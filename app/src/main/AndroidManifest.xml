@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <uses-feature android:name="android.hardware.camera.front" android:required="true" />
+
+    <application
+        android:label="Senior Visio"
+        android:icon="@drawable/ic_launcher"
+        android:theme="@style/Theme.AppCompat.NoActionBar"
+        android:allowBackup="false">
+
+        <activity
+            android:name=".ui.IncomingCallActivity"
+            android:exported="false"
+            android:excludeFromRecents="true" />
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".admin.AdminSettingsActivity"
+            android:exported="false"
+            android:label="Réglages (admin)" />
+
+        <service
+            android:name=".service.IncomingCallService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
+
+        <!-- TODO : receiver FCM pour déclencher IncomingCallService sur push silencieux -->
+
+    </application>
+</manifest>

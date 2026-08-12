@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#1B2A4A"
+    android:padding="32dp">
+
+    <TextView
+        android:id="@+id/textCallerName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Appel de..."
+        android:textColor="#FFFFFF"
+        android:textSize="48sp"
+        android:textStyle="bold"
+        android:gravity="center" />
+
+    <TextView
+        android:id="@+id/textCountdown"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="30 s"
+        android:textColor="#CCCCCC"
+        android:textSize="40sp"
+        android:gravity="center" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="La visio démarre automatiquement"
+        android:textColor="#999999"
+        android:textSize="18sp"
+        android:gravity="center" />
+
+    <Button
+        android:id="@+id/buttonBlock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="48dp"
+        android:text="Bloquer l'appel"
+        android:textSize="22sp"
+        android:paddingLeft="32dp"
+        android:paddingRight="32dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
+        android:backgroundTint="#C0392B" />
+
+</LinearLayout>

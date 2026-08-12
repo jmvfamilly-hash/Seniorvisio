@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Appeler Jean</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app">
+    <h1>Appeler Jean</h1>
+
+    <div id="stateIdle" class="state">
+      <button id="callButton">📹 Démarrer l'appel</button>
+    </div>
+
+    <div id="stateCalling" class="state hidden">
+      <p>Appel en cours vers Jean…</p>
+      <p class="hint">L'alerte s'affiche sur sa tablette pendant 30 secondes.</p>
+      <button id="cancelButton" class="secondary">Annuler</button>
+    </div>
+
+    <div id="stateBlocked" class="state hidden">
+      <p>Jean a bloqué l'appel.</p>
+      <button id="retryButton">Réessayer</button>
+    </div>
+
+    <div id="stateConnected" class="state hidden">
+      <video id="remoteVideo" autoplay playsinline></video>
+      <video id="localVideo" autoplay playsinline muted></video>
+      <button id="hangupButton" class="danger">Raccrocher</button>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
