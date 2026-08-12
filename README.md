@@ -20,7 +20,10 @@ signaling/
   CallSignalingClient.kt     → échange offre/réponse SDP + candidats ICE via Firestore
 
 service/
-  IncomingCallService.kt         → réveille l'app à l'appel entrant (foreground service)
+  CallListenerService.kt         → écoute Firestore en continu (foreground service permanent,
+                                    fonctionne écran éteint) et déclenche IncomingCallService
+  IncomingCallService.kt         → affiche l'écran d'appel entrant (foreground service ponctuel)
+  BootReceiver.kt                → relance CallListenerService au démarrage de la tablette
   TimedCallAlertController.kt    → implémentation du minuteur (CountDownTimer)
 
 ui/
@@ -46,6 +49,10 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
 - **Moteur d'appel vidéo WebRTC branché des deux côtés** (`WebRtcCallEngine.kt` / `webrtc-engine.js`),
   avec signaling par Firestore (voir ci-dessous) — architecture bâtie sur une interface `CallEngine`
   commune (logique similaire Kotlin/JS) pour rester swappable vers un SDK managé plus tard si besoin
+- **Détection d'appel en arrière-plan** via `CallListenerService` (foreground service permanent,
+  fonctionne écran éteint), relancé automatiquement au démarrage de la tablette
+- Métriques temps réel (niveau audio, gigue, pertes, résolution/fps vidéo) affichées des deux côtés
+  pendant l'appel, pour objectiver la qualité au lieu de se fier au ressenti
 
 ## Configuration Firebase (obligatoire pour que les appels fonctionnent)
 Le signaling (échange de l'offre/réponse SDP et des candidats ICE entre la
@@ -81,15 +88,29 @@ ne s'active que si le fichier est présent (voir `app/build.gradle`), et l'app d
 config pour éviter de planter.
 
 ## Ce qu'il reste à faire (ordre logique)
-1. Créer le projet Firebase et fournir la configuration (voir section ci-dessus)
-2. Récepteur de notification (push) côté tablette pour réveiller l'app même fermée — aujourd'hui
-   la détection d'appel entrant se fait par écoute Firestore en direct tant que l'app est ouverte,
-   suffisant pour une tablette qui reste allumée sur l'écran d'accueil
-3. Écran de réglages admin (PIN + ajustement de `countdownSeconds`)
-4. Héberger le PWA (n'importe quel hébergement statique : GitHub Pages, Netlify, Vercel — gratuit)
-5. Tester un appel complet en conditions réelles (deux appareils), ajuster l'ergonomie
-6. Éventuellement ajouter un serveur TURN (ex. Open Relay gratuit, ou coturn auto-hébergé) si
+1. Écran de réglages admin (PIN + ajustement de `countdownSeconds`)
+2. Tester un appel complet en conditions réelles (deux appareils), ajuster l'ergonomie
+3. Éventuellement ajouter un serveur TURN (ex. Open Relay gratuit, ou coturn auto-hébergé) si
    certains réseaux/box échouent à se connecter avec les seuls serveurs STUN publics
+4. Éventuellement passer au réveil par notification push (FCM) si `CallListenerService` s'avère
+   pas assez fiable sur certains appareils (voir note ci-dessous)
+
+### Note sur la fiabilité du réveil en arrière-plan
+La détection d'appel entrant tourne dans `CallListenerService`, un foreground service permanent
+(notification discrète "En attente d'appel") qui maintient une écoute Firestore active même écran
+éteint — contrairement à une simple Activity, un foreground service est exempté de l'essentiel des
+restrictions Android (Doze / mise en veille). C'est gratuit et suffisant dans l'immense majorité des
+cas pour une tablette qui reste allumée/branchée en continu.
+
+Limite connue : certains constructeurs (Xiaomi/MIUI, Huawei, Oppo notamment) tuent parfois les
+foreground services malgré tout, sauf si l'app est explicitement exemptée d'optimisation batterie
+(demandé automatiquement au premier lancement) et/ou autorisée manuellement à "démarrer
+automatiquement" dans les réglages de batterie du fabricant. Si des appels manqués persistent malgré
+ça sur la tablette utilisée, la solution la plus robuste serait de migrer vers un réveil par
+notification push (Firebase Cloud Messaging) déclenché par une Cloud Function côté serveur — mais
+cela nécessite de passer le projet Firebase au plan payant "Blaze" (le volume réel resterait dans le
+quota gratuit, mais Blaze exige une carte bancaire enregistrée), donc volontairement pas fait par
+défaut ici pour rester sur du 100% gratuit sans engagement.
 
 ## Pourquoi cette architecture
 Le moteur d'appel est isolé derrière `CallEngine` des deux côtés, pour rester remplaçable. Le PWA
