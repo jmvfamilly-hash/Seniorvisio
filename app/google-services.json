@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "319467825373",
+    "project_id": "seniorvisio",
+    "storage_bucket": "seniorvisio.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:319467825373:android:0848e464c5d9a09ae7d334",
+        "android_client_info": {
+          "package_name": "com.seniorvisio"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVTbDh7-42vreKmhA1oYhaKsA-zUoGgwg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
