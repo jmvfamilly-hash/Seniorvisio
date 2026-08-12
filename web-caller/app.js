@@ -22,12 +22,25 @@ const els = {
   cancelButton: document.getElementById("cancelButton"),
   retryButton: document.getElementById("retryButton"),
   hangupButton: document.getElementById("hangupButton"),
+  callStats: document.getElementById("callStats"),
 };
+
+let statsInterval = null;
 
 function showState(name) {
   ["idle", "calling", "blocked", "connected"].forEach((s) => {
     els[s].classList.toggle("hidden", s !== name);
   });
+
+  if (statsInterval) {
+    clearInterval(statsInterval);
+    statsInterval = null;
+  }
+  if (name === "connected") {
+    statsInterval = setInterval(async () => {
+      els.callStats.textContent = await engine.getStatsSummary();
+    }, 2000);
+  }
 }
 
 els.callButton.addEventListener("click", async () => {

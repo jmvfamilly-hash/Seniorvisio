@@ -97,6 +97,23 @@ class RealCallEngine extends CallEngine {
     });
   }
 
+  /** Résumé lisible des métriques temps réel (niveau audio, gigue, pertes, fps vidéo). */
+  async getStatsSummary() {
+    if (!this._pc) return "";
+    const stats = await this._pc.getStats();
+    let audioLine = "";
+    let videoLine = "";
+    stats.forEach((report) => {
+      if (report.type === "inbound-rtp" && report.kind === "audio") {
+        audioLine = `🔊 niveau=${report.audioLevel ?? "?"} gigue=${report.jitter ?? "?"}s pertes=${report.packetsLost ?? "?"}`;
+      }
+      if (report.type === "inbound-rtp" && report.kind === "video") {
+        videoLine = `🎥 ${report.frameWidth ?? "?"}x${report.frameHeight ?? "?"}@${Math.round(report.framesPerSecond ?? 0)}fps pertes=${report.packetsLost ?? "?"}`;
+      }
+    });
+    return [audioLine, videoLine].filter(Boolean).join("\n");
+  }
+
   async cancelCall() {
     if (this._callDocRef) {
       await this._callDocRef.update({ status: "ended" }).catch(() => {});

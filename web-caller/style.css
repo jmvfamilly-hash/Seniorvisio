@@ -49,3 +49,14 @@ video {
   bottom: 90px;
   right: 24px;
 }
+
+.stats {
+  text-align: left;
+  font-size: 12px;
+  color: #AAB4C8;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  padding: 8px;
+  margin-top: 8px;
+  white-space: pre-wrap;
+}

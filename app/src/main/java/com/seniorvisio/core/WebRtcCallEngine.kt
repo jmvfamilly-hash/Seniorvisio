@@ -3,6 +3,7 @@ package com.seniorvisio.core
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import androidx.core.content.ContextCompat
 import com.google.firebase.firestore.ListenerRegistration
 import com.seniorvisio.signaling.CallSignalingClient
@@ -54,6 +55,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var localRenderer: SurfaceViewRenderer? = null
     private var remoteRenderer: SurfaceViewRenderer? = null
     private val pendingRemoteCandidates = mutableListOf<IceCandidate>()
+
+    private var savedAudioMode: Int? = null
+    private var savedSpeakerphoneOn: Boolean = false
 
     override var state: CallState = CallState.IDLE
         private set
@@ -130,7 +134,55 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         remoteVideoTrack?.addSink(remote)
     }
 
+    /**
+     * Résumé lisible des métriques temps réel de l'appel (niveau audio, gigue,
+     * paquets perdus, résolution/fps vidéo) — pour objectiver la qualité au
+     * lieu de se fier au ressenti. Rafraîchi à la demande (voir appelant).
+     */
+    fun fetchStatsSummary(onResult: (String) -> Unit) {
+        val pc = peerConnection
+        if (pc == null) {
+            onResult("")
+            return
+        }
+        pc.getStats { report ->
+            var audioLine = ""
+            var videoLine = ""
+            report.statsMap.values.forEach { stat ->
+                if (stat.type == "inbound-rtp") {
+                    when (stat.members["kind"]) {
+                        "audio" -> audioLine = "🔊 niveau=${stat.members["audioLevel"]} " +
+                            "gigue=${stat.members["jitter"]}s pertes=${stat.members["packetsLost"]}"
+                        "video" -> videoLine = "🎥 ${stat.members["frameWidth"]}x${stat.members["frameHeight"]}" +
+                            "@${stat.members["framesPerSecond"]}fps pertes=${stat.members["packetsLost"]}"
+                    }
+                }
+            }
+            onResult(listOf(audioLine, videoLine).filter { it.isNotEmpty() }.joinToString("\n"))
+        }
+    }
+
     // ---- internals ----
+
+    /**
+     * Force le haut-parleur principal (et le mode audio "communication") :
+     * sans ça, Android route par défaut l'audio d'appel vers le petit
+     * écouteur destiné à être collé à l'oreille, quasi inaudible ici.
+     */
+    private fun configureAudioForCall() {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        savedAudioMode = audioManager.mode
+        savedSpeakerphoneOn = audioManager.isSpeakerphoneOn
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        audioManager.isSpeakerphoneOn = true
+    }
+
+    private fun restoreAudio() {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        savedAudioMode?.let { audioManager.mode = it }
+        audioManager.isSpeakerphoneOn = savedSpeakerphoneOn
+        savedAudioMode = null
+    }
 
     private fun ensureFactory() {
         if (peerConnectionFactory != null) return
@@ -192,6 +244,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             return
         }
 
+        configureAudioForCall()
+
         val capturer = createFrontCameraCapturer() ?: return
         videoCapturer = capturer
         val videoSource = factory.createVideoSource(false)
@@ -236,6 +290,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     private fun cleanup() {
+        restoreAudio()
         callerCandidatesListener?.remove()
         callerCandidatesListener = null
         videoCapturer?.let {

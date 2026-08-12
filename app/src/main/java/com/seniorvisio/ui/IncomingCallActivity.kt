@@ -2,6 +2,8 @@ package com.seniorvisio.ui
 
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
@@ -28,6 +30,8 @@ class IncomingCallActivity : AppCompatActivity() {
     private lateinit var buttonBlock: Button
     private var isConnected = false
     private var callHandled = false
+    private val statsHandler = Handler(Looper.getMainLooper())
+    private var statsRunnable: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -103,10 +107,33 @@ class IncomingCallActivity : AppCompatActivity() {
         callEngine.attachRenderers(localRenderer, remoteRenderer)
         callEngine.answer()
         buttonBlock.text = "Raccrocher"
+        startStatsPolling()
+    }
+
+    /** Rafraîchit toutes les 2s les métriques réelles (niveau audio, pertes, fps vidéo). */
+    private fun startStatsPolling() {
+        val textStats = findViewById<TextView>(R.id.textStats)
+        textStats.visibility = View.VISIBLE
+        val runnable = object : Runnable {
+            override fun run() {
+                callEngine.fetchStatsSummary { summary ->
+                    runOnUiThread { textStats.text = summary }
+                }
+                statsHandler.postDelayed(this, 2000)
+            }
+        }
+        statsRunnable = runnable
+        statsHandler.post(runnable)
+    }
+
+    private fun stopStatsPolling() {
+        statsRunnable?.let { statsHandler.removeCallbacks(it) }
+        statsRunnable = null
     }
 
     override fun onDestroy() {
         alertController.cancel()
+        stopStatsPolling()
         if (!callHandled) {
             callHandled = true
             callEngine.hangUp()

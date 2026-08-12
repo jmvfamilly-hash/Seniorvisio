@@ -57,6 +57,19 @@
 
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/textStats"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="8dp"
+        android:background="#88000000"
+        android:padding="6dp"
+        android:fontFamily="monospace"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
     <Button
         android:id="@+id/buttonBlock"
         android:layout_width="wrap_content"
