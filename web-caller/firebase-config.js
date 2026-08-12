@@ -6,10 +6,10 @@
  * via la confidentialité de ces champs.
  */
 const FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: "",
+  apiKey: "AIzaSyDdEvxbetU0V6p6QXKPPA6JWS6ZW4WCcEM",
+  authDomain: "seniorvisio.firebaseapp.com",
+  projectId: "seniorvisio",
+  storageBucket: "seniorvisio.firebasestorage.app",
+  messagingSenderId: "319467825373",
+  appId: "1:319467825373:web:16fb3faba0d9c8dde7d334",
 };
