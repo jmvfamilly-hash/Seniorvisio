@@ -8,7 +8,7 @@ package com.seniorvisio.core
 interface CallEngine {
 
     /** Prépare une session entrante (sans démarrer le flux audio/vidéo). */
-    fun prepareIncomingCall(callerId: String, onReady: () -> Unit, onError: (Throwable) -> Unit)
+    fun prepareIncomingCall(callId: String, onReady: () -> Unit, onError: (Throwable) -> Unit)
 
     /** Démarre effectivement le flux (déclenché par la présence détectée). */
     fun answer()

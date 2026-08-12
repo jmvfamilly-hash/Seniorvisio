@@ -1,0 +1,13 @@
+/**
+ * Contrat abstrait du moteur d'appel côté PWA — pendant JS de
+ * core/CallEngine.kt côté Android. Permet de garder l'implémentation WebRTC
+ * (webrtc-engine.js) interchangeable et l'UI (app.js) indépendante du
+ * transport.
+ */
+class CallEngine {
+  async startCall(targetId, callerName) { throw new Error("not implemented"); }
+  async cancelCall() { throw new Error("not implemented"); }
+  onBlocked(callback) { throw new Error("not implemented"); }
+  onConnected(callback) { throw new Error("not implemented"); }
+  onEnded(callback) { throw new Error("not implemented"); }
+}
