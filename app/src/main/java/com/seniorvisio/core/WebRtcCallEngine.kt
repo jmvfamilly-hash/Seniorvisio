@@ -60,18 +60,18 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
     override val engineName: String = "WebRTC (signaling Firestore auto-hébergé)"
 
-    override fun prepareIncomingCall(callerId: String, onReady: () -> Unit, onError: (Throwable) -> Unit) {
+    override fun prepareIncomingCall(callId: String, onReady: () -> Unit, onError: (Throwable) -> Unit) {
         if (!signaling.isAvailable()) {
             onError(IllegalStateException("Firebase non configuré (google-services.json manquant)"))
             return
         }
-        callId = callerId
+        this.callId = callId
         state = CallState.RINGING_SILENT
         ensureFactory()
 
-        signaling.fetchOfferSdp(callerId) { sdp ->
+        signaling.fetchOfferSdp(callId) { sdp ->
             if (sdp == null) {
-                onError(IllegalStateException("Offre d'appel introuvable (callId=$callerId)"))
+                onError(IllegalStateException("Offre d'appel introuvable (callId=$callId)"))
                 return@fetchOfferSdp
             }
             val pc = createPeerConnection()
