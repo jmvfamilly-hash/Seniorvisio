@@ -15,6 +15,7 @@ class RealCallEngine extends CallEngine {
     this._callDocRef = null;
     this._unsubscribeCallDoc = null;
     this._unsubscribeCalleeCandidates = null;
+    this._recognition = null;
 
     try {
       firebase.initializeApp(firebaseConfig);
@@ -95,6 +96,59 @@ class RealCallEngine extends CallEngine {
         }
       });
     });
+
+    this._startCaptioning();
+  }
+
+  /**
+   * Transcrit en direct la voix du proche (micro local) et envoie le texte
+   * dans Firestore, pour le mode "sous-titres géants" côté tablette (voir
+   * core/WebRtcCallEngine.kt). Non supporté par Safari/iOS : l'appel vidéo
+   * fonctionne quand même, seuls les sous-titres restent vides.
+   */
+  _startCaptioning() {
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+      console.warn("[RealCallEngine] Reconnaissance vocale non supportée par ce navigateur (sous-titres désactivés).");
+      return;
+    }
+
+    const recognition = new SpeechRecognitionCtor();
+    this._recognition = recognition;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "fr-FR";
+
+    let lastSent = 0;
+    recognition.onresult = (event) => {
+      let text = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        text += event.results[i][0].transcript;
+      }
+      const now = Date.now();
+      if (text && now - lastSent > 500 && this._callDocRef) {
+        lastSent = now;
+        this._callDocRef.update({ callerSpeechText: text }).catch(() => {});
+      }
+    };
+    recognition.onerror = (e) => console.warn("[RealCallEngine] Reconnaissance vocale :", e.error);
+    recognition.onend = () => {
+      // L'API s'arrête parfois seule après un silence : on la relance tant que l'appel est actif.
+      if (this._pc && this._recognition === recognition) {
+        try { recognition.start(); } catch (_) {}
+      }
+    };
+
+    try { recognition.start(); } catch (_) {}
+  }
+
+  _stopCaptioning() {
+    if (this._recognition) {
+      const recognition = this._recognition;
+      this._recognition = null;
+      recognition.onend = null;
+      try { recognition.stop(); } catch (_) {}
+    }
   }
 
   /** Résumé lisible des métriques temps réel (niveau audio, gigue, pertes, fps vidéo). */
@@ -122,6 +176,7 @@ class RealCallEngine extends CallEngine {
   }
 
   _teardown() {
+    this._stopCaptioning();
     if (this._unsubscribeCallDoc) this._unsubscribeCallDoc();
     this._unsubscribeCallDoc = null;
     if (this._unsubscribeCalleeCandidates) this._unsubscribeCalleeCandidates();

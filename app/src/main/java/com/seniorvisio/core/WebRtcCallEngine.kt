@@ -54,6 +54,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
     private var localRenderer: SurfaceViewRenderer? = null
     private var remoteRenderer: SurfaceViewRenderer? = null
+    private var captionRenderer: SurfaceViewRenderer? = null
+    private var speechListener: ListenerRegistration? = null
     private val pendingRemoteCandidates = mutableListOf<IceCandidate>()
 
     private var savedAudioMode: Int? = null
@@ -124,14 +126,34 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         state = CallState.ENDED
     }
 
-    fun attachRenderers(local: SurfaceViewRenderer, remote: SurfaceViewRenderer) {
+    /**
+     * @param captionRemote petit rendu vidéo utilisé par le mode "sous-titres géants"
+     * (voir IncomingCallActivity) — reçoit le même flux que [remote], juste affiché en
+     * plus petit pendant que le texte transcrit prend le plus de place à l'écran.
+     */
+    fun attachRenderers(local: SurfaceViewRenderer, remote: SurfaceViewRenderer, captionRemote: SurfaceViewRenderer) {
         local.init(eglBase.eglBaseContext, null)
         local.setMirror(true)
         remote.init(eglBase.eglBaseContext, null)
+        captionRemote.init(eglBase.eglBaseContext, null)
         localRenderer = local
         remoteRenderer = remote
+        captionRenderer = captionRemote
         localVideoTrack?.addSink(local)
         remoteVideoTrack?.addSink(remote)
+        remoteVideoTrack?.addSink(captionRemote)
+    }
+
+    /**
+     * Écoute le texte transcrit en direct de la voix de l'appelant (envoyé par
+     * webrtc-engine.js via reconnaissance vocale navigateur) pour le mode
+     * "sous-titres géants". Ne fait rien si le navigateur appelant ne
+     * supporte pas la reconnaissance vocale (ex. Safari/iOS) : aucun texte
+     * n'arrivera jamais, l'appel vidéo reste inchangé.
+     */
+    fun listenForCaptions(onText: (String) -> Unit) {
+        val id = callId ?: return
+        speechListener = signaling.listenForCallerSpeech(id, onText)
     }
 
     /**
@@ -219,6 +241,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                 if (track is VideoTrack) {
                     remoteVideoTrack = track
                     remoteRenderer?.let { track.addSink(it) }
+                    captionRenderer?.let { track.addSink(it) }
                 }
             }
 
@@ -293,6 +316,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         restoreAudio()
         callerCandidatesListener?.remove()
         callerCandidatesListener = null
+        speechListener?.remove()
+        speechListener = null
         videoCapturer?.let {
             try {
                 it.stopCapture()
@@ -305,8 +330,10 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         surfaceTextureHelper = null
         localRenderer?.release()
         remoteRenderer?.release()
+        captionRenderer?.release()
         localRenderer = null
         remoteRenderer = null
+        captionRenderer = null
         peerConnection?.close()
         peerConnection = null
         localVideoTrack = null

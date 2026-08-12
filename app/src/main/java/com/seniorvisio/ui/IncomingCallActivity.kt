@@ -102,12 +102,42 @@ class IncomingCallActivity : AppCompatActivity() {
         findViewById<View>(R.id.alertContent).visibility = View.GONE
         val localRenderer = findViewById<SurfaceViewRenderer>(R.id.localRenderer)
         val remoteRenderer = findViewById<SurfaceViewRenderer>(R.id.remoteRenderer)
+        val captionRemoteRenderer = findViewById<SurfaceViewRenderer>(R.id.captionRemoteRenderer)
         localRenderer.visibility = View.VISIBLE
         remoteRenderer.visibility = View.VISIBLE
-        callEngine.attachRenderers(localRenderer, remoteRenderer)
+        callEngine.attachRenderers(localRenderer, remoteRenderer, captionRemoteRenderer)
         callEngine.answer()
         buttonBlock.text = "Raccrocher"
         startStatsPolling()
+        setupCaptionMode()
+    }
+
+    /**
+     * Mode "sous-titres géants" : les paroles de l'appelant, transcrites en
+     * direct côté navigateur (voir web-caller/webrtc-engine.js), s'affichent
+     * en très gros sur 80% de l'écran, avec sa vidéo réduite dans les 20%
+     * restants. Fonctionne uniquement si le proche appelle depuis un
+     * navigateur supportant la reconnaissance vocale (Chrome ; pas Safari).
+     */
+    private fun setupCaptionMode() {
+        val buttonToggleCaption = findViewById<Button>(R.id.buttonToggleCaption)
+        val captionContent = findViewById<View>(R.id.captionContent)
+        val textCaption = findViewById<TextView>(R.id.textCaption)
+        val remoteRenderer = findViewById<SurfaceViewRenderer>(R.id.remoteRenderer)
+        val localRenderer = findViewById<SurfaceViewRenderer>(R.id.localRenderer)
+
+        buttonToggleCaption.visibility = View.VISIBLE
+        buttonToggleCaption.setOnClickListener {
+            val showingCaptions = captionContent.visibility == View.VISIBLE
+            captionContent.visibility = if (showingCaptions) View.GONE else View.VISIBLE
+            remoteRenderer.visibility = if (showingCaptions) View.VISIBLE else View.GONE
+            localRenderer.visibility = if (showingCaptions) View.VISIBLE else View.GONE
+            buttonToggleCaption.text = if (showingCaptions) "🔤 Sous-titres" else "🎥 Vidéo"
+        }
+
+        callEngine.listenForCaptions { text ->
+            runOnUiThread { textCaption.text = text }
+        }
     }
 
     /** Rafraîchit toutes les 2s les métriques réelles (niveau audio, pertes, fps vidéo). */

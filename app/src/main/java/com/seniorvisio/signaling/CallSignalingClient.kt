@@ -73,6 +73,14 @@ class CallSignalingClient {
         )
     }
 
+    /** Texte transcrit en direct de la voix de l'appelant (voir web-caller/webrtc-engine.js). */
+    fun listenForCallerSpeech(callId: String, onText: (String) -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            val text = snapshot?.getString(FIELD_CALLER_SPEECH)
+            if (!text.isNullOrEmpty()) onText(text)
+        }
+    }
+
     fun listenForCallerCandidates(callId: String, onCandidate: (RemoteIceCandidate) -> Unit): ListenerRegistration {
         return callDoc(callId).collection(CALLER_CANDIDATES)
             .addSnapshotListener { snapshot, _ ->
@@ -101,6 +109,7 @@ class CallSignalingClient {
         private const val FIELD_CALLER_NAME = "callerName"
         private const val FIELD_OFFER_SDP = "offerSdp"
         private const val FIELD_ANSWER_SDP = "answerSdp"
+        private const val FIELD_CALLER_SPEECH = "callerSpeechText"
 
         const val STATUS_RINGING = "ringing"
         const val STATUS_CONNECTED = "connected"

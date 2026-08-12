@@ -53,6 +53,11 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   fonctionne écran éteint), relancé automatiquement au démarrage de la tablette
 - Métriques temps réel (niveau audio, gigue, pertes, résolution/fps vidéo) affichées des deux côtés
   pendant l'appel, pour objectiver la qualité au lieu de se fier au ressenti
+- **Mode "sous-titres géants"** (bouton 🔤 pendant l'appel) : les paroles du proche, transcrites en
+  direct par la reconnaissance vocale du navigateur, s'affichent en très grand sur 80% de l'écran de
+  la tablette, sa vidéo réduite dans les 20% restants. Ne fonctionne que si le proche appelle depuis
+  un navigateur supportant la reconnaissance vocale (Chrome Android/desktop) — **pas Safari/iOS**,
+  qui ne l'implémente pas ; l'appel vidéo lui-même n'est pas affecté, seuls les sous-titres restent vides
 
 ## Configuration Firebase (obligatoire pour que les appels fonctionnent)
 Le signaling (échange de l'offre/réponse SDP et des candidats ICE entre la
