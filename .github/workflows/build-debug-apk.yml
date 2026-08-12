@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,3 +38,14 @@ jobs:
         with:
           name: senior-visio-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publish APK to a GitHub Release (direct download link)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="debug-build-${{ github.run_number }}"
+          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk \
+            --repo "${{ github.repository }}" \
+            --title "Senior Visio - APK debug #${{ github.run_number }}" \
+            --notes "APK debug généré automatiquement depuis le commit ${{ github.sha }}." \
+            --target "${{ github.sha }}"
