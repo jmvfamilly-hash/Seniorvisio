@@ -54,8 +54,10 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
 - Métriques vidéo temps réel (résolution, fps, paquets perdus) affichées des deux côtés pendant
   l'appel, pour objectiver la qualité au lieu de se fier au ressenti
 - **Réglage du volume à distance** : un curseur côté PWA appelant règle en direct le volume avec
-  lequel Jean l'entend sur la tablette (`AudioTrack.setVolume`, propre au flux de l'appel — ne
-  touche pas le volume système de la tablette)
+  lequel Jean l'entend sur la tablette (`AudioTrack.setVolume`, propre au flux de l'appel). Pendant
+  l'appel, le volume système de la tablette est fixé au maximum et les boutons physiques de volume
+  sont neutralisés, pour que seul ce curseur fasse foi (sinon Jean pourrait couper le son réglé à
+  distance avec les boutons physiques, qui agissent en dernier sur le volume final)
 - **Mode "sous-titres géants"** (bouton 🔤 pendant l'appel) : les paroles du proche, transcrites en
   direct par la reconnaissance vocale du navigateur, s'affichent en très grand sur 80% de l'écran de
   la tablette, sa vidéo réduite dans les 20% restants. Ne fonctionne que si le proche appelle depuis

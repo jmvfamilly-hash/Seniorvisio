@@ -4,6 +4,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
@@ -141,7 +142,22 @@ class IncomingCallActivity : AppCompatActivity() {
         }
     }
 
-    /** Rafraîchit toutes les 2s les métriques réelles (niveau audio, pertes, fps vidéo). */
+    /**
+     * Bloque les boutons physiques de volume pendant l'appel : sans ça, Jean
+     * peut couper le son que le proche a réglé à distance (le volume système
+     * multiplie en dernier le gain envoyé par le curseur du PWA, voir
+     * WebRtcCallEngine.configureAudioForCall). Seul le curseur du proche doit
+     * faire foi tant que l'appel est connecté.
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (isConnected && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+            callEngine.pinSystemVolumeToMax()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    /** Rafraîchit toutes les 2s les métriques réelles (résolution/fps vidéo). */
     private fun startStatsPolling() {
         val textStats = findViewById<TextView>(R.id.textStats)
         textStats.visibility = View.VISIBLE

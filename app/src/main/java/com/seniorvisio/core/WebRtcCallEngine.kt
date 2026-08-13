@@ -64,6 +64,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
     private var savedAudioMode: Int? = null
     private var savedSpeakerphoneOn: Boolean = false
+    private var savedCallVolume: Int? = null
 
     override var state: CallState = CallState.IDLE
         private set
@@ -203,20 +204,37 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * Force le haut-parleur principal (et le mode audio "communication") :
      * sans ça, Android route par défaut l'audio d'appel vers le petit
      * écouteur destiné à être collé à l'oreille, quasi inaudible ici.
+     *
+     * Fixe aussi le volume système de l'appel au maximum : c'est ce volume
+     * qui multiplie en dernier le gain réglé à distance ([listenForRemoteVolumeControl])
+     * — s'il reste au choix de Jean (boutons physiques), il peut annuler l'effet
+     * du curseur du proche. Pendant l'appel, seul ce curseur doit faire foi
+     * (voir aussi IncomingCallActivity, qui bloque les boutons physiques).
      */
     private fun configureAudioForCall() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         savedAudioMode = audioManager.mode
         savedSpeakerphoneOn = audioManager.isSpeakerphoneOn
+        savedCallVolume = audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         audioManager.isSpeakerphoneOn = true
+        pinSystemVolumeToMax()
+    }
+
+    /** Remet le volume système de l'appel au maximum (voir configureAudioForCall). */
+    fun pinSystemVolumeToMax() {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
+        audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, max, 0)
     }
 
     private fun restoreAudio() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         savedAudioMode?.let { audioManager.mode = it }
         audioManager.isSpeakerphoneOn = savedSpeakerphoneOn
+        savedCallVolume?.let { audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, it, 0) }
         savedAudioMode = null
+        savedCallVolume = null
     }
 
     private fun ensureFactory() {
