@@ -159,8 +159,16 @@ class IncomingCallActivity : AppCompatActivity() {
         val captionBanner = findViewById<View>(R.id.captionBanner)
         val textCaption = findViewById<TextView>(R.id.textCaption)
 
+        // L'écoute Firestore porte sur tout le document d'appel : elle se
+        // redéclenche à chaque nouveau texte transcrit (toutes les ~500ms),
+        // pas seulement quand l'activation change. Sans ce garde-fou, le
+        // fondu d'apparition repartirait de zéro à chaque sous-titre reçu,
+        // donnant un clignotement au lieu d'une simple mise à jour du texte.
+        var captionsCurrentlyEnabled: Boolean? = null
         callEngine.listenForCaptionMode { enabled ->
             runOnUiThread {
+                if (captionsCurrentlyEnabled == enabled) return@runOnUiThread
+                captionsCurrentlyEnabled = enabled
                 if (enabled) {
                     captionBanner.visibility = View.VISIBLE
                     captionBanner.animate().alpha(1f).setDuration(400).start()
@@ -176,8 +184,13 @@ class IncomingCallActivity : AppCompatActivity() {
             runOnUiThread { textCaption.text = text }
         }
 
+        // Même garde-fou que ci-dessus : ce listener se redéclenche aussi à
+        // chaque nouveau texte transcrit, pas seulement quand la taille change.
+        var currentTextSizeSp: Float? = null
         callEngine.listenForCaptionTextSize { sizeSp ->
             runOnUiThread {
+                if (currentTextSizeSp == sizeSp) return@runOnUiThread
+                currentTextSizeSp = sizeSp
                 textCaption.animate().alpha(0f).setDuration(150).withEndAction {
                     textCaption.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
                     textCaption.animate().alpha(1f).setDuration(150).start()
