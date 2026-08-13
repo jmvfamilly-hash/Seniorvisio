@@ -20,6 +20,7 @@ const els = {
   connected: document.getElementById("stateConnected"),
   callButton: document.getElementById("callButton"),
   cancelButton: document.getElementById("cancelButton"),
+  forceConnectButton: document.getElementById("forceConnectButton"),
   retryButton: document.getElementById("retryButton"),
   hangupButton: document.getElementById("hangupButton"),
   callStats: document.getElementById("callStats"),
@@ -62,6 +63,7 @@ els.callButton.addEventListener("click", async () => {
   els.transcriptCurrent.textContent = "";
   els.transcriptHistory.innerHTML = "";
   els.silenceIndicator.classList.add("hidden");
+  els.forceConnectButton.disabled = false;
   showState("calling");
   await engine.startCall(CONFIG.targetDeviceId, CONFIG.callerName);
 });
@@ -116,6 +118,11 @@ els.volumeSlider.addEventListener("input", () => {
   volumeDebounce = setTimeout(() => {
     engine.setRemoteVolume(Number(els.volumeSlider.value) / 100);
   }, 150);
+});
+
+els.forceConnectButton.addEventListener("click", () => {
+  els.forceConnectButton.disabled = true;
+  engine.forceConnect();
 });
 
 els.cancelButton.addEventListener("click", async () => {

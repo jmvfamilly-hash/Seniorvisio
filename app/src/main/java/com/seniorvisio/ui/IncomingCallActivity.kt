@@ -2,6 +2,7 @@ package com.seniorvisio.ui
 
 import android.graphics.BitmapFactory
 import android.graphics.Outline
+import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Base64
@@ -64,11 +65,10 @@ class IncomingCallActivity : AppCompatActivity() {
 
         val callerName = intent.getStringExtra("callerName") ?: "un proche"
         val textCallerName = findViewById<TextView>(R.id.textCallerName)
-        val textCountdown = findViewById<TextView>(R.id.textCountdown)
         val countdownFill = findViewById<View>(R.id.countdownProgressFill)
         buttonBlock = findViewById(R.id.buttonBlock)
 
-        textCallerName.text = "Appel de $callerName"
+        textCallerName.text = "On vous appelle"
         showCallerPhoto(intent.getStringExtra(EXTRA_CALLER_PHOTO))
 
         countdownFill.pivotX = 0f
@@ -96,22 +96,43 @@ class IncomingCallActivity : AppCompatActivity() {
             }
         )
 
+        var forceConnectHandled = false
+        callEngine.listenForForceConnect {
+            runOnUiThread {
+                if (forceConnectHandled || isConnected) return@runOnUiThread
+                forceConnectHandled = true
+                alertController.cancel()
+                connectVideoCall()
+            }
+        }
+
         val durationSeconds = adminConfig.countdownSeconds
         callEngine.signalAlertStarted(durationSeconds)
+        playDiscreetAlertSound()
         alertController.startCountdown(
             callerName = callerName,
             durationSeconds = durationSeconds,
             onTick = { remaining ->
-                // Le chiffre reste discret ; la barre qui se remplit doucement porte
-                // l'essentiel de l'information visuelle (évite l'effet de décompte
-                // anxiogène d'un gros chiffre qui défile — recommandation ergonomique).
-                textCountdown.text = "$remaining s"
+                // Seule la barre qui se remplit doucement porte l'information visuelle
+                // (pas de chiffre affiché : évite l'effet de décompte anxiogène d'un
+                // gros chiffre qui défile — recommandation ergonomique).
                 val elapsedFraction = 1f - (remaining.toFloat() / durationSeconds.toFloat())
                 countdownFill.animate().scaleX(elapsedFraction).setDuration(950).start()
             },
             onTimeoutConnect = { connectVideoCall() },
             onBlocked = { /* déclenché via le bouton, voir ci-dessus */ }
         )
+    }
+
+    /** Petit son discret au tout début du décompte, pour signaler l'appel sans réveiller toute la maison. */
+    private fun playDiscreetAlertSound() {
+        try {
+            val soundUri = RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_NOTIFICATION)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            RingtoneManager.getRingtone(this, soundUri)?.play()
+        } catch (_: Exception) {
+            // Pas de son système configuré : pas bloquant, le décompte visuel suffit.
+        }
     }
 
     /** Photo du proche (capturée sur son navigateur à l'ouverture de l'appel) pour une reconnaissance immédiate. */

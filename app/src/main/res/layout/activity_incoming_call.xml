@@ -65,16 +65,6 @@
         </FrameLayout>
 
         <TextView
-            android:id="@+id/textCountdown"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="30 s"
-            android:textColor="#8FA0BF"
-            android:textSize="18sp"
-            android:gravity="center" />
-
-        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"

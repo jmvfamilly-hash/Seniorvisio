@@ -62,6 +62,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var volumeListener: ListenerRegistration? = null
     private var captionModeListener: ListenerRegistration? = null
     private var captionTextSizeListener: ListenerRegistration? = null
+    private var forceConnectListener: ListenerRegistration? = null
     private var pendingVolume: Double = 1.0
     private var currentVolume: Double = 1.0
     private var volumeRampRunnable: Runnable? = null
@@ -199,6 +200,15 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             pendingVolume = volume
             rampVolumeTo(volume)
         }
+    }
+
+    /**
+     * Écoute la demande du proche de connecter l'appel immédiatement, sans
+     * attendre la fin du décompte (bouton "Se connecter maintenant" côté PWA).
+     */
+    fun listenForForceConnect(onForce: () -> Unit) {
+        val id = callId ?: return
+        forceConnectListener = signaling.listenForForceConnect(id, onForce)
     }
 
     // ---- internals ----
@@ -385,6 +395,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         captionModeListener = null
         captionTextSizeListener?.remove()
         captionTextSizeListener = null
+        forceConnectListener?.remove()
+        forceConnectListener = null
         volumeRampRunnable?.let { volumeHandler.removeCallbacks(it) }
         volumeRampRunnable = null
         pendingVolume = 1.0

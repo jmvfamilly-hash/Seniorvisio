@@ -319,6 +319,18 @@ class RealCallEngine extends CallEngine {
     }
   }
 
+  /**
+   * Force la connexion immédiate côté tablette, sans attendre la fin du
+   * décompte (bouton "Se connecter maintenant" côté PWA). La tablette
+   * écoute ce champ (voir core/WebRtcCallEngine.listenForForceConnect) et
+   * saute directement à la vidéo dès qu'il passe à true.
+   */
+  async forceConnect() {
+    if (this._callDocRef) {
+      await this._callDocRef.update({ forceConnectRequested: true }).catch(() => {});
+    }
+  }
+
   async cancelCall() {
     if (this._callDocRef) {
       await this._callDocRef.update({ status: "ended" }).catch(() => {});

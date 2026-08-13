@@ -73,12 +73,16 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   depuis la caméra du proche dès le début de l'appel et l'envoie via Firestore ; la tablette l'affiche
   en rond au-dessus du nom pendant le décompte, pour une reconnaissance immédiate. Non bloquant si la
   caméra n'a pas encore de frame disponible (timeout de secours 1,5s) : Jean voit alors juste le nom
-- **Décompte à l'écran discret, porté par une barre de progression** : le chiffre reste petit et
-  neutre, une barre se remplit doucement (transition animée, pas de saut) pour porter l'essentiel de
-  l'information visuelle — évite l'effet anxiogène d'un gros chiffre qui défile
+- **Décompte à l'écran discret, porté par une barre de progression** : aucun chiffre affiché côté
+  tablette, seule une barre se remplit doucement (transition animée, pas de saut) — évite l'effet
+  anxiogène d'un gros chiffre qui défile. Un petit son de notification discret (celui déjà configuré
+  sur l'appareil) signale le tout début du décompte, sans réveiller toute la maison. Le texte "On vous
+  appelle" remplace l'ancien "Appel de [nom]" pendant l'attente (le nom de l'appelant n'est pas encore
+  personnalisable dans ce MVP — la photo du proche, elle, permet déjà de le reconnaître)
 - **Progression du décompte visible côté PWA** : pendant les 30s d'alerte sur la tablette, le proche
   voit une barre de progression et le temps restant avant connexion automatique, synchronisés via
-  l'horodatage serveur Firestore (pas juste un texte statique "ça sonne")
+  l'horodatage serveur Firestore (pas juste un texte statique "ça sonne"). Un bouton "Se connecter
+  maintenant" permet aussi de forcer la connexion immédiatement, sans attendre la fin du décompte
 - **Miroir de transcription côté PWA** : pendant l'appel, le proche voit exactement le texte que Jean
   reçoit (même source que ce qui est envoyé), avec les 2-3 dernières phrases finalisées en historique.
   Les segments à faible confiance de reconnaissance sont colorés (orange/jaune) pour repérer les

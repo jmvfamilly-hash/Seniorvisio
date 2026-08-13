@@ -130,6 +130,18 @@ class CallSignalingClient {
         }
     }
 
+    /**
+     * Écoute la demande de connexion immédiate déclenchée à distance par le
+     * proche (bouton "Se connecter maintenant" côté PWA), pour ne pas
+     * attendre la fin du décompte.
+     */
+    fun listenForForceConnect(callId: String, onForce: () -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            val requested = snapshot?.getBoolean(FIELD_FORCE_CONNECT) ?: false
+            if (requested) onForce()
+        }
+    }
+
     fun listenForCallerCandidates(callId: String, onCandidate: (RemoteIceCandidate) -> Unit): ListenerRegistration {
         return callDoc(callId).collection(CALLER_CANDIDATES)
             .addSnapshotListener { snapshot, _ ->
@@ -165,6 +177,7 @@ class CallSignalingClient {
         private const val FIELD_ALERT_DURATION = "alertDurationSeconds"
         private const val FIELD_CAPTION_MODE = "captionModeEnabled"
         private const val FIELD_CAPTION_TEXT_SIZE = "captionTextSize"
+        private const val FIELD_FORCE_CONNECT = "forceConnectRequested"
 
         const val STATUS_RINGING = "ringing"
         const val STATUS_CONNECTED = "connected"
