@@ -2,6 +2,7 @@ package com.seniorvisio.signaling
 
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentChange
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 
@@ -89,6 +90,30 @@ class CallSignalingClient {
         }
     }
 
+    /**
+     * Signale le début du décompte d'alerte côté tablette, pour que le PWA
+     * appelant puisse en afficher la progression en direct (voir
+     * web-caller/app.js). L'horodatage vient du serveur Firestore, pas de
+     * l'horloge locale de la tablette, pour rester cohérent malgré un
+     * éventuel décalage d'horloge entre les deux appareils.
+     */
+    fun startAlertCountdown(callId: String, durationSeconds: Int) {
+        callDoc(callId).update(
+            mapOf(
+                FIELD_ALERT_STARTED_AT to FieldValue.serverTimestamp(),
+                FIELD_ALERT_DURATION to durationSeconds
+            )
+        )
+    }
+
+    /** Active/désactive à distance le mode "sous-titres géants" côté tablette (voir web-caller/app.js). */
+    fun listenForCaptionMode(callId: String, onEnabled: (Boolean) -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            val enabled = snapshot?.getBoolean(FIELD_CAPTION_MODE)
+            if (enabled != null) onEnabled(enabled)
+        }
+    }
+
     fun listenForCallerCandidates(callId: String, onCandidate: (RemoteIceCandidate) -> Unit): ListenerRegistration {
         return callDoc(callId).collection(CALLER_CANDIDATES)
             .addSnapshotListener { snapshot, _ ->
@@ -119,6 +144,9 @@ class CallSignalingClient {
         private const val FIELD_ANSWER_SDP = "answerSdp"
         private const val FIELD_CALLER_SPEECH = "callerSpeechText"
         private const val FIELD_REMOTE_VOLUME = "remoteVolume"
+        private const val FIELD_ALERT_STARTED_AT = "alertStartedAt"
+        private const val FIELD_ALERT_DURATION = "alertDurationSeconds"
+        private const val FIELD_CAPTION_MODE = "captionModeEnabled"
 
         const val STATUS_RINGING = "ringing"
         const val STATUS_CONNECTED = "connected"

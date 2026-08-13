@@ -58,8 +58,9 @@
     </LinearLayout>
 
     <!-- Mode "sous-titres géants" : vidéo réduite à 20% en haut, texte transcrit
-         en très gros sur fond uni dans les 80% restants. Activable/désactivable
-         via buttonToggleCaption une fois l'appel connecté. -->
+         en très gros sur fond uni dans les 80% restants. Activé/désactivé à
+         distance par le proche depuis le PWA (voir
+         WebRtcCallEngine.listenForCaptionMode), pas de bouton local ici. -->
     <LinearLayout
         android:id="@+id/captionContent"
         android:layout_width="match_parent"
@@ -118,16 +119,5 @@
         android:paddingTop="16dp"
         android:paddingBottom="16dp"
         android:backgroundTint="#C0392B" />
-
-    <Button
-        android:id="@+id/buttonToggleCaption"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
-        android:layout_margin="16dp"
-        android:text="🔤 Sous-titres"
-        android:textSize="16sp"
-        android:backgroundTint="#2C3E5C"
-        android:visibility="gone" />
 
 </FrameLayout>

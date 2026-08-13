@@ -59,6 +59,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var captionRenderer: SurfaceViewRenderer? = null
     private var speechListener: ListenerRegistration? = null
     private var volumeListener: ListenerRegistration? = null
+    private var captionModeListener: ListenerRegistration? = null
     private var pendingVolume: Double = 1.0
     private val pendingRemoteCandidates = mutableListOf<IceCandidate>()
 
@@ -159,6 +160,25 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     fun listenForCaptions(onText: (String) -> Unit) {
         val id = callId ?: return
         speechListener = signaling.listenForCallerSpeech(id, onText)
+    }
+
+    /**
+     * Notifie Firestore que le décompte d'alerte démarre, pour que le PWA
+     * appelant en affiche la progression en direct (voir web-caller/app.js).
+     */
+    fun signalAlertStarted(durationSeconds: Int) {
+        val id = callId ?: return
+        signaling.startAlertCountdown(id, durationSeconds)
+    }
+
+    /**
+     * Écoute l'activation/désactivation à distance du mode "sous-titres
+     * géants" : la décision revient au proche depuis le PWA (voir
+     * web-caller/app.js), pas à un bouton sur la tablette.
+     */
+    fun listenForCaptionMode(onEnabled: (Boolean) -> Unit) {
+        val id = callId ?: return
+        captionModeListener = signaling.listenForCaptionMode(id, onEnabled)
     }
 
     /**
@@ -354,6 +374,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         speechListener = null
         volumeListener?.remove()
         volumeListener = null
+        captionModeListener?.remove()
+        captionModeListener = null
         pendingVolume = 1.0
         videoCapturer?.let {
             try {

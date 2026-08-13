@@ -24,6 +24,10 @@ const els = {
   hangupButton: document.getElementById("hangupButton"),
   callStats: document.getElementById("callStats"),
   volumeSlider: document.getElementById("volumeSlider"),
+  captionToggle: document.getElementById("captionToggle"),
+  callingHint: document.getElementById("callingHint"),
+  countdownFill: document.getElementById("countdownFill"),
+  countdownText: document.getElementById("countdownText"),
 };
 
 let statsInterval = null;
@@ -46,8 +50,23 @@ function showState(name) {
 
 els.callButton.addEventListener("click", async () => {
   els.volumeSlider.value = 100;
+  els.captionToggle.checked = false;
+  els.callingHint.textContent = "Connexion à sa tablette…";
+  els.countdownFill.style.width = "0%";
+  els.countdownText.textContent = "";
   showState("calling");
   await engine.startCall(CONFIG.targetDeviceId, CONFIG.callerName);
+});
+
+engine.onCountdown((remaining, total) => {
+  els.callingHint.textContent = "L'alerte s'affiche sur sa tablette…";
+  els.countdownFill.style.width = `${Math.round((remaining / total) * 100)}%`;
+  els.countdownText.textContent =
+    remaining > 0 ? `${remaining}s avant connexion automatique` : "Connexion en cours…";
+});
+
+els.captionToggle.addEventListener("change", () => {
+  engine.setCaptionMode(els.captionToggle.checked);
 });
 
 let volumeDebounce = null;

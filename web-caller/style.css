@@ -76,3 +76,44 @@ video {
 .volume-control input[type="range"] {
   width: 100%;
 }
+
+.caption-control {
+  text-align: left;
+  margin-top: 16px;
+  font-size: 14px;
+  color: #AAB4C8;
+}
+
+.caption-control label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.caption-control input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  margin-top: 16px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: #2ECC71;
+  transition: width 0.25s linear;
+}
+
+.countdown-text {
+  color: #AAB4C8;
+  font-size: 14px;
+  margin-top: 8px;
+}

@@ -16,6 +16,8 @@ class RealCallEngine extends CallEngine {
     this._unsubscribeCallDoc = null;
     this._unsubscribeCalleeCandidates = null;
     this._recognition = null;
+    this._countdownCb = null;
+    this._countdownInterval = null;
 
     try {
       firebase.initializeApp(firebaseConfig);
@@ -30,6 +32,8 @@ class RealCallEngine extends CallEngine {
   onBlocked(callback) { this._blockedCb = callback; }
   onConnected(callback) { this._connectedCb = callback; }
   onEnded(callback) { this._endedCb = callback; }
+  /** callback(remainingSeconds, totalSeconds) — progression du décompte vu côté tablette. */
+  onCountdown(callback) { this._countdownCb = callback; }
 
   async startCall(targetId, callerName) {
     if (!this._available) {
@@ -69,6 +73,7 @@ class RealCallEngine extends CallEngine {
       callerName: callerName || "Un proche",
       status: "ringing",
       offerSdp: offer.sdp,
+      captionModeEnabled: false,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -77,6 +82,9 @@ class RealCallEngine extends CallEngine {
       if (!data) return;
       if (data.answerSdp && this._pc && !this._pc.currentRemoteDescription) {
         this._pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: data.answerSdp }));
+      }
+      if (data.alertStartedAt && data.alertDurationSeconds) {
+        this._startCountdownDisplay(data.alertStartedAt.toMillis(), data.alertDurationSeconds);
       }
       if (data.status === "connected") this._connectedCb && this._connectedCb();
       if (data.status === "blocked") {
@@ -142,6 +150,38 @@ class RealCallEngine extends CallEngine {
     try { recognition.start(); } catch (_) {}
   }
 
+  /**
+   * Affiche la progression du décompte de 30s vu côté tablette (voir
+   * core/WebRtcCallEngine.signalAlertStarted). Basé sur l'horodatage serveur
+   * Firestore plutôt que le moment de réception ici, pour rester correct même
+   * si le message a mis du temps à arriver.
+   */
+  _startCountdownDisplay(startMillis, durationSeconds) {
+    if (this._countdownInterval) return;
+    const tick = () => {
+      const elapsed = (Date.now() - startMillis) / 1000;
+      const remaining = Math.max(0, Math.ceil(durationSeconds - elapsed));
+      this._countdownCb && this._countdownCb(remaining, durationSeconds);
+      if (remaining <= 0) {
+        clearInterval(this._countdownInterval);
+        this._countdownInterval = null;
+      }
+    };
+    tick();
+    this._countdownInterval = setInterval(tick, 250);
+  }
+
+  /**
+   * Active/désactive à distance le mode "sous-titres géants" côté tablette
+   * (voir core/WebRtcCallEngine.kt : listenForCaptionMode). C'est le proche
+   * qui décide depuis le PWA, pas un bouton sur la tablette.
+   */
+  async setCaptionMode(enabled) {
+    if (this._callDocRef) {
+      await this._callDocRef.update({ captionModeEnabled: enabled }).catch(() => {});
+    }
+  }
+
   _stopCaptioning() {
     if (this._recognition) {
       const recognition = this._recognition;
@@ -184,6 +224,10 @@ class RealCallEngine extends CallEngine {
 
   _teardown() {
     this._stopCaptioning();
+    if (this._countdownInterval) {
+      clearInterval(this._countdownInterval);
+      this._countdownInterval = null;
+    }
     if (this._unsubscribeCallDoc) this._unsubscribeCallDoc();
     this._unsubscribeCallDoc = null;
     if (this._unsubscribeCalleeCandidates) this._unsubscribeCalleeCandidates();

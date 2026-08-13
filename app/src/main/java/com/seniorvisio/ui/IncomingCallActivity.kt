@@ -89,6 +89,7 @@ class IncomingCallActivity : AppCompatActivity() {
             }
         )
 
+        callEngine.signalAlertStarted(adminConfig.countdownSeconds)
         alertController.startCountdown(
             callerName = callerName,
             durationSeconds = adminConfig.countdownSeconds,
@@ -118,23 +119,23 @@ class IncomingCallActivity : AppCompatActivity() {
      * Mode "sous-titres géants" : les paroles de l'appelant, transcrites en
      * direct côté navigateur (voir web-caller/webrtc-engine.js), s'affichent
      * en très gros sur 80% de l'écran, avec sa vidéo réduite dans les 20%
-     * restants. Fonctionne uniquement si le proche appelle depuis un
-     * navigateur supportant la reconnaissance vocale (Chrome ; pas Safari).
+     * restants. Activé/désactivé à distance par le proche depuis le PWA
+     * (pas de bouton local sur la tablette) — voir listenForCaptionMode.
+     * Fonctionne uniquement si le proche appelle depuis un navigateur
+     * supportant la reconnaissance vocale (Chrome ; pas Safari).
      */
     private fun setupCaptionMode() {
-        val buttonToggleCaption = findViewById<Button>(R.id.buttonToggleCaption)
         val captionContent = findViewById<View>(R.id.captionContent)
         val textCaption = findViewById<TextView>(R.id.textCaption)
         val remoteRenderer = findViewById<SurfaceViewRenderer>(R.id.remoteRenderer)
         val localRenderer = findViewById<SurfaceViewRenderer>(R.id.localRenderer)
 
-        buttonToggleCaption.visibility = View.VISIBLE
-        buttonToggleCaption.setOnClickListener {
-            val showingCaptions = captionContent.visibility == View.VISIBLE
-            captionContent.visibility = if (showingCaptions) View.GONE else View.VISIBLE
-            remoteRenderer.visibility = if (showingCaptions) View.VISIBLE else View.GONE
-            localRenderer.visibility = if (showingCaptions) View.VISIBLE else View.GONE
-            buttonToggleCaption.text = if (showingCaptions) "🔤 Sous-titres" else "🎥 Vidéo"
+        callEngine.listenForCaptionMode { enabled ->
+            runOnUiThread {
+                captionContent.visibility = if (enabled) View.VISIBLE else View.GONE
+                remoteRenderer.visibility = if (enabled) View.GONE else View.VISIBLE
+                localRenderer.visibility = if (enabled) View.GONE else View.VISIBLE
+            }
         }
 
         callEngine.listenForCaptions { text ->

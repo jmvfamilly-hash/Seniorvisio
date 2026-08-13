@@ -58,11 +58,15 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   l'appel, le volume système de la tablette est fixé au maximum et les boutons physiques de volume
   sont neutralisés, pour que seul ce curseur fasse foi (sinon Jean pourrait couper le son réglé à
   distance avec les boutons physiques, qui agissent en dernier sur le volume final)
-- **Mode "sous-titres géants"** (bouton 🔤 pendant l'appel) : les paroles du proche, transcrites en
-  direct par la reconnaissance vocale du navigateur, s'affichent en très grand sur 80% de l'écran de
-  la tablette, sa vidéo réduite dans les 20% restants. Ne fonctionne que si le proche appelle depuis
-  un navigateur supportant la reconnaissance vocale (Chrome Android/desktop) — **pas Safari/iOS**,
-  qui ne l'implémente pas ; l'appel vidéo lui-même n'est pas affecté, seuls les sous-titres restent vides
+- **Mode "sous-titres géants"** : les paroles du proche, transcrites en direct par la reconnaissance
+  vocale du navigateur, s'affichent en très grand sur 80% de l'écran de la tablette, sa vidéo réduite
+  dans les 20% restants. Activé/désactivé **à distance depuis le PWA** (case à cocher côté proche —
+  pas de bouton sur la tablette) ; ne fonctionne que si le proche appelle depuis un navigateur
+  supportant la reconnaissance vocale (Chrome Android/desktop) — **pas Safari/iOS**, qui ne
+  l'implémente pas ; l'appel vidéo lui-même n'est pas affecté, seuls les sous-titres restent vides
+- **Progression du décompte visible côté PWA** : pendant les 30s d'alerte sur la tablette, le proche
+  voit une barre de progression et le temps restant avant connexion automatique, synchronisés via
+  l'horodatage serveur Firestore (pas juste un texte statique "ça sonne")
 
 ## Configuration Firebase (obligatoire pour que les appels fonctionnent)
 Le signaling (échange de l'offre/réponse SDP et des candidats ICE entre la
