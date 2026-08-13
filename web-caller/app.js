@@ -25,6 +25,7 @@ const els = {
   callStats: document.getElementById("callStats"),
   volumeSlider: document.getElementById("volumeSlider"),
   captionToggle: document.getElementById("captionToggle"),
+  textSizeSlider: document.getElementById("textSizeSlider"),
   callingHint: document.getElementById("callingHint"),
   countdownFill: document.getElementById("countdownFill"),
   countdownText: document.getElementById("countdownText"),
@@ -51,6 +52,7 @@ function showState(name) {
 els.callButton.addEventListener("click", async () => {
   els.volumeSlider.value = 100;
   els.captionToggle.checked = false;
+  els.textSizeSlider.value = 56;
   els.callingHint.textContent = "Connexion à sa tablette…";
   els.countdownFill.style.width = "0%";
   els.countdownText.textContent = "";
@@ -67,6 +69,14 @@ engine.onCountdown((remaining, total) => {
 
 els.captionToggle.addEventListener("change", () => {
   engine.setCaptionMode(els.captionToggle.checked);
+});
+
+let textSizeDebounce = null;
+els.textSizeSlider.addEventListener("input", () => {
+  clearTimeout(textSizeDebounce);
+  textSizeDebounce = setTimeout(() => {
+    engine.setCaptionTextSize(Number(els.textSizeSlider.value));
+  }, 150);
 });
 
 let volumeDebounce = null;

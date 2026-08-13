@@ -114,6 +114,14 @@ class CallSignalingClient {
         }
     }
 
+    /** Taille du texte des sous-titres (en sp), choisie à distance par l'appelant. */
+    fun listenForCaptionTextSize(callId: String, onSizeSp: (Double) -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            val size = snapshot?.getDouble(FIELD_CAPTION_TEXT_SIZE)
+            if (size != null) onSizeSp(size)
+        }
+    }
+
     fun listenForCallerCandidates(callId: String, onCandidate: (RemoteIceCandidate) -> Unit): ListenerRegistration {
         return callDoc(callId).collection(CALLER_CANDIDATES)
             .addSnapshotListener { snapshot, _ ->
@@ -147,6 +155,7 @@ class CallSignalingClient {
         private const val FIELD_ALERT_STARTED_AT = "alertStartedAt"
         private const val FIELD_ALERT_DURATION = "alertDurationSeconds"
         private const val FIELD_CAPTION_MODE = "captionModeEnabled"
+        private const val FIELD_CAPTION_TEXT_SIZE = "captionTextSize"
 
         const val STATUS_RINGING = "ringing"
         const val STATUS_CONNECTED = "connected"

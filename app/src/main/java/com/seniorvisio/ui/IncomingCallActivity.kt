@@ -4,6 +4,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
@@ -140,6 +141,10 @@ class IncomingCallActivity : AppCompatActivity() {
 
         callEngine.listenForCaptions { text ->
             runOnUiThread { textCaption.text = text }
+        }
+
+        callEngine.listenForCaptionTextSize { sizeSp ->
+            runOnUiThread { textCaption.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp) }
         }
     }
 

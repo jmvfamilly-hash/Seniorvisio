@@ -86,9 +86,6 @@
             android:textColor="#FFFFFF"
             android:textStyle="bold"
             android:textSize="56sp"
-            android:autoSizeTextType="uniform"
-            android:autoSizeMinTextSize="28sp"
-            android:autoSizeMaxTextSize="80sp"
             android:text="En attente de parole…" />
 
     </LinearLayout>

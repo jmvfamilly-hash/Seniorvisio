@@ -74,6 +74,7 @@ class RealCallEngine extends CallEngine {
       status: "ringing",
       offerSdp: offer.sdp,
       captionModeEnabled: false,
+      captionTextSize: 56,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -179,6 +180,13 @@ class RealCallEngine extends CallEngine {
   async setCaptionMode(enabled) {
     if (this._callDocRef) {
       await this._callDocRef.update({ captionModeEnabled: enabled }).catch(() => {});
+    }
+  }
+
+  /** Règle à distance la taille (en sp) du texte des sous-titres géants côté tablette. */
+  async setCaptionTextSize(sizeSp) {
+    if (this._callDocRef) {
+      await this._callDocRef.update({ captionTextSize: sizeSp }).catch(() => {});
     }
   }
 

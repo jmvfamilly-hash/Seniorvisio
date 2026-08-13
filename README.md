@@ -63,7 +63,8 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   dans les 20% restants. Activé/désactivé **à distance depuis le PWA** (case à cocher côté proche —
   pas de bouton sur la tablette) ; ne fonctionne que si le proche appelle depuis un navigateur
   supportant la reconnaissance vocale (Chrome Android/desktop) — **pas Safari/iOS**, qui ne
-  l'implémente pas ; l'appel vidéo lui-même n'est pas affecté, seuls les sous-titres restent vides
+  l'implémente pas ; l'appel vidéo lui-même n'est pas affecté, seuls les sous-titres restent vides.
+  Un second curseur côté PWA règle aussi la taille de ce texte (24 à 100sp)
 - **Progression du décompte visible côté PWA** : pendant les 30s d'alerte sur la tablette, le proche
   voit une barre de progression et le temps restant avant connexion automatique, synchronisés via
   l'horodatage serveur Firestore (pas juste un texte statique "ça sonne")

@@ -60,6 +60,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var speechListener: ListenerRegistration? = null
     private var volumeListener: ListenerRegistration? = null
     private var captionModeListener: ListenerRegistration? = null
+    private var captionTextSizeListener: ListenerRegistration? = null
     private var pendingVolume: Double = 1.0
     private val pendingRemoteCandidates = mutableListOf<IceCandidate>()
 
@@ -179,6 +180,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     fun listenForCaptionMode(onEnabled: (Boolean) -> Unit) {
         val id = callId ?: return
         captionModeListener = signaling.listenForCaptionMode(id, onEnabled)
+    }
+
+    /** Écoute la taille de texte des sous-titres choisie à distance par le proche depuis le PWA. */
+    fun listenForCaptionTextSize(onSizeSp: (Float) -> Unit) {
+        val id = callId ?: return
+        captionTextSizeListener = signaling.listenForCaptionTextSize(id) { size -> onSizeSp(size.toFloat()) }
     }
 
     /**
@@ -376,6 +383,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         volumeListener = null
         captionModeListener?.remove()
         captionModeListener = null
+        captionTextSizeListener?.remove()
+        captionTextSizeListener = null
         pendingVolume = 1.0
         videoCapturer?.let {
             try {
