@@ -51,8 +51,11 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   commune (logique similaire Kotlin/JS) pour rester swappable vers un SDK managé plus tard si besoin
 - **Détection d'appel en arrière-plan** via `CallListenerService` (foreground service permanent,
   fonctionne écran éteint), relancé automatiquement au démarrage de la tablette
-- Métriques temps réel (niveau audio, gigue, pertes, résolution/fps vidéo) affichées des deux côtés
-  pendant l'appel, pour objectiver la qualité au lieu de se fier au ressenti
+- Métriques vidéo temps réel (résolution, fps, paquets perdus) affichées des deux côtés pendant
+  l'appel, pour objectiver la qualité au lieu de se fier au ressenti
+- **Réglage du volume à distance** : un curseur côté PWA appelant règle en direct le volume avec
+  lequel Jean l'entend sur la tablette (`AudioTrack.setVolume`, propre au flux de l'appel — ne
+  touche pas le volume système de la tablette)
 - **Mode "sous-titres géants"** (bouton 🔤 pendant l'appel) : les paroles du proche, transcrites en
   direct par la reconnaissance vocale du navigateur, s'affichent en très grand sur 80% de l'écran de
   la tablette, sa vidéo réduite dans les 20% restants. Ne fonctionne que si le proche appelle depuis

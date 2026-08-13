@@ -8,6 +8,7 @@ import androidx.core.content.ContextCompat
 import com.google.firebase.firestore.ListenerRegistration
 import com.seniorvisio.signaling.CallSignalingClient
 import com.seniorvisio.signaling.RemoteIceCandidate
+import org.webrtc.AudioTrack
 import org.webrtc.Camera2Enumerator
 import org.webrtc.CameraVideoCapturer
 import org.webrtc.DataChannel
@@ -48,6 +49,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var surfaceTextureHelper: SurfaceTextureHelper? = null
     private var localVideoTrack: VideoTrack? = null
     private var remoteVideoTrack: VideoTrack? = null
+    private var remoteAudioTrack: AudioTrack? = null
 
     private var callerCandidatesListener: ListenerRegistration? = null
     private var callId: String? = null
@@ -56,6 +58,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var remoteRenderer: SurfaceViewRenderer? = null
     private var captionRenderer: SurfaceViewRenderer? = null
     private var speechListener: ListenerRegistration? = null
+    private var volumeListener: ListenerRegistration? = null
+    private var pendingVolume: Double = 1.0
     private val pendingRemoteCandidates = mutableListOf<IceCandidate>()
 
     private var savedAudioMode: Int? = null
@@ -157,9 +161,23 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     /**
-     * Résumé lisible des métriques temps réel de l'appel (niveau audio, gigue,
-     * paquets perdus, résolution/fps vidéo) — pour objectiver la qualité au
-     * lieu de se fier au ressenti. Rafraîchi à la demande (voir appelant).
+     * Applique le niveau de volume choisi à distance par l'appelant depuis le
+     * curseur du PWA (voir web-caller/webrtc-engine.js). 1.0 = volume normal,
+     * 0.0 = muet, >1.0 = amplifié. Agit uniquement sur le flux audio de
+     * l'appel (pas le volume système de la tablette).
+     */
+    fun listenForRemoteVolumeControl() {
+        val id = callId ?: return
+        volumeListener = signaling.listenForRemoteVolume(id) { volume ->
+            pendingVolume = volume
+            remoteAudioTrack?.setVolume(volume)
+        }
+    }
+
+    /**
+     * Résumé lisible des métriques vidéo temps réel de l'appel (résolution,
+     * fps, paquets perdus) — pour objectiver la qualité au lieu de se fier au
+     * ressenti. Rafraîchi à la demande (voir appelant).
      */
     fun fetchStatsSummary(onResult: (String) -> Unit) {
         val pc = peerConnection
@@ -168,19 +186,14 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             return
         }
         pc.getStats { report ->
-            var audioLine = ""
             var videoLine = ""
             report.statsMap.values.forEach { stat ->
-                if (stat.type == "inbound-rtp") {
-                    when (stat.members["kind"]) {
-                        "audio" -> audioLine = "🔊 niveau=${stat.members["audioLevel"]} " +
-                            "gigue=${stat.members["jitter"]}s pertes=${stat.members["packetsLost"]}"
-                        "video" -> videoLine = "🎥 ${stat.members["frameWidth"]}x${stat.members["frameHeight"]}" +
-                            "@${stat.members["framesPerSecond"]}fps pertes=${stat.members["packetsLost"]}"
-                    }
+                if (stat.type == "inbound-rtp" && stat.members["kind"] == "video") {
+                    videoLine = "🎥 ${stat.members["frameWidth"]}x${stat.members["frameHeight"]}" +
+                        "@${stat.members["framesPerSecond"]}fps pertes=${stat.members["packetsLost"]}"
                 }
             }
-            onResult(listOf(audioLine, videoLine).filter { it.isNotEmpty() }.joinToString("\n"))
+            onResult(videoLine)
         }
     }
 
@@ -242,6 +255,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                     remoteVideoTrack = track
                     remoteRenderer?.let { track.addSink(it) }
                     captionRenderer?.let { track.addSink(it) }
+                } else if (track is AudioTrack) {
+                    remoteAudioTrack = track
+                    track.setVolume(pendingVolume)
                 }
             }
 
@@ -318,6 +334,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         callerCandidatesListener = null
         speechListener?.remove()
         speechListener = null
+        volumeListener?.remove()
+        volumeListener = null
+        pendingVolume = 1.0
         videoCapturer?.let {
             try {
                 it.stopCapture()
@@ -338,6 +357,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         peerConnection = null
         localVideoTrack = null
         remoteVideoTrack = null
+        remoteAudioTrack = null
         pendingRemoteCandidates.clear()
     }
 

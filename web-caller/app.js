@@ -23,6 +23,7 @@ const els = {
   retryButton: document.getElementById("retryButton"),
   hangupButton: document.getElementById("hangupButton"),
   callStats: document.getElementById("callStats"),
+  volumeSlider: document.getElementById("volumeSlider"),
 };
 
 let statsInterval = null;
@@ -44,8 +45,17 @@ function showState(name) {
 }
 
 els.callButton.addEventListener("click", async () => {
+  els.volumeSlider.value = 100;
   showState("calling");
   await engine.startCall(CONFIG.targetDeviceId, CONFIG.callerName);
+});
+
+let volumeDebounce = null;
+els.volumeSlider.addEventListener("input", () => {
+  clearTimeout(volumeDebounce);
+  volumeDebounce = setTimeout(() => {
+    engine.setRemoteVolume(Number(els.volumeSlider.value) / 100);
+  }, 150);
 });
 
 els.cancelButton.addEventListener("click", async () => {

@@ -110,6 +110,7 @@ class IncomingCallActivity : AppCompatActivity() {
         buttonBlock.text = "Raccrocher"
         startStatsPolling()
         setupCaptionMode()
+        callEngine.listenForRemoteVolumeControl()
     }
 
     /**

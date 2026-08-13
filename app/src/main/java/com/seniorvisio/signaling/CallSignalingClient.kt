@@ -81,6 +81,14 @@ class CallSignalingClient {
         }
     }
 
+    /** Niveau de volume choisi à distance par l'appelant (voir web-caller/webrtc-engine.js). */
+    fun listenForRemoteVolume(callId: String, onVolume: (Double) -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            val volume = snapshot?.getDouble(FIELD_REMOTE_VOLUME)
+            if (volume != null) onVolume(volume)
+        }
+    }
+
     fun listenForCallerCandidates(callId: String, onCandidate: (RemoteIceCandidate) -> Unit): ListenerRegistration {
         return callDoc(callId).collection(CALLER_CANDIDATES)
             .addSnapshotListener { snapshot, _ ->
@@ -110,6 +118,7 @@ class CallSignalingClient {
         private const val FIELD_OFFER_SDP = "offerSdp"
         private const val FIELD_ANSWER_SDP = "answerSdp"
         private const val FIELD_CALLER_SPEECH = "callerSpeechText"
+        private const val FIELD_REMOTE_VOLUME = "remoteVolume"
 
         const val STATUS_RINGING = "ringing"
         const val STATUS_CONNECTED = "connected"

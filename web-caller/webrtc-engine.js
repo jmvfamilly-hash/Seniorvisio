@@ -151,21 +151,28 @@ class RealCallEngine extends CallEngine {
     }
   }
 
-  /** Résumé lisible des métriques temps réel (niveau audio, gigue, pertes, fps vidéo). */
+  /** Résumé lisible des métriques vidéo temps réel (résolution, fps, pertes). */
   async getStatsSummary() {
     if (!this._pc) return "";
     const stats = await this._pc.getStats();
-    let audioLine = "";
     let videoLine = "";
     stats.forEach((report) => {
-      if (report.type === "inbound-rtp" && report.kind === "audio") {
-        audioLine = `🔊 niveau=${report.audioLevel ?? "?"} gigue=${report.jitter ?? "?"}s pertes=${report.packetsLost ?? "?"}`;
-      }
       if (report.type === "inbound-rtp" && report.kind === "video") {
         videoLine = `🎥 ${report.frameWidth ?? "?"}x${report.frameHeight ?? "?"}@${Math.round(report.framesPerSecond ?? 0)}fps pertes=${report.packetsLost ?? "?"}`;
       }
     });
-    return [audioLine, videoLine].filter(Boolean).join("\n");
+    return videoLine;
+  }
+
+  /**
+   * Règle à distance le volume avec lequel Jean entend le proche sur la
+   * tablette (voir core/WebRtcCallEngine.kt : AudioTrack.setVolume côté
+   * Android). 1 = volume normal, 0 = muet, >1 = amplifié.
+   */
+  async setRemoteVolume(volume) {
+    if (this._callDocRef) {
+      await this._callDocRef.update({ remoteVolume: volume }).catch(() => {});
+    }
   }
 
   async cancelCall() {

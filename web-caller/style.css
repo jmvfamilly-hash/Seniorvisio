@@ -60,3 +60,19 @@ video {
   margin-top: 8px;
   white-space: pre-wrap;
 }
+
+.volume-control {
+  text-align: left;
+  margin-top: 16px;
+}
+
+.volume-control label {
+  display: block;
+  font-size: 14px;
+  color: #AAB4C8;
+  margin-bottom: 6px;
+}
+
+.volume-control input[type="range"] {
+  width: 100%;
+}
