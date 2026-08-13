@@ -51,23 +51,41 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   commune (logique similaire Kotlin/JS) pour rester swappable vers un SDK managé plus tard si besoin
 - **Détection d'appel en arrière-plan** via `CallListenerService` (foreground service permanent,
   fonctionne écran éteint), relancé automatiquement au démarrage de la tablette
-- Métriques vidéo temps réel (résolution, fps, paquets perdus) affichées des deux côtés pendant
-  l'appel, pour objectiver la qualité au lieu de se fier au ressenti
+- Métriques vidéo temps réel (résolution, fps, paquets perdus) affichées côté PWA appelant pendant
+  l'appel, pour objectiver la qualité au lieu de se fier au ressenti (retirées côté tablette : Jean
+  n'a pas besoin de voir ce genre d'information technique — voir recommandations ergonomiques ci-dessous)
 - **Réglage du volume à distance** : un curseur côté PWA appelant règle en direct le volume avec
-  lequel Jean l'entend sur la tablette (`AudioTrack.setVolume`, propre au flux de l'appel). Pendant
-  l'appel, le volume système de la tablette est fixé au maximum et les boutons physiques de volume
-  sont neutralisés, pour que seul ce curseur fasse foi (sinon Jean pourrait couper le son réglé à
-  distance avec les boutons physiques, qui agissent en dernier sur le volume final)
-- **Mode "sous-titres géants"** : les paroles du proche, transcrites en direct par la reconnaissance
-  vocale du navigateur, s'affichent en très grand sur 80% de l'écran de la tablette, sa vidéo réduite
-  dans les 20% restants. Activé/désactivé **à distance depuis le PWA** (case à cocher côté proche —
-  pas de bouton sur la tablette) ; ne fonctionne que si le proche appelle depuis un navigateur
-  supportant la reconnaissance vocale (Chrome Android/desktop) — **pas Safari/iOS**, qui ne
-  l'implémente pas ; l'appel vidéo lui-même n'est pas affecté, seuls les sous-titres restent vides.
-  Un second curseur côté PWA règle aussi la taille de ce texte (24 à 100sp)
+  lequel Jean l'entend sur la tablette (`AudioTrack.setVolume`, propre au flux de l'appel, avec une
+  transition progressive sur ~1,2s plutôt qu'un saut brutal). Pendant l'appel, le volume système de
+  la tablette est fixé au maximum et les boutons physiques de volume sont neutralisés, pour que seul
+  ce curseur fasse foi (sinon Jean pourrait couper le son réglé à distance avec les boutons
+  physiques, qui agissent en dernier sur le volume final)
+- **Mode "sous-titres"** en surimpression façon sous-titrage TV : les paroles du proche, transcrites
+  en direct par la reconnaissance vocale du navigateur, s'affichent dans un bandeau semi-opaque en
+  bas de l'écran, par-dessus la vidéo qui reste plein écran (remplace l'ancien écran divisé 80/20).
+  Activé/désactivé **à distance depuis le PWA** (case à cocher côté proche — pas de bouton sur la
+  tablette), avec un fondu à l'apparition/disparition pour éviter tout changement brutal côté Jean ;
+  ne fonctionne que si le proche appelle depuis un navigateur supportant la reconnaissance vocale
+  (Chrome Android/desktop) — **pas Safari/iOS**, qui ne l'implémente pas ; l'appel vidéo lui-même
+  n'est pas affecté, seuls les sous-titres restent vides. Un second curseur côté PWA règle aussi la
+  taille de ce texte (24 à 100sp), avec un fondu enchaîné au changement plutôt qu'un redimensionnement brut
+- **Photo du proche à la réception de l'appel** : le PWA capture une photo (240x240, JPEG compressé)
+  depuis la caméra du proche dès le début de l'appel et l'envoie via Firestore ; la tablette l'affiche
+  en rond au-dessus du nom pendant le décompte, pour une reconnaissance immédiate. Non bloquant si la
+  caméra n'a pas encore de frame disponible (timeout de secours 1,5s) : Jean voit alors juste le nom
+- **Décompte à l'écran discret, porté par une barre de progression** : le chiffre reste petit et
+  neutre, une barre se remplit doucement (transition animée, pas de saut) pour porter l'essentiel de
+  l'information visuelle — évite l'effet anxiogène d'un gros chiffre qui défile
 - **Progression du décompte visible côté PWA** : pendant les 30s d'alerte sur la tablette, le proche
   voit une barre de progression et le temps restant avant connexion automatique, synchronisés via
   l'horodatage serveur Firestore (pas juste un texte statique "ça sonne")
+- **Miroir de transcription côté PWA** : pendant l'appel, le proche voit exactement le texte que Jean
+  reçoit (même source que ce qui est envoyé), avec les 2-3 dernières phrases finalisées en historique.
+  Les segments à faible confiance de reconnaissance sont colorés (orange/jaune) pour repérer les
+  passages probablement mal transcrits
+- **Détection de silence côté PWA** : si la reconnaissance vocale ne capte plus rien pendant 5s
+  pendant que le micro écoute, un indicateur discret ("Aucun son détecté") prévient le proche que rien
+  n'est transmis (micro coupé, téléphone trop loin, etc.)
 
 ## Configuration Firebase (obligatoire pour que les appels fonctionnent)
 Le signaling (échange de l'offre/réponse SDP et des candidats ICE entre la

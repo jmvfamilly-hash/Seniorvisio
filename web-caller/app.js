@@ -29,6 +29,9 @@ const els = {
   callingHint: document.getElementById("callingHint"),
   countdownFill: document.getElementById("countdownFill"),
   countdownText: document.getElementById("countdownText"),
+  transcriptCurrent: document.getElementById("transcriptCurrent"),
+  transcriptHistory: document.getElementById("transcriptHistory"),
+  silenceIndicator: document.getElementById("silenceIndicator"),
 };
 
 let statsInterval = null;
@@ -56,6 +59,9 @@ els.callButton.addEventListener("click", async () => {
   els.callingHint.textContent = "Connexion à sa tablette…";
   els.countdownFill.style.width = "0%";
   els.countdownText.textContent = "";
+  els.transcriptCurrent.textContent = "";
+  els.transcriptHistory.innerHTML = "";
+  els.silenceIndicator.classList.add("hidden");
   showState("calling");
   await engine.startCall(CONFIG.targetDeviceId, CONFIG.callerName);
 });
@@ -69,6 +75,31 @@ engine.onCountdown((remaining, total) => {
 
 els.captionToggle.addEventListener("change", () => {
   engine.setCaptionMode(els.captionToggle.checked);
+});
+
+/** Classe CSS selon la confiance de reconnaissance (repère visuel des passages mal transcrits). */
+function confidenceClass(confidence) {
+  if (confidence == null) return "";
+  if (confidence < 0.5) return "low-confidence";
+  if (confidence < 0.75) return "mid-confidence";
+  return "";
+}
+
+engine.onTranscript(({ liveText, isFinal, confidence, history }) => {
+  els.transcriptCurrent.textContent = liveText || "…";
+  els.transcriptCurrent.className = "transcript-current" + (isFinal ? " " + confidenceClass(confidence) : "");
+
+  els.transcriptHistory.innerHTML = "";
+  history.slice(0, -1).forEach((entry) => {
+    const li = document.createElement("li");
+    li.textContent = entry.text;
+    li.className = confidenceClass(entry.confidence);
+    els.transcriptHistory.appendChild(li);
+  });
+});
+
+engine.onSilenceDetected((silent) => {
+  els.silenceIndicator.classList.toggle("hidden", !silent);
 });
 
 let textSizeDebounce = null;

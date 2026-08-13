@@ -32,17 +32,19 @@ class IncomingCallService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         val callerName = intent?.getStringExtra(EXTRA_CALLER_NAME) ?: "un proche"
+        val callerPhoto = intent?.getStringExtra(EXTRA_CALLER_PHOTO)
         val callId = intent?.getStringExtra(EXTRA_CALL_ID)
         if (callId != null) {
-            launchAlertScreen(callId, callerName)
+            launchAlertScreen(callId, callerName, callerPhoto)
         }
         return START_NOT_STICKY
     }
 
-    private fun launchAlertScreen(callId: String, callerName: String) {
+    private fun launchAlertScreen(callId: String, callerName: String, callerPhotoBase64: String?) {
         val alertIntent = Intent(this, IncomingCallActivity::class.java).apply {
             putExtra(IncomingCallActivity.EXTRA_CALL_ID, callId)
             putExtra("callerName", callerName)
+            putExtra(IncomingCallActivity.EXTRA_CALLER_PHOTO, callerPhotoBase64)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         startActivity(alertIntent)
@@ -65,6 +67,7 @@ class IncomingCallService : LifecycleService() {
 
     companion object {
         const val EXTRA_CALLER_NAME = "extra_caller_name"
+        const val EXTRA_CALLER_PHOTO = "extra_caller_photo"
         const val EXTRA_CALL_ID = "extra_call_id"
         private const val FOREGROUND_ID = 42
         private const val SERVICE_CHANNEL_ID = "senior_visio_service"

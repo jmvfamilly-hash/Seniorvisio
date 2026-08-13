@@ -32,8 +32,15 @@ class CallSignalingClient {
         false
     }
 
-    /** Notifie uniquement des appels *nouvellement* mis en sonnerie après l'appel de cette fonction. */
-    fun listenForRingingCalls(onIncoming: (callId: String, callerName: String) -> Unit): ListenerRegistration {
+    /**
+     * Notifie uniquement des appels *nouvellement* mis en sonnerie après
+     * l'appel de cette fonction. `callerPhotoBase64` est une photo (JPEG,
+     * capturée sur le navigateur du proche à l'ouverture de l'appel) pour
+     * une reconnaissance visuelle immédiate — null si absente ou trop lourde.
+     */
+    fun listenForRingingCalls(
+        onIncoming: (callId: String, callerName: String, callerPhotoBase64: String?) -> Unit
+    ): ListenerRegistration {
         var isFirstSnapshot = true
         return db.collection(CALLS_COLLECTION)
             .whereEqualTo(FIELD_STATUS, STATUS_RINGING)
@@ -44,7 +51,8 @@ class CallSignalingClient {
                 snapshot.documentChanges.forEach { change ->
                     if (change.type == DocumentChange.Type.ADDED) {
                         val callerName = change.document.getString(FIELD_CALLER_NAME) ?: "un proche"
-                        onIncoming(change.document.id, callerName)
+                        val photo = change.document.getString(FIELD_CALLER_PHOTO)
+                        onIncoming(change.document.id, callerName, photo)
                     }
                 }
             }
@@ -148,6 +156,7 @@ class CallSignalingClient {
 
         private const val FIELD_STATUS = "status"
         private const val FIELD_CALLER_NAME = "callerName"
+        private const val FIELD_CALLER_PHOTO = "callerPhotoBase64"
         private const val FIELD_OFFER_SDP = "offerSdp"
         private const val FIELD_ANSWER_SDP = "answerSdp"
         private const val FIELD_CALLER_SPEECH = "callerSpeechText"

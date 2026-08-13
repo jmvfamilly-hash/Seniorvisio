@@ -50,6 +50,13 @@
         <input type="range" id="textSizeSlider" min="24" max="100" value="56" step="4">
       </div>
 
+      <div class="transcript-mirror">
+        <p class="transcript-hint">Ce que Jean va voir :</p>
+        <p class="transcript-current" id="transcriptCurrent"></p>
+        <p class="silence-indicator hidden" id="silenceIndicator">🔇 Aucun son détecté depuis quelques secondes</p>
+        <ul class="transcript-history" id="transcriptHistory"></ul>
+      </div>
+
       <button id="hangupButton" class="danger">Raccrocher</button>
     </div>
   </main>

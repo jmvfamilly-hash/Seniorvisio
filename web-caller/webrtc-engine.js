@@ -18,6 +18,11 @@ class RealCallEngine extends CallEngine {
     this._recognition = null;
     this._countdownCb = null;
     this._countdownInterval = null;
+    this._transcriptCb = null;
+    this._silenceCb = null;
+    this._transcriptHistory = [];
+    this._silenceTimer = null;
+    this._silenceActive = false;
 
     try {
       firebase.initializeApp(firebaseConfig);
@@ -34,6 +39,10 @@ class RealCallEngine extends CallEngine {
   onEnded(callback) { this._endedCb = callback; }
   /** callback(remainingSeconds, totalSeconds) — progression du décompte vu côté tablette. */
   onCountdown(callback) { this._countdownCb = callback; }
+  /** callback({liveText, isFinal, confidence, history}) — miroir local de ce que Jean va voir/entendre. */
+  onTranscript(callback) { this._transcriptCb = callback; }
+  /** callback(silent: boolean) — aucun son détecté depuis quelques secondes pendant que le micro écoute. */
+  onSilenceDetected(callback) { this._silenceCb = callback; }
 
   async startCall(targetId, callerName) {
     if (!this._available) {
@@ -66,13 +75,17 @@ class RealCallEngine extends CallEngine {
       if (event.candidate) callerCandidates.add(event.candidate.toJSON());
     };
 
+    const photoPromise = this._captureCallerPhoto();
+
     const offer = await this._pc.createOffer();
     await this._pc.setLocalDescription(offer);
+    const callerPhotoBase64 = await photoPromise;
 
     await this._callDocRef.set({
       callerName: callerName || "Un proche",
       status: "ringing",
       offerSdp: offer.sdp,
+      callerPhotoBase64: callerPhotoBase64 || null,
       captionModeEnabled: false,
       captionTextSize: 56,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -110,10 +123,51 @@ class RealCallEngine extends CallEngine {
   }
 
   /**
+   * Capture une photo carrée (240x240, JPEG compressé) depuis le flux vidéo
+   * local déjà actif, pour affichage immédiat côté tablette (reconnaissance
+   * visuelle du proche à la réception de l'appel). Retourne null si la vidéo
+   * n'a pas encore de frame disponible (ex. permission caméra refusée) —
+   * non bloquant, Jean voit alors juste le nom.
+   */
+  async _captureCallerPhoto() {
+    try {
+      const video = document.getElementById("localVideo");
+      if (!video.videoWidth) {
+        await new Promise((resolve) => {
+          const onLoaded = () => { video.removeEventListener("loadeddata", onLoaded); resolve(); };
+          video.addEventListener("loadeddata", onLoaded);
+          setTimeout(resolve, 1500);
+        });
+      }
+      if (!video.videoWidth) return null;
+
+      const size = 240;
+      const side = Math.min(video.videoWidth, video.videoHeight);
+      const sx = (video.videoWidth - side) / 2;
+      const sy = (video.videoHeight - side) / 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      canvas.getContext("2d").drawImage(video, sx, sy, side, side, 0, 0, size, size);
+      return canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+    } catch (e) {
+      console.warn("[RealCallEngine] Capture photo impossible :", e);
+      return null;
+    }
+  }
+
+  /**
    * Transcrit en direct la voix du proche (micro local) et envoie le texte
    * dans Firestore, pour le mode "sous-titres géants" côté tablette (voir
    * core/WebRtcCallEngine.kt). Non supporté par Safari/iOS : l'appel vidéo
    * fonctionne quand même, seuls les sous-titres restent vides.
+   *
+   * Miroir local (onTranscript) : montre au proche exactement ce que Jean va
+   * recevoir, avec un historique des 3 dernières phrases finalisées et leur
+   * confiance de reconnaissance (pour repérer les passages mal transcrits).
+   * Détection de silence (onSilenceDetected) : si aucun résultat de
+   * reconnaissance n'arrive pendant 5s alors que le micro écoute, on prévient
+   * le proche que rien n'est capté (micro coupé, trop loin, etc.).
    */
   _startCaptioning() {
     const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -128,17 +182,54 @@ class RealCallEngine extends CallEngine {
     recognition.interimResults = true;
     recognition.lang = "fr-FR";
 
+    this._transcriptHistory = [];
+    const SILENCE_MS = 5000;
+    const resetSilenceTimer = () => {
+      if (this._silenceTimer) clearTimeout(this._silenceTimer);
+      if (this._silenceActive) {
+        this._silenceActive = false;
+        this._silenceCb && this._silenceCb(false);
+      }
+      this._silenceTimer = setTimeout(() => {
+        this._silenceActive = true;
+        this._silenceCb && this._silenceCb(true);
+      }, SILENCE_MS);
+    };
+    resetSilenceTimer();
+
     let lastSent = 0;
     recognition.onresult = (event) => {
       let text = "";
+      let hasFinal = false;
+      let confidence = null;
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        text += event.results[i][0].transcript;
+        const result = event.results[i];
+        text += result[0].transcript;
+        if (result.isFinal) {
+          hasFinal = true;
+          confidence = result[0].confidence;
+        }
       }
+
+      resetSilenceTimer();
+
       const now = Date.now();
       if (text && now - lastSent > 500 && this._callDocRef) {
         lastSent = now;
         this._callDocRef.update({ callerSpeechText: text }).catch(() => {});
       }
+
+      if (hasFinal && text.trim()) {
+        this._transcriptHistory.push({ text: text.trim(), confidence });
+        if (this._transcriptHistory.length > 3) this._transcriptHistory.shift();
+      }
+
+      this._transcriptCb && this._transcriptCb({
+        liveText: text,
+        isFinal: hasFinal,
+        confidence,
+        history: [...this._transcriptHistory],
+      });
     };
     recognition.onerror = (e) => console.warn("[RealCallEngine] Reconnaissance vocale :", e.error);
     recognition.onend = () => {
@@ -197,6 +288,11 @@ class RealCallEngine extends CallEngine {
       recognition.onend = null;
       try { recognition.stop(); } catch (_) {}
     }
+    if (this._silenceTimer) {
+      clearTimeout(this._silenceTimer);
+      this._silenceTimer = null;
+    }
+    this._silenceActive = false;
   }
 
   /** Résumé lisible des métriques vidéo temps réel (résolution, fps, pertes). */

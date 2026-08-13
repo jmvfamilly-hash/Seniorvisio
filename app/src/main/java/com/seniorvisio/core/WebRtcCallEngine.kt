@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioManager
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.google.firebase.firestore.ListenerRegistration
 import com.seniorvisio.signaling.CallSignalingClient
@@ -56,12 +58,14 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
     private var localRenderer: SurfaceViewRenderer? = null
     private var remoteRenderer: SurfaceViewRenderer? = null
-    private var captionRenderer: SurfaceViewRenderer? = null
     private var speechListener: ListenerRegistration? = null
     private var volumeListener: ListenerRegistration? = null
     private var captionModeListener: ListenerRegistration? = null
     private var captionTextSizeListener: ListenerRegistration? = null
     private var pendingVolume: Double = 1.0
+    private var currentVolume: Double = 1.0
+    private var volumeRampRunnable: Runnable? = null
+    private val volumeHandler = Handler(Looper.getMainLooper())
     private val pendingRemoteCandidates = mutableListOf<IceCandidate>()
 
     private var savedAudioMode: Int? = null
@@ -133,22 +137,14 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         state = CallState.ENDED
     }
 
-    /**
-     * @param captionRemote petit rendu vidéo utilisé par le mode "sous-titres géants"
-     * (voir IncomingCallActivity) — reçoit le même flux que [remote], juste affiché en
-     * plus petit pendant que le texte transcrit prend le plus de place à l'écran.
-     */
-    fun attachRenderers(local: SurfaceViewRenderer, remote: SurfaceViewRenderer, captionRemote: SurfaceViewRenderer) {
+    fun attachRenderers(local: SurfaceViewRenderer, remote: SurfaceViewRenderer) {
         local.init(eglBase.eglBaseContext, null)
         local.setMirror(true)
         remote.init(eglBase.eglBaseContext, null)
-        captionRemote.init(eglBase.eglBaseContext, null)
         localRenderer = local
         remoteRenderer = remote
-        captionRenderer = captionRemote
         localVideoTrack?.addSink(local)
         remoteVideoTrack?.addSink(remote)
-        remoteVideoTrack?.addSink(captionRemote)
     }
 
     /**
@@ -192,40 +188,44 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * Applique le niveau de volume choisi à distance par l'appelant depuis le
      * curseur du PWA (voir web-caller/webrtc-engine.js). 1.0 = volume normal,
      * 0.0 = muet, >1.0 = amplifié. Agit uniquement sur le flux audio de
-     * l'appel (pas le volume système de la tablette).
+     * l'appel (pas le volume système de la tablette). La transition se fait
+     * en douceur (~1,2s) plutôt qu'un saut instantané, pour éviter un effet
+     * de surprise côté Jean si le proche change le réglage en pleine
+     * conversation (recommandation ergonomique).
      */
     fun listenForRemoteVolumeControl() {
         val id = callId ?: return
         volumeListener = signaling.listenForRemoteVolume(id) { volume ->
             pendingVolume = volume
-            remoteAudioTrack?.setVolume(volume)
-        }
-    }
-
-    /**
-     * Résumé lisible des métriques vidéo temps réel de l'appel (résolution,
-     * fps, paquets perdus) — pour objectiver la qualité au lieu de se fier au
-     * ressenti. Rafraîchi à la demande (voir appelant).
-     */
-    fun fetchStatsSummary(onResult: (String) -> Unit) {
-        val pc = peerConnection
-        if (pc == null) {
-            onResult("")
-            return
-        }
-        pc.getStats { report ->
-            var videoLine = ""
-            report.statsMap.values.forEach { stat ->
-                if (stat.type == "inbound-rtp" && stat.members["kind"] == "video") {
-                    videoLine = "🎥 ${stat.members["frameWidth"]}x${stat.members["frameHeight"]}" +
-                        "@${stat.members["framesPerSecond"]}fps pertes=${stat.members["packetsLost"]}"
-                }
-            }
-            onResult(videoLine)
+            rampVolumeTo(volume)
         }
     }
 
     // ---- internals ----
+
+    private fun rampVolumeTo(target: Double) {
+        val track = remoteAudioTrack
+        volumeRampRunnable?.let { volumeHandler.removeCallbacks(it) }
+        if (track == null) {
+            currentVolume = target
+            return
+        }
+        val start = currentVolume
+        val steps = 20
+        val stepDelayMs = 60L
+        var step = 0
+        val runnable = object : Runnable {
+            override fun run() {
+                step++
+                val value = start + (target - start) * (step.toFloat() / steps)
+                track.setVolume(value)
+                currentVolume = value
+                if (step < steps) volumeHandler.postDelayed(this, stepDelayMs)
+            }
+        }
+        volumeRampRunnable = runnable
+        volumeHandler.post(runnable)
+    }
 
     /**
      * Force le haut-parleur principal (et le mode audio "communication") :
@@ -299,10 +299,10 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                 if (track is VideoTrack) {
                     remoteVideoTrack = track
                     remoteRenderer?.let { track.addSink(it) }
-                    captionRenderer?.let { track.addSink(it) }
                 } else if (track is AudioTrack) {
                     remoteAudioTrack = track
                     track.setVolume(pendingVolume)
+                    currentVolume = pendingVolume
                 }
             }
 
@@ -385,7 +385,10 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         captionModeListener = null
         captionTextSizeListener?.remove()
         captionTextSizeListener = null
+        volumeRampRunnable?.let { volumeHandler.removeCallbacks(it) }
+        volumeRampRunnable = null
         pendingVolume = 1.0
+        currentVolume = 1.0
         videoCapturer?.let {
             try {
                 it.stopCapture()
@@ -398,10 +401,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         surfaceTextureHelper = null
         localRenderer?.release()
         remoteRenderer?.release()
-        captionRenderer?.release()
         localRenderer = null
         remoteRenderer = null
-        captionRenderer = null
         peerConnection?.close()
         peerConnection = null
         localVideoTrack = null

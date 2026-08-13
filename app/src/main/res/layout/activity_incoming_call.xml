@@ -26,6 +26,16 @@
         android:gravity="center"
         android:padding="32dp">
 
+        <ImageView
+            android:id="@+id/imageCallerPhoto"
+            android:layout_width="160dp"
+            android:layout_height="160dp"
+            android:layout_marginBottom="24dp"
+            android:background="#2C3E5C"
+            android:scaleType="centerCrop"
+            android:contentDescription="Photo de l'appelant"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/textCallerName"
             android:layout_width="wrap_content"
@@ -36,14 +46,32 @@
             android:textStyle="bold"
             android:gravity="center" />
 
+        <!-- Décompte : la barre qui se remplit doucement porte l'essentiel de
+             l'information visuelle, le chiffre reste discret en dessous
+             (recommandation ergonomique : éviter l'effet de compte à rebours
+             anxiogène d'un gros chiffre qui défile). -->
+        <FrameLayout
+            android:id="@+id/countdownProgressContainer"
+            android:layout_width="280dp"
+            android:layout_height="10dp"
+            android:layout_marginTop="28dp"
+            android:background="#33FFFFFF">
+
+            <View
+                android:id="@+id/countdownProgressFill"
+                android:layout_width="280dp"
+                android:layout_height="10dp"
+                android:background="#2ECC71" />
+        </FrameLayout>
+
         <TextView
             android:id="@+id/textCountdown"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="10dp"
             android:text="30 s"
-            android:textColor="#CCCCCC"
-            android:textSize="40sp"
+            android:textColor="#8FA0BF"
+            android:textSize="18sp"
             android:gravity="center" />
 
         <TextView
@@ -57,51 +85,36 @@
 
     </LinearLayout>
 
-    <!-- Mode "sous-titres géants" : vidéo réduite à 20% en haut, texte transcrit
-         en très gros sur fond uni dans les 80% restants. Activé/désactivé à
-         distance par le proche depuis le PWA (voir
-         WebRtcCallEngine.listenForCaptionMode), pas de bouton local ici. -->
+    <!-- Sous-titres en surimpression (style sous-titrage TV) : la vidéo reste
+         plein écran, le texte transcrit s'affiche dans un bandeau semi-opaque
+         en bas, 3 lignes max. Activé/désactivé à distance par le proche
+         depuis le PWA (voir WebRtcCallEngine.listenForCaptionMode) — apparaît
+         et disparaît en fondu, pas de bouton local ici. -->
     <LinearLayout
-        android:id="@+id/captionContent"
+        android:id="@+id/captionBanner"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:background="#000000"
-        android:visibility="gone">
-
-        <org.webrtc.SurfaceViewRenderer
-            android:id="@+id/captionRemoteRenderer"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="0.2" />
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="140dp"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:background="@drawable/caption_banner_bg"
+        android:padding="20dp"
+        android:visibility="gone"
+        android:alpha="0">
 
         <TextView
             android:id="@+id/textCaption"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="0.8"
+            android:layout_height="wrap_content"
             android:gravity="center"
-            android:padding="24dp"
-            android:background="#000000"
             android:textColor="#FFFFFF"
             android:textStyle="bold"
-            android:textSize="56sp"
-            android:text="En attente de parole…" />
-
+            android:textSize="32sp"
+            android:maxLines="3"
+            android:ellipsize="end"
+            android:text="" />
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/textStats"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|start"
-        android:layout_margin="8dp"
-        android:background="#88000000"
-        android:padding="6dp"
-        android:fontFamily="monospace"
-        android:textColor="#FFFFFF"
-        android:textSize="12sp"
-        android:visibility="gone" />
 
     <Button
         android:id="@+id/buttonBlock"

@@ -43,10 +43,11 @@ class CallListenerService : LifecycleService() {
 
     private fun startListening() {
         if (!signaling.isAvailable()) return
-        callListener = signaling.listenForRingingCalls { callId, callerName ->
+        callListener = signaling.listenForRingingCalls { callId, callerName, callerPhotoBase64 ->
             val alertIntent = Intent(this, IncomingCallService::class.java).apply {
                 putExtra(IncomingCallService.EXTRA_CALL_ID, callId)
                 putExtra(IncomingCallService.EXTRA_CALLER_NAME, callerName)
+                putExtra(IncomingCallService.EXTRA_CALLER_PHOTO, callerPhotoBase64)
             }
             startForegroundService(alertIntent)
         }

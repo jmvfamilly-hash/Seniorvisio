@@ -1,14 +1,17 @@
 package com.seniorvisio.ui
 
+import android.graphics.BitmapFactory
+import android.graphics.Outline
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
+import android.util.Base64
 import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewOutlineProvider
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import android.widget.TextView
@@ -32,8 +35,6 @@ class IncomingCallActivity : AppCompatActivity() {
     private lateinit var buttonBlock: Button
     private var isConnected = false
     private var callHandled = false
-    private val statsHandler = Handler(Looper.getMainLooper())
-    private var statsRunnable: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,9 +65,14 @@ class IncomingCallActivity : AppCompatActivity() {
         val callerName = intent.getStringExtra("callerName") ?: "un proche"
         val textCallerName = findViewById<TextView>(R.id.textCallerName)
         val textCountdown = findViewById<TextView>(R.id.textCountdown)
+        val countdownFill = findViewById<View>(R.id.countdownProgressFill)
         buttonBlock = findViewById(R.id.buttonBlock)
 
         textCallerName.text = "Appel de $callerName"
+        showCallerPhoto(intent.getStringExtra(EXTRA_CALLER_PHOTO))
+
+        countdownFill.pivotX = 0f
+        countdownFill.scaleX = 0f
 
         buttonBlock.setOnClickListener {
             alertController.cancel()
@@ -90,14 +96,42 @@ class IncomingCallActivity : AppCompatActivity() {
             }
         )
 
-        callEngine.signalAlertStarted(adminConfig.countdownSeconds)
+        val durationSeconds = adminConfig.countdownSeconds
+        callEngine.signalAlertStarted(durationSeconds)
         alertController.startCountdown(
             callerName = callerName,
-            durationSeconds = adminConfig.countdownSeconds,
-            onTick = { remaining -> textCountdown.text = "$remaining s" },
+            durationSeconds = durationSeconds,
+            onTick = { remaining ->
+                // Le chiffre reste discret ; la barre qui se remplit doucement porte
+                // l'essentiel de l'information visuelle (évite l'effet de décompte
+                // anxiogène d'un gros chiffre qui défile — recommandation ergonomique).
+                textCountdown.text = "$remaining s"
+                val elapsedFraction = 1f - (remaining.toFloat() / durationSeconds.toFloat())
+                countdownFill.animate().scaleX(elapsedFraction).setDuration(950).start()
+            },
             onTimeoutConnect = { connectVideoCall() },
             onBlocked = { /* déclenché via le bouton, voir ci-dessus */ }
         )
+    }
+
+    /** Photo du proche (capturée sur son navigateur à l'ouverture de l'appel) pour une reconnaissance immédiate. */
+    private fun showCallerPhoto(photoBase64: String?) {
+        if (photoBase64.isNullOrEmpty()) return
+        val imagePhoto = findViewById<ImageView>(R.id.imageCallerPhoto)
+        try {
+            val bytes = Base64.decode(photoBase64, Base64.DEFAULT)
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return
+            imagePhoto.setImageBitmap(bitmap)
+            imagePhoto.clipToOutline = true
+            imagePhoto.outlineProvider = object : ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: Outline) {
+                    outline.setOval(0, 0, view.width, view.height)
+                }
+            }
+            imagePhoto.visibility = View.VISIBLE
+        } catch (_: IllegalArgumentException) {
+            // Photo corrompue/mal encodée : on garde simplement le nom, pas bloquant.
+        }
     }
 
     private fun connectVideoCall() {
@@ -105,37 +139,36 @@ class IncomingCallActivity : AppCompatActivity() {
         findViewById<View>(R.id.alertContent).visibility = View.GONE
         val localRenderer = findViewById<SurfaceViewRenderer>(R.id.localRenderer)
         val remoteRenderer = findViewById<SurfaceViewRenderer>(R.id.remoteRenderer)
-        val captionRemoteRenderer = findViewById<SurfaceViewRenderer>(R.id.captionRemoteRenderer)
         localRenderer.visibility = View.VISIBLE
         remoteRenderer.visibility = View.VISIBLE
-        callEngine.attachRenderers(localRenderer, remoteRenderer, captionRemoteRenderer)
+        callEngine.attachRenderers(localRenderer, remoteRenderer)
         callEngine.answer()
         buttonBlock.text = "Raccrocher"
-        startStatsPolling()
         setupCaptionMode()
         callEngine.listenForRemoteVolumeControl()
     }
 
     /**
-     * Mode "sous-titres géants" : les paroles de l'appelant, transcrites en
-     * direct côté navigateur (voir web-caller/webrtc-engine.js), s'affichent
-     * en très gros sur 80% de l'écran, avec sa vidéo réduite dans les 20%
-     * restants. Activé/désactivé à distance par le proche depuis le PWA
-     * (pas de bouton local sur la tablette) — voir listenForCaptionMode.
-     * Fonctionne uniquement si le proche appelle depuis un navigateur
-     * supportant la reconnaissance vocale (Chrome ; pas Safari).
+     * Sous-titres en surimpression façon sous-titrage TV (recommandation
+     * ergonomique : remplace l'ancien mode 80%/20% en écran divisé) — la
+     * vidéo reste plein écran, le texte apparaît dans un bandeau semi-opaque
+     * en bas. Activé/désactivé à distance par le proche depuis le PWA, avec
+     * une transition en fondu pour éviter tout changement brutal côté Jean.
      */
     private fun setupCaptionMode() {
-        val captionContent = findViewById<View>(R.id.captionContent)
+        val captionBanner = findViewById<View>(R.id.captionBanner)
         val textCaption = findViewById<TextView>(R.id.textCaption)
-        val remoteRenderer = findViewById<SurfaceViewRenderer>(R.id.remoteRenderer)
-        val localRenderer = findViewById<SurfaceViewRenderer>(R.id.localRenderer)
 
         callEngine.listenForCaptionMode { enabled ->
             runOnUiThread {
-                captionContent.visibility = if (enabled) View.VISIBLE else View.GONE
-                remoteRenderer.visibility = if (enabled) View.GONE else View.VISIBLE
-                localRenderer.visibility = if (enabled) View.GONE else View.VISIBLE
+                if (enabled) {
+                    captionBanner.visibility = View.VISIBLE
+                    captionBanner.animate().alpha(1f).setDuration(400).start()
+                } else {
+                    captionBanner.animate().alpha(0f).setDuration(400)
+                        .withEndAction { captionBanner.visibility = View.GONE }
+                        .start()
+                }
             }
         }
 
@@ -144,7 +177,12 @@ class IncomingCallActivity : AppCompatActivity() {
         }
 
         callEngine.listenForCaptionTextSize { sizeSp ->
-            runOnUiThread { textCaption.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp) }
+            runOnUiThread {
+                textCaption.animate().alpha(0f).setDuration(150).withEndAction {
+                    textCaption.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
+                    textCaption.animate().alpha(1f).setDuration(150).start()
+                }.start()
+            }
         }
     }
 
@@ -163,30 +201,8 @@ class IncomingCallActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
-    /** Rafraîchit toutes les 2s les métriques réelles (résolution/fps vidéo). */
-    private fun startStatsPolling() {
-        val textStats = findViewById<TextView>(R.id.textStats)
-        textStats.visibility = View.VISIBLE
-        val runnable = object : Runnable {
-            override fun run() {
-                callEngine.fetchStatsSummary { summary ->
-                    runOnUiThread { textStats.text = summary }
-                }
-                statsHandler.postDelayed(this, 2000)
-            }
-        }
-        statsRunnable = runnable
-        statsHandler.post(runnable)
-    }
-
-    private fun stopStatsPolling() {
-        statsRunnable?.let { statsHandler.removeCallbacks(it) }
-        statsRunnable = null
-    }
-
     override fun onDestroy() {
         alertController.cancel()
-        stopStatsPolling()
         if (!callHandled) {
             callHandled = true
             callEngine.hangUp()
@@ -196,5 +212,6 @@ class IncomingCallActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_CALL_ID = "extra_call_id"
+        const val EXTRA_CALLER_PHOTO = "extra_caller_photo"
     }
 }
