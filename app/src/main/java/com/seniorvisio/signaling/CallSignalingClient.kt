@@ -152,6 +152,18 @@ class CallSignalingClient {
         }
     }
 
+    /**
+     * Écoute la fin d'appel déclenchée à distance par le proche (bouton
+     * "Annuler" pendant l'attente, ou "Raccrocher" une fois connecté), pour
+     * que la tablette se referme aussi — sans ça, un raccroché côté proche
+     * laissait la communication tourner indéfiniment côté tablette.
+     */
+    fun listenForRemoteEnded(callId: String, onEnded: () -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            if (snapshot?.getString(FIELD_STATUS) == STATUS_ENDED) onEnded()
+        }
+    }
+
     fun listenForCallerCandidates(callId: String, onCandidate: (RemoteIceCandidate) -> Unit): ListenerRegistration {
         return callDoc(callId).collection(CALLER_CANDIDATES)
             .addSnapshotListener { snapshot, _ ->

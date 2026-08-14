@@ -63,6 +63,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var captionModeListener: ListenerRegistration? = null
     private var captionTextSizeListener: ListenerRegistration? = null
     private var forceConnectListener: ListenerRegistration? = null
+    private var remoteEndedListener: ListenerRegistration? = null
     private var pendingVolume: Double = 1.0
     private var currentVolume: Double = 1.0
     private var volumeRampRunnable: Runnable? = null
@@ -219,6 +220,16 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     fun listenForForceConnect(onForce: () -> Unit) {
         val id = callId ?: return
         forceConnectListener = signaling.listenForForceConnect(id, onForce)
+    }
+
+    /**
+     * Écoute la fin d'appel déclenchée à distance par le proche (PWA), pour
+     * que la tablette se referme aussi — sans ça, un raccroché côté proche
+     * laissait la communication tourner indéfiniment côté tablette.
+     */
+    fun listenForRemoteHangup(onHangup: () -> Unit) {
+        val id = callId ?: return
+        remoteEndedListener = signaling.listenForRemoteEnded(id, onHangup)
     }
 
     // ---- internals ----
@@ -407,6 +418,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         captionTextSizeListener = null
         forceConnectListener?.remove()
         forceConnectListener = null
+        remoteEndedListener?.remove()
+        remoteEndedListener = null
         volumeRampRunnable?.let { volumeHandler.removeCallbacks(it) }
         volumeRampRunnable = null
         pendingVolume = 1.0

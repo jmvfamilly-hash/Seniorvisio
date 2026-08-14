@@ -108,6 +108,16 @@ class IncomingCallActivity : AppCompatActivity() {
             }
         }
 
+        // Sans ça, un raccroché côté PWA (pendant l'attente ou une fois
+        // connecté) n'était jamais détecté ici : la tablette restait bloquée
+        // en communication. onDestroy() se charge du nettoyage (caméra/micro/
+        // WebRTC) exactement comme pour le bouton "Bloquer"/"Raccrocher".
+        callEngine.listenForRemoteHangup {
+            runOnUiThread {
+                if (!callHandled) finish()
+            }
+        }
+
         val durationSeconds = adminConfig.countdownSeconds
         callEngine.signalAlertStarted(durationSeconds)
         playDiscreetAlertSound()
