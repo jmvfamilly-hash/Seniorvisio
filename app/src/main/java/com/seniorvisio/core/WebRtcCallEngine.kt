@@ -65,6 +65,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var forceConnectListener: ListenerRegistration? = null
     private var voskCaptionRecognizer: VoskCaptionRecognizer? = null
     private var localCaptionListener: ((String) -> Unit)? = null
+    private var hasReceivedRemoteText = false
     private var pendingVolume: Double = 1.0
     private var currentVolume: Double = 1.0
     private var volumeRampRunnable: Runnable? = null
@@ -152,23 +153,25 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     /**
-     * Sous-titres : privilégie la reconnaissance embarquée sur la tablette
-     * (Vosk, à partir de l'audio WebRTC réellement reçu — voir
-     * VoskCaptionRecognizer, branché dans onTrack ci-dessous), qui fonctionne
-     * quel que soit le navigateur du proche, contrairement à l'ancienne
-     * dépendance à la Web Speech API du navigateur (indisponible sur
-     * Safari/iOS). Tant que le modèle Vosk n'est pas encore chargé (premier
-     * lancement, téléchargement en cours — voir VoskModelProvider), on
-     * retombe sur le texte transcrit côté PWA et relayé par Firestore, pour
-     * ne pas laisser les sous-titres vides pendant ce temps.
+     * Sous-titres : privilégie le texte transcrit côté PWA (Web Speech API du
+     * navigateur, généralement plus fiable que le petit modèle Vosk embarqué
+     * — voir README) dès qu'il en arrive au moins une fois pendant l'appel.
+     * La reconnaissance embarquée sur la tablette (Vosk, à partir de l'audio
+     * WebRTC réellement reçu — voir VoskCaptionRecognizer, branché dans
+     * onTrack ci-dessous) ne sert que de filet de secours : premières
+     * secondes avant le premier texte du PWA, et surtout navigateurs sans
+     * reconnaissance vocale (Safari/iOS), qui n'enverront jamais rien par
+     * Firestore.
      */
     fun listenForCaptions(onText: (String) -> Unit) {
-        localCaptionListener = onText
-        voskCaptionRecognizer?.setOnTextListener(onText)
+        hasReceivedRemoteText = false
+        localCaptionListener = { text -> if (!hasReceivedRemoteText) onText(text) }
+        voskCaptionRecognizer?.setOnTextListener(localCaptionListener!!)
 
         val id = callId ?: return
         speechListener = signaling.listenForCallerSpeech(id) { text ->
-            if (VoskModelProvider.getModel() == null) onText(text)
+            hasReceivedRemoteText = true
+            onText(text)
         }
     }
 
@@ -427,6 +430,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         voskCaptionRecognizer?.release()
         voskCaptionRecognizer = null
         localCaptionListener = null
+        hasReceivedRemoteText = false
         volumeRampRunnable?.let { volumeHandler.removeCallbacks(it) }
         volumeRampRunnable = null
         pendingVolume = 1.0

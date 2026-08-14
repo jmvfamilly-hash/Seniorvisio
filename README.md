@@ -114,16 +114,18 @@ locale avec [Vosk](https://alphacephei.com/vosk/) (gratuit, open source, 100% ho
 - `VoskCaptionRecognizer` s'attache directement au flux audio du proche reçu par WebRTC
   (`AudioTrack.addSink`, voir `WebRtcCallEngine.onTrack`) et transcrit en direct, sans jamais passer
   par le navigateur de l'appelant.
-- Tant que le modèle n'est pas encore prêt (premier lancement), `WebRtcCallEngine.listenForCaptions`
-  retombe automatiquement sur l'ancien texte relayé par Firestore (PWA → tablette), pour ne pas
-  laisser les sous-titres vides pendant le téléchargement.
+- **Priorité au texte du PWA** : le petit modèle Vosk "small" embarqué est nettement moins précis que
+  la reconnaissance vocale du navigateur (constaté en test réel — des mots corrects côté PWA arrivaient
+  déformés côté tablette). `WebRtcCallEngine.listenForCaptions` affiche donc en priorité le texte relayé
+  par Firestore (PWA → tablette) dès qu'il en arrive au moins une fois pendant l'appel ; Vosk ne sert
+  que de filet de secours (début d'appel avant le premier texte du PWA, et surtout navigateurs sans
+  reconnaissance vocale comme Safari/iOS, qui n'enverront jamais rien par Firestore).
 
-**Non vérifié en conditions réelles** (pas de tablette physique disponible pour tester) : le format
-audio exact livré par `AudioTrackSink.onData` (fréquence, canaux) n'a pu être validé que par lecture
-du code WebRTC, pas par un appel réel. À surveiller en priorité lors du premier test : la présence
-de sous-titres du tout (le modèle a-t-il fini de télécharger ?), leur justesse, et l'usage CPU/batterie
-pendant un appel. En cas de problème, revenir à `claude/android-apk-debug-build-d3zwgj` ne perd aucun
-autre changement : cette branche n'a touché que les sous-titres.
+**Non vérifié en conditions réelles au-delà de ce premier test** (pas de tablette physique disponible
+pour un test approfondi) : l'usage CPU/batterie pendant un appel, et la justesse de Vosk en filet de
+secours (cas Safari/iOS) restent à valider. En cas de problème, revenir à
+`claude/android-apk-debug-build-d3zwgj` ne perd aucun autre changement : cette branche n'a touché que
+les sous-titres.
 
 ## Configuration Firebase (obligatoire pour que les appels fonctionnent)
 Le signaling (échange de l'offre/réponse SDP et des candidats ICE entre la
