@@ -46,19 +46,23 @@ class VoskCaptionRecognizer : AudioTrackSink {
         var current = recognizer
         if (current == null || recognizerSampleRate != sampleRate) {
             current?.close()
-            current = try {
+            val created = try {
                 Recognizer(model, sampleRate.toFloat())
             } catch (e: Exception) {
                 Log.w(TAG, "Recognizer Vosk indisponible : ${e.message}")
                 return
             }
-            recognizer = current
+            recognizer = created
             recognizerSampleRate = sampleRate
+            current = created
         }
+        // Réassigné en var ci-dessus : un val local force le compilateur à
+        // le traiter comme définitivement non-null pour la suite.
+        val activeRecognizer = current ?: return
 
         val mono = toMonoShortArray(audioData, numberOfChannels, numberOfFrames)
-        val isFinal = current.acceptWaveForm(mono, mono.size)
-        val json = if (isFinal) current.result else current.partialResult
+        val isFinal = activeRecognizer.acceptWaveForm(mono, mono.size)
+        val json = if (isFinal) activeRecognizer.result else activeRecognizer.partialResult
         val text = extractText(json, isFinal)
         if (!text.isNullOrBlank()) listener?.invoke(text)
     }
