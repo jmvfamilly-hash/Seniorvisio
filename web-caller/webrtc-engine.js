@@ -21,6 +21,7 @@ class RealCallEngine extends CallEngine {
     this._transcriptCb = null;
     this._silenceCb = null;
     this._captionOverflowCb = null;
+    this._tabletCaptionCb = null;
     this._transcriptHistory = [];
     this._silenceTimer = null;
     this._silenceActive = false;
@@ -46,6 +47,8 @@ class RealCallEngine extends CallEngine {
   onSilenceDetected(callback) { this._silenceCb = callback; }
   /** callback(overflowing: boolean) — le texte affiché déborde de l'espace visible côté tablette : ralentir le débit. */
   onCaptionOverflow(callback) { this._captionOverflowCb = callback; }
+  /** callback(text: string) — texte exact affiché en ce moment sur la tablette, quelle que soit sa source. */
+  onTabletCaption(callback) { this._tabletCaptionCb = callback; }
 
   async startCall(targetId, callerName) {
     if (!this._available) {
@@ -105,6 +108,9 @@ class RealCallEngine extends CallEngine {
       }
       if (typeof data.captionOverflowing === "boolean") {
         this._captionOverflowCb && this._captionOverflowCb(data.captionOverflowing);
+      }
+      if (typeof data.tabletDisplayedCaption === "string") {
+        this._tabletCaptionCb && this._tabletCaptionCb(data.tabletDisplayedCaption);
       }
       if (data.status === "connected") this._connectedCb && this._connectedCb();
       if (data.status === "blocked") {

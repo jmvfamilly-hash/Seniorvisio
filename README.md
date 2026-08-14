@@ -120,6 +120,12 @@ locale avec [Vosk](https://alphacephei.com/vosk/) (gratuit, open source, 100% ho
   par Firestore (PWA → tablette) dès qu'il en arrive au moins une fois pendant l'appel ; Vosk ne sert
   que de filet de secours (début d'appel avant le premier texte du PWA, et surtout navigateurs sans
   reconnaissance vocale comme Safari/iOS, qui n'enverront jamais rien par Firestore).
+- **Miroir exact côté PWA** : quelle que soit la source retenue par la tablette (texte du PWA ou
+  filet de secours Vosk), `IncomingCallActivity` renvoie le texte réellement affiché à l'écran vers
+  Firestore (`tabletDisplayedCaption`, voir `WebRtcCallEngine.signalDisplayedCaption`). Le PWA
+  l'affiche dans un second encart ("Ce que Jean voit en ce moment") distinct du miroir de sa propre
+  transcription ("Ce que tu dis") — le proche voit ainsi toujours exactement ce que Jean a sous les
+  yeux, sans avoir à deviner si Vosk a pris le relais.
 
 **Non vérifié en conditions réelles au-delà de ce premier test** (pas de tablette physique disponible
 pour un test approfondi) : l'usage CPU/batterie pendant un appel, et la justesse de Vosk en filet de

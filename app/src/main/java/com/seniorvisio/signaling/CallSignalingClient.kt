@@ -114,6 +114,16 @@ class CallSignalingClient {
         )
     }
 
+    /**
+     * Renvoie vers Firestore le texte exact affiché à l'écran de la tablette,
+     * quelle que soit sa source (texte relayé par le PWA ou reconnaissance
+     * Vosk embarquée) — permet au PWA d'afficher fidèlement ce que Jean voit
+     * réellement plutôt qu'une supposition basée sur ce qui a été envoyé.
+     */
+    fun signalDisplayedCaption(callId: String, text: String) {
+        callDoc(callId).update(FIELD_DISPLAYED_CAPTION, text)
+    }
+
     /** Active/désactive à distance le mode "sous-titres géants" côté tablette (voir web-caller/app.js). */
     fun listenForCaptionMode(callId: String, onEnabled: (Boolean) -> Unit): ListenerRegistration {
         return callDoc(callId).addSnapshotListener { snapshot, _ ->
@@ -187,6 +197,7 @@ class CallSignalingClient {
         private const val FIELD_ALERT_DURATION = "alertDurationSeconds"
         private const val FIELD_CAPTION_MODE = "captionModeEnabled"
         private const val FIELD_CAPTION_TEXT_SIZE = "captionTextSize"
+        private const val FIELD_DISPLAYED_CAPTION = "tabletDisplayedCaption"
         private const val FIELD_FORCE_CONNECT = "forceConnectRequested"
         private const val FIELD_CAPTION_OVERFLOW = "captionOverflowing"
 

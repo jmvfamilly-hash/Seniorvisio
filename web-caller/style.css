@@ -172,3 +172,25 @@ video {
 }
 
 .caption-overflow-indicator.hidden { display: none; }
+
+.tablet-caption-mirror {
+  text-align: left;
+  margin-top: 16px;
+  background: rgba(46, 204, 113, 0.12);
+  border: 1px solid rgba(46, 204, 113, 0.35);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.tablet-caption-hint {
+  color: #2ECC71;
+  font-size: 12px;
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.tablet-caption-text {
+  font-size: 16px;
+  margin: 0;
+  min-height: 1.2em;
+}

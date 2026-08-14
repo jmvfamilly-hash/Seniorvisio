@@ -218,6 +218,17 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     /**
+     * Renvoie vers le PWA le texte exact affiché à l'écran de la tablette
+     * (voir IncomingCallActivity.setupCaptionMode), quelle que soit sa
+     * source — texte relayé par le PWA ou reconnaissance Vosk embarquée —
+     * pour que le proche voie fidèlement ce que Jean voit, sans supposition.
+     */
+    fun signalDisplayedCaption(text: String) {
+        val id = callId ?: return
+        signaling.signalDisplayedCaption(id, text)
+    }
+
+    /**
      * Signale au proche que le texte affiché déborde de l'espace visible côté
      * tablette (voir IncomingCallActivity.setupCaptionMode), pour qu'il puisse
      * ralentir le temps que Jean finisse de lire.

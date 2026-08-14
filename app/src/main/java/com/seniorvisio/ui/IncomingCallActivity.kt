@@ -216,6 +216,7 @@ class IncomingCallActivity : AppCompatActivity() {
         callEngine.listenForCaptions { text ->
             runOnUiThread {
                 textCaption.text = text
+                callEngine.signalDisplayedCaption(text)
                 textCaption.post {
                     scrollAnimator?.cancel()
                     captionScroll.scrollTo(0, 0)
