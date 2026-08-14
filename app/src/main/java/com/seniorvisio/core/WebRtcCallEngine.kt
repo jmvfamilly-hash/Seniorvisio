@@ -63,6 +63,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var captionModeListener: ListenerRegistration? = null
     private var captionTextSizeListener: ListenerRegistration? = null
     private var forceConnectListener: ListenerRegistration? = null
+    private var voskCaptionRecognizer: VoskCaptionRecognizer? = null
+    private var localCaptionListener: ((String) -> Unit)? = null
     private var pendingVolume: Double = 1.0
     private var currentVolume: Double = 1.0
     private var volumeRampRunnable: Runnable? = null
@@ -86,6 +88,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         this.callId = callId
         state = CallState.RINGING_SILENT
         ensureFactory()
+        VoskModelProvider.prepare(context)
 
         signaling.fetchOfferSdp(callId) { sdp ->
             if (sdp == null) {
@@ -149,15 +152,24 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     /**
-     * Écoute le texte transcrit en direct de la voix de l'appelant (envoyé par
-     * webrtc-engine.js via reconnaissance vocale navigateur) pour le mode
-     * "sous-titres géants". Ne fait rien si le navigateur appelant ne
-     * supporte pas la reconnaissance vocale (ex. Safari/iOS) : aucun texte
-     * n'arrivera jamais, l'appel vidéo reste inchangé.
+     * Sous-titres : privilégie la reconnaissance embarquée sur la tablette
+     * (Vosk, à partir de l'audio WebRTC réellement reçu — voir
+     * VoskCaptionRecognizer, branché dans onTrack ci-dessous), qui fonctionne
+     * quel que soit le navigateur du proche, contrairement à l'ancienne
+     * dépendance à la Web Speech API du navigateur (indisponible sur
+     * Safari/iOS). Tant que le modèle Vosk n'est pas encore chargé (premier
+     * lancement, téléchargement en cours — voir VoskModelProvider), on
+     * retombe sur le texte transcrit côté PWA et relayé par Firestore, pour
+     * ne pas laisser les sous-titres vides pendant ce temps.
      */
     fun listenForCaptions(onText: (String) -> Unit) {
+        localCaptionListener = onText
+        voskCaptionRecognizer?.setOnTextListener(onText)
+
         val id = callId ?: return
-        speechListener = signaling.listenForCallerSpeech(id, onText)
+        speechListener = signaling.listenForCallerSpeech(id) { text ->
+            if (VoskModelProvider.getModel() == null) onText(text)
+        }
     }
 
     /**
@@ -323,6 +335,11 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                     remoteAudioTrack = track
                     track.setVolume(pendingVolume)
                     currentVolume = pendingVolume
+
+                    val recognizer = VoskCaptionRecognizer()
+                    localCaptionListener?.let { recognizer.setOnTextListener(it) }
+                    voskCaptionRecognizer = recognizer
+                    track.addSink(recognizer)
                 }
             }
 
@@ -407,6 +424,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         captionTextSizeListener = null
         forceConnectListener?.remove()
         forceConnectListener = null
+        voskCaptionRecognizer?.release()
+        voskCaptionRecognizer = null
+        localCaptionListener = null
         volumeRampRunnable?.let { volumeHandler.removeCallbacks(it) }
         volumeRampRunnable = null
         pendingVolume = 1.0

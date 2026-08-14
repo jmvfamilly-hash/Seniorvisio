@@ -1,5 +1,15 @@
 # Senior Visio — squelette de projet (v2)
 
+> **Branche expérimentale (`experiment/vosk-on-device-captions`)** : cette
+> branche déplace la reconnaissance vocale des sous-titres du navigateur du
+> proche vers la tablette elle-même (Vosk, gratuit, 100% hors-ligne une fois
+> le modèle téléchargé). Objectif : ne plus dépendre du navigateur de
+> l'appelant (règle la limitation Safari/iOS) et gagner en stabilité. C'est
+> un changement invasif (nouvelle dépendance native, traitement audio bas
+> niveau non testable sans tablette physique) : si ça ne s'avère pas fiable
+> en usage réel, il suffit de revenir à la branche précédente sans rien
+> perdre du reste. Voir la section dédiée plus bas pour le détail technique.
+
 ## Fonctionnel cible
 Un proche (Android ou iOS) ouvre un lien web et appelle la tablette de
 Jean. Sur la tablette : alerte plein écran pendant 30s (paramétrable),
@@ -94,6 +104,26 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
 - **Détection de silence côté PWA** : si la reconnaissance vocale ne capte plus rien pendant 5s
   pendant que le micro écoute, un indicateur discret ("Aucun son détecté") prévient le proche que rien
   n'est transmis (micro coupé, téléphone trop loin, etc.)
+
+## Reconnaissance vocale embarquée sur la tablette (branche expérimentale)
+`core/VoskModelProvider.kt` et `core/VoskCaptionRecognizer.kt` ajoutent une reconnaissance vocale
+locale avec [Vosk](https://alphacephei.com/vosk/) (gratuit, open source, 100% hors-ligne) :
+
+- `VoskModelProvider` télécharge (une seule fois, ~45 Mo, modèle français "small") puis charge le
+  modèle en mémoire, démarré dès `CallListenerService.onCreate()` pour être prêt avant le premier appel.
+- `VoskCaptionRecognizer` s'attache directement au flux audio du proche reçu par WebRTC
+  (`AudioTrack.addSink`, voir `WebRtcCallEngine.onTrack`) et transcrit en direct, sans jamais passer
+  par le navigateur de l'appelant.
+- Tant que le modèle n'est pas encore prêt (premier lancement), `WebRtcCallEngine.listenForCaptions`
+  retombe automatiquement sur l'ancien texte relayé par Firestore (PWA → tablette), pour ne pas
+  laisser les sous-titres vides pendant le téléchargement.
+
+**Non vérifié en conditions réelles** (pas de tablette physique disponible pour tester) : le format
+audio exact livré par `AudioTrackSink.onData` (fréquence, canaux) n'a pu être validé que par lecture
+du code WebRTC, pas par un appel réel. À surveiller en priorité lors du premier test : la présence
+de sous-titres du tout (le modèle a-t-il fini de télécharger ?), leur justesse, et l'usage CPU/batterie
+pendant un appel. En cas de problème, revenir à `claude/android-apk-debug-build-d3zwgj` ne perd aucun
+autre changement : cette branche n'a touché que les sous-titres.
 
 ## Configuration Firebase (obligatoire pour que les appels fonctionnent)
 Le signaling (échange de l'offre/réponse SDP et des candidats ICE entre la
