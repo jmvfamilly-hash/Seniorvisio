@@ -70,9 +70,13 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   n'est pas affecté, seuls les sous-titres restent vides. Un second curseur côté PWA règle aussi la
   taille de ce texte (24 à 100sp), avec un fondu enchaîné au changement plutôt qu'un redimensionnement brut.
   Aucun texte n'est perdu : une phrase trop longue pour l'espace visible défile automatiquement vers
-  le bas (à un rythme calculé sur le nombre de mots) au lieu d'être tronquée avec des "…", et le PWA
-  affiche un indicateur discret ("Jean n'a pas fini de lire") tant que ce débordement dure, pour que
-  le proche puisse ralentir son débit
+  le bas au lieu d'être tronquée avec des "…", en suivant la parole en continu façon sous-titrage TV
+  en direct ("roll-up", CEA-608) — le défilement avance par petits crans au fil des mots plutôt que de
+  repartir du haut à chaque mise à jour (ce qui rendait le défilement inutilisable en parole continue :
+  l'animation n'avait jamais le temps d'aller au bout avant d'être relancée depuis le début). Il ne
+  revient en haut que lorsqu'une phrase réellement nouvelle démarre. Le PWA affiche un indicateur
+  discret ("Jean n'a pas fini de lire") tant qu'un débordement dure, pour que le proche puisse
+  ralentir son débit
 - **Photo du proche à la réception de l'appel** : le PWA capture une photo (240x240, JPEG compressé)
   depuis la caméra du proche dès le début de l'appel et l'envoie via Firestore ; la tablette l'affiche
   en rond au-dessus du nom pendant le décompte, pour une reconnaissance immédiate. Non bloquant si la
