@@ -25,7 +25,8 @@
         <activity
             android:name=".ui.IncomingCallActivity"
             android:exported="false"
-            android:excludeFromRecents="true" />
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
 
         <activity
             android:name=".ui.MainActivity"

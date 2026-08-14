@@ -235,9 +235,18 @@ class IncomingCallActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
+    /**
+     * Ne raccroche que si cet écran se termine réellement (bouton "Bloquer"/
+     * "Raccrocher", ou l'appel se termine côté proche). Un changement de
+     * configuration (rotation, redimensionnement multi-fenêtre) détruit puis
+     * recrée l'Activity par défaut sans que ce soit une vraie fin d'appel —
+     * voir aussi android:configChanges sur cette Activity dans le manifest,
+     * qui évite déjà cette destruction pour les cas courants (rotation...) ;
+     * ce garde-fou couvre les cas non listés là-bas.
+     */
     override fun onDestroy() {
         alertController.cancel()
-        if (!callHandled) {
+        if (!callHandled && !isChangingConfigurations) {
             callHandled = true
             callEngine.hangUp()
         }
