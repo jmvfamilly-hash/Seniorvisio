@@ -77,9 +77,15 @@
 
     <!-- Sous-titres en surimpression (style sous-titrage TV) : la vidéo reste
          plein écran, le texte transcrit s'affiche dans un bandeau semi-opaque
-         en bas, 3 lignes max. Activé/désactivé à distance par le proche
-         depuis le PWA (voir WebRtcCallEngine.listenForCaptionMode) — apparaît
-         et disparaît en fondu, pas de bouton local ici. -->
+         en bas. Activé/désactivé à distance par le proche depuis le PWA (voir
+         WebRtcCallEngine.listenForCaptionMode) — apparaît et disparaît en
+         fondu, pas de bouton local ici.
+
+         Le texte n'est plus jamais tronqué : quand une phrase dépasse
+         l'espace visible, captionScroll défile automatiquement jusqu'en bas
+         (voir IncomingCallActivity.setupCaptionMode), à un rythme calculé
+         sur le nombre de mots, plutôt que de couper avec des "…" et perdre
+         la fin du texte pour Jean. -->
     <LinearLayout
         android:id="@+id/captionBanner"
         android:layout_width="match_parent"
@@ -93,17 +99,22 @@
         android:visibility="gone"
         android:alpha="0">
 
-        <TextView
-            android:id="@+id/textCaption"
+        <ScrollView
+            android:id="@+id/captionScroll"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:textColor="#FFFFFF"
-            android:textStyle="bold"
-            android:textSize="32sp"
-            android:maxLines="3"
-            android:ellipsize="end"
-            android:text="" />
+            android:layout_height="220dp"
+            android:scrollbars="none">
+
+            <TextView
+                android:id="@+id/textCaption"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                android:textSize="32sp"
+                android:text="" />
+        </ScrollView>
     </LinearLayout>
 
     <Button

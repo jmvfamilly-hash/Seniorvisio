@@ -131,6 +131,16 @@ class CallSignalingClient {
     }
 
     /**
+     * Signale si le texte des sous-titres déborde de l'espace visible côté
+     * tablette (voir web-caller/app.js) : le proche peut alors ralentir son
+     * débit le temps que Jean finisse de lire, plutôt que de perdre la fin
+     * du texte tronqué.
+     */
+    fun signalCaptionOverflow(callId: String, overflowing: Boolean) {
+        callDoc(callId).update(FIELD_CAPTION_OVERFLOW, overflowing)
+    }
+
+    /**
      * Écoute la demande de connexion immédiate déclenchée à distance par le
      * proche (bouton "Se connecter maintenant" côté PWA), pour ne pas
      * attendre la fin du décompte.
@@ -178,6 +188,7 @@ class CallSignalingClient {
         private const val FIELD_CAPTION_MODE = "captionModeEnabled"
         private const val FIELD_CAPTION_TEXT_SIZE = "captionTextSize"
         private const val FIELD_FORCE_CONNECT = "forceConnectRequested"
+        private const val FIELD_CAPTION_OVERFLOW = "captionOverflowing"
 
         const val STATUS_RINGING = "ringing"
         const val STATUS_CONNECTED = "connected"

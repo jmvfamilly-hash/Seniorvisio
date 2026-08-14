@@ -203,6 +203,16 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     /**
+     * Signale au proche que le texte affiché déborde de l'espace visible côté
+     * tablette (voir IncomingCallActivity.setupCaptionMode), pour qu'il puisse
+     * ralentir le temps que Jean finisse de lire.
+     */
+    fun signalCaptionOverflow(overflowing: Boolean) {
+        val id = callId ?: return
+        signaling.signalCaptionOverflow(id, overflowing)
+    }
+
+    /**
      * Écoute la demande du proche de connecter l'appel immédiatement, sans
      * attendre la fin du décompte (bouton "Se connecter maintenant" côté PWA).
      */

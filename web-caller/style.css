@@ -163,3 +163,12 @@ video {
 }
 
 .silence-indicator.hidden { display: none; }
+
+.caption-overflow-indicator {
+  color: #F1C40F;
+  font-size: 13px;
+  margin: 8px 0 0;
+  transition: opacity 0.3s ease;
+}
+
+.caption-overflow-indicator.hidden { display: none; }

@@ -33,6 +33,7 @@ const els = {
   transcriptCurrent: document.getElementById("transcriptCurrent"),
   transcriptHistory: document.getElementById("transcriptHistory"),
   silenceIndicator: document.getElementById("silenceIndicator"),
+  captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
 };
 
 let statsInterval = null;
@@ -63,6 +64,7 @@ els.callButton.addEventListener("click", async () => {
   els.transcriptCurrent.textContent = "";
   els.transcriptHistory.innerHTML = "";
   els.silenceIndicator.classList.add("hidden");
+  els.captionOverflowIndicator.classList.add("hidden");
   els.forceConnectButton.disabled = false;
   showState("calling");
   await engine.startCall(CONFIG.targetDeviceId, CONFIG.callerName);
@@ -102,6 +104,10 @@ engine.onTranscript(({ liveText, isFinal, confidence, history }) => {
 
 engine.onSilenceDetected((silent) => {
   els.silenceIndicator.classList.toggle("hidden", !silent);
+});
+
+engine.onCaptionOverflow((overflowing) => {
+  els.captionOverflowIndicator.classList.toggle("hidden", !overflowing);
 });
 
 let textSizeDebounce = null;

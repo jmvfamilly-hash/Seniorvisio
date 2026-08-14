@@ -20,6 +20,7 @@ class RealCallEngine extends CallEngine {
     this._countdownInterval = null;
     this._transcriptCb = null;
     this._silenceCb = null;
+    this._captionOverflowCb = null;
     this._transcriptHistory = [];
     this._silenceTimer = null;
     this._silenceActive = false;
@@ -43,6 +44,8 @@ class RealCallEngine extends CallEngine {
   onTranscript(callback) { this._transcriptCb = callback; }
   /** callback(silent: boolean) — aucun son détecté depuis quelques secondes pendant que le micro écoute. */
   onSilenceDetected(callback) { this._silenceCb = callback; }
+  /** callback(overflowing: boolean) — le texte affiché déborde de l'espace visible côté tablette : ralentir le débit. */
+  onCaptionOverflow(callback) { this._captionOverflowCb = callback; }
 
   async startCall(targetId, callerName) {
     if (!this._available) {
@@ -99,6 +102,9 @@ class RealCallEngine extends CallEngine {
       }
       if (data.alertStartedAt && data.alertDurationSeconds) {
         this._startCountdownDisplay(data.alertStartedAt.toMillis(), data.alertDurationSeconds);
+      }
+      if (typeof data.captionOverflowing === "boolean") {
+        this._captionOverflowCb && this._captionOverflowCb(data.captionOverflowing);
       }
       if (data.status === "connected") this._connectedCb && this._connectedCb();
       if (data.status === "blocked") {

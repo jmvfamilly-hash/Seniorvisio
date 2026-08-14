@@ -1,5 +1,6 @@
 package com.seniorvisio.ui
 
+import android.animation.ObjectAnimator
 import android.graphics.BitmapFactory
 import android.graphics.Outline
 import android.media.RingtoneManager
@@ -13,6 +14,7 @@ import android.view.ViewOutlineProvider
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.ScrollView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import android.widget.TextView
@@ -178,7 +180,10 @@ class IncomingCallActivity : AppCompatActivity() {
      */
     private fun setupCaptionMode() {
         val captionBanner = findViewById<View>(R.id.captionBanner)
+        val captionScroll = findViewById<ScrollView>(R.id.captionScroll)
         val textCaption = findViewById<TextView>(R.id.textCaption)
+        // Le défilement est piloté par le code (voir plus bas), pas par Jean.
+        captionScroll.setOnTouchListener { _, _ -> true }
 
         // L'écoute Firestore porte sur tout le document d'appel : elle se
         // redéclenche à chaque nouveau texte transcrit (toutes les ~500ms),
@@ -201,8 +206,35 @@ class IncomingCallActivity : AppCompatActivity() {
             }
         }
 
+        // Plus aucun texte n'est perdu : si la phrase dépasse l'espace visible,
+        // on défile automatiquement jusqu'en bas à un rythme proportionnel au
+        // nombre de mots (plutôt que de tronquer avec des "…"), et on signale
+        // le débordement au proche pour qu'il puisse temporiser (voir
+        // WebRtcCallEngine.signalCaptionOverflow / web-caller/app.js).
+        var scrollAnimator: ObjectAnimator? = null
+        var lastOverflowSignaled: Boolean? = null
         callEngine.listenForCaptions { text ->
-            runOnUiThread { textCaption.text = text }
+            runOnUiThread {
+                textCaption.text = text
+                textCaption.post {
+                    scrollAnimator?.cancel()
+                    captionScroll.scrollTo(0, 0)
+                    val overflow = textCaption.height > captionScroll.height
+                    if (overflow) {
+                        val maxScroll = textCaption.height - captionScroll.height
+                        val wordCount = text.trim().split(Regex("\\s+")).size.coerceAtLeast(1)
+                        val durationMs = (wordCount * 220L).coerceIn(900L, 6000L)
+                        scrollAnimator = ObjectAnimator.ofInt(captionScroll, "scrollY", 0, maxScroll).apply {
+                            duration = durationMs
+                            start()
+                        }
+                    }
+                    if (lastOverflowSignaled != overflow) {
+                        lastOverflowSignaled = overflow
+                        callEngine.signalCaptionOverflow(overflow)
+                    }
+                }
+            }
         }
 
         // Même garde-fou que ci-dessus : ce listener se redéclenche aussi à
