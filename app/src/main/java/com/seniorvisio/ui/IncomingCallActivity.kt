@@ -217,26 +217,38 @@ class IncomingCallActivity : AppCompatActivity() {
         }
 
         // Plus aucun texte n'est perdu : si la phrase dépasse l'espace visible,
-        // on défile automatiquement jusqu'en bas à un rythme proportionnel au
-        // nombre de mots (plutôt que de tronquer avec des "…"), et on signale
-        // le débordement au proche pour qu'il puisse temporiser (voir
-        // WebRtcCallEngine.signalCaptionOverflow / web-caller/app.js).
+        // on défile automatiquement (plutôt que de tronquer avec des "…"), et
+        // on signale le débordement au proche pour qu'il puisse temporiser
+        // (voir WebRtcCallEngine.signalCaptionOverflow / web-caller/app.js).
+        //
+        // Le défilement suit la parole en continu, façon sous-titrage TV en
+        // direct ("roll-up", CEA-608) : tant que le texte reçu prolonge celui
+        // d'avant (la personne continue de parler dans la même phrase, un mot
+        // de plus toutes les ~500ms), on avance d'un cran sans revenir en
+        // haut. Repartir de zéro à chaque mise à jour (comme avant) rendait
+        // le défilement inutilisable en parole continue : l'animation n'avait
+        // jamais le temps d'aller au bout avant d'être relancée depuis le
+        // début. On ne revient en haut que lorsqu'une phrase réellement
+        // nouvelle démarre (le texte ne prolonge plus le précédent).
         var scrollAnimator: ObjectAnimator? = null
         var lastOverflowSignaled: Boolean? = null
+        var lastCaptionText = ""
         callEngine.listenForCaptions { text ->
             runOnUiThread {
+                val isContinuation = lastCaptionText.isNotEmpty() && text.startsWith(lastCaptionText)
+                lastCaptionText = text
                 textCaption.text = text
                 callEngine.signalDisplayedCaption(text)
                 textCaption.post {
                     scrollAnimator?.cancel()
-                    captionScroll.scrollTo(0, 0)
+                    if (!isContinuation) {
+                        captionScroll.scrollTo(0, 0)
+                    }
                     val overflow = textCaption.height > captionScroll.height
+                    val maxScroll = (textCaption.height - captionScroll.height).coerceAtLeast(0)
                     if (overflow) {
-                        val maxScroll = textCaption.height - captionScroll.height
-                        val wordCount = text.trim().split(Regex("\\s+")).size.coerceAtLeast(1)
-                        val durationMs = (wordCount * 220L).coerceIn(900L, 6000L)
-                        scrollAnimator = ObjectAnimator.ofInt(captionScroll, "scrollY", 0, maxScroll).apply {
-                            duration = durationMs
+                        scrollAnimator = ObjectAnimator.ofInt(captionScroll, "scrollY", captionScroll.scrollY, maxScroll).apply {
+                            duration = 280L
                             start()
                         }
                     }
