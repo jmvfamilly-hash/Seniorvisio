@@ -1,6 +1,5 @@
 package com.seniorvisio.ui
 
-import android.animation.ObjectAnimator
 import android.graphics.BitmapFactory
 import android.graphics.Outline
 import android.media.RingtoneManager
@@ -230,7 +229,6 @@ class IncomingCallActivity : AppCompatActivity() {
         // jamais le temps d'aller au bout avant d'être relancée depuis le
         // début. On ne revient en haut que lorsqu'une phrase réellement
         // nouvelle démarre (le texte ne prolonge plus le précédent).
-        var scrollAnimator: ObjectAnimator? = null
         var lastOverflowSignaled: Boolean? = null
         var lastCaptionText = ""
         callEngine.listenForCaptions { text ->
@@ -239,17 +237,17 @@ class IncomingCallActivity : AppCompatActivity() {
                 lastCaptionText = text
                 textCaption.text = text
                 textCaption.post {
-                    scrollAnimator?.cancel()
                     if (!isContinuation) {
                         captionScroll.scrollTo(0, 0)
                     }
                     val overflow = textCaption.height > captionScroll.height
                     val maxScroll = (textCaption.height - captionScroll.height).coerceAtLeast(0)
                     if (overflow) {
-                        scrollAnimator = ObjectAnimator.ofInt(captionScroll, "scrollY", captionScroll.scrollY, maxScroll).apply {
-                            duration = 280L
-                            start()
-                        }
+                        // smoothScrollTo (le défileur natif d'Android) adapte sa
+                        // durée à la distance réelle à parcourir, plutôt qu'une
+                        // durée fixe qui paraît tantôt trop lente (petit pas),
+                        // tantôt trop brusque (plusieurs mots d'un coup).
+                        captionScroll.smoothScrollTo(0, maxScroll)
                     }
                     if (lastOverflowSignaled != overflow) {
                         lastOverflowSignaled = overflow

@@ -76,7 +76,10 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   l'animation n'avait jamais le temps d'aller au bout avant d'être relancée depuis le début). Il ne
   revient en haut que lorsqu'une phrase réellement nouvelle démarre. Le PWA affiche un indicateur
   discret ("Jean n'a pas fini de lire") tant qu'un débordement dure, pour que le proche puisse
-  ralentir son débit
+  ralentir son débit. Le défilement utilise le scroller natif d'Android (`smoothScrollTo`, durée
+  adaptée à la distance réelle plutôt que fixe), le PWA envoie le texte transcrit plus souvent (300ms
+  au lieu de 500ms, par petits incréments), et la tablette ignore les écritures Firestore qui ne
+  changent pas le texte — trois optimisations pour un défilement plus fluide
 - **Photo du proche à la réception de l'appel** : le PWA capture une photo (240x240, JPEG compressé)
   depuis la caméra du proche dès le début de l'appel et l'envoie via Firestore ; la tablette l'affiche
   en rond au-dessus du nom pendant le décompte, pour une reconnaissance immédiate. Non bloquant si la

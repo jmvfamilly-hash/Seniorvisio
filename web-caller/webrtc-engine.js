@@ -219,8 +219,12 @@ class RealCallEngine extends CallEngine {
 
       resetSilenceTimer();
 
+      // Envoi toutes les ~300ms (plutôt que 500ms) : des incréments plus
+      // petits et plus fréquents donnent un défilement plus fluide côté
+      // tablette (voir IncomingCallActivity.setupCaptionMode) qu'un texte
+      // qui avance par gros blocs.
       const now = Date.now();
-      if (text && now - lastSent > 500 && this._callDocRef) {
+      if (text && now - lastSent > 300 && this._callDocRef) {
         lastSent = now;
         this._callDocRef.update({ callerSpeechText: text }).catch(() => {});
       }

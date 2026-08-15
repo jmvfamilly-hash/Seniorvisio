@@ -82,11 +82,22 @@ class CallSignalingClient {
         )
     }
 
-    /** Texte transcrit en direct de la voix de l'appelant (voir web-caller/webrtc-engine.js). */
+    /**
+     * Texte transcrit en direct de la voix de l'appelant (voir
+     * web-caller/webrtc-engine.js). Ce listener écoute tout le document
+     * d'appel, donc il se redéclenche à chaque écriture Firestore pendant
+     * l'appel (volume, etc.), pas seulement quand le texte change — on ne
+     * notifie que sur un texte réellement différent, pour éviter de relancer
+     * inutilement l'animation de défilement côté tablette.
+     */
     fun listenForCallerSpeech(callId: String, onText: (String) -> Unit): ListenerRegistration {
+        var lastText: String? = null
         return callDoc(callId).addSnapshotListener { snapshot, _ ->
             val text = snapshot?.getString(FIELD_CALLER_SPEECH)
-            if (!text.isNullOrEmpty()) onText(text)
+            if (!text.isNullOrEmpty() && text != lastText) {
+                lastText = text
+                onText(text)
+            }
         }
     }
 
