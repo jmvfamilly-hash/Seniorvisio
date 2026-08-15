@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Labo défilement sous-titres — Senior Visio</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, system-ui, sans-serif;
+    background: #10192E;
+    color: #E8ECF4;
+    margin: 0;
+    padding: 20px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 10px; color: #AAB4C8; }
+  .hint { color: #8FA0BF; font-size: 13px; max-width: 900px; line-height: 1.5; }
+  .warn {
+    background: rgba(230, 126, 34, 0.15);
+    border: 1px solid rgba(230, 126, 34, 0.4);
+    color: #F0B27A;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    max-width: 900px;
+    margin: 10px 0;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 300px 1fr 300px;
+    gap: 20px;
+    margin-top: 16px;
+    align-items: start;
+  }
+  @media (max-width: 1000px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  fieldset {
+    border: 1px solid #2C3E5C;
+    border-radius: 10px;
+    padding: 12px;
+    margin: 0 0 14px;
+  }
+  legend { padding: 0 6px; color: #AAB4C8; font-size: 12px; font-weight: 600; }
+  label {
+    display: block;
+    font-size: 13px;
+    color: #C7D0E0;
+    margin-bottom: 12px;
+  }
+  label:last-child { margin-bottom: 0; }
+  input[type="range"] { width: 100%; vertical-align: middle; }
+  select {
+    width: 100%;
+    padding: 6px;
+    border-radius: 6px;
+    background: #1B2A4A;
+    color: #E8ECF4;
+    border: 1px solid #2C3E5C;
+  }
+  .val { color: #2ECC71; font-weight: 600; float: right; }
+  button {
+    font-size: 14px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: none;
+    background: #2ECC71;
+    color: #10192E;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 0 8px 8px 0;
+  }
+  button:disabled { background: #3A4A6B; color: #7A88A5; cursor: not-allowed; }
+  button.danger { background: #C0392B; color: white; }
+  button.secondary { background: #3A4A6B; color: #E8ECF4; }
+  .status { font-size: 13px; color: #8FA0BF; margin-top: 8px; }
+
+  .preview {
+    background: #060B16;
+    border-radius: 12px;
+    min-height: 420px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .preview::before {
+    content: "aperçu vidéo (placeholder)";
+    position: absolute;
+    top: 16px; left: 16px;
+    color: #2C3E5C;
+    font-size: 12px;
+  }
+  .caption-banner {
+    background: #CC000000;
+    background: rgba(0,0,0,0.8);
+    border-radius: 16px;
+    padding: 20px;
+    max-width: 100%;
+  }
+  .caption-scroll {
+    overflow: hidden;
+    scroll-behavior: smooth;
+  }
+  .caption-text {
+    color: #FFFFFF;
+    font-weight: bold;
+    text-align: center;
+    line-height: 1.25;
+  }
+
+  .metrics table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .metrics td { padding: 6px 4px; border-bottom: 1px solid #1B2A4A; }
+  .metrics td:last-child { text-align: right; color: #2ECC71; font-weight: 600; }
+
+  .summary {
+    margin-top: 24px;
+    background: #0C1626;
+    border: 1px solid #2C3E5C;
+    border-radius: 10px;
+    padding: 16px;
+    max-width: 900px;
+  }
+  .summary.hidden { display: none; }
+  .summary textarea {
+    width: 100%;
+    height: 220px;
+    background: #060B16;
+    color: #2ECC71;
+    border: 1px solid #2C3E5C;
+    border-radius: 8px;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    padding: 10px;
+  }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+  <h1>Labo de défilement des sous-titres</h1>
+  <p class="hint">
+    Outil autonome pour régler et mesurer objectivement le défilement des sous-titres avant de reporter
+    les réglages dans le code de Senior Visio. Parle normalement en français : le texte reconnu s'affiche
+    et défile dans l'encart ci-dessous, exactement comme sur la tablette de Jean. Change les réglages à
+    tout moment (les métriques se réinitialisent automatiquement à chaque changement pour rester
+    comparables) et regarde les chiffres évoluer.
+  </p>
+  <p class="warn" id="unsupportedWarning">
+    ⚠️ Ce navigateur ne supporte pas la reconnaissance vocale (Web Speech API). Utilise Chrome
+    (Android ou ordinateur) — pas Safari/iOS.
+  </p>
+  <p class="warn">
+    ⚠️ Le micro ne fonctionne que sur une page servie en HTTPS (ou en local via <code>localhost</code>) —
+    pas un fichier ouvert directement depuis le disque.
+  </p>
+
+  <div class="layout">
+    <div class="controls">
+      <fieldset>
+        <legend>Zone d'affichage</legend>
+        <label>Largeur (px) <span class="val" id="boxWidthVal"></span>
+          <input type="range" id="boxWidth" min="220" max="900" step="10" value="500">
+        </label>
+        <label>Hauteur (px) <span class="val" id="boxHeightVal"></span>
+          <input type="range" id="boxHeight" min="80" max="400" step="10" value="220">
+        </label>
+        <label>Taille de police (px) <span class="val" id="fontSizeVal"></span>
+          <input type="range" id="fontSize" min="16" max="100" step="2" value="32">
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Paramètres techniques</legend>
+        <label>Vitesse d'échantillonnage du texte — ms entre mises à jour <span class="val" id="sampleIntervalVal"></span>
+          <input type="range" id="sampleInterval" min="100" max="1000" step="50" value="300">
+        </label>
+        <label>Stratégie de défilement
+          <select id="scrollStrategy">
+            <option value="reset">Ancien comportement (reset à chaque mise à jour) — référence du bug</option>
+            <option value="native" selected>Roll-up natif (smooth scroll navigateur) — comportement actuel de l'appli</option>
+            <option value="lerp">Suivi continu (interpolation image par image)</option>
+          </select>
+        </label>
+        <label id="lerpFactorRow" class="hidden">Vitesse de rattrapage <span class="val" id="lerpFactorVal"></span>
+          <input type="range" id="lerpFactor" min="0.05" max="0.6" step="0.05" value="0.2">
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Session</legend>
+        <button id="startBtn">🎤 Démarrer</button>
+        <button id="stopBtn" class="danger" disabled>⏹ Arrêter</button>
+        <button id="resetMetricsBtn" class="secondary">↺ Réinitialiser les métriques</button>
+        <p class="status" id="status">Prêt.</p>
+      </fieldset>
+    </div>
+
+    <div class="preview">
+      <div class="caption-banner" id="captionBanner">
+        <div class="caption-scroll" id="captionScroll">
+          <div class="caption-text" id="captionText">Le texte reconnu apparaîtra ici…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="metrics">
+      <h2>Métriques en direct (depuis la dernière réinitialisation)</h2>
+      <table>
+        <tr><td>Durée de la fenêtre de mesure</td><td id="mDuration">—</td></tr>
+        <tr><td>FPS moyen pendant le défilement</td><td id="mFps">—</td></tr>
+        <tr><td>Frames saccadées (&gt;20ms)</td><td id="mJank">—</td></tr>
+        <tr><td>Intervalle réel moyen texte</td><td id="mInterval">—</td></tr>
+        <tr><td>Débit affiché</td><td id="mWpm">—</td></tr>
+        <tr><td>Temps en débordement</td><td id="mOverflow">—</td></tr>
+        <tr><td>Nouvelles phrases / min</td><td id="mResets">—</td></tr>
+        <tr><td>Distance totale défilée</td><td id="mDistance">—</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="summary hidden" id="summaryPanel">
+    <h2>Résumé de session (à copier-coller pour me le renvoyer)</h2>
+    <textarea id="summaryText" readonly></textarea>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- Éléments ----
+  const els = {
+    boxWidth: document.getElementById("boxWidth"),
+    boxWidthVal: document.getElementById("boxWidthVal"),
+    boxHeight: document.getElementById("boxHeight"),
+    boxHeightVal: document.getElementById("boxHeightVal"),
+    fontSize: document.getElementById("fontSize"),
+    fontSizeVal: document.getElementById("fontSizeVal"),
+    sampleInterval: document.getElementById("sampleInterval"),
+    sampleIntervalVal: document.getElementById("sampleIntervalVal"),
+    scrollStrategy: document.getElementById("scrollStrategy"),
+    lerpFactorRow: document.getElementById("lerpFactorRow"),
+    lerpFactor: document.getElementById("lerpFactor"),
+    lerpFactorVal: document.getElementById("lerpFactorVal"),
+    startBtn: document.getElementById("startBtn"),
+    stopBtn: document.getElementById("stopBtn"),
+    resetMetricsBtn: document.getElementById("resetMetricsBtn"),
+    status: document.getElementById("status"),
+    captionBanner: document.getElementById("captionBanner"),
+    captionScroll: document.getElementById("captionScroll"),
+    captionText: document.getElementById("captionText"),
+    mDuration: document.getElementById("mDuration"),
+    mFps: document.getElementById("mFps"),
+    mJank: document.getElementById("mJank"),
+    mInterval: document.getElementById("mInterval"),
+    mWpm: document.getElementById("mWpm"),
+    mOverflow: document.getElementById("mOverflow"),
+    mResets: document.getElementById("mResets"),
+    mDistance: document.getElementById("mDistance"),
+    summaryPanel: document.getElementById("summaryPanel"),
+    summaryText: document.getElementById("summaryText"),
+    unsupportedWarning: document.getElementById("unsupportedWarning"),
+  };
+
+  const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  els.unsupportedWarning.classList.toggle("hidden", !!SpeechRecognitionCtor);
+  if (!SpeechRecognitionCtor) els.startBtn.disabled = true;
+
+  // ---- Paramètres (lus depuis les contrôles) ----
+  const params = {
+    boxWidth: 500,
+    boxHeight: 220,
+    fontSize: 32,
+    sampleInterval: 300,
+    scrollStrategy: "native",
+    lerpFactor: 0.2,
+  };
+
+  function applyStyles() {
+    els.captionBanner.style.maxWidth = params.boxWidth + "px";
+    els.captionScroll.style.height = params.boxHeight + "px";
+    els.captionText.style.fontSize = params.fontSize + "px";
+  }
+
+  function readControlsAndReset() {
+    params.boxWidth = Number(els.boxWidth.value);
+    params.boxHeight = Number(els.boxHeight.value);
+    params.fontSize = Number(els.fontSize.value);
+    params.sampleInterval = Number(els.sampleInterval.value);
+    params.scrollStrategy = els.scrollStrategy.value;
+    params.lerpFactor = Number(els.lerpFactor.value);
+
+    els.boxWidthVal.textContent = params.boxWidth + " px";
+    els.boxHeightVal.textContent = params.boxHeight + " px";
+    els.fontSizeVal.textContent = params.fontSize + " px";
+    els.sampleIntervalVal.textContent = params.sampleInterval + " ms";
+    els.lerpFactorVal.textContent = params.lerpFactor.toFixed(2);
+    els.lerpFactorRow.classList.toggle("hidden", params.scrollStrategy !== "lerp");
+
+    applyStyles();
+    resetMetrics();
+  }
+
+  [els.boxWidth, els.boxHeight, els.fontSize, els.sampleInterval, els.scrollStrategy, els.lerpFactor]
+    .forEach((el) => el.addEventListener("input", readControlsAndReset));
+
+  // ---- État de la reconnaissance / du défilement ----
+  let recognition = null;
+  let lastCaptionText = "";
+  let lastSampleTime = 0;
+  let scrollAnimHandle = null;
+  let isAnimating = false;
+  let scrollEndTimeout = null;
+
+  // ---- Métriques (fenêtre courante, remise à zéro à chaque réglage) ----
+  let metricsStartTs = 0;
+  let frameCount = 0;
+  let frameDeltaSum = 0;
+  let jankCount = 0;
+  let lastFrameTs = 0;
+  const intervalSamples = [];
+  let lastAppliedTime = null;
+  let totalWordsSeen = 0;
+  let lastWordCountInPhrase = 0;
+  let resetCount = 0;
+  let overflowAccumMs = 0;
+  let overflowSince = null;
+  let currentlyOverflowing = false;
+  let totalScrolledPx = 0;
+  let lastKnownScrollTop = 0;
+
+  function resetMetrics() {
+    metricsStartTs = performance.now();
+    frameCount = 0;
+    frameDeltaSum = 0;
+    jankCount = 0;
+    lastFrameTs = 0;
+    intervalSamples.length = 0;
+    lastAppliedTime = null;
+    totalWordsSeen = 0;
+    lastWordCountInPhrase = 0;
+    resetCount = 0;
+    overflowAccumMs = 0;
+    overflowSince = currentlyOverflowing ? metricsStartTs : null;
+    totalScrolledPx = 0;
+    lastKnownScrollTop = els.captionScroll.scrollTop;
+  }
+
+  // ---- Boucle d'animation permanente : mesure FPS/jank + pilote le mode "lerp" ----
+  let lerpTarget = 0;
+  function mainLoop(ts) {
+    if (lastFrameTs) {
+      const delta = ts - lastFrameTs;
+      if (isAnimating) {
+        frameCount++;
+        frameDeltaSum += delta;
+        if (delta > 20) jankCount++;
+      }
+    }
+    lastFrameTs = ts;
+
+    if (params.scrollStrategy === "lerp" && isAnimating) {
+      const cur = els.captionScroll.scrollTop;
+      const diff = lerpTarget - cur;
+      if (Math.abs(diff) < 0.5) {
+        setScrollTop(lerpTarget);
+        isAnimating = false;
+      } else {
+        setScrollTop(cur + diff * params.lerpFactor);
+      }
+    }
+
+    // distance défilée (toutes stratégies)
+    const now = els.captionScroll.scrollTop;
+    if (now !== lastKnownScrollTop) {
+      totalScrolledPx += Math.abs(now - lastKnownScrollTop);
+      lastKnownScrollTop = now;
+    }
+
+    // débordement cumulé, pondéré par le temps
+    if (overflowSince != null && !currentlyOverflowing) {
+      overflowAccumMs += ts - overflowSince;
+      overflowSince = null;
+    }
+
+    requestAnimationFrame(mainLoop);
+  }
+  requestAnimationFrame(mainLoop);
+
+  function setScrollTop(v) {
+    els.captionScroll.scrollTop = v;
+  }
+
+  function updateOverflowState(overflow, ts) {
+    if (overflow === currentlyOverflowing) return;
+    if (overflow) {
+      overflowSince = ts;
+    } else if (overflowSince != null) {
+      overflowAccumMs += ts - overflowSince;
+      overflowSince = null;
+    }
+    currentlyOverflowing = overflow;
+  }
+
+  // ---- Stratégies de défilement ----
+  function animateResetStrategy(maxScroll, wordCount) {
+    // Reproduit fidèlement l'ancien bug pour référence/comparaison : on
+    // repart de zéro et on rejoue toute l'animation à chaque mise à jour.
+    if (scrollAnimHandle) cancelAnimationFrame(scrollAnimHandle);
+    setScrollTop(0);
+    const durationMs = Math.min(6000, Math.max(900, wordCount * 220));
+    const start = performance.now();
+    isAnimating = true;
+    function step(ts) {
+      const t = Math.min(1, (ts - start) / durationMs);
+      setScrollTop(maxScroll * t);
+      if (t < 1) {
+        scrollAnimHandle = requestAnimationFrame(step);
+      } else {
+        isAnimating = false;
+      }
+    }
+    scrollAnimHandle = requestAnimationFrame(step);
+  }
+
+  function animateNativeStrategy(maxScroll, isContinuation) {
+    if (!isContinuation) setScrollTop(0);
+    isAnimating = true;
+    if (scrollEndTimeout) clearTimeout(scrollEndTimeout);
+    els.captionScroll.scrollTo({ top: maxScroll, behavior: "smooth" });
+    // 'scrollend' n'est pas garanti partout : filet de secours par timeout.
+    const onEnd = () => { isAnimating = false; els.captionScroll.removeEventListener("scrollend", onEnd); };
+    els.captionScroll.addEventListener("scrollend", onEnd, { once: true });
+    scrollEndTimeout = setTimeout(() => { isAnimating = false; }, 1200);
+  }
+
+  function animateLerpStrategy(maxScroll, isContinuation) {
+    if (!isContinuation) setScrollTop(0);
+    lerpTarget = maxScroll;
+    isAnimating = true;
+  }
+
+  // ---- Réception d'un nouveau texte échantillonné ----
+  function applyCaptionText(text, now) {
+    const isContinuation = !!lastCaptionText && text.startsWith(lastCaptionText);
+
+    if (lastAppliedTime != null) intervalSamples.push(now - lastAppliedTime);
+    lastAppliedTime = now;
+
+    const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+    if (!isContinuation) {
+      resetCount++;
+      totalWordsSeen += wordCount;
+    } else {
+      totalWordsSeen += Math.max(0, wordCount - lastWordCountInPhrase);
+    }
+    lastWordCountInPhrase = wordCount;
+    lastCaptionText = text;
+
+    els.captionText.textContent = text;
+
+    requestAnimationFrame(() => {
+      const contentH = els.captionText.scrollHeight;
+      const boxH = els.captionScroll.clientHeight;
+      const overflow = contentH > boxH;
+      updateOverflowState(overflow, performance.now());
+      const maxScroll = Math.max(0, contentH - boxH);
+
+      if (!overflow) { isAnimating = false; return; }
+
+      if (params.scrollStrategy === "reset") animateResetStrategy(maxScroll, wordCount);
+      else if (params.scrollStrategy === "lerp") animateLerpStrategy(maxScroll, isContinuation);
+      else animateNativeStrategy(maxScroll, isContinuation);
+    });
+  }
+
+  // ---- Reconnaissance vocale ----
+  function startRecognition() {
+    const recog = new SpeechRecognitionCtor();
+    recognition = recog;
+    recog.continuous = true;
+    recog.interimResults = true;
+    recog.lang = "fr-FR";
+
+    recog.onresult = (event) => {
+      let text = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        text += event.results[i][0].transcript;
+      }
+      if (!text) return;
+      const now = performance.now();
+      if (now - lastSampleTime < params.sampleInterval) return;
+      lastSampleTime = now;
+      applyCaptionText(text, now);
+    };
+    recog.onerror = (e) => { els.status.textContent = "Erreur reconnaissance : " + e.error; };
+    recog.onend = () => {
+      if (recognition === recog) {
+        try { recog.start(); } catch (_) {}
+      }
+    };
+    try { recog.start(); } catch (_) {}
+    els.status.textContent = "🎤 Écoute en cours — parle normalement.";
+  }
+
+  function stopRecognition() {
+    const recog = recognition;
+    recognition = null;
+    if (recog) {
+      recog.onend = null;
+      try { recog.stop(); } catch (_) {}
+    }
+    els.status.textContent = "Arrêté.";
+  }
+
+  els.startBtn.addEventListener("click", () => {
+    readControlsAndReset();
+    lastCaptionText = "";
+    lastWordCountInPhrase = 0;
+    els.captionText.textContent = "";
+    startRecognition();
+    els.startBtn.disabled = true;
+    els.stopBtn.disabled = false;
+    els.summaryPanel.classList.add("hidden");
+  });
+
+  els.stopBtn.addEventListener("click", () => {
+    stopRecognition();
+    els.startBtn.disabled = false;
+    els.stopBtn.disabled = true;
+    showSummary();
+  });
+
+  els.resetMetricsBtn.addEventListener("click", resetMetrics);
+
+  // ---- Affichage des métriques en direct ----
+  function computeMetrics() {
+    const durationMs = performance.now() - metricsStartTs;
+    const durationMin = durationMs / 60000;
+    const avgFps = frameCount ? 1000 / (frameDeltaSum / frameCount) : null;
+    const jankPct = frameCount ? (jankCount / frameCount) * 100 : null;
+    const avgInterval = intervalSamples.length
+      ? intervalSamples.reduce((a, b) => a + b, 0) / intervalSamples.length
+      : null;
+    const wpm = durationMin > 0.01 ? totalWordsSeen / durationMin : null;
+    let overflowMs = overflowAccumMs;
+    if (overflowSince != null) overflowMs += performance.now() - overflowSince;
+    const overflowPct = durationMs > 0 ? (overflowMs / durationMs) * 100 : null;
+    const resetsPerMin = durationMin > 0.01 ? resetCount / durationMin : null;
+    return { durationMs, avgFps, jankPct, avgInterval, wpm, overflowPct, resetsPerMin, totalScrolledPx };
+  }
+
+  function fmt(v, digits, suffix) {
+    return v == null || isNaN(v) ? "—" : v.toFixed(digits) + (suffix || "");
+  }
+
+  setInterval(() => {
+    const m = computeMetrics();
+    els.mDuration.textContent = fmt(m.durationMs / 1000, 0, " s");
+    els.mFps.textContent = fmt(m.avgFps, 0, " im/s");
+    els.mJank.textContent = fmt(m.jankPct, 0, " %");
+    els.mInterval.textContent = fmt(m.avgInterval, 0, " ms");
+    els.mWpm.textContent = fmt(m.wpm, 0, " mots/min");
+    els.mOverflow.textContent = fmt(m.overflowPct, 0, " %");
+    els.mResets.textContent = fmt(m.resetsPerMin, 1, " /min");
+    els.mDistance.textContent = fmt(m.totalScrolledPx, 0, " px");
+  }, 400);
+
+  function showSummary() {
+    const m = computeMetrics();
+    const summary = {
+      parametres: {
+        largeurZone_px: params.boxWidth,
+        hauteurZone_px: params.boxHeight,
+        taillePolice_px: params.fontSize,
+        intervalleEchantillonnage_ms: params.sampleInterval,
+        strategieDefilement: params.scrollStrategy,
+        vitesseRattrapage: params.scrollStrategy === "lerp" ? params.lerpFactor : null,
+      },
+      mesures: {
+        dureeSession_s: Number((m.durationMs / 1000).toFixed(1)),
+        fpsMoyenPendantDefilement: m.avgFps != null ? Number(m.avgFps.toFixed(1)) : null,
+        framesSaccadeesPct: m.jankPct != null ? Number(m.jankPct.toFixed(1)) : null,
+        intervalleReelMoyenTexte_ms: m.avgInterval != null ? Number(m.avgInterval.toFixed(0)) : null,
+        debitAffiche_motsParMinute: m.wpm != null ? Number(m.wpm.toFixed(0)) : null,
+        tempsEnDebordementPct: m.overflowPct != null ? Number(m.overflowPct.toFixed(1)) : null,
+        nouvellesPhrasesParMinute: m.resetsPerMin != null ? Number(m.resetsPerMin.toFixed(1)) : null,
+        distanceTotaleDefilee_px: Number(m.totalScrolledPx.toFixed(0)),
+      },
+    };
+    els.summaryText.value = JSON.stringify(summary, null, 2);
+    els.summaryPanel.classList.remove("hidden");
+  }
+
+  // ---- Initialisation ----
+  readControlsAndReset();
+})();
+</script>
+</body>
+</html>
