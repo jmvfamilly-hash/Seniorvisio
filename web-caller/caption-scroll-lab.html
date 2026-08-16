@@ -169,6 +169,12 @@
     ⚠️ Le micro ne fonctionne que sur une page servie en HTTPS (ou en local via <code>localhost</code>) —
     pas un fichier ouvert directement depuis le disque.
   </p>
+  <p class="warn">
+    ⚠️ Si le premier clic sur "Démarrer" ne demande jamais l'autorisation du micro : c'est peut-être
+    qu'elle a déjà été refusée pour ce site auparavant (le navigateur ne redemande pas). Vérifie via
+    l'icône 🔒 (ou ⓘ) à gauche de l'adresse → Autorisations du site → Microphone → Autoriser, puis
+    recharge la page.
+  </p>
 
   <div class="layout">
     <div class="controls">
@@ -590,11 +596,18 @@
   }
 
   // ---- Reconnaissance vocale (mode micro = live + enregistrement) ----
+  // Erreurs qui ne se résoudront pas en réessayant (permission refusée/
+  // bloquée, pas de micro détecté) : inutile — et trompeur — de relancer
+  // recognition.start() en boucle silencieuse dans ce cas.
+  const FATAL_SPEECH_ERRORS = new Set(["not-allowed", "service-not-allowed", "audio-capture"]);
+  let fatalErrorOccurred = false;
+
   function startLive() {
     runMode = "live";
     beginRun();
     recordingRaw = [];
     recordingStartTs = performance.now();
+    fatalErrorOccurred = false;
 
     const recog = new SpeechRecognitionCtor();
     recognition = recog;
@@ -615,14 +628,48 @@
       recordingDurationMs = now - recordingStartTs;
       handleThrottledSample(text, now);
     };
-    recog.onerror = (e) => { els.status.textContent = "Erreur reconnaissance : " + e.error; };
-    recog.onend = () => {
-      if (recognition === recog) {
-        try { recog.start(); } catch (_) {}
+    recog.onerror = (e) => {
+      if (FATAL_SPEECH_ERRORS.has(e.error)) {
+        fatalErrorOccurred = true;
+        els.status.textContent = "❌ Micro refusé ou indisponible (" + e.error + "). Le navigateur ne " +
+          "redemande pas l'autorisation s'il l'a déjà refusée : clique sur l'icône 🔒 (ou ⓘ) à gauche " +
+          "de l'adresse → Autorisations du site → Microphone → Autoriser, puis recharge la page.";
+        abortLive();
+      } else {
+        els.status.textContent = "Reconnaissance : " + e.error + " (nouvelle tentative…)";
       }
     };
-    try { recog.start(); } catch (_) {}
-    els.status.textContent = "🎤 Écoute en cours — parle normalement.";
+    recog.onend = () => {
+      if (recognition === recog && !fatalErrorOccurred) {
+        try { recog.start(); } catch (e) {
+          fatalErrorOccurred = true;
+          els.status.textContent = "❌ Impossible de relancer la reconnaissance (" + e.message + ").";
+          abortLive();
+        }
+      }
+    };
+    try {
+      recog.start();
+      els.status.textContent = "🎤 Écoute en cours — parle normalement.";
+    } catch (e) {
+      fatalErrorOccurred = true;
+      els.status.textContent = "❌ Impossible de démarrer la reconnaissance vocale (" + e.message + ").";
+      abortLive();
+    }
+  }
+
+  /** Arrêt suite à une erreur fatale : ne finalise pas dans l'historique, rien d'exploitable n'a été capté. */
+  function abortLive() {
+    const recog = recognition;
+    recognition = null;
+    if (recog) {
+      recog.onend = null;
+      try { recog.stop(); } catch (_) {}
+    }
+    runMode = null;
+    els.startBtn.disabled = !SpeechRecognitionCtor;
+    els.stopBtn.disabled = true;
+    updateRecordingUI();
   }
 
   function stopLive() {
