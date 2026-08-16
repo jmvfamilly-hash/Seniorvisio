@@ -75,6 +75,7 @@
   button.danger { background: #C0392B; color: white; }
   button.secondary { background: #3A4A6B; color: #E8ECF4; }
   .status { font-size: 13px; color: #8FA0BF; margin-top: 8px; }
+  .recording-info { font-size: 12px; color: #2ECC71; margin-top: 6px; min-height: 1.4em; }
 
   .preview {
     background: #060B16;
@@ -95,7 +96,6 @@
     font-size: 12px;
   }
   .caption-banner {
-    background: #CC000000;
     background: rgba(0,0,0,0.8);
     border-radius: 16px;
     padding: 20px;
@@ -116,6 +116,17 @@
   .metrics td { padding: 6px 4px; border-bottom: 1px solid #1B2A4A; }
   .metrics td:last-child { text-align: right; color: #2ECC71; font-weight: 600; }
 
+  .history {
+    margin-top: 24px;
+    max-width: 100%;
+  }
+  .history-scroll { overflow-x: auto; border: 1px solid #2C3E5C; border-radius: 10px; }
+  .history table { border-collapse: collapse; font-size: 12px; width: 100%; white-space: nowrap; }
+  .history th, .history td { padding: 6px 10px; text-align: right; border-bottom: 1px solid #1B2A4A; }
+  .history th:first-child, .history td:first-child { text-align: left; }
+  .history th { color: #8FA0BF; font-weight: 600; background: #0C1626; position: sticky; top: 0; }
+  .history tr:last-child td { color: #2ECC71; }
+
   .summary {
     margin-top: 24px;
     background: #0C1626;
@@ -124,7 +135,6 @@
     padding: 16px;
     max-width: 900px;
   }
-  .summary.hidden { display: none; }
   .summary textarea {
     width: 100%;
     height: 220px;
@@ -143,14 +153,17 @@
   <h1>Labo de défilement des sous-titres</h1>
   <p class="hint">
     Outil autonome pour régler et mesurer objectivement le défilement des sous-titres avant de reporter
-    les réglages dans le code de Senior Visio. Parle normalement en français : le texte reconnu s'affiche
-    et défile dans l'encart ci-dessous, exactement comme sur la tablette de Jean. Change les réglages à
-    tout moment (les métriques se réinitialisent automatiquement à chaque changement pour rester
-    comparables) et regarde les chiffres évoluer.
+    les réglages dans le code de Senior Visio.
+    <strong>1.</strong> Premier essai : clique "🎤 Démarrer (parler)" et parle normalement — ça affiche
+    le résultat en direct <em>et</em> enregistre ce que tu dis. <strong>2.</strong> Pour tous les essais
+    suivants, change les réglages puis clique "▶️ Rejouer l'enregistrement" : le même texte, avec le même
+    rythme, est rejoué comme s'il venait du micro — comparaison à conditions strictement identiques, sans
+    avoir à reparler. Chaque essai (micro ou rejeu) s'ajoute à l'historique ci-dessous, rien n'est effacé
+    automatiquement.
   </p>
   <p class="warn" id="unsupportedWarning">
     ⚠️ Ce navigateur ne supporte pas la reconnaissance vocale (Web Speech API). Utilise Chrome
-    (Android ou ordinateur) — pas Safari/iOS.
+    (Android ou ordinateur) — pas Safari/iOS. Le rejeu d'un enregistrement déjà importé reste possible.
   </p>
   <p class="warn">
     ⚠️ Le micro ne fonctionne que sur une page servie en HTTPS (ou en local via <code>localhost</code>) —
@@ -191,10 +204,20 @@
 
       <fieldset>
         <legend>Session</legend>
-        <button id="startBtn">🎤 Démarrer</button>
+        <button id="startBtn">🎤 Démarrer (parler)</button>
+        <button id="replayBtn" class="secondary" disabled>▶️ Rejouer l'enregistrement</button>
         <button id="stopBtn" class="danger" disabled>⏹ Arrêter</button>
-        <button id="resetMetricsBtn" class="secondary">↺ Réinitialiser les métriques</button>
         <p class="status" id="status">Prêt.</p>
+        <p class="recording-info" id="recordingInfo">Aucun enregistrement pour l'instant.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Enregistrement (import / export)</legend>
+        <label>JSON de l'enregistrement
+          <textarea id="recordingIO" rows="4" style="width:100%; font-family: ui-monospace, monospace; font-size:11px;" placeholder="Exporte ici pour sauvegarder, ou colle un enregistrement à importer."></textarea>
+        </label>
+        <button id="exportRecordingBtn" class="secondary">Exporter</button>
+        <button id="importRecordingBtn" class="secondary">Importer</button>
       </fieldset>
     </div>
 
@@ -207,9 +230,9 @@
     </div>
 
     <div class="metrics">
-      <h2>Métriques en direct (depuis la dernière réinitialisation)</h2>
+      <h2>Métriques — essai en cours</h2>
       <table>
-        <tr><td>Durée de la fenêtre de mesure</td><td id="mDuration">—</td></tr>
+        <tr><td>Durée</td><td id="mDuration">—</td></tr>
         <tr><td>FPS moyen pendant le défilement</td><td id="mFps">—</td></tr>
         <tr><td>Frames saccadées (&gt;20ms)</td><td id="mJank">—</td></tr>
         <tr><td>Intervalle réel moyen texte</td><td id="mInterval">—</td></tr>
@@ -221,8 +244,26 @@
     </div>
   </div>
 
-  <div class="summary hidden" id="summaryPanel">
-    <h2>Résumé de session (à copier-coller pour me le renvoyer)</h2>
+  <div class="history">
+    <h2>Historique des essais (rien n'est effacé automatiquement)</h2>
+    <div class="history-scroll">
+      <table id="historyTable">
+        <thead>
+          <tr>
+            <th>#</th><th>Source</th><th>Zone</th><th>Police</th><th>Échant.</th><th>Stratégie</th>
+            <th>Rattrap.</th><th>FPS</th><th>Jank%</th><th>Interv. réel</th><th>Débit</th>
+            <th>Débord.%</th><th>Phr./min</th><th>Distance</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+    <button id="clearHistoryBtn" class="secondary" style="margin-top:10px;">🗑 Effacer l'historique</button>
+  </div>
+
+  <div class="summary" id="summaryPanel">
+    <h2>JSON complet (tous les essais) — à copier-coller pour analyse</h2>
+    <button id="copyJsonBtn" class="secondary">📋 Copier le JSON</button>
     <textarea id="summaryText" readonly></textarea>
   </div>
 
@@ -245,9 +286,13 @@
     lerpFactor: document.getElementById("lerpFactor"),
     lerpFactorVal: document.getElementById("lerpFactorVal"),
     startBtn: document.getElementById("startBtn"),
+    replayBtn: document.getElementById("replayBtn"),
     stopBtn: document.getElementById("stopBtn"),
-    resetMetricsBtn: document.getElementById("resetMetricsBtn"),
     status: document.getElementById("status"),
+    recordingInfo: document.getElementById("recordingInfo"),
+    recordingIO: document.getElementById("recordingIO"),
+    exportRecordingBtn: document.getElementById("exportRecordingBtn"),
+    importRecordingBtn: document.getElementById("importRecordingBtn"),
     captionBanner: document.getElementById("captionBanner"),
     captionScroll: document.getElementById("captionScroll"),
     captionText: document.getElementById("captionText"),
@@ -259,8 +304,10 @@
     mOverflow: document.getElementById("mOverflow"),
     mResets: document.getElementById("mResets"),
     mDistance: document.getElementById("mDistance"),
-    summaryPanel: document.getElementById("summaryPanel"),
+    historyBody: document.getElementById("historyBody"),
+    clearHistoryBtn: document.getElementById("clearHistoryBtn"),
     summaryText: document.getElementById("summaryText"),
+    copyJsonBtn: document.getElementById("copyJsonBtn"),
     unsupportedWarning: document.getElementById("unsupportedWarning"),
   };
 
@@ -268,45 +315,40 @@
   els.unsupportedWarning.classList.toggle("hidden", !!SpeechRecognitionCtor);
   if (!SpeechRecognitionCtor) els.startBtn.disabled = true;
 
-  // ---- Paramètres (lus depuis les contrôles) ----
-  const params = {
-    boxWidth: 500,
-    boxHeight: 220,
-    fontSize: 32,
-    sampleInterval: 300,
-    scrollStrategy: "native",
-    lerpFactor: 0.2,
-  };
-
-  function applyStyles() {
-    els.captionBanner.style.maxWidth = params.boxWidth + "px";
-    els.captionScroll.style.height = params.boxHeight + "px";
-    els.captionText.style.fontSize = params.fontSize + "px";
+  // ---- Réglages affichage (appliqués en direct, indépendamment des essais) ----
+  function currentControlValues() {
+    return {
+      boxWidth: Number(els.boxWidth.value),
+      boxHeight: Number(els.boxHeight.value),
+      fontSize: Number(els.fontSize.value),
+      sampleInterval: Number(els.sampleInterval.value),
+      scrollStrategy: els.scrollStrategy.value,
+      lerpFactor: Number(els.lerpFactor.value),
+    };
   }
 
-  function readControlsAndReset() {
-    params.boxWidth = Number(els.boxWidth.value);
-    params.boxHeight = Number(els.boxHeight.value);
-    params.fontSize = Number(els.fontSize.value);
-    params.sampleInterval = Number(els.sampleInterval.value);
-    params.scrollStrategy = els.scrollStrategy.value;
-    params.lerpFactor = Number(els.lerpFactor.value);
-
-    els.boxWidthVal.textContent = params.boxWidth + " px";
-    els.boxHeightVal.textContent = params.boxHeight + " px";
-    els.fontSizeVal.textContent = params.fontSize + " px";
-    els.sampleIntervalVal.textContent = params.sampleInterval + " ms";
-    els.lerpFactorVal.textContent = params.lerpFactor.toFixed(2);
-    els.lerpFactorRow.classList.toggle("hidden", params.scrollStrategy !== "lerp");
-
-    applyStyles();
-    resetMetrics();
+  function applyStyles(p) {
+    els.captionBanner.style.maxWidth = p.boxWidth + "px";
+    els.captionScroll.style.height = p.boxHeight + "px";
+    els.captionText.style.fontSize = p.fontSize + "px";
   }
 
+  function refreshControlLabels() {
+    const p = currentControlValues();
+    els.boxWidthVal.textContent = p.boxWidth + " px";
+    els.boxHeightVal.textContent = p.boxHeight + " px";
+    els.fontSizeVal.textContent = p.fontSize + " px";
+    els.sampleIntervalVal.textContent = p.sampleInterval + " ms";
+    els.lerpFactorVal.textContent = p.lerpFactor.toFixed(2);
+    els.lerpFactorRow.classList.toggle("hidden", p.scrollStrategy !== "lerp");
+    applyStyles(p);
+  }
   [els.boxWidth, els.boxHeight, els.fontSize, els.sampleInterval, els.scrollStrategy, els.lerpFactor]
-    .forEach((el) => el.addEventListener("input", readControlsAndReset));
+    .forEach((el) => el.addEventListener("input", refreshControlLabels));
 
-  // ---- État de la reconnaissance / du défilement ----
+  // ---- État d'un essai ("run") ----
+  let currentRunParams = null;
+  let runMode = null; // null | 'live' | 'replay'
   let recognition = null;
   let lastCaptionText = "";
   let lastSampleTime = 0;
@@ -314,7 +356,26 @@
   let isAnimating = false;
   let scrollEndTimeout = null;
 
-  // ---- Métriques (fenêtre courante, remise à zéro à chaque réglage) ----
+  // ---- Enregistrement (flux brut, non throttlé, rejouable) ----
+  let recordingRaw = [];      // [{ t: ms depuis le début, text }]
+  let recordingStartTs = 0;
+  let recordingDurationMs = 0;
+  let replayTimers = [];
+  let replayEndTimer = null;
+
+  function describeRecording() {
+    if (!recordingRaw.length) return "Aucun enregistrement pour l'instant.";
+    const lastText = recordingRaw[recordingRaw.length - 1].text;
+    const words = lastText.trim().split(/\s+/).filter(Boolean).length;
+    return "Dernier enregistrement : " + (recordingDurationMs / 1000).toFixed(1) + " s, ~" + words +
+      " mots, " + recordingRaw.length + " échantillons bruts.";
+  }
+  function updateRecordingUI() {
+    els.recordingInfo.textContent = describeRecording();
+    els.replayBtn.disabled = !recordingRaw.length || runMode !== null;
+  }
+
+  // ---- Métriques de l'essai en cours ----
   let metricsStartTs = 0;
   let frameCount = 0;
   let frameDeltaSum = 0;
@@ -331,7 +392,7 @@
   let totalScrolledPx = 0;
   let lastKnownScrollTop = 0;
 
-  function resetMetrics() {
+  function resetRunMetrics() {
     metricsStartTs = performance.now();
     frameCount = 0;
     frameDeltaSum = 0;
@@ -348,6 +409,9 @@
     lastKnownScrollTop = els.captionScroll.scrollTop;
   }
 
+  // ---- Historique persistant (tous les essais de cette page) ----
+  const sessionHistory = [];
+
   // ---- Boucle d'animation permanente : mesure FPS/jank + pilote le mode "lerp" ----
   let lerpTarget = 0;
   function mainLoop(ts) {
@@ -361,25 +425,23 @@
     }
     lastFrameTs = ts;
 
-    if (params.scrollStrategy === "lerp" && isAnimating) {
+    if (currentRunParams && currentRunParams.scrollStrategy === "lerp" && isAnimating) {
       const cur = els.captionScroll.scrollTop;
       const diff = lerpTarget - cur;
       if (Math.abs(diff) < 0.5) {
         setScrollTop(lerpTarget);
         isAnimating = false;
       } else {
-        setScrollTop(cur + diff * params.lerpFactor);
+        setScrollTop(cur + diff * currentRunParams.lerpFactor);
       }
     }
 
-    // distance défilée (toutes stratégies)
     const now = els.captionScroll.scrollTop;
     if (now !== lastKnownScrollTop) {
       totalScrolledPx += Math.abs(now - lastKnownScrollTop);
       lastKnownScrollTop = now;
     }
 
-    // débordement cumulé, pondéré par le temps
     if (overflowSince != null && !currentlyOverflowing) {
       overflowAccumMs += ts - overflowSince;
       overflowSince = null;
@@ -389,9 +451,7 @@
   }
   requestAnimationFrame(mainLoop);
 
-  function setScrollTop(v) {
-    els.captionScroll.scrollTop = v;
-  }
+  function setScrollTop(v) { els.captionScroll.scrollTop = v; }
 
   function updateOverflowState(overflow, ts) {
     if (overflow === currentlyOverflowing) return;
@@ -406,8 +466,6 @@
 
   // ---- Stratégies de défilement ----
   function animateResetStrategy(maxScroll, wordCount) {
-    // Reproduit fidèlement l'ancien bug pour référence/comparaison : on
-    // repart de zéro et on rejoue toute l'animation à chaque mise à jour.
     if (scrollAnimHandle) cancelAnimationFrame(scrollAnimHandle);
     setScrollTop(0);
     const durationMs = Math.min(6000, Math.max(900, wordCount * 220));
@@ -430,7 +488,6 @@
     isAnimating = true;
     if (scrollEndTimeout) clearTimeout(scrollEndTimeout);
     els.captionScroll.scrollTo({ top: maxScroll, behavior: "smooth" });
-    // 'scrollend' n'est pas garanti partout : filet de secours par timeout.
     const onEnd = () => { isAnimating = false; els.captionScroll.removeEventListener("scrollend", onEnd); };
     els.captionScroll.addEventListener("scrollend", onEnd, { once: true });
     scrollEndTimeout = setTimeout(() => { isAnimating = false; }, 1200);
@@ -442,7 +499,7 @@
     isAnimating = true;
   }
 
-  // ---- Réception d'un nouveau texte échantillonné ----
+  // ---- Réception d'un texte déjà passé au tamis de l'échantillonnage ----
   function applyCaptionText(text, now) {
     const isContinuation = !!lastCaptionText && text.startsWith(lastCaptionText);
 
@@ -470,14 +527,75 @@
 
       if (!overflow) { isAnimating = false; return; }
 
-      if (params.scrollStrategy === "reset") animateResetStrategy(maxScroll, wordCount);
-      else if (params.scrollStrategy === "lerp") animateLerpStrategy(maxScroll, isContinuation);
+      if (currentRunParams.scrollStrategy === "reset") animateResetStrategy(maxScroll, wordCount);
+      else if (currentRunParams.scrollStrategy === "lerp") animateLerpStrategy(maxScroll, isContinuation);
       else animateNativeStrategy(maxScroll, isContinuation);
     });
   }
 
-  // ---- Reconnaissance vocale ----
-  function startRecognition() {
+  // Point d'entrée commun micro live / rejeu : applique le même throttle
+  // d'échantillonnage que l'appli réelle, pour que le paramètre reste
+  // significatif même en rejeu.
+  function handleThrottledSample(text, now) {
+    if (now - lastSampleTime < currentRunParams.sampleInterval) return;
+    lastSampleTime = now;
+    applyCaptionText(text, now);
+  }
+
+  // ---- Démarrage / fin d'un essai ----
+  function beginRun() {
+    currentRunParams = currentControlValues();
+    applyStyles(currentRunParams);
+    resetRunMetrics();
+    lastCaptionText = "";
+    lastWordCountInPhrase = 0;
+    lastSampleTime = 0;
+    els.captionText.textContent = "";
+    els.startBtn.disabled = true;
+    els.replayBtn.disabled = true;
+    els.stopBtn.disabled = false;
+  }
+
+  function finalizeRun(source) {
+    const m = computeMetrics();
+    sessionHistory.push({
+      id: sessionHistory.length + 1,
+      source,
+      horodatage: new Date().toISOString(),
+      parametres: {
+        largeurZone_px: currentRunParams.boxWidth,
+        hauteurZone_px: currentRunParams.boxHeight,
+        taillePolice_px: currentRunParams.fontSize,
+        intervalleEchantillonnage_ms: currentRunParams.sampleInterval,
+        strategieDefilement: currentRunParams.scrollStrategy,
+        vitesseRattrapage: currentRunParams.scrollStrategy === "lerp" ? currentRunParams.lerpFactor : null,
+      },
+      mesures: {
+        dureeSession_s: Number((m.durationMs / 1000).toFixed(1)),
+        fpsMoyenPendantDefilement: m.avgFps != null ? Number(m.avgFps.toFixed(1)) : null,
+        framesSaccadeesPct: m.jankPct != null ? Number(m.jankPct.toFixed(1)) : null,
+        intervalleReelMoyenTexte_ms: m.avgInterval != null ? Number(m.avgInterval.toFixed(0)) : null,
+        debitAffiche_motsParMinute: m.wpm != null ? Number(m.wpm.toFixed(0)) : null,
+        tempsEnDebordementPct: m.overflowPct != null ? Number(m.overflowPct.toFixed(1)) : null,
+        nouvellesPhrasesParMinute: m.resetsPerMin != null ? Number(m.resetsPerMin.toFixed(1)) : null,
+        distanceTotaleDefilee_px: Number(m.totalScrolledPx.toFixed(0)),
+      },
+    });
+    runMode = null;
+    els.startBtn.disabled = !SpeechRecognitionCtor;
+    els.stopBtn.disabled = true;
+    updateRecordingUI();
+    renderHistory();
+    els.status.textContent = "Essai #" + sessionHistory.length + " (" + source + ") ajouté à l'historique.";
+  }
+
+  // ---- Reconnaissance vocale (mode micro = live + enregistrement) ----
+  function startLive() {
+    runMode = "live";
+    beginRun();
+    recordingRaw = [];
+    recordingStartTs = performance.now();
+
     const recog = new SpeechRecognitionCtor();
     recognition = recog;
     recog.continuous = true;
@@ -491,9 +609,11 @@
       }
       if (!text) return;
       const now = performance.now();
-      if (now - lastSampleTime < params.sampleInterval) return;
-      lastSampleTime = now;
-      applyCaptionText(text, now);
+      // Flux brut complet (pas throttlé) : fidélité totale pour le rejeu,
+      // quel que soit l'échantillonnage choisi lors d'un essai ultérieur.
+      recordingRaw.push({ t: now - recordingStartTs, text });
+      recordingDurationMs = now - recordingStartTs;
+      handleThrottledSample(text, now);
     };
     recog.onerror = (e) => { els.status.textContent = "Erreur reconnaissance : " + e.error; };
     recog.onend = () => {
@@ -505,37 +625,76 @@
     els.status.textContent = "🎤 Écoute en cours — parle normalement.";
   }
 
-  function stopRecognition() {
+  function stopLive() {
     const recog = recognition;
     recognition = null;
     if (recog) {
       recog.onend = null;
       try { recog.stop(); } catch (_) {}
     }
-    els.status.textContent = "Arrêté.";
+    updateRecordingUI();
+    finalizeRun("micro");
   }
 
-  els.startBtn.addEventListener("click", () => {
-    readControlsAndReset();
-    lastCaptionText = "";
-    lastWordCountInPhrase = 0;
-    els.captionText.textContent = "";
-    startRecognition();
-    els.startBtn.disabled = true;
-    els.stopBtn.disabled = false;
-    els.summaryPanel.classList.add("hidden");
-  });
+  // ---- Rejeu d'un enregistrement ----
+  function startReplay() {
+    if (!recordingRaw.length) return;
+    runMode = "replay";
+    beginRun();
+    els.status.textContent = "▶️ Rejeu en cours…";
 
+    replayTimers = recordingRaw.map((sample) =>
+      setTimeout(() => handleThrottledSample(sample.text, performance.now()), sample.t)
+    );
+    const totalDuration = recordingRaw[recordingRaw.length - 1].t;
+    replayEndTimer = setTimeout(() => finalizeRun("rejeu"), totalDuration + 1000);
+  }
+
+  function cancelReplay() {
+    replayTimers.forEach(clearTimeout);
+    replayTimers = [];
+    if (replayEndTimer) clearTimeout(replayEndTimer);
+    finalizeRun("rejeu (arrêté)");
+  }
+
+  els.startBtn.addEventListener("click", startLive);
+  els.replayBtn.addEventListener("click", startReplay);
   els.stopBtn.addEventListener("click", () => {
-    stopRecognition();
-    els.startBtn.disabled = false;
-    els.stopBtn.disabled = true;
-    showSummary();
+    if (runMode === "live") stopLive();
+    else if (runMode === "replay") cancelReplay();
   });
 
-  els.resetMetricsBtn.addEventListener("click", resetMetrics);
+  els.exportRecordingBtn.addEventListener("click", () => {
+    els.recordingIO.value = JSON.stringify({ recordingRaw, recordingDurationMs }, null, 2);
+  });
+  els.importRecordingBtn.addEventListener("click", () => {
+    try {
+      const parsed = JSON.parse(els.recordingIO.value);
+      if (!Array.isArray(parsed.recordingRaw)) throw new Error("format inattendu");
+      recordingRaw = parsed.recordingRaw;
+      recordingDurationMs = parsed.recordingDurationMs || (recordingRaw.length ? recordingRaw[recordingRaw.length - 1].t : 0);
+      updateRecordingUI();
+      els.status.textContent = "Enregistrement importé.";
+    } catch (e) {
+      els.status.textContent = "Import impossible : " + e.message;
+    }
+  });
 
-  // ---- Affichage des métriques en direct ----
+  els.clearHistoryBtn.addEventListener("click", () => {
+    sessionHistory.length = 0;
+    renderHistory();
+    els.status.textContent = "Historique effacé.";
+  });
+
+  els.copyJsonBtn.addEventListener("click", () => {
+    navigator.clipboard.writeText(els.summaryText.value).then(() => {
+      els.status.textContent = "JSON copié dans le presse-papier.";
+    }).catch(() => {
+      els.status.textContent = "Copie impossible : sélectionne et copie manuellement.";
+    });
+  });
+
+  // ---- Métriques : calcul + affichage en direct ----
   function computeMetrics() {
     const durationMs = performance.now() - metricsStartTs;
     const durationMin = durationMs / 60000;
@@ -568,34 +727,49 @@
     els.mDistance.textContent = fmt(m.totalScrolledPx, 0, " px");
   }, 400);
 
-  function showSummary() {
-    const m = computeMetrics();
-    const summary = {
-      parametres: {
-        largeurZone_px: params.boxWidth,
-        hauteurZone_px: params.boxHeight,
-        taillePolice_px: params.fontSize,
-        intervalleEchantillonnage_ms: params.sampleInterval,
-        strategieDefilement: params.scrollStrategy,
-        vitesseRattrapage: params.scrollStrategy === "lerp" ? params.lerpFactor : null,
-      },
-      mesures: {
-        dureeSession_s: Number((m.durationMs / 1000).toFixed(1)),
-        fpsMoyenPendantDefilement: m.avgFps != null ? Number(m.avgFps.toFixed(1)) : null,
-        framesSaccadeesPct: m.jankPct != null ? Number(m.jankPct.toFixed(1)) : null,
-        intervalleReelMoyenTexte_ms: m.avgInterval != null ? Number(m.avgInterval.toFixed(0)) : null,
-        debitAffiche_motsParMinute: m.wpm != null ? Number(m.wpm.toFixed(0)) : null,
-        tempsEnDebordementPct: m.overflowPct != null ? Number(m.overflowPct.toFixed(1)) : null,
-        nouvellesPhrasesParMinute: m.resetsPerMin != null ? Number(m.resetsPerMin.toFixed(1)) : null,
-        distanceTotaleDefilee_px: Number(m.totalScrolledPx.toFixed(0)),
-      },
+  // ---- Historique : tableau + JSON complet ----
+  function renderHistory() {
+    els.historyBody.innerHTML = "";
+    sessionHistory.forEach((s) => {
+      const tr = document.createElement("tr");
+      const cells = [
+        s.id,
+        s.source,
+        s.parametres.largeurZone_px + "×" + s.parametres.hauteurZone_px,
+        s.parametres.taillePolice_px + "px",
+        s.parametres.intervalleEchantillonnage_ms + "ms",
+        s.parametres.strategieDefilement,
+        s.parametres.vitesseRattrapage != null ? s.parametres.vitesseRattrapage : "—",
+        fmt(s.mesures.fpsMoyenPendantDefilement, 0),
+        fmt(s.mesures.framesSaccadeesPct, 1),
+        fmt(s.mesures.intervalleReelMoyenTexte_ms, 0),
+        fmt(s.mesures.debitAffiche_motsParMinute, 0),
+        fmt(s.mesures.tempsEnDebordementPct, 0),
+        fmt(s.mesures.nouvellesPhrasesParMinute, 1),
+        fmt(s.mesures.distanceTotaleDefilee_px, 0),
+      ];
+      cells.forEach((c) => {
+        const td = document.createElement("td");
+        td.textContent = c;
+        tr.appendChild(td);
+      });
+      els.historyBody.appendChild(tr);
+    });
+
+    const full = {
+      enregistrement: recordingRaw.length ? {
+        dureeMs: Number(recordingDurationMs.toFixed(0)),
+        nombreEchantillonsBruts: recordingRaw.length,
+      } : null,
+      sessions: sessionHistory,
     };
-    els.summaryText.value = JSON.stringify(summary, null, 2);
-    els.summaryPanel.classList.remove("hidden");
+    els.summaryText.value = JSON.stringify(full, null, 2);
   }
 
   // ---- Initialisation ----
-  readControlsAndReset();
+  refreshControlLabels();
+  updateRecordingUI();
+  renderHistory();
 })();
 </script>
 </body>
