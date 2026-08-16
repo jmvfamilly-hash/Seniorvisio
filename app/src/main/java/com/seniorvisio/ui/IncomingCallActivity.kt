@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Base64
 import android.util.TypedValue
+import android.view.Choreographer
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewOutlineProvider
@@ -22,6 +23,8 @@ import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.service.TimedCallAlertController
 import org.webrtc.SurfaceViewRenderer
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Écran plein format affiché à chaque appel entrant : décompte visible
@@ -229,8 +232,35 @@ class IncomingCallActivity : AppCompatActivity() {
         // jamais le temps d'aller au bout avant d'être relancée depuis le
         // début. On ne revient en haut que lorsqu'une phrase réellement
         // nouvelle démarre (le texte ne prolonge plus le précédent).
+        //
+        // Suivi continu par interpolation image par image (facteur de
+        // rattrapage 0.35), plutôt que smoothScrollTo : validé dans le labo
+        // de défilement (experiment/caption-scroll) sur un enregistrement
+        // vocal réel — 60 im/s en moyenne, seulement 0,2% d'images saccadées.
         var lastOverflowSignaled: Boolean? = null
         var lastCaptionText = ""
+        var lerpTargetScroll = 0
+        var lerpFrameScheduled = false
+        val lerpCatchUpFactor = 0.35f
+
+        fun requestLerpFrame() {
+            if (lerpFrameScheduled) return
+            lerpFrameScheduled = true
+            Choreographer.getInstance().postFrameCallback {
+                lerpFrameScheduled = false
+                val current = captionScroll.scrollY
+                val diff = lerpTargetScroll - current
+                if (abs(diff) < 1) {
+                    captionScroll.scrollTo(0, lerpTargetScroll)
+                } else {
+                    val step = diff * lerpCatchUpFactor
+                    val next = current + (if (step == 0f) (if (diff > 0) 1f else -1f) else step)
+                    captionScroll.scrollTo(0, next.roundToInt())
+                    requestLerpFrame()
+                }
+            }
+        }
+
         callEngine.listenForCaptions { text ->
             runOnUiThread {
                 val isContinuation = lastCaptionText.isNotEmpty() && text.startsWith(lastCaptionText)
@@ -239,15 +269,13 @@ class IncomingCallActivity : AppCompatActivity() {
                 textCaption.post {
                     if (!isContinuation) {
                         captionScroll.scrollTo(0, 0)
+                        lerpTargetScroll = 0
                     }
                     val overflow = textCaption.height > captionScroll.height
                     val maxScroll = (textCaption.height - captionScroll.height).coerceAtLeast(0)
                     if (overflow) {
-                        // smoothScrollTo (le défileur natif d'Android) adapte sa
-                        // durée à la distance réelle à parcourir, plutôt qu'une
-                        // durée fixe qui paraît tantôt trop lente (petit pas),
-                        // tantôt trop brusque (plusieurs mots d'un coup).
-                        captionScroll.smoothScrollTo(0, maxScroll)
+                        lerpTargetScroll = maxScroll
+                        requestLerpFrame()
                     }
                     if (lastOverflowSignaled != overflow) {
                         lastOverflowSignaled = overflow
