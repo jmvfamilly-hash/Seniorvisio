@@ -37,6 +37,11 @@ class IncomingCallService : LifecycleService() {
         if (callId != null) {
             launchAlertScreen(callId, callerName, callerPhoto)
         }
+        // Le rôle de ce service s'arrête ici : IncomingCallActivity gère seule
+        // la suite (décompte, appel, raccroché). Sans ce stopSelf(), le
+        // service restait actif indéfiniment après le tout premier appel — sa
+        // notification "Senior Visio actif" ne disparaissait jamais.
+        stopSelf(startId)
         return START_NOT_STICKY
     }
 

@@ -444,6 +444,16 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         remoteVideoTrack = null
         remoteAudioTrack = null
         pendingRemoteCandidates.clear()
+        // Sans ça, la factory WebRTC (caméra, codecs, threads natifs) et le
+        // contexte EGL de cet appel restaient en mémoire indéfiniment : chaque
+        // appel crée sa propre instance (voir ensureFactory/EglBase.create()
+        // dans le constructeur), donc les appels s'accumulaient jusqu'à ce
+        // que la tablette n'ait plus accès à la caméra pour un nouvel appel
+        // (elle restait "active" — service au premier plan toujours vivant —
+        // mais n'acceptait plus de connexion).
+        peerConnectionFactory?.dispose()
+        peerConnectionFactory = null
+        eglBase.release()
     }
 
     private class SimpleSdpObserver(
