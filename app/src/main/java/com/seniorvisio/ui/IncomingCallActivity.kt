@@ -1,5 +1,6 @@
 package com.seniorvisio.ui
 
+import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import android.graphics.Outline
 import android.media.RingtoneManager
@@ -8,12 +9,15 @@ import android.os.Bundle
 import android.util.Base64
 import android.util.TypedValue
 import android.view.Choreographer
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewOutlineProvider
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -40,6 +44,14 @@ class IncomingCallActivity : AppCompatActivity() {
     private lateinit var buttonBlock: Button
     private var isConnected = false
     private var callHandled = false
+
+    // Références gardées pour adapter la disposition à chaque rotation (voir
+    // onConfigurationChanged / applyOrientationLayout) sans jamais recréer
+    // l'Activity ni rattacher les renderers WebRTC — l'appel en cours n'est
+    // jamais interrompu par une rotation.
+    private var remoteRendererRef: SurfaceViewRenderer? = null
+    private var captionBannerRef: View? = null
+    private var captionScrollRef: ScrollView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -179,8 +191,81 @@ class IncomingCallActivity : AppCompatActivity() {
         callEngine.attachRenderers(localRenderer, remoteRenderer)
         callEngine.answer()
         buttonBlock.text = "Raccrocher"
+        remoteRendererRef = remoteRenderer
         setupCaptionMode()
         callEngine.listenForRemoteVolumeControl()
+        // Applique tout de suite la disposition correspondant à l'orientation
+        // actuelle (la tablette peut déjà être en paysage au moment où
+        // l'appel se connecte, pas seulement lors d'une rotation ultérieure).
+        applyOrientationLayout(resources.configuration.orientation)
+    }
+
+    /**
+     * Adapte la disposition de l'écran d'appel à l'orientation, sans jamais
+     * recréer les vues (voir remoteRendererRef/captionBannerRef, remplies
+     * dans connectVideoCall/setupCaptionMode) : seuls leurs LayoutParams
+     * changent, donc le flux vidéo et le défilement des sous-titres ne sont
+     * jamais interrompus par une rotation.
+     *
+     * Première itération du mode paysage : vidéo du proche à droite, sous-
+     * titres en colonne à gauche (au lieu du bandeau du bas utilisé en
+     * portrait) — à affiner après un usage réel.
+     */
+    private fun applyOrientationLayout(orientation: Int) {
+        val remoteRenderer = remoteRendererRef ?: return
+        val captionBanner = captionBannerRef ?: return
+        val captionScroll = captionScrollRef ?: return
+        val isLandscape = orientation == Configuration.ORIENTATION_LANDSCAPE
+        val screenWidth = resources.displayMetrics.widthPixels
+        val halfWidth = screenWidth / 2
+        val margin16 = (16 * resources.displayMetrics.density).roundToInt()
+        val margin24 = (24 * resources.displayMetrics.density).roundToInt()
+        val margin140 = (140 * resources.displayMetrics.density).roundToInt()
+        val portraitCaptionScrollHeight = (220 * resources.displayMetrics.density).roundToInt()
+
+        (remoteRenderer.layoutParams as FrameLayout.LayoutParams).apply {
+            if (isLandscape) {
+                width = screenWidth - halfWidth
+                height = FrameLayout.LayoutParams.MATCH_PARENT
+                gravity = Gravity.END or Gravity.TOP
+                marginStart = 0
+            } else {
+                width = FrameLayout.LayoutParams.MATCH_PARENT
+                height = FrameLayout.LayoutParams.MATCH_PARENT
+                gravity = Gravity.NO_GRAVITY
+            }
+            remoteRenderer.layoutParams = this
+        }
+
+        (captionBanner.layoutParams as FrameLayout.LayoutParams).apply {
+            if (isLandscape) {
+                width = halfWidth
+                height = FrameLayout.LayoutParams.MATCH_PARENT
+                gravity = Gravity.START or Gravity.TOP
+                marginStart = margin16; marginEnd = margin16; topMargin = margin16; bottomMargin = margin16
+            } else {
+                width = FrameLayout.LayoutParams.MATCH_PARENT
+                height = FrameLayout.LayoutParams.WRAP_CONTENT
+                gravity = Gravity.BOTTOM
+                marginStart = margin24; marginEnd = margin24; topMargin = 0; bottomMargin = margin140
+            }
+            captionBanner.layoutParams = this
+        }
+
+        (captionScroll.layoutParams as LinearLayout.LayoutParams).apply {
+            height = if (isLandscape) LinearLayout.LayoutParams.MATCH_PARENT else portraitCaptionScrollHeight
+            captionScroll.layoutParams = this
+        }
+    }
+
+    /**
+     * Rotation de la tablette pendant l'appel : configChanges (voir
+     * AndroidManifest) empêche déjà la destruction de l'Activity, il ne
+     * reste qu'à réadapter la disposition aux nouvelles dimensions.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (isConnected) applyOrientationLayout(newConfig.orientation)
     }
 
     /**
@@ -194,6 +279,8 @@ class IncomingCallActivity : AppCompatActivity() {
         val captionBanner = findViewById<View>(R.id.captionBanner)
         val captionScroll = findViewById<ScrollView>(R.id.captionScroll)
         val textCaption = findViewById<TextView>(R.id.textCaption)
+        captionBannerRef = captionBanner
+        captionScrollRef = captionScroll
         // Le défilement est piloté par le code (voir plus bas), pas par Jean.
         captionScroll.setOnTouchListener { _, _ -> true }
 
