@@ -7,6 +7,7 @@ import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Base64
+import android.util.Log
 import android.util.TypedValue
 import android.view.Choreographer
 import android.view.Gravity
@@ -66,9 +67,25 @@ class IncomingCallActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             window.addFlags(
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
             )
+        }
+        // setTurnScreenOn ne fait que réveiller l'écran une fois : sans ce
+        // flag séparé (qui, lui, s'applique sur toutes les versions), rien
+        // n'empêche l'écran de s'éteindre pendant le décompte ou l'appel une
+        // fois le délai de veille système écoulé — retiré explicitement dans
+        // onDestroy dès que l'écran d'appel se termine (voir plus bas), pour
+        // ne pas garder l'écran forcé allumé hors fenêtre d'appel.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        // Repère de latence réveil (voir CONSIGNES_veille_reveil_appel.md,
+        // section 5) : mesure le délai entre la réception du signal d'appel
+        // côté service et l'affichage effectif de cet écran, pour pouvoir
+        // diagnostiquer une régression après une future mise à jour Android.
+        val signalReceivedAtMs = intent.getLongExtra(EXTRA_SIGNAL_RECEIVED_AT, 0L)
+        if (signalReceivedAtMs > 0) {
+            val wakeLatencyMs = System.currentTimeMillis() - signalReceivedAtMs
+            Log.i(TAG, "Réveil écran d'appel : ${wakeLatencyMs}ms depuis réception du signal")
         }
 
         setContentView(R.layout.activity_incoming_call)
@@ -432,6 +449,10 @@ class IncomingCallActivity : AppCompatActivity() {
      * ce garde-fou couvre les cas non listés là-bas.
      */
     override fun onDestroy() {
+        // Ne garde jamais l'écran forcé allumé hors de la fenêtre d'appel
+        // (voir le flag posé dans onCreate) — usage 24/7, risque batterie/
+        // chauffe/marquage d'écran sinon.
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         alertController.cancel()
         if (!callHandled && !isChangingConfigurations) {
             callHandled = true
@@ -441,7 +462,9 @@ class IncomingCallActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val TAG = "IncomingCallActivity"
         const val EXTRA_CALL_ID = "extra_call_id"
         const val EXTRA_CALLER_PHOTO = "extra_caller_photo"
+        const val EXTRA_SIGNAL_RECEIVED_AT = "extra_signal_received_at"
     }
 }

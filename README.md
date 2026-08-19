@@ -171,6 +171,23 @@ cela nécessite de passer le projet Firebase au plan payant "Blaze" (le volume r
 quota gratuit, mais Blaze exige une carte bancaire enregistrée), donc volontairement pas fait par
 défaut ici pour rester sur du 100% gratuit sans engagement.
 
+En complément de l'exemption d'optimisation batterie ci-dessus, `IncomingCallService` acquiert aussi
+un `WakeLock` partiel (toujours avec un timeout de sécurité de 10s, pour ne jamais fuiter en cas de
+crash) au moment précis où l'appel entrant est confirmé, avant même l'affichage de l'écran d'alerte —
+utile en particulier sur les surcouches constructeur (Samsung notamment) qui imposent parfois des
+restrictions de veille supplémentaires au-delà du Doze standard d'Android. `IncomingCallActivity`
+force ensuite l'écran allumé (`FLAG_KEEP_SCREEN_ON`) pendant toute la durée du décompte et de l'appel,
+retiré explicitement dès la fin (raccroché, blocage, ou appel terminé côté proche) pour ne jamais
+garder l'écran forcé allumé hors appel. Le délai réel entre la réception du signal et l'affichage de
+l'écran est tracé dans les logs (`Log.i`, tag `IncomingCallActivity`), pour pouvoir diagnostiquer une
+régression après une future mise à jour Android sur le parc de tablettes.
+
+Reste à configurer côté console Headwind MDM (une fois le compte créé, voir plan de déploiement) :
+timeout de mise en veille écran (30-60s), et surtout la liste blanche d'optimisation batterie poussée
+par policy plutôt que dépendre uniquement de la demande faite au premier lancement — c'est le réglage
+qui se réinitialise le plus souvent après une mise à jour Android ou un reset du device owner, donc à
+vérifier après chaque redémarrage/mise à jour de la tablette de test avant promotion en production.
+
 ## Pourquoi cette architecture
 Le moteur d'appel est isolé derrière `CallEngine` des deux côtés, pour rester remplaçable. Le PWA
 appelant évite toute compilation iOS (pas de Mac nécessaire) : Safari supporte WebRTC nativement
