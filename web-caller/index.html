@@ -44,12 +44,17 @@
           <input type="checkbox" id="captionToggle">
           🔤 Afficher mes paroles en grand chez Jean
         </label>
-        <p class="caption-overflow-indicator hidden" id="captionOverflowIndicator">⏳ Jean n'a pas fini de lire, laisse-lui un peu de temps</p>
+        <p class="caption-overflow-indicator hidden" id="captionOverflowIndicator"></p>
       </div>
 
       <div class="volume-control">
         <label for="textSizeSlider">🔠 Taille du texte chez Jean</label>
         <input type="range" id="textSizeSlider" min="24" max="100" value="56" step="4">
+      </div>
+
+      <div class="volume-control">
+        <label for="scrollSpeedSlider">🐢🐇 Vitesse de défilement max chez Jean</label>
+        <input type="range" id="scrollSpeedSlider" min="20" max="100" value="50" step="10">
       </div>
 
       <div class="transcript-mirror">

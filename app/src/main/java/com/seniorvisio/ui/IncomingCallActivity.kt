@@ -207,53 +207,42 @@ class IncomingCallActivity : AppCompatActivity() {
      * changent, donc le flux vidéo et le défilement des sous-titres ne sont
      * jamais interrompus par une rotation.
      *
-     * Première itération du mode paysage : vidéo du proche à droite, sous-
-     * titres en colonne à gauche (au lieu du bandeau du bas utilisé en
-     * portrait) — à affiner après un usage réel.
+     * La première itération du mode paysage (vidéo à droite, sous-titres en
+     * colonne à gauche) s'est révélée plus perturbante à l'usage que le
+     * bandeau en bas utilisé en portrait — la vidéo reste donc plein écran
+     * et le bandeau de sous-titres en surimpression basse dans les deux
+     * orientations ; seules la hauteur de la zone de texte et la marge basse
+     * sont réduites en paysage, où la hauteur d'écran disponible est plus
+     * courte.
      */
     private fun applyOrientationLayout(orientation: Int) {
         val remoteRenderer = remoteRendererRef ?: return
         val captionBanner = captionBannerRef ?: return
         val captionScroll = captionScrollRef ?: return
         val isLandscape = orientation == Configuration.ORIENTATION_LANDSCAPE
-        val screenWidth = resources.displayMetrics.widthPixels
-        val halfWidth = screenWidth / 2
-        val margin16 = (16 * resources.displayMetrics.density).roundToInt()
-        val margin24 = (24 * resources.displayMetrics.density).roundToInt()
-        val margin140 = (140 * resources.displayMetrics.density).roundToInt()
-        val portraitCaptionScrollHeight = (220 * resources.displayMetrics.density).roundToInt()
+        val density = resources.displayMetrics.density
+        val margin24 = (24 * density).roundToInt()
+        val bottomMargin = ((if (isLandscape) 90 else 140) * density).roundToInt()
+        val captionScrollHeight = ((if (isLandscape) 150 else 220) * density).roundToInt()
 
         (remoteRenderer.layoutParams as FrameLayout.LayoutParams).apply {
-            if (isLandscape) {
-                width = screenWidth - halfWidth
-                height = FrameLayout.LayoutParams.MATCH_PARENT
-                gravity = Gravity.END or Gravity.TOP
-                marginStart = 0
-            } else {
-                width = FrameLayout.LayoutParams.MATCH_PARENT
-                height = FrameLayout.LayoutParams.MATCH_PARENT
-                gravity = Gravity.NO_GRAVITY
-            }
+            width = FrameLayout.LayoutParams.MATCH_PARENT
+            height = FrameLayout.LayoutParams.MATCH_PARENT
+            gravity = Gravity.NO_GRAVITY
+            marginStart = 0
             remoteRenderer.layoutParams = this
         }
 
         (captionBanner.layoutParams as FrameLayout.LayoutParams).apply {
-            if (isLandscape) {
-                width = halfWidth
-                height = FrameLayout.LayoutParams.MATCH_PARENT
-                gravity = Gravity.START or Gravity.TOP
-                marginStart = margin16; marginEnd = margin16; topMargin = margin16; bottomMargin = margin16
-            } else {
-                width = FrameLayout.LayoutParams.MATCH_PARENT
-                height = FrameLayout.LayoutParams.WRAP_CONTENT
-                gravity = Gravity.BOTTOM
-                marginStart = margin24; marginEnd = margin24; topMargin = 0; bottomMargin = margin140
-            }
+            width = FrameLayout.LayoutParams.MATCH_PARENT
+            height = FrameLayout.LayoutParams.WRAP_CONTENT
+            gravity = Gravity.BOTTOM
+            marginStart = margin24; marginEnd = margin24; topMargin = 0; this.bottomMargin = bottomMargin
             captionBanner.layoutParams = this
         }
 
         (captionScroll.layoutParams as LinearLayout.LayoutParams).apply {
-            height = if (isLandscape) LinearLayout.LayoutParams.MATCH_PARENT else portraitCaptionScrollHeight
+            height = captionScrollHeight
             captionScroll.layoutParams = this
         }
     }
@@ -307,8 +296,8 @@ class IncomingCallActivity : AppCompatActivity() {
 
         // Plus aucun texte n'est perdu : si la phrase dépasse l'espace visible,
         // on défile automatiquement (plutôt que de tronquer avec des "…"), et
-        // on signale le débordement au proche pour qu'il puisse temporiser
-        // (voir WebRtcCallEngine.signalCaptionOverflow / web-caller/app.js).
+        // on signale le retard de lecture au proche pour qu'il puisse temporiser
+        // (voir WebRtcCallEngine.signalCaptionCatchUpLag / web-caller/app.js).
         //
         // Le défilement suit la parole en continu, façon sous-titrage TV en
         // direct ("roll-up", CEA-608) : tant que le texte reçu prolonge celui
@@ -320,32 +309,66 @@ class IncomingCallActivity : AppCompatActivity() {
         // début. On ne revient en haut que lorsqu'une phrase réellement
         // nouvelle démarre (le texte ne prolonge plus le précédent).
         //
-        // Suivi continu par interpolation image par image (facteur de
-        // rattrapage 0.35), plutôt que smoothScrollTo : validé dans le labo
-        // de défilement (experiment/caption-scroll) sur un enregistrement
-        // vocal réel — 60 im/s en moyenne, seulement 0,2% d'images saccadées.
-        var lastOverflowSignaled: Boolean? = null
+        // Suivi continu par interpolation image par image (Choreographer),
+        // validé dans le labo de défilement (experiment/caption-scroll) sur
+        // un enregistrement vocal réel — 60 im/s en moyenne, quasi aucune
+        // image saccadée. Le pas par frame était initialement proportionnel
+        // à la distance restante (facteur de rattrapage 0,35) : plus le
+        // proche parlait vite (donc plus de texte en attente), plus le
+        // défilement accélérait — l'inverse de ce qu'il fallait pour laisser
+        // le temps à Jean de lire, constaté lors des tests réels. Le pas est
+        // maintenant plafonné à une vitesse constante et paramétrable (voir
+        // listenForCaptionScrollSpeed, réglée à distance par le proche) :
+        // le texte reçu peut s'accumuler en attente le temps que le
+        // défilement rattrape, plutôt que de défiler plus vite. Le retard de
+        // lecture qui en résulte est signalé en continu au proche (voir
+        // signalCaptionCatchUpLag) pour qu'il sache précisément où en est
+        // Jean, plutôt qu'un simple indicateur "ça déborde" ou non.
         var lastCaptionText = ""
         var lerpTargetScroll = 0
         var lerpFrameScheduled = false
-        val lerpCatchUpFactor = 0.35f
+        var lastFrameTimeNanos = 0L
+        var lastLagSentAtMs = 0L
+        // Valeur de départ raisonnable en l'absence de mesure labo pour ce
+        // réglage (contrairement au lissage ci-dessus) — ajustée en direct
+        // par le proche via le curseur du PWA.
+        var maxScrollSpeedPxPerSec = 50f * resources.displayMetrics.density
 
         fun requestLerpFrame() {
             if (lerpFrameScheduled) return
             lerpFrameScheduled = true
-            Choreographer.getInstance().postFrameCallback {
+            Choreographer.getInstance().postFrameCallback { frameTimeNanos ->
                 lerpFrameScheduled = false
+                val dtSeconds = if (lastFrameTimeNanos == 0L) {
+                    0f
+                } else {
+                    ((frameTimeNanos - lastFrameTimeNanos) / 1_000_000_000f).coerceIn(0f, 0.1f)
+                }
+                lastFrameTimeNanos = frameTimeNanos
                 val current = captionScroll.scrollY
-                val diff = lerpTargetScroll - current
-                if (abs(diff) < 1) {
+                val diff = (lerpTargetScroll - current).toFloat()
+                if (abs(diff) < 1f) {
                     captionScroll.scrollTo(0, lerpTargetScroll)
                 } else {
-                    val step = diff * lerpCatchUpFactor
-                    val next = current + (if (step == 0f) (if (diff > 0) 1f else -1f) else step)
-                    captionScroll.scrollTo(0, next.roundToInt())
+                    val maxStep = (maxScrollSpeedPxPerSec * dtSeconds).coerceAtLeast(1f)
+                    val step = diff.coerceIn(-maxStep, maxStep)
+                    captionScroll.scrollTo(0, (current + step).roundToInt())
                     requestLerpFrame()
                 }
+
+                val maxScrollNow = (textCaption.height - captionScroll.height).coerceAtLeast(0)
+                val remainingPx = (maxScrollNow - captionScroll.scrollY).coerceAtLeast(0)
+                val lagSeconds = if (maxScrollSpeedPxPerSec > 0f) remainingPx / maxScrollSpeedPxPerSec else 0f
+                val now = System.currentTimeMillis()
+                if (now - lastLagSentAtMs > 300) {
+                    lastLagSentAtMs = now
+                    callEngine.signalCaptionCatchUpLag(lagSeconds)
+                }
             }
+        }
+
+        callEngine.listenForCaptionScrollSpeed { dpPerSec ->
+            maxScrollSpeedPxPerSec = dpPerSec * resources.displayMetrics.density
         }
 
         callEngine.listenForCaptions { text ->
@@ -357,16 +380,13 @@ class IncomingCallActivity : AppCompatActivity() {
                     if (!isContinuation) {
                         captionScroll.scrollTo(0, 0)
                         lerpTargetScroll = 0
+                        callEngine.signalCaptionCatchUpLag(0f)
                     }
                     val overflow = textCaption.height > captionScroll.height
                     val maxScroll = (textCaption.height - captionScroll.height).coerceAtLeast(0)
                     if (overflow) {
                         lerpTargetScroll = maxScroll
                         requestLerpFrame()
-                    }
-                    if (lastOverflowSignaled != overflow) {
-                        lastOverflowSignaled = overflow
-                        callEngine.signalCaptionOverflow(overflow)
                     }
                 }
             }

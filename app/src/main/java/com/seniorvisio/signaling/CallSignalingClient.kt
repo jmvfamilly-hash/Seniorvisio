@@ -141,14 +141,24 @@ class CallSignalingClient {
         }
     }
 
+    /** Vitesse maximale (dp/s) à laquelle le texte défile chez Jean, choisie à distance par l'appelant. */
+    fun listenForCaptionScrollSpeed(callId: String, onDpPerSec: (Double) -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            val speed = snapshot?.getDouble(FIELD_CAPTION_SCROLL_SPEED)
+            if (speed != null) onDpPerSec(speed)
+        }
+    }
+
     /**
-     * Signale si le texte des sous-titres déborde de l'espace visible côté
-     * tablette (voir web-caller/app.js) : le proche peut alors ralentir son
-     * débit le temps que Jean finisse de lire, plutôt que de perdre la fin
-     * du texte tronqué.
+     * Signale en continu au proche le retard de lecture de Jean par rapport
+     * au texte reçu (voir IncomingCallActivity.setupCaptionMode) : 0 quand
+     * Jean a tout lu, une valeur croissante (en secondes) tant que le
+     * défilement — plafonné à listenForCaptionScrollSpeed — n'a pas rattrapé
+     * le texte reçu. Remplace l'ancien indicateur booléen "ça déborde", trop
+     * imprécis pour que le proche sache s'il doit ralentir un peu ou beaucoup.
      */
-    fun signalCaptionOverflow(callId: String, overflowing: Boolean) {
-        callDoc(callId).update(FIELD_CAPTION_OVERFLOW, overflowing)
+    fun signalCaptionCatchUpLag(callId: String, lagSeconds: Float) {
+        callDoc(callId).update(FIELD_CAPTION_CATCHUP_LAG, lagSeconds.toDouble())
     }
 
     /**
@@ -211,7 +221,8 @@ class CallSignalingClient {
         private const val FIELD_CAPTION_MODE = "captionModeEnabled"
         private const val FIELD_CAPTION_TEXT_SIZE = "captionTextSize"
         private const val FIELD_FORCE_CONNECT = "forceConnectRequested"
-        private const val FIELD_CAPTION_OVERFLOW = "captionOverflowing"
+        private const val FIELD_CAPTION_SCROLL_SPEED = "captionMaxScrollSpeedDpPerSec"
+        private const val FIELD_CAPTION_CATCHUP_LAG = "captionCatchUpLagSeconds"
 
         const val STATUS_RINGING = "ringing"
         const val STATUS_CONNECTED = "connected"

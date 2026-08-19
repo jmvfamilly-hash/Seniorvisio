@@ -27,6 +27,7 @@ const els = {
   volumeSlider: document.getElementById("volumeSlider"),
   captionToggle: document.getElementById("captionToggle"),
   textSizeSlider: document.getElementById("textSizeSlider"),
+  scrollSpeedSlider: document.getElementById("scrollSpeedSlider"),
   callingHint: document.getElementById("callingHint"),
   countdownFill: document.getElementById("countdownFill"),
   countdownText: document.getElementById("countdownText"),
@@ -58,6 +59,7 @@ els.callButton.addEventListener("click", async () => {
   els.volumeSlider.value = 100;
   els.captionToggle.checked = false;
   els.textSizeSlider.value = 56;
+  els.scrollSpeedSlider.value = 50;
   els.callingHint.textContent = "Connexion à sa tablette…";
   els.countdownFill.style.width = "0%";
   els.countdownText.textContent = "";
@@ -106,8 +108,13 @@ engine.onSilenceDetected((silent) => {
   els.silenceIndicator.classList.toggle("hidden", !silent);
 });
 
-engine.onCaptionOverflow((overflowing) => {
-  els.captionOverflowIndicator.classList.toggle("hidden", !overflowing);
+engine.onCaptionCatchUpLag((lagSeconds) => {
+  const lagging = lagSeconds > 0.3; // en dessous, pas perceptible pour Jean
+  if (lagging) {
+    els.captionOverflowIndicator.textContent =
+      `⏳ Jean a environ ${lagSeconds.toFixed(1)}s de retard sur ta voix, ralentis un peu`;
+  }
+  els.captionOverflowIndicator.classList.toggle("hidden", !lagging);
 });
 
 let textSizeDebounce = null;
@@ -115,6 +122,14 @@ els.textSizeSlider.addEventListener("input", () => {
   clearTimeout(textSizeDebounce);
   textSizeDebounce = setTimeout(() => {
     engine.setCaptionTextSize(Number(els.textSizeSlider.value));
+  }, 150);
+});
+
+let scrollSpeedDebounce = null;
+els.scrollSpeedSlider.addEventListener("input", () => {
+  clearTimeout(scrollSpeedDebounce);
+  scrollSpeedDebounce = setTimeout(() => {
+    engine.setCaptionScrollSpeed(Number(els.scrollSpeedSlider.value));
   }, 150);
 });
 

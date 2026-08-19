@@ -62,6 +62,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var volumeListener: ListenerRegistration? = null
     private var captionModeListener: ListenerRegistration? = null
     private var captionTextSizeListener: ListenerRegistration? = null
+    private var captionScrollSpeedListener: ListenerRegistration? = null
     private var forceConnectListener: ListenerRegistration? = null
     private var remoteEndedListener: ListenerRegistration? = null
     private var pendingVolume: Double = 1.0
@@ -203,14 +204,20 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         }
     }
 
-    /**
-     * Signale au proche que le texte affiché déborde de l'espace visible côté
-     * tablette (voir IncomingCallActivity.setupCaptionMode), pour qu'il puisse
-     * ralentir le temps que Jean finisse de lire.
-     */
-    fun signalCaptionOverflow(overflowing: Boolean) {
+    /** Écoute la vitesse maximale de défilement des sous-titres choisie à distance par le proche. */
+    fun listenForCaptionScrollSpeed(onDpPerSec: (Float) -> Unit) {
         val id = callId ?: return
-        signaling.signalCaptionOverflow(id, overflowing)
+        captionScrollSpeedListener = signaling.listenForCaptionScrollSpeed(id) { speed -> onDpPerSec(speed.toFloat()) }
+    }
+
+    /**
+     * Signale en continu au proche le retard de lecture de Jean par rapport
+     * au texte reçu (voir IncomingCallActivity.setupCaptionMode), pour un
+     * retour clair de là où il en est plutôt qu'un simple "ça déborde" ou non.
+     */
+    fun signalCaptionCatchUpLag(lagSeconds: Float) {
+        val id = callId ?: return
+        signaling.signalCaptionCatchUpLag(id, lagSeconds)
     }
 
     /**
@@ -416,6 +423,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         captionModeListener = null
         captionTextSizeListener?.remove()
         captionTextSizeListener = null
+        captionScrollSpeedListener?.remove()
+        captionScrollSpeedListener = null
         forceConnectListener?.remove()
         forceConnectListener = null
         remoteEndedListener?.remove()

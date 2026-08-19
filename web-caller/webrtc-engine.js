@@ -20,7 +20,7 @@ class RealCallEngine extends CallEngine {
     this._countdownInterval = null;
     this._transcriptCb = null;
     this._silenceCb = null;
-    this._captionOverflowCb = null;
+    this._captionCatchUpLagCb = null;
     this._transcriptHistory = [];
     this._silenceTimer = null;
     this._silenceActive = false;
@@ -44,8 +44,8 @@ class RealCallEngine extends CallEngine {
   onTranscript(callback) { this._transcriptCb = callback; }
   /** callback(silent: boolean) — aucun son détecté depuis quelques secondes pendant que le micro écoute. */
   onSilenceDetected(callback) { this._silenceCb = callback; }
-  /** callback(overflowing: boolean) — le texte affiché déborde de l'espace visible côté tablette : ralentir le débit. */
-  onCaptionOverflow(callback) { this._captionOverflowCb = callback; }
+  /** callback(lagSeconds: number) — retard de lecture de Jean par rapport au texte reçu (0 = à jour) : ralentir le débit si ça grimpe. */
+  onCaptionCatchUpLag(callback) { this._captionCatchUpLagCb = callback; }
 
   async startCall(targetId, callerName) {
     if (!this._available) {
@@ -91,6 +91,7 @@ class RealCallEngine extends CallEngine {
       callerPhotoBase64: callerPhotoBase64 || null,
       captionModeEnabled: false,
       captionTextSize: 56,
+      captionMaxScrollSpeedDpPerSec: 50,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -103,8 +104,8 @@ class RealCallEngine extends CallEngine {
       if (data.alertStartedAt && data.alertDurationSeconds) {
         this._startCountdownDisplay(data.alertStartedAt.toMillis(), data.alertDurationSeconds);
       }
-      if (typeof data.captionOverflowing === "boolean") {
-        this._captionOverflowCb && this._captionOverflowCb(data.captionOverflowing);
+      if (typeof data.captionCatchUpLagSeconds === "number") {
+        this._captionCatchUpLagCb && this._captionCatchUpLagCb(data.captionCatchUpLagSeconds);
       }
       if (data.status === "connected") this._connectedCb && this._connectedCb();
       if (data.status === "blocked") {
@@ -288,6 +289,18 @@ class RealCallEngine extends CallEngine {
   async setCaptionTextSize(sizeSp) {
     if (this._callDocRef) {
       await this._callDocRef.update({ captionTextSize: sizeSp }).catch(() => {});
+    }
+  }
+
+  /**
+   * Règle à distance la vitesse maximale (en dp/s) à laquelle le texte des
+   * sous-titres défile chez Jean (voir IncomingCallActivity.setupCaptionMode
+   * côté Android) — plus c'est bas, plus Jean a le temps de lire, au prix
+   * d'un retard qui s'accumule si le proche parle vite (voir onCaptionCatchUpLag).
+   */
+  async setCaptionScrollSpeed(dpPerSec) {
+    if (this._callDocRef) {
+      await this._callDocRef.update({ captionMaxScrollSpeedDpPerSec: dpPerSec }).catch(() => {});
     }
   }
 

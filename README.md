@@ -74,15 +74,23 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   en direct ("roll-up", CEA-608) — le défilement avance par petits crans au fil des mots plutôt que de
   repartir du haut à chaque mise à jour (ce qui rendait le défilement inutilisable en parole continue :
   l'animation n'avait jamais le temps d'aller au bout avant d'être relancée depuis le début). Il ne
-  revient en haut que lorsqu'une phrase réellement nouvelle démarre. Le PWA affiche un indicateur
-  discret ("Jean n'a pas fini de lire") tant qu'un débordement dure, pour que le proche puisse
-  ralentir son débit. Le défilement suit la position cible par interpolation image par image
-  (`Choreographer`, facteur de rattrapage 0,35 — remplace l'ancien `smoothScrollTo` natif), réglage
-  validé dans le labo de défilement (`experiment/caption-scroll`, `web-caller/caption-scroll-lab.html`)
-  sur un enregistrement vocal réel : 60 im/s en moyenne, 0,2% d'images saccadées. Le PWA envoie aussi le
+  revient en haut que lorsqu'une phrase réellement nouvelle démarre. Le défilement suit la position
+  cible par interpolation image par image (`Choreographer`, remplace l'ancien `smoothScrollTo` natif),
+  réglage validé dans le labo de défilement (`experiment/caption-scroll`, `web-caller/caption-scroll-lab.html`)
+  sur un enregistrement vocal réel : 60 im/s en moyenne, quasi aucune image saccadée. Le PWA envoie aussi le
   texte transcrit plus souvent (300ms au lieu de 500ms, par petits incréments), et la tablette ignore
-  les écritures Firestore qui ne changent pas le texte — au total, trois optimisations pour un
-  défilement plus fluide
+  les écritures Firestore qui ne changent pas le texte — au total, plusieurs optimisations pour un
+  défilement plus fluide. En paysage comme en portrait, le bandeau reste en surimpression basse
+  par-dessus la vidéo plein écran (une première version mettait la vidéo à droite et les sous-titres
+  dans une colonne à gauche en paysage — jugée plus perturbante à l'usage, abandonnée)
+- **Vitesse de lecture plafonnée, avec retour de retard côté PWA** : des tests réels ont montré que si
+  le proche parle avec un débit rapide, Jean n'a pas le temps de lire avant que le texte suivant
+  arrive. Le défilement avance donc à une vitesse maximale constante et paramétrable (curseur "Vitesse
+  de défilement" côté PWA, en dp/s) plutôt que proportionnelle au texte en attente — l'ancien réglage
+  accélérait d'autant plus que le proche parlait vite, l'inverse de l'effet recherché. Le texte reçu
+  peut ainsi s'accumuler en attente le temps que Jean rattrape son retard, et ce retard (en secondes)
+  est signalé en continu au PWA ("Jean a environ X,Xs de retard sur ta voix, ralentis un peu"), pour un
+  repère précis plutôt qu'un simple indicateur "ça déborde" ou non
 - **Photo du proche à la réception de l'appel** : le PWA capture une photo (240x240, JPEG compressé)
   depuis la caméra du proche dès le début de l'appel et l'envoie via Firestore ; la tablette l'affiche
   en rond au-dessus du nom pendant le décompte, pour une reconnaissance immédiate. Non bloquant si la
