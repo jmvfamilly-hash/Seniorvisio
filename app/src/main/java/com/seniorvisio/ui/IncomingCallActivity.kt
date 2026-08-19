@@ -228,9 +228,12 @@ class IncomingCallActivity : AppCompatActivity() {
      * colonne à gauche) s'est révélée plus perturbante à l'usage que le
      * bandeau en bas utilisé en portrait — la vidéo reste donc plein écran
      * et le bandeau de sous-titres en surimpression basse dans les deux
-     * orientations ; seules la hauteur de la zone de texte et la marge basse
-     * sont réduites en paysage, où la hauteur d'écran disponible est plus
-     * courte.
+     * orientations. En paysage, le bandeau est aussi élargi au maximum
+     * (marges latérales réduites) et sa hauteur totale (marge basse +
+     * rembourrage interne + zone de texte, voir activity_incoming_call.xml)
+     * est plafonnée à la moitié basse de l'écran, calculée dynamiquement à
+     * partir de la résolution réelle plutôt qu'une valeur fixe — pour rester
+     * valable quelle que soit la tablette utilisée.
      */
     private fun applyOrientationLayout(orientation: Int) {
         val remoteRenderer = remoteRendererRef ?: return
@@ -238,9 +241,21 @@ class IncomingCallActivity : AppCompatActivity() {
         val captionScroll = captionScrollRef ?: return
         val isLandscape = orientation == Configuration.ORIENTATION_LANDSCAPE
         val density = resources.displayMetrics.density
-        val margin24 = (24 * density).roundToInt()
-        val bottomMargin = ((if (isLandscape) 90 else 140) * density).roundToInt()
-        val captionScrollHeight = ((if (isLandscape) 150 else 220) * density).roundToInt()
+        val sideMargin = ((if (isLandscape) 12 else 24) * density).roundToInt()
+        // Rembourrage haut+bas du bandeau, fixé dans le layout XML (android:padding="20dp").
+        val bannerVerticalPadding = (20 * density * 2).roundToInt()
+
+        val bottomMargin: Int
+        val captionScrollHeight: Int
+        if (isLandscape) {
+            bottomMargin = (16 * density).roundToInt()
+            val maxBannerAreaPx = resources.displayMetrics.heightPixels / 2
+            captionScrollHeight = (maxBannerAreaPx - bottomMargin - bannerVerticalPadding)
+                .coerceAtLeast((80 * density).roundToInt())
+        } else {
+            bottomMargin = (140 * density).roundToInt()
+            captionScrollHeight = (220 * density).roundToInt()
+        }
 
         (remoteRenderer.layoutParams as FrameLayout.LayoutParams).apply {
             width = FrameLayout.LayoutParams.MATCH_PARENT
@@ -254,7 +269,7 @@ class IncomingCallActivity : AppCompatActivity() {
             width = FrameLayout.LayoutParams.MATCH_PARENT
             height = FrameLayout.LayoutParams.WRAP_CONTENT
             gravity = Gravity.BOTTOM
-            marginStart = margin24; marginEnd = margin24; topMargin = 0; this.bottomMargin = bottomMargin
+            marginStart = sideMargin; marginEnd = sideMargin; topMargin = 0; this.bottomMargin = bottomMargin
             captionBanner.layoutParams = this
         }
 
