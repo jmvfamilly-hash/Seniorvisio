@@ -188,6 +188,19 @@ par policy plutôt que dépendre uniquement de la demande faite au premier lance
 qui se réinitialise le plus souvent après une mise à jour Android ou un reset du device owner, donc à
 vérifier après chaque redémarrage/mise à jour de la tablette de test avant promotion en production.
 
+**Test réel sur Android 16 (One UI 8.5)** : l'écran d'appel ne s'affichait jamais si l'application
+n'était plus au premier plan, y compris avec le service actif (notification visible) et l'app déjà
+exclue des listes de mise en veille Samsung — donc indépendant du réglage constructeur ci-dessus.
+Cause identifiée : depuis Android 10, un service ne peut plus démarrer une Activity de façon fiable
+depuis l'arrière-plan (restriction renforcée à chaque version) ; l'appli utilisait jusqu'ici un simple
+`startActivity()` depuis `IncomingCallService`. Remplacé par le mécanisme officiellement prévu par
+Android pour les applis d'appel : une notification "plein écran" (`setFullScreenIntent`), seule
+autorisée à afficher une Activity par-dessus l'écran verrouillé/éteint depuis un contexte non visible
+(permission `USE_FULL_SCREEN_INTENT`, déjà déclarée dans le manifest). À partir d'Android 14, cette
+permission n'est plus accordée automatiquement pour toutes les catégories d'app : `MainActivity`
+demande maintenant explicitement son autorisation au premier lancement (sinon Android rétrograde
+silencieusement la notification plein écran en simple notification discrète, sans réveil).
+
 ## Pourquoi cette architecture
 Le moteur d'appel est isolé derrière `CallEngine` des deux côtés, pour rester remplaçable. Le PWA
 appelant évite toute compilation iOS (pas de Mac nécessaire) : Safari supporte WebRTC nativement

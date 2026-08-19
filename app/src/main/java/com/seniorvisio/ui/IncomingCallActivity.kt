@@ -1,5 +1,6 @@
 package com.seniorvisio.ui
 
+import android.app.NotificationManager
 import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import android.graphics.Outline
@@ -26,6 +27,7 @@ import android.widget.TextView
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.WebRtcCallEngine
+import com.seniorvisio.service.IncomingCallService
 import com.seniorvisio.service.TimedCallAlertController
 import org.webrtc.SurfaceViewRenderer
 import kotlin.math.abs
@@ -87,6 +89,12 @@ class IncomingCallActivity : AppCompatActivity() {
             val wakeLatencyMs = System.currentTimeMillis() - signalReceivedAtMs
             Log.i(TAG, "Réveil écran d'appel : ${wakeLatencyMs}ms depuis réception du signal")
         }
+
+        // La notification plein écran qui a potentiellement déclenché cet
+        // écran (voir IncomingCallService.launchAlertScreen) n'a plus lieu
+        // d'être une fois l'écran effectivement affiché.
+        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
+            .cancel(IncomingCallService.CALL_NOTIFICATION_ID)
 
         setContentView(R.layout.activity_incoming_call)
 

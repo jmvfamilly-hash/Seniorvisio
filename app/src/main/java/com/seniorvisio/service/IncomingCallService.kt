@@ -71,6 +71,21 @@ class IncomingCallService : LifecycleService() {
         wakeLock = null
     }
 
+    /**
+     * Démarrer l'Activity directement depuis ce service ne suffit plus de
+     * façon fiable sur les versions récentes d'Android : constaté en test
+     * réel (Android 16), l'écran d'appel ne s'affichait jamais si l'appli
+     * n'avait pas déjà un contexte visible récent — les restrictions de
+     * lancement d'activité en arrière-plan se sont renforcées à chaque
+     * version depuis Android 10, indépendamment du réglage de mise en veille
+     * par app (déjà vérifié non responsable ici). La voie officiellement
+     * prévue par Android pour ce cas précis (appli d'appel) est une
+     * notification "plein écran" (`setFullScreenIntent`), seule autorisée à
+     * afficher une Activity par-dessus l'écran verrouillé/éteint depuis un
+     * contexte non visible — d'où la permission USE_FULL_SCREEN_INTENT déjà
+     * déclarée dans le manifest. `startActivity` reste tenté en complément,
+     * sans conséquence s'il échoue silencieusement.
+     */
     private fun launchAlertScreen(callId: String, callerName: String, callerPhotoBase64: String?, signalReceivedAtMs: Long) {
         val alertIntent = Intent(this, IncomingCallActivity::class.java).apply {
             putExtra(IncomingCallActivity.EXTRA_CALL_ID, callId)
@@ -79,7 +94,34 @@ class IncomingCallService : LifecycleService() {
             putExtra(IncomingCallActivity.EXTRA_SIGNAL_RECEIVED_AT, signalReceivedAtMs)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        startActivity(alertIntent)
+
+        val fullScreenPendingIntent = PendingIntent.getActivity(
+            this, callId.hashCode(), alertIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                NotificationChannel(CALL_CHANNEL_ID, "Appel entrant Senior Visio", NotificationManager.IMPORTANCE_HIGH)
+            )
+        }
+        val notification = NotificationCompat.Builder(this, CALL_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_menu_call)
+            .setContentTitle("Appel entrant")
+            .setContentText(callerName)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setFullScreenIntent(fullScreenPendingIntent, true)
+            .setContentIntent(fullScreenPendingIntent)
+            .setAutoCancel(true)
+            .build()
+        manager.notify(CALL_NOTIFICATION_ID, notification)
+
+        try {
+            startActivity(alertIntent)
+        } catch (_: Exception) {
+        }
     }
 
     private fun buildForegroundNotification(): Notification {
@@ -101,7 +143,9 @@ class IncomingCallService : LifecycleService() {
         const val EXTRA_CALLER_NAME = "extra_caller_name"
         const val EXTRA_CALLER_PHOTO = "extra_caller_photo"
         const val EXTRA_CALL_ID = "extra_call_id"
+        const val CALL_NOTIFICATION_ID = 44
         private const val FOREGROUND_ID = 42
         private const val SERVICE_CHANNEL_ID = "senior_visio_service"
+        private const val CALL_CHANNEL_ID = "senior_visio_incoming_call"
     }
 }
