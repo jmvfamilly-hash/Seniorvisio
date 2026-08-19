@@ -53,6 +53,7 @@ class IncomingCallActivity : AppCompatActivity() {
     // l'Activity ni rattacher les renderers WebRTC — l'appel en cours n'est
     // jamais interrompu par une rotation.
     private var remoteRendererRef: SurfaceViewRenderer? = null
+    private var localRendererRef: SurfaceViewRenderer? = null
     private var captionBannerRef: View? = null
     private var captionScrollRef: ScrollView? = null
 
@@ -217,6 +218,7 @@ class IncomingCallActivity : AppCompatActivity() {
         callEngine.answer()
         buttonBlock.text = "Raccrocher"
         remoteRendererRef = remoteRenderer
+        localRendererRef = localRenderer
         setupCaptionMode()
         callEngine.listenForRemoteVolumeControl()
         // Applique tout de suite la disposition correspondant à l'orientation
@@ -243,41 +245,36 @@ class IncomingCallActivity : AppCompatActivity() {
      * partir de la résolution réelle plutôt qu'une valeur fixe — pour rester
      * valable quelle que soit la tablette utilisée.
      *
-     * En portrait, le bouton Bloquer/Raccrocher reste tout en bas, bien en
-     * dessous du bandeau (grande marge basse) : aucun chevauchement. En
-     * paysage, le bandeau occupe toute la largeur près du bord bas et
-     * chevaucherait le bouton s'il restait à sa position portrait — le
-     * bandeau laisse donc une petite place à son extrémité (marge de fin
-     * agrandie) pour le bouton, aligné sur la même bande basse que lui
-     * plutôt qu'étalé au milieu de l'écran par-dessus le visage de
-     * l'appelant. Cet écran n'est atteint qu'une fois connecté (le texte du
-     * bouton est déjà "Raccrocher", plus court que "Bloquer l'appel" pendant
-     * le décompte), la place réservée n'a donc qu'à couvrir ce texte-là.
+     * En portrait, le bouton Bloquer/Raccrocher reste tout en bas (loin du
+     * bandeau, qui garde une grande marge basse). En paysage, où le bandeau
+     * de sous-titres occupe toute la largeur près du bord bas, le bouton
+     * passe en haut à droite, par-dessus la vidéo du proche plutôt que sur
+     * le texte — la miniature de Jean (localRenderer, elle aussi en haut à
+     * droite par défaut) descend d'autant pour ne pas être recouverte par le
+     * bouton.
      */
     private fun applyOrientationLayout(orientation: Int) {
         val remoteRenderer = remoteRendererRef ?: return
         val captionBanner = captionBannerRef ?: return
         val captionScroll = captionScrollRef ?: return
+        val localRenderer = localRendererRef ?: return
         val isLandscape = orientation == Configuration.ORIENTATION_LANDSCAPE
         val density = resources.displayMetrics.density
         val sideMargin = ((if (isLandscape) 12 else 24) * density).roundToInt()
+        val margin16 = (16 * density).roundToInt()
         // Rembourrage haut+bas du bandeau, fixé dans le layout XML (android:padding="20dp").
         val bannerVerticalPadding = (20 * density * 2).roundToInt()
-        val buttonReservedWidth = (190 * density).roundToInt()
 
         val bottomMargin: Int
         val captionScrollHeight: Int
-        val bannerMarginEnd: Int
         if (isLandscape) {
             bottomMargin = (16 * density).roundToInt()
             val maxBannerAreaPx = resources.displayMetrics.heightPixels / 2
             captionScrollHeight = (maxBannerAreaPx - bottomMargin - bannerVerticalPadding)
                 .coerceAtLeast((80 * density).roundToInt())
-            bannerMarginEnd = sideMargin + buttonReservedWidth
         } else {
             bottomMargin = (140 * density).roundToInt()
             captionScrollHeight = (220 * density).roundToInt()
-            bannerMarginEnd = sideMargin
         }
 
         (remoteRenderer.layoutParams as FrameLayout.LayoutParams).apply {
@@ -292,7 +289,7 @@ class IncomingCallActivity : AppCompatActivity() {
             width = FrameLayout.LayoutParams.MATCH_PARENT
             height = FrameLayout.LayoutParams.WRAP_CONTENT
             gravity = Gravity.BOTTOM
-            marginStart = sideMargin; marginEnd = bannerMarginEnd; topMargin = 0; this.bottomMargin = bottomMargin
+            marginStart = sideMargin; marginEnd = sideMargin; topMargin = 0; this.bottomMargin = bottomMargin
             captionBanner.layoutParams = this
         }
 
@@ -302,10 +299,23 @@ class IncomingCallActivity : AppCompatActivity() {
         }
 
         (buttonBlock.layoutParams as FrameLayout.LayoutParams).apply {
-            gravity = Gravity.BOTTOM or Gravity.END
-            this.bottomMargin = if (isLandscape) bottomMargin else (24 * density).roundToInt()
-            marginEnd = sideMargin
+            if (isLandscape) {
+                gravity = Gravity.TOP or Gravity.END
+                topMargin = margin16; this.bottomMargin = 0
+            } else {
+                gravity = Gravity.BOTTOM or Gravity.END
+                topMargin = 0; this.bottomMargin = (24 * density).roundToInt()
+            }
+            marginEnd = if (isLandscape) margin16 else sideMargin
             buttonBlock.layoutParams = this
+        }
+
+        (localRenderer.layoutParams as FrameLayout.LayoutParams).apply {
+            gravity = Gravity.TOP or Gravity.END
+            marginStart = margin16; marginEnd = margin16; this.bottomMargin = 0
+            // Décalée sous le bouton en paysage pour ne pas être recouverte.
+            topMargin = if (isLandscape) margin16 + (74 * density).roundToInt() else margin16
+            localRenderer.layoutParams = this
         }
     }
 
