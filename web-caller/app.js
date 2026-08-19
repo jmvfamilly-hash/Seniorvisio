@@ -26,6 +26,7 @@ const els = {
   callStats: document.getElementById("callStats"),
   volumeSlider: document.getElementById("volumeSlider"),
   captionToggle: document.getElementById("captionToggle"),
+  selfPreviewToggle: document.getElementById("selfPreviewToggle"),
   textSizeSlider: document.getElementById("textSizeSlider"),
   scrollSpeedSlider: document.getElementById("scrollSpeedSlider"),
   callingHint: document.getElementById("callingHint"),
@@ -58,6 +59,7 @@ function showState(name) {
 els.callButton.addEventListener("click", async () => {
   els.volumeSlider.value = 100;
   els.captionToggle.checked = false;
+  els.selfPreviewToggle.checked = false;
   els.textSizeSlider.value = 56;
   els.scrollSpeedSlider.value = 50;
   els.callingHint.textContent = "Connexion à sa tablette…";
@@ -81,6 +83,10 @@ engine.onCountdown((remaining, total) => {
 
 els.captionToggle.addEventListener("change", () => {
   engine.setCaptionMode(els.captionToggle.checked);
+});
+
+els.selfPreviewToggle.addEventListener("change", () => {
+  engine.setSelfPreviewMode(els.selfPreviewToggle.checked);
 });
 
 /** Classe CSS selon la confiance de reconnaissance (repère visuel des passages mal transcrits). */

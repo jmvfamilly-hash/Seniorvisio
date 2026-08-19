@@ -141,6 +141,19 @@ class CallSignalingClient {
         }
     }
 
+    /**
+     * Active/désactive à distance l'aperçu de sa propre caméra affiché à
+     * Jean (petite vignette en haut de son écran) — masqué par défaut,
+     * c'est le proche qui décide de l'activer depuis le PWA, pas un bouton
+     * sur la tablette.
+     */
+    fun listenForSelfPreviewMode(callId: String, onEnabled: (Boolean) -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            val enabled = snapshot?.getBoolean(FIELD_SELF_PREVIEW)
+            if (enabled != null) onEnabled(enabled)
+        }
+    }
+
     /** Vitesse maximale (dp/s) à laquelle le texte défile chez Jean, choisie à distance par l'appelant. */
     fun listenForCaptionScrollSpeed(callId: String, onDpPerSec: (Double) -> Unit): ListenerRegistration {
         return callDoc(callId).addSnapshotListener { snapshot, _ ->
@@ -221,6 +234,7 @@ class CallSignalingClient {
         private const val FIELD_CAPTION_MODE = "captionModeEnabled"
         private const val FIELD_CAPTION_TEXT_SIZE = "captionTextSize"
         private const val FIELD_FORCE_CONNECT = "forceConnectRequested"
+        private const val FIELD_SELF_PREVIEW = "selfPreviewEnabled"
         private const val FIELD_CAPTION_SCROLL_SPEED = "captionMaxScrollSpeedDpPerSec"
         private const val FIELD_CAPTION_CATCHUP_LAG = "captionCatchUpLagSeconds"
 

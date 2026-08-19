@@ -63,6 +63,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var captionModeListener: ListenerRegistration? = null
     private var captionTextSizeListener: ListenerRegistration? = null
     private var captionScrollSpeedListener: ListenerRegistration? = null
+    private var selfPreviewListener: ListenerRegistration? = null
     private var forceConnectListener: ListenerRegistration? = null
     private var remoteEndedListener: ListenerRegistration? = null
     private var pendingVolume: Double = 1.0
@@ -202,6 +203,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             pendingVolume = volume
             rampVolumeTo(volume)
         }
+    }
+
+    /** Écoute l'activation à distance de l'aperçu de sa propre caméra affiché à Jean (masqué par défaut). */
+    fun listenForSelfPreviewMode(onEnabled: (Boolean) -> Unit) {
+        val id = callId ?: return
+        selfPreviewListener = signaling.listenForSelfPreviewMode(id, onEnabled)
     }
 
     /** Écoute la vitesse maximale de défilement des sous-titres choisie à distance par le proche. */
@@ -425,6 +432,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         captionTextSizeListener = null
         captionScrollSpeedListener?.remove()
         captionScrollSpeedListener = null
+        selfPreviewListener?.remove()
+        selfPreviewListener = null
         forceConnectListener?.remove()
         forceConnectListener = null
         remoteEndedListener?.remove()

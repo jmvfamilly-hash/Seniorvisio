@@ -92,6 +92,7 @@ class RealCallEngine extends CallEngine {
       captionModeEnabled: false,
       captionTextSize: 56,
       captionMaxScrollSpeedDpPerSec: 50,
+      selfPreviewEnabled: false,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -289,6 +290,17 @@ class RealCallEngine extends CallEngine {
   async setCaptionTextSize(sizeSp) {
     if (this._callDocRef) {
       await this._callDocRef.update({ captionTextSize: sizeSp }).catch(() => {});
+    }
+  }
+
+  /**
+   * Active/désactive à distance l'aperçu de sa propre caméra affiché à Jean
+   * (petite vignette en haut de son écran, masquée par défaut) — voir
+   * core/WebRtcCallEngine.kt : listenForSelfPreviewMode.
+   */
+  async setSelfPreviewMode(enabled) {
+    if (this._callDocRef) {
+      await this._callDocRef.update({ selfPreviewEnabled: enabled }).catch(() => {});
     }
   }
 

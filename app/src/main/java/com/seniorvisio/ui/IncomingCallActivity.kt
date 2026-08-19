@@ -212,7 +212,10 @@ class IncomingCallActivity : AppCompatActivity() {
         findViewById<View>(R.id.alertContent).visibility = View.GONE
         val localRenderer = findViewById<SurfaceViewRenderer>(R.id.localRenderer)
         val remoteRenderer = findViewById<SurfaceViewRenderer>(R.id.remoteRenderer)
-        localRenderer.visibility = View.VISIBLE
+        // Miniature de Jean masquée par défaut (retirée de l'écran) : ne
+        // s'affiche que si le proche l'active à distance depuis le PWA, voir
+        // listenForSelfPreviewMode ci-dessous.
+        localRenderer.visibility = View.GONE
         remoteRenderer.visibility = View.VISIBLE
         callEngine.attachRenderers(localRenderer, remoteRenderer)
         callEngine.answer()
@@ -221,6 +224,9 @@ class IncomingCallActivity : AppCompatActivity() {
         localRendererRef = localRenderer
         setupCaptionMode()
         callEngine.listenForRemoteVolumeControl()
+        callEngine.listenForSelfPreviewMode { enabled ->
+            runOnUiThread { localRenderer.visibility = if (enabled) View.VISIBLE else View.GONE }
+        }
         // Applique tout de suite la disposition correspondant à l'orientation
         // actuelle (la tablette peut déjà être en paysage au moment où
         // l'appel se connecte, pas seulement lors d'une rotation ultérieure).

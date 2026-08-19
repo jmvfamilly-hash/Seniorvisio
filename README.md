@@ -91,6 +91,10 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   peut ainsi s'accumuler en attente le temps que Jean rattrape son retard, et ce retard (en secondes)
   est signalé en continu au PWA ("Jean a environ X,Xs de retard sur ta voix, ralentis un peu"), pour un
   repère précis plutôt qu'un simple indicateur "ça déborde" ou non
+- **Aperçu de sa propre caméra chez Jean, masqué par défaut** : la petite vignette qui montrait à Jean
+  sa propre image (en haut à droite de son écran, portrait comme paysage) est retirée par défaut —
+  simplifie l'écran et libère la place que le bouton Raccrocher occupe désormais en paysage à cet
+  endroit. Le proche peut la réactiver à tout moment depuis le PWA (case à cocher pendant l'appel)
 - **Photo du proche à la réception de l'appel** : le PWA capture une photo (240x240, JPEG compressé)
   depuis la caméra du proche dès le début de l'appel et l'envoie via Firestore ; la tablette l'affiche
   en rond au-dessus du nom pendant le décompte, pour une reconnaissance immédiate. Non bloquant si la
