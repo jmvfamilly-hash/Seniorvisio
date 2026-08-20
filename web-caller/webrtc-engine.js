@@ -21,7 +21,11 @@ class RealCallEngine extends CallEngine {
     this._transcriptCb = null;
     this._silenceCb = null;
     this._captionCatchUpLagCb = null;
+    this._fullscreenCaptionCb = null;
     this._transcriptHistory = [];
+    this._transcriptBuffer = [];
+    this._lastLagSeconds = 0;
+    this._fullscreenCaptionInterval = null;
     this._silenceTimer = null;
     this._silenceActive = false;
 
@@ -46,6 +50,15 @@ class RealCallEngine extends CallEngine {
   onSilenceDetected(callback) { this._silenceCb = callback; }
   /** callback(lagSeconds: number) — retard de lecture de Jean par rapport au texte reçu (0 = à jour) : ralentir le débit si ça grimpe. */
   onCaptionCatchUpLag(callback) { this._captionCatchUpLagCb = callback; }
+  /**
+   * callback({text, lagSeconds}) — texte tel qu'il apparaît réellement chez
+   * Jean à l'instant présent (retardé du retard de lecture mesuré, voir
+   * _startFullscreenCaptionTick), pour l'overlay de l'onglet visio plein
+   * écran. Différent de onTranscript, qui montre ce que le proche vient de
+   * dire (temps réel, non synchronisé avec ce que Jean a effectivement sous
+   * les yeux).
+   */
+  onFullscreenCaption(callback) { this._fullscreenCaptionCb = callback; }
 
   async startCall(targetId, callerName) {
     if (!this._available) {
@@ -106,6 +119,7 @@ class RealCallEngine extends CallEngine {
         this._startCountdownDisplay(data.alertStartedAt.toMillis(), data.alertDurationSeconds);
       }
       if (typeof data.captionCatchUpLagSeconds === "number") {
+        this._lastLagSeconds = data.captionCatchUpLagSeconds;
         this._captionCatchUpLagCb && this._captionCatchUpLagCb(data.captionCatchUpLagSeconds);
       }
       if (data.status === "connected") this._connectedCb && this._connectedCb();
@@ -128,6 +142,7 @@ class RealCallEngine extends CallEngine {
     });
 
     this._startCaptioning();
+    this._startFullscreenCaptionTick();
   }
 
   /**
@@ -231,6 +246,17 @@ class RealCallEngine extends CallEngine {
         this._callDocRef.update({ callerSpeechText: text }).catch(() => {});
       }
 
+      // Historique horodaté pour reconstituer ce que Jean voit avec le
+      // retard mesuré côté tablette (voir _startFullscreenCaptionTick) —
+      // borné à 60s, largement au-delà des retards observés en pratique.
+      if (text) {
+        this._transcriptBuffer.push({ text, tsMs: now });
+        const cutoffMs = now - 60000;
+        while (this._transcriptBuffer.length > 1 && this._transcriptBuffer[0].tsMs < cutoffMs) {
+          this._transcriptBuffer.shift();
+        }
+      }
+
       if (hasFinal && text.trim()) {
         this._transcriptHistory.push({ text: text.trim(), confidence });
         if (this._transcriptHistory.length > 3) this._transcriptHistory.shift();
@@ -252,6 +278,35 @@ class RealCallEngine extends CallEngine {
     };
 
     try { recognition.start(); } catch (_) {}
+  }
+
+  /**
+   * Reconstitue périodiquement le texte tel qu'il apparaît réellement chez
+   * Jean à l'instant présent (voir onFullscreenCaption), en piochant dans
+   * l'historique horodaté du texte transcrit (_transcriptBuffer) l'entrée la
+   * plus récente antérieure de `_lastLagSeconds` secondes à maintenant —
+   * approximation raisonnable de ce que Jean a sous les yeux tant que le
+   * retard mesuré reste à peu près stable, sans avoir besoin de faire
+   * remonter le texte exact affiché côté tablette.
+   */
+  _startFullscreenCaptionTick() {
+    if (this._fullscreenCaptionInterval) return;
+    this._fullscreenCaptionInterval = setInterval(() => {
+      if (!this._fullscreenCaptionCb) return;
+      const targetTsMs = Date.now() - this._lastLagSeconds * 1000;
+      let delayed = "";
+      for (let i = this._transcriptBuffer.length - 1; i >= 0; i--) {
+        if (this._transcriptBuffer[i].tsMs <= targetTsMs) {
+          delayed = this._transcriptBuffer[i].text;
+          break;
+        }
+      }
+      if (!delayed && this._transcriptBuffer.length > 0) {
+        // Retard plus long que l'historique conservé : montre le plus ancien connu.
+        delayed = this._transcriptBuffer[0].text;
+      }
+      this._fullscreenCaptionCb({ text: delayed, lagSeconds: this._lastLagSeconds });
+    }, 250);
   }
 
   /**
@@ -379,6 +434,12 @@ class RealCallEngine extends CallEngine {
       clearInterval(this._countdownInterval);
       this._countdownInterval = null;
     }
+    if (this._fullscreenCaptionInterval) {
+      clearInterval(this._fullscreenCaptionInterval);
+      this._fullscreenCaptionInterval = null;
+    }
+    this._transcriptBuffer = [];
+    this._lastLagSeconds = 0;
     if (this._unsubscribeCallDoc) this._unsubscribeCallDoc();
     this._unsubscribeCallDoc = null;
     if (this._unsubscribeCalleeCandidates) this._unsubscribeCalleeCandidates();

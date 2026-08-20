@@ -91,6 +91,14 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   peut ainsi s'accumuler en attente le temps que Jean rattrape son retard, et ce retard (en secondes)
   est signalé en continu au PWA ("Jean a environ X,Xs de retard sur ta voix, ralentis un peu"), pour un
   repère précis plutôt qu'un simple indicateur "ça déborde" ou non
+- **Onglet "visio" côté PWA, séparé des réglages** : dès la connexion, le proche arrive sur une vue
+  quasi plein écran (juste la vidéo, le bouton Raccrocher et un bouton "⚙️ Réglages") plutôt que
+  l'écran complet de contrôles — pensée pour l'usage pendant la conversation elle-même. Un bouton
+  permet de naviguer vers l'écran de réglages complet (volume, sous-titres, miroir de transcription…)
+  et d'en revenir. Quand les sous-titres sont activés, cet onglet affiche aussi un bandeau en
+  surimpression façon Android — mais avec le texte tel qu'il apparaît **réellement** chez Jean à cet
+  instant (retardé du retard de lecture mesuré, voir ci-dessus), pas ce que le proche vient de dire en
+  temps réel comme le fait le miroir de transcription de l'écran de réglages
 - **Aperçu de sa propre caméra chez Jean, masqué par défaut** : la petite vignette qui montrait à Jean
   sa propre image (en haut à droite de son écran, portrait comme paysage) est retirée par défaut —
   simplifie l'écran et libère la place que le bouton Raccrocher occupe désormais en paysage à cet

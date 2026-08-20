@@ -37,6 +37,9 @@ const els = {
   transcriptHistory: document.getElementById("transcriptHistory"),
   silenceIndicator: document.getElementById("silenceIndicator"),
   captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
+  fullscreenCaptionBanner: document.getElementById("fullscreenCaptionBanner"),
+  fullscreenCaption: document.getElementById("fullscreenCaption"),
+  fullscreenCaptionLag: document.getElementById("fullscreenCaptionLag"),
 };
 
 let statsInterval = null;
@@ -90,6 +93,7 @@ els.callButton.addEventListener("click", async () => {
   els.transcriptHistory.innerHTML = "";
   els.silenceIndicator.classList.add("hidden");
   els.captionOverflowIndicator.classList.add("hidden");
+  els.fullscreenCaptionBanner.classList.add("hidden");
   els.forceConnectButton.disabled = false;
   showState("calling");
   await engine.startCall(CONFIG.targetDeviceId, CONFIG.callerName);
@@ -104,6 +108,16 @@ engine.onCountdown((remaining, total) => {
 
 els.captionToggle.addEventListener("change", () => {
   engine.setCaptionMode(els.captionToggle.checked);
+  // Le bandeau plein écran ne montre les sous-titres que si Jean les a
+  // effectivement affichés — pas de surimpression fantôme sinon.
+  els.fullscreenCaptionBanner.classList.toggle("hidden", !els.captionToggle.checked);
+});
+
+engine.onFullscreenCaption(({ text, lagSeconds }) => {
+  els.fullscreenCaption.textContent = text || "…";
+  const lagging = lagSeconds > 0.3;
+  els.fullscreenCaptionLag.textContent = lagging ? `⏳ ${lagSeconds.toFixed(1)}s de retard` : "";
+  els.fullscreenCaptionLag.classList.toggle("hidden", !lagging);
 });
 
 els.selfPreviewToggle.addEventListener("change", () => {
