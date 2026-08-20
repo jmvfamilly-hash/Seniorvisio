@@ -23,6 +23,7 @@ const els = {
   forceConnectButton: document.getElementById("forceConnectButton"),
   retryButton: document.getElementById("retryButton"),
   hangupButton: document.getElementById("hangupButton"),
+  toggleViewButton: document.getElementById("toggleViewButton"),
   callStats: document.getElementById("callStats"),
   volumeSlider: document.getElementById("volumeSlider"),
   captionToggle: document.getElementById("captionToggle"),
@@ -40,6 +41,19 @@ const els = {
 
 let statsInterval = null;
 
+/**
+ * Onglet "visio" (vidéo quasi plein écran, juste Raccrocher + le bouton pour
+ * naviguer vers l'écran de réglages) vs onglet "réglages" (l'écran complet
+ * construit jusqu'ici : volume, sous-titres, miroir de transcription…).
+ * Basculé via une classe sur <body> (voir style.css), actif par défaut dès
+ * la connexion — pendant la conversation elle-même, pas besoin des réglages
+ * sous les yeux en permanence.
+ */
+function setVideoMode(active) {
+  document.body.classList.toggle("video-mode", active);
+  els.toggleViewButton.textContent = active ? "⚙️ Réglages" : "📹 Vidéo";
+}
+
 function showState(name) {
   ["idle", "calling", "blocked", "connected"].forEach((s) => {
     els[s].classList.toggle("hidden", s !== name);
@@ -53,8 +67,15 @@ function showState(name) {
     statsInterval = setInterval(async () => {
       els.callStats.textContent = await engine.getStatsSummary();
     }, 2000);
+    setVideoMode(true);
+  } else {
+    setVideoMode(false);
   }
 }
+
+els.toggleViewButton.addEventListener("click", () => {
+  setVideoMode(!document.body.classList.contains("video-mode"));
+});
 
 els.callButton.addEventListener("click", async () => {
   els.volumeSlider.value = 100;

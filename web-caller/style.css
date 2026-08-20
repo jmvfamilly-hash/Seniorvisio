@@ -172,3 +172,55 @@ video {
 }
 
 .caption-overflow-indicator.hidden { display: none; }
+
+/*
+ * Onglet "visio" : vue plein écran (quasi) utilisée pendant la conversation
+ * elle-même, sans les réglages qui l'entourent le reste du temps — juste la
+ * vidéo, le bouton Raccrocher et un bouton pour naviguer vers l'écran de
+ * réglages complet. Basculé en JS (voir app.js) via une classe sur <body>,
+ * activée par défaut dès la connexion de l'appel.
+ */
+body.video-mode #app {
+  padding: 0;
+  max-width: 100%;
+}
+
+body.video-mode h1 {
+  display: none;
+}
+
+body.video-mode #connectedControls,
+body.video-mode #callStats {
+  display: none;
+}
+
+body.video-mode #remoteVideo {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  border-radius: 0;
+  margin: 0;
+  z-index: 1;
+}
+
+body.video-mode #localVideo {
+  z-index: 2;
+}
+
+body.video-mode #toggleViewButton,
+body.video-mode #hangupButton {
+  position: fixed;
+  bottom: 24px;
+  margin: 0;
+  z-index: 3;
+}
+
+body.video-mode #toggleViewButton {
+  left: 24px;
+}
+
+body.video-mode #hangupButton {
+  right: 24px;
+}

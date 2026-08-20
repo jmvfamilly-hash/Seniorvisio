@@ -32,45 +32,49 @@
     <div id="stateConnected" class="state hidden">
       <video id="remoteVideo" autoplay playsinline></video>
       <video id="localVideo" autoplay playsinline muted></video>
-      <pre id="callStats" class="stats"></pre>
 
-      <div class="volume-control">
-        <label for="volumeSlider">🔊 Volume chez Jean</label>
-        <input type="range" id="volumeSlider" min="0" max="200" value="100" step="5">
+      <div id="connectedControls">
+        <pre id="callStats" class="stats"></pre>
+
+        <div class="volume-control">
+          <label for="volumeSlider">🔊 Volume chez Jean</label>
+          <input type="range" id="volumeSlider" min="0" max="200" value="100" step="5">
+        </div>
+
+        <div class="caption-control">
+          <label>
+            <input type="checkbox" id="captionToggle">
+            🔤 Afficher mes paroles en grand chez Jean
+          </label>
+          <p class="caption-overflow-indicator hidden" id="captionOverflowIndicator"></p>
+        </div>
+
+        <div class="caption-control">
+          <label>
+            <input type="checkbox" id="selfPreviewToggle">
+            🪞 Montrer à Jean sa propre image (petite vignette)
+          </label>
+        </div>
+
+        <div class="volume-control">
+          <label for="textSizeSlider">🔠 Taille du texte chez Jean</label>
+          <input type="range" id="textSizeSlider" min="24" max="100" value="56" step="4">
+        </div>
+
+        <div class="volume-control">
+          <label for="scrollSpeedSlider">🐢🐇 Vitesse de défilement max chez Jean</label>
+          <input type="range" id="scrollSpeedSlider" min="20" max="100" value="50" step="10">
+        </div>
+
+        <div class="transcript-mirror">
+          <p class="transcript-hint">Ce que Jean va voir :</p>
+          <p class="transcript-current" id="transcriptCurrent"></p>
+          <p class="silence-indicator hidden" id="silenceIndicator">🔇 Aucun son détecté depuis quelques secondes</p>
+          <ul class="transcript-history" id="transcriptHistory"></ul>
+        </div>
       </div>
 
-      <div class="caption-control">
-        <label>
-          <input type="checkbox" id="captionToggle">
-          🔤 Afficher mes paroles en grand chez Jean
-        </label>
-        <p class="caption-overflow-indicator hidden" id="captionOverflowIndicator"></p>
-      </div>
-
-      <div class="caption-control">
-        <label>
-          <input type="checkbox" id="selfPreviewToggle">
-          🪞 Montrer à Jean sa propre image (petite vignette)
-        </label>
-      </div>
-
-      <div class="volume-control">
-        <label for="textSizeSlider">🔠 Taille du texte chez Jean</label>
-        <input type="range" id="textSizeSlider" min="24" max="100" value="56" step="4">
-      </div>
-
-      <div class="volume-control">
-        <label for="scrollSpeedSlider">🐢🐇 Vitesse de défilement max chez Jean</label>
-        <input type="range" id="scrollSpeedSlider" min="20" max="100" value="50" step="10">
-      </div>
-
-      <div class="transcript-mirror">
-        <p class="transcript-hint">Ce que Jean va voir :</p>
-        <p class="transcript-current" id="transcriptCurrent"></p>
-        <p class="silence-indicator hidden" id="silenceIndicator">🔇 Aucun son détecté depuis quelques secondes</p>
-        <ul class="transcript-history" id="transcriptHistory"></ul>
-      </div>
-
+      <button id="toggleViewButton" class="secondary">⚙️ Réglages</button>
       <button id="hangupButton" class="danger">Raccrocher</button>
     </div>
   </main>
