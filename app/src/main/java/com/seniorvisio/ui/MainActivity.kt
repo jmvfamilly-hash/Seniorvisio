@@ -3,23 +3,33 @@ package com.seniorvisio.ui
 import android.Manifest
 import android.app.NotificationManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.view.View
+import android.widget.Button
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import android.widget.TextView
 import androidx.core.content.ContextCompat
+import com.seniorvisio.R
 import com.seniorvisio.service.CallListenerService
 
 /**
- * Écran affiché quand aucun appel n'est en cours. Volontairement épuré
- * pour l'usage senior : pas de menu, pas de bouton, juste un message
- * d'accueil (à enrichir selon les retours terrain).
+ * Écran affiché quand aucun appel n'est en cours. Volontairement épuré pour
+ * l'usage senior : juste un message d'accueil et un unique bouton pour
+ * activer/désactiver le sous-titrage des conversations de la pièce (voir
+ * plus bas) — rien d'autre à comprendre.
  *
- * La détection d'appel entrant ne dépend plus du cycle de vie de cet écran :
+ * La détection d'appel entrant ne dépend pas du cycle de vie de cet écran :
  * elle tourne en continu dans CallListenerService (démarré ci-dessous),
  * pour fonctionner même écran éteint ou app en arrière-plan.
  */
@@ -28,14 +38,32 @@ class MainActivity : AppCompatActivity() {
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { /* no-op : voir startLocalMedia() pour le repli si refusé */ }
 
+    private lateinit var idleContent: View
+    private lateinit var roomCaptionScroll: ScrollView
+    private lateinit var textRoomCaption: TextView
+    private lateinit var buttonRoomCaptions: Button
+    private lateinit var buttonStopRoomCaptions: Button
+
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var roomCaptionsActive = false
+    // Distinct de roomCaptionsActive : reflète le choix de Jean, pas l'état
+    // technique du moment (coupé pendant un appel entrant, voir onPause/
+    // onResume) — permet de reprendre automatiquement les sous-titres de la
+    // pièce au retour sur cet écran, sans que Jean ait à rappuyer dessus.
+    private var roomCaptionsUserEnabled = false
+    private val roomCaptionHistory = StringBuilder()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val tv = TextView(this).apply {
-            text = "Senior Visio\n(en attente d'appel)"
-            textSize = 28f
-            gravity = android.view.Gravity.CENTER
-        }
-        setContentView(tv)
+        setContentView(R.layout.activity_main)
+
+        idleContent = findViewById(R.id.idleContent)
+        roomCaptionScroll = findViewById(R.id.roomCaptionScroll)
+        textRoomCaption = findViewById(R.id.textRoomCaption)
+        buttonRoomCaptions = findViewById(R.id.buttonRoomCaptions)
+        buttonStopRoomCaptions = findViewById(R.id.buttonStopRoomCaptions)
+        buttonRoomCaptions.setOnClickListener { toggleRoomCaptions() }
+        buttonStopRoomCaptions.setOnClickListener { toggleRoomCaptions() }
 
         permissionLauncher.launch(
             arrayOf(
@@ -80,5 +108,143 @@ class MainActivity : AppCompatActivity() {
             data = Uri.parse("package:$packageName")
         }
         startActivity(intent)
+    }
+
+    // ---- Sous-titres de la pièce (aucun proche impliqué : contrairement
+    // aux sous-titres d'appel, la reconnaissance doit obligatoirement
+    // tourner sur la tablette elle-même) ----
+
+    private fun toggleRoomCaptions() {
+        if (roomCaptionsUserEnabled) {
+            roomCaptionsUserEnabled = false
+            stopRoomCaptions()
+            showIdleView()
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                Toast.makeText(this, "Micro non autorisé", Toast.LENGTH_SHORT).show()
+                return
+            }
+            roomCaptionsUserEnabled = true
+            showRoomCaptionView()
+            startRoomCaptions()
+        }
+    }
+
+    private fun showIdleView() {
+        idleContent.visibility = View.VISIBLE
+        roomCaptionScroll.visibility = View.GONE
+        buttonStopRoomCaptions.visibility = View.GONE
+    }
+
+    private fun showRoomCaptionView() {
+        idleContent.visibility = View.GONE
+        roomCaptionScroll.visibility = View.VISIBLE
+        buttonStopRoomCaptions.visibility = View.VISIBLE
+        roomCaptionHistory.clear()
+        textRoomCaption.text = ""
+    }
+
+    private fun startRoomCaptions() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            Toast.makeText(this, "Reconnaissance vocale indisponible sur cette tablette", Toast.LENGTH_SHORT).show()
+            roomCaptionsUserEnabled = false
+            showIdleView()
+            return
+        }
+        if (speechRecognizer == null) {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
+                setRecognitionListener(roomCaptionListener)
+            }
+        }
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        }
+        speechRecognizer?.startListening(intent)
+        roomCaptionsActive = true
+    }
+
+    private fun stopRoomCaptions() {
+        roomCaptionsActive = false
+        speechRecognizer?.stopListening()
+        speechRecognizer?.cancel()
+    }
+
+    /**
+     * L'API SpeechRecognizer traite une phrase à la fois : sans relance
+     * après chaque résultat/erreur, elle s'arrête au premier silence — même
+     * principe que côté PWA (voir webrtc-engine.js, recognition.onend).
+     */
+    private fun restartRoomCaptionsIfEnabled() {
+        if (!roomCaptionsUserEnabled) return
+        textRoomCaption.postDelayed({ if (roomCaptionsUserEnabled) startRoomCaptions() }, 300)
+    }
+
+    private fun appendRoomCaption(text: String) {
+        if (roomCaptionHistory.isNotEmpty()) roomCaptionHistory.append("\n")
+        roomCaptionHistory.append(text)
+        // Historique borné : évite une zone de texte qui grossirait indéfiniment.
+        val maxChars = 2000
+        if (roomCaptionHistory.length > maxChars) {
+            roomCaptionHistory.delete(0, roomCaptionHistory.length - maxChars)
+        }
+        showRoomCaptionText(roomCaptionHistory.toString())
+    }
+
+    private fun showRoomCaptionText(text: String) {
+        textRoomCaption.text = text
+        textRoomCaption.post { roomCaptionScroll.smoothScrollTo(0, textRoomCaption.height) }
+    }
+
+    private val roomCaptionListener = object : RecognitionListener {
+        override fun onReadyForSpeech(params: Bundle?) {}
+        override fun onBeginningOfSpeech() {}
+        override fun onRmsChanged(rmsdB: Float) {}
+        override fun onBufferReceived(buffer: ByteArray?) {}
+        override fun onEndOfSpeech() {}
+        override fun onEvent(eventType: Int, params: Bundle?) {}
+
+        override fun onError(error: Int) {
+            restartRoomCaptionsIfEnabled()
+        }
+
+        override fun onResults(results: Bundle?) {
+            val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+            if (!text.isNullOrEmpty()) appendRoomCaption(text)
+            restartRoomCaptionsIfEnabled()
+        }
+
+        override fun onPartialResults(partialResults: Bundle?) {
+            val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+            if (!text.isNullOrEmpty()) {
+                val preview = if (roomCaptionHistory.isNotEmpty()) "$roomCaptionHistory\n$text" else text
+                showRoomCaptionText(preview)
+            }
+        }
+    }
+
+    /**
+     * Coupe le micro dès que cet écran n'est plus au premier plan (typiquement
+     * un appel entrant qui prend l'écran) : sans ça, la reconnaissance de la
+     * pièce entrerait en conflit avec le micro de l'appel vidéo.
+     */
+    override fun onPause() {
+        super.onPause()
+        if (roomCaptionsActive) stopRoomCaptions()
+    }
+
+    /** Reprend automatiquement les sous-titres de la pièce si Jean les avait activés. */
+    override fun onResume() {
+        super.onResume()
+        if (roomCaptionsUserEnabled && !roomCaptionsActive) startRoomCaptions()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        speechRecognizer?.destroy()
+        speechRecognizer = null
     }
 }

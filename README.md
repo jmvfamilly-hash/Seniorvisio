@@ -121,6 +121,13 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   reçoit (même source que ce qui est envoyé), avec les 2-3 dernières phrases finalisées en historique.
   Les segments à faible confiance de reconnaissance sont colorés (orange/jaune) pour repérer les
   passages probablement mal transcrits
+- **Sous-titres de la pièce, indépendants de tout appel** : un unique gros bouton "🔤 Sous-titres" sur
+  l'écran d'accueil active la reconnaissance vocale locale de la tablette (`SpeechRecognizer` d'Android,
+  pas Vosk — abandonné, moins précis que le moteur des navigateurs) pour sous-titrer en direct les
+  conversations dans la pièce avec Jean, pour un besoin distinct des sous-titres d'appel vidéo :
+  personne côté "proche" ici, donc la reconnaissance doit obligatoirement tourner sur l'appareil
+  lui-même. Se coupe automatiquement si un appel entrant prend l'écran (conflit de micro avec la vidéo)
+  et reprend seule au retour sur l'écran d'accueil, sans que Jean ait à rappuyer sur le bouton
 - **Détection de silence côté PWA** : si la reconnaissance vocale ne capte plus rien pendant 5s
   pendant que le micro écoute, un indicateur discret ("Aucun son détecté") prévient le proche que rien
   n'est transmis (micro coupé, téléphone trop loin, etc.)
