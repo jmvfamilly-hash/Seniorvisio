@@ -137,20 +137,19 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   reçoit (même source que ce qui est envoyé), avec les 2-3 dernières phrases finalisées en historique.
   Les segments à faible confiance de reconnaissance sont colorés (orange/jaune) pour repérer les
   passages probablement mal transcrits
-- **Sous-titres de la pièce, indépendants de tout appel** : sur l'écran d'accueil, un bouton "🎙️
-  Maintenir pour dicter" à appui maintenu (façon talkie-walkie, une pression = une dictée) déclenche
-  la reconnaissance vocale locale de la tablette (`SpeechRecognizer` d'Android, pas Vosk — abandonné,
-  moins précis que le moteur des navigateurs), pour un besoin distinct des sous-titres d'appel vidéo :
+- **Sous-titres de la pièce, indépendants de tout appel** : un unique gros bouton "🔤 Sous-titres" sur
+  l'écran d'accueil active la reconnaissance vocale locale de la tablette (`SpeechRecognizer` d'Android,
+  pas Vosk — abandonné, moins précis que le moteur des navigateurs) pour sous-titrer en direct les
+  conversations dans la pièce avec Jean, pour un besoin distinct des sous-titres d'appel vidéo :
   personne côté "proche" ici, donc la reconnaissance doit obligatoirement tourner sur l'appareil
-  lui-même. Chaque dictée s'ajoute à un historique consultable, séparée visuellement de la précédente ;
-  le défilement automatique avance à une vitesse plafonnée (même principe que les sous-titres d'appel)
-  pour laisser le temps de lire, et se met en pause dès que Jean touche l'écran pour naviguer
-  manuellement dans l'historique — il reprend son rythme dès qu'il relâche. Coupe proprement la
-  dictée en cours si un appel entrant interrompt (conflit de micro avec la vidéo). Le service de
-  reconnaissance d'Android joue un bip audible à chaque début d'écoute (comportement du système, pas
-  de l'appli) ; la tolérance au silence est allongée (`EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS`)
-  pour éviter des relances trop rapprochées tant que le bouton reste maintenu, et la dictée s'arrête
-  proprement (message clair) après plusieurs échecs consécutifs plutôt que de boucler indéfiniment
+  lui-même. Se coupe automatiquement si un appel entrant prend l'écran (conflit de micro avec la vidéo)
+  et reprend seule au retour sur l'écran d'accueil, sans que Jean ait à rappuyer sur le bouton. Le
+  service de reconnaissance d'Android joue un bip audible à chaque début d'écoute (comportement du
+  système, pas de l'appli) : un court silence entre deux phrases suffisait à faire expirer la
+  reconnaissance (`ERROR_SPEECH_TIMEOUT`) et relancer aussitôt, donnant des bips répétitifs sans
+  jamais laisser le temps de capter une phrase entière — corrigé en allongeant la tolérance au silence
+  (`EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS`) et en abandonnant proprement (message clair,
+  plutôt qu'une boucle de bips) après plusieurs échecs consécutifs
 - **Détection de silence côté PWA** : si la reconnaissance vocale ne capte plus rien pendant 5s
   pendant que le micro écoute, un indicateur discret ("Aucun son détecté") prévient le proche que rien
   n'est transmis (micro coupé, téléphone trop loin, etc.)

@@ -1,41 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-     Écran d'accueil (hors appel). Un seul écran permanent maintenant : le
-     titre discret, l'historique des dictées (vide au départ) et le bouton à
-     maintenir enfoncé pour dicter, toujours visible en bas (voir
-     MainActivity.kt).
+     Écran d'accueil (hors appel). Deux vues exclusives : l'attente (titre +
+     bouton pour activer les sous-titres de la pièce) et l'affichage des
+     sous-titres eux-mêmes une fois activés (voir MainActivity.kt).
 -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#1B2A4A"
-    android:orientation="vertical">
+    android:background="#1B2A4A">
 
-    <TextView
-        android:id="@+id/textIdleTitle"
+    <LinearLayout
+        android:id="@+id/idleContent"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Senior Visio"
-        android:textColor="#8FA0BF"
-        android:textSize="18sp"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
         android:gravity="center"
-        android:padding="16dp" />
+        android:padding="32dp">
 
-    <!-- Historique des dictées : reconnaissance vocale locale de la tablette
+        <TextView
+            android:id="@+id/textIdleTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Senior Visio\n(en attente d'appel)"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:gravity="center" />
+
+        <Button
+            android:id="@+id/buttonRoomCaptions"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="40dp"
+            android:text="🔤 Sous-titres"
+            android:textSize="24sp"
+            android:paddingLeft="40dp"
+            android:paddingRight="40dp"
+            android:paddingTop="20dp"
+            android:paddingBottom="20dp"
+            android:backgroundTint="#2ECC71" />
+
+    </LinearLayout>
+
+    <!-- Sous-titres de la pièce : reconnaissance vocale locale de la tablette
          (pas de proche impliqué ici, donc pas d'autre choix que de faire
-         tourner la reconnaissance directement sur l'appareil). Chaque
-         dictée (une pression maintenue du bouton ci-dessous) s'ajoute à la
-         suite, séparée visuellement de la précédente. Le défilement automatique
-         (voir MainActivity.kt) avance à une vitesse plafonnée, comme pour les
-         sous-titres d'appel, pour laisser le temps de lire ; il se met en
-         pause dès que Jean touche l'écran pour naviguer manuellement dans
-         l'historique, et reprend son rythme dès qu'il relâche. -->
+         tourner la reconnaissance directement sur l'appareil). Historique
+         continu (pas de retour en haut comme les sous-titres d'appel,
+         puisqu'il n'y a pas de notion de "nouvelle phrase" bien définie dans
+         une conversation de pièce). -->
     <ScrollView
         android:id="@+id/roomCaptionScroll"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:padding="24dp">
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:padding="32dp">
 
         <TextView
             android:id="@+id/textRoomCaption"
@@ -44,19 +61,23 @@
             android:gravity="center"
             android:textColor="#FFFFFF"
             android:textStyle="bold"
-            android:textSize="36sp"
+            android:textSize="40sp"
             android:text="" />
     </ScrollView>
 
     <Button
-        android:id="@+id/buttonRoomCaptions"
-        android:layout_width="match_parent"
+        android:id="@+id/buttonStopRoomCaptions"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_margin="24dp"
-        android:text="🎙️ Maintenir pour dicter"
-        android:textSize="22sp"
-        android:paddingTop="24dp"
-        android:paddingBottom="24dp"
-        android:backgroundTint="#2ECC71" />
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="32dp"
+        android:visibility="gone"
+        android:text="Arrêter les sous-titres"
+        android:textSize="20sp"
+        android:paddingLeft="32dp"
+        android:paddingRight="32dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
+        android:backgroundTint="#C0392B" />
 
-</LinearLayout>
+</FrameLayout>
