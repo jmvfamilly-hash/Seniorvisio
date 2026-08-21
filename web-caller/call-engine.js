@@ -10,4 +10,6 @@ class CallEngine {
   onBlocked(callback) { throw new Error("not implemented"); }
   onConnected(callback) { throw new Error("not implemented"); }
   onEnded(callback) { throw new Error("not implemented"); }
+  /** callback(message: string) — l'appel n'a pas pu démarrer (caméra/micro inaccessible, etc.). */
+  onError(callback) { throw new Error("not implemented"); }
 }

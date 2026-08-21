@@ -202,3 +202,7 @@ els.hangupButton.addEventListener("click", async () => {
 engine.onBlocked(() => showState("blocked"));
 engine.onConnected(() => showState("connected"));
 engine.onEnded(() => showState("idle"));
+engine.onError((message) => {
+  alert(message);
+  showState("idle");
+});

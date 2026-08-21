@@ -107,6 +107,11 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   jamais posé à l'écran) ne crée jamais sa surface, ce qui perturbait aussi le rendu de la vidéo du
   proche côté Jean (écran noir constaté en test réel) — les deux renderers partagent le même contexte
   EGL (voir `WebRtcCallEngine.attachRenderers`)
+- **Message clair si la caméra/le micro du proche est inaccessible** : un refus ou échec d'autorisation
+  navigateur (distincte de l'autorisation système d'une appli native comme WhatsApp — les deux peuvent
+  diverger sur un même appareil) plantait silencieusement l'appel : aucun message, l'écran restait
+  bloqué sur "Connexion à sa tablette…" indéfiniment. Un message explicite invite maintenant à vérifier
+  l'autorisation du site (icône 🔒/ⓘ à côté de l'adresse) et l'appel revient proprement à l'écran d'accueil
 - **Photo du proche à la réception de l'appel** : le PWA capture une photo (240x240, JPEG compressé)
   depuis la caméra du proche dès le début de l'appel et l'envoie via Firestore ; la tablette l'affiche
   en rond au-dessus du nom pendant le décompte, pour une reconnaissance immédiate. Non bloquant si la

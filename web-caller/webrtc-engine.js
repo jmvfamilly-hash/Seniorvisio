@@ -10,6 +10,7 @@ class RealCallEngine extends CallEngine {
     this._blockedCb = null;
     this._connectedCb = null;
     this._endedCb = null;
+    this._errorCb = null;
     this._pc = null;
     this._localStream = null;
     this._callDocRef = null;
@@ -43,6 +44,8 @@ class RealCallEngine extends CallEngine {
   onBlocked(callback) { this._blockedCb = callback; }
   onConnected(callback) { this._connectedCb = callback; }
   onEnded(callback) { this._endedCb = callback; }
+  /** callback(message: string) — l'appel n'a pas pu démarrer (caméra/micro inaccessible, etc.). */
+  onError(callback) { this._errorCb = callback; }
   /** callback(remainingSeconds, totalSeconds) — progression du décompte vu côté tablette. */
   onCountdown(callback) { this._countdownCb = callback; }
   /** callback({liveText, isFinal, confidence, history}) — miroir local de ce que Jean va voir/entendre. */
@@ -74,7 +77,25 @@ class RealCallEngine extends CallEngine {
     ];
     this._pc = new RTCPeerConnection({ iceServers });
 
-    this._localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    // Sans ce garde-fou, un refus/échec de la caméra ou du micro (permission
+    // refusée pour ce site, caméra déjà utilisée par un autre onglet, pas de
+    // caméra...) plantait silencieusement toute la suite : aucun message,
+    // l'écran restait bloqué sur "Connexion à sa tablette…" indéfiniment,
+    // sans que rien n'indique pourquoi. L'accès caméra/micro d'un site web
+    // est une autorisation distincte de celle d'une appli native (WhatsApp,
+    // etc.) : les deux peuvent diverger sur un même appareil.
+    try {
+      this._localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    } catch (e) {
+      console.error("[RealCallEngine] Accès caméra/micro refusé ou impossible :", e);
+      this._errorCb && this._errorCb(
+        "Impossible d'accéder à la caméra/au micro de ce navigateur. Vérifie l'autorisation " +
+        "accordée à ce site (icône 🔒 ou ⓘ à côté de l'adresse), puis réessaie."
+      );
+      this._pc.close();
+      this._pc = null;
+      return;
+    }
     document.getElementById("localVideo").srcObject = this._localStream;
     this._localStream.getTracks().forEach((track) => this._pc.addTrack(track, this._localStream));
 
