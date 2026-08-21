@@ -233,6 +233,14 @@ class IncomingCallActivity : AppCompatActivity() {
         callEngine.listenForSelfPreviewMode { enabled ->
             runOnUiThread { localRenderer.visibility = if (enabled) View.VISIBLE else View.INVISIBLE }
         }
+        // Ferme proprement l'écran si la connexion se perd sans qu'un
+        // raccroché explicite n'ait été envoyé (Wi-Fi coupé, navigateur du
+        // proche qui plante...) : sans ça, la caméra/le micro restaient
+        // engagés indéfiniment côté tablette (voir WebRtcCallEngine.
+        // onConnectionLost et le commentaire dans cleanup()).
+        callEngine.onConnectionLost {
+            runOnUiThread { if (!callHandled) finish() }
+        }
         // Applique tout de suite la disposition correspondant à l'orientation
         // actuelle (la tablette peut déjà être en paysage au moment où
         // l'appel se connecte, pas seulement lors d'une rotation ultérieure).

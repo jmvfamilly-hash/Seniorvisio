@@ -112,6 +112,20 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   diverger sur un même appareil) plantait silencieusement l'appel : aucun message, l'écran restait
   bloqué sur "Connexion à sa tablette…" indéfiniment. Un message explicite invite maintenant à vérifier
   l'autorisation du site (icône 🔒/ⓘ à côté de l'adresse) et l'appel revient proprement à l'écran d'accueil
+- **Fin d'appel automatique en cas de coupure réseau anormale** : constaté en test réel, la caméra/le
+  micro pouvaient rester engagés indéfiniment côté tablette après une coupure brutale (Wi-Fi perdu,
+  navigateur du proche qui plante ou se ferme sans "raccrocher" propre) — jusqu'à un redémarrage de la
+  tablette. Deux causes : (1) rien ne surveillait l'état de la connexion ICE ni côté tablette
+  (`onIceConnectionChange` vide) ni côté PWA, donc aucun des deux ne détectait que l'appel était mort
+  si l'autre camp ne l'annonçait pas explicitement dans Firestore ; (2) le nettoyage côté tablette
+  (`WebRtcCallEngine.cleanup()`) n'attrapait qu'un seul type d'erreur autour de l'arrêt de la caméra —
+  toute autre erreur y court-circuitait la libération de la fabrique WebRTC et du contexte EGL, qui
+  restaient alors en mémoire pour le reste de la vie du processus (`CallListenerService` étant un
+  foreground service permanent, ce processus ne redémarre jamais tout seul). Corrigé des deux côtés :
+  chaque camp détecte désormais localement une déconnexion ICE persistante (délai de grâce de 8s, une
+  brève coupure se résorbant souvent seule) et raccroche proprement de son côté ; chaque étape du
+  nettoyage tablette est isolée dans son propre `try/catch` pour que l'échec d'une seule n'empêche
+  jamais les suivantes de s'exécuter
 - **Photo du proche à la réception de l'appel** : le PWA capture une photo (240x240, JPEG compressé)
   depuis la caméra du proche dès le début de l'appel et l'envoie via Firestore ; la tablette l'affiche
   en rond au-dessus du nom pendant le décompte, pour une reconnaissance immédiate. Non bloquant si la

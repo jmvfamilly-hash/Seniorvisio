@@ -94,6 +94,29 @@ class RealCallEngine extends CallEngine {
     const pc = new RTCPeerConnection({ iceServers });
     this._pc = pc;
 
+    // Sans ça, une coupure réseau brutale (Wi-Fi perdu, tablette éteinte...)
+    // ne mettait jamais fin à l'appel côté PWA : ni "ended" ni "blocked"
+    // n'était jamais écrit dans Firestore, le proche restait bloqué sur
+    // l'écran "connecté" indéfiniment. Un bref délai de grâce (l'ICE se
+    // rétablit souvent seul après quelques secondes) avant de considérer la
+    // connexion définitivement perdue.
+    let iceFailureTimer = null;
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
+        if (iceFailureTimer) return;
+        iceFailureTimer = setTimeout(() => {
+          iceFailureTimer = null;
+          if (isStale()) return;
+          this.cancelCall();
+        }, 8000);
+      } else if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+        if (iceFailureTimer) {
+          clearTimeout(iceFailureTimer);
+          iceFailureTimer = null;
+        }
+      }
+    };
+
     // Sans ce garde-fou, un refus/échec de la caméra ou du micro (permission
     // refusée pour ce site, caméra déjà utilisée par un autre onglet, pas de
     // caméra...) plantait silencieusement toute la suite : aucun message,

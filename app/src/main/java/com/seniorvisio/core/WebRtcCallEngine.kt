@@ -66,6 +66,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var selfPreviewListener: ListenerRegistration? = null
     private var forceConnectListener: ListenerRegistration? = null
     private var remoteEndedListener: ListenerRegistration? = null
+    private var connectionLostCb: (() -> Unit)? = null
+    private val autoHangupHandler = Handler(Looper.getMainLooper())
+    private var autoHangupRunnable: Runnable? = null
     private var pendingVolume: Double = 1.0
     private var currentVolume: Double = 1.0
     private var volumeRampRunnable: Runnable? = null
@@ -246,6 +249,36 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         remoteEndedListener = signaling.listenForRemoteEnded(id, onHangup)
     }
 
+    /**
+     * Détecte une perte de connexion que personne n'a signalée explicitement
+     * (Wi-Fi coupé, navigateur du proche qui plante ou se ferme brutalement,
+     * appli tuée en arrière-plan...) : sans ça, ni la tablette ni le PWA ne
+     * savent que l'appel est terminé, la caméra/le micro restent engagés
+     * indéfiniment côté tablette — jusqu'à ce que Jean raccroche à la main,
+     * ou, s'il ne le fait pas, jusqu'à un redémarrage de la tablette (voir
+     * cleanup()). Voir onIceConnectionChange ci-dessous.
+     */
+    fun onConnectionLost(callback: () -> Unit) {
+        connectionLostCb = callback
+    }
+
+    private fun scheduleAutoHangupOnIceFailure() {
+        if (autoHangupRunnable != null) return
+        val runnable = Runnable {
+            autoHangupRunnable = null
+            hangUp()
+            connectionLostCb?.invoke()
+        }
+        autoHangupRunnable = runnable
+        autoHangupHandler.postDelayed(runnable, ICE_FAILURE_GRACE_MS)
+    }
+
+    /** Une brève déconnexion ICE se résout souvent seule (reprise Wi-Fi...) : n'agit qu'après le délai de grâce. */
+    private fun cancelScheduledAutoHangup() {
+        autoHangupRunnable?.let { autoHangupHandler.removeCallbacks(it) }
+        autoHangupRunnable = null
+    }
+
     // ---- internals ----
 
     private fun rampVolumeTo(target: Double) {
@@ -353,7 +386,15 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
             override fun onIceCandidatesRemoved(candidates: Array<IceCandidate>) {}
             override fun onSignalingChange(newState: PeerConnection.SignalingState?) {}
-            override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {}
+            override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {
+                when (newState) {
+                    PeerConnection.IceConnectionState.DISCONNECTED,
+                    PeerConnection.IceConnectionState.FAILED -> scheduleAutoHangupOnIceFailure()
+                    PeerConnection.IceConnectionState.CONNECTED,
+                    PeerConnection.IceConnectionState.COMPLETED -> cancelScheduledAutoHangup()
+                    else -> {}
+                }
+            }
             override fun onIceConnectionReceivingChange(receiving: Boolean) {}
             override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState?) {}
             override fun onAddStream(stream: MediaStream?) {}
@@ -419,6 +460,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     private fun cleanup() {
+        cancelScheduledAutoHangup()
         restoreAudio()
         callerCandidatesListener?.remove()
         callerCandidatesListener = null
@@ -442,36 +484,60 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         volumeRampRunnable = null
         pendingVolume = 1.0
         currentVolume = 1.0
+        // Chaque étape est isolée dans son propre try/catch : une erreur sur
+        // l'une d'elles (état caméra inattendu, etc.) ne doit jamais empêcher
+        // les suivantes de s'exécuter. Avant ce garde-fou, un unique
+        // stopCapture() en échec (seule InterruptedException était
+        // attrapée) court-circuitait tout le reste — y compris la
+        // libération de la factory WebRTC et du contexte EGL juste en
+        // dessous, qui restaient alors en mémoire pour le reste de la vie
+        // du processus (CallListenerService étant un foreground service
+        // permanent, le processus ne redémarre jamais tout seul) : la
+        // caméra restait bloquée jusqu'à un redémarrage de la tablette.
         videoCapturer?.let {
             try {
                 it.stopCapture()
-            } catch (_: InterruptedException) {
+            } catch (e: Exception) {
             }
-            it.dispose()
+            try {
+                it.dispose()
+            } catch (e: Exception) {
+            }
         }
         videoCapturer = null
-        surfaceTextureHelper?.dispose()
+        try {
+            surfaceTextureHelper?.dispose()
+        } catch (e: Exception) {
+        }
         surfaceTextureHelper = null
-        localRenderer?.release()
-        remoteRenderer?.release()
+        try {
+            localRenderer?.release()
+        } catch (e: Exception) {
+        }
+        try {
+            remoteRenderer?.release()
+        } catch (e: Exception) {
+        }
         localRenderer = null
         remoteRenderer = null
-        peerConnection?.close()
+        try {
+            peerConnection?.close()
+        } catch (e: Exception) {
+        }
         peerConnection = null
         localVideoTrack = null
         remoteVideoTrack = null
         remoteAudioTrack = null
         pendingRemoteCandidates.clear()
-        // Sans ça, la factory WebRTC (caméra, codecs, threads natifs) et le
-        // contexte EGL de cet appel restaient en mémoire indéfiniment : chaque
-        // appel crée sa propre instance (voir ensureFactory/EglBase.create()
-        // dans le constructeur), donc les appels s'accumulaient jusqu'à ce
-        // que la tablette n'ait plus accès à la caméra pour un nouvel appel
-        // (elle restait "active" — service au premier plan toujours vivant —
-        // mais n'acceptait plus de connexion).
-        peerConnectionFactory?.dispose()
+        try {
+            peerConnectionFactory?.dispose()
+        } catch (e: Exception) {
+        }
         peerConnectionFactory = null
-        eglBase.release()
+        try {
+            eglBase.release()
+        } catch (e: Exception) {
+        }
     }
 
     private class SimpleSdpObserver(
@@ -483,5 +549,14 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         override fun onSetSuccess() = onSet()
         override fun onCreateFailure(error: String) = onFailure(error)
         override fun onSetFailure(error: String) = onFailure(error)
+    }
+
+    companion object {
+        /**
+         * Une brève déconnexion ICE se résout souvent seule (quelques
+         * secondes de coupure Wi-Fi...) : ce délai laisse une chance de
+         * reprendre avant de considérer l'appel définitivement perdu.
+         */
+        private const val ICE_FAILURE_GRACE_MS = 8000L
     }
 }
