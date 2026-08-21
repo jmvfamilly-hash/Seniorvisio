@@ -94,9 +94,15 @@ els.callButton.addEventListener("click", async () => {
   els.silenceIndicator.classList.add("hidden");
   els.captionOverflowIndicator.classList.add("hidden");
   els.fullscreenCaptionBanner.classList.add("hidden");
-  els.forceConnectButton.disabled = false;
+  // Désactivé tant que l'appel n'est pas prêt (voir plus bas) : un appui
+  // pendant la mise en place (caméra, création de l'offre...) tombait dans
+  // le vide côté PWA — le document d'appel n'existait pas encore, la
+  // demande de connexion immédiate ne partait jamais — tout en désactivant
+  // le bouton, sans plus aucun moyen de relancer la connexion pour cet appel.
+  els.forceConnectButton.disabled = true;
   showState("calling");
   await engine.startCall(CONFIG.targetDeviceId, CONFIG.callerName);
+  els.forceConnectButton.disabled = false;
 });
 
 engine.onCountdown((remaining, total) => {

@@ -125,7 +125,10 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
 - **Progression du décompte visible côté PWA** : pendant les 30s d'alerte sur la tablette, le proche
   voit une barre de progression et le temps restant avant connexion automatique, synchronisés via
   l'horodatage serveur Firestore (pas juste un texte statique "ça sonne"). Un bouton "Se connecter
-  maintenant" permet aussi de forcer la connexion immédiatement, sans attendre la fin du décompte
+  maintenant" permet aussi de forcer la connexion immédiatement, sans attendre la fin du décompte —
+  désactivé tant que l'appel n'est pas prêt côté PWA (caméra, offre créée) : un appui trop tôt tombait
+  dans le vide (le document d'appel n'existait pas encore) tout en désactivant le bouton, sans plus
+  aucun moyen de relancer la connexion pour cet appel
 - **Miroir de transcription côté PWA** : pendant l'appel, le proche voit exactement le texte que Jean
   reçoit (même source que ce qui est envoyé), avec les 2-3 dernières phrases finalisées en historique.
   Les segments à faible confiance de reconnaissance sont colorés (orange/jaune) pour repérer les
