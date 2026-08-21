@@ -57,6 +57,12 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- Envoyé uniquement à cette appli, quand elle vient d'être mise à jour (voir
+                     BootReceiver.kt) : sans ça, une mise à jour silencieuse poussée par un MDM
+                     (Headwind) tue le processus en cours sans jamais le relancer — le service
+                     d'écoute des appels resterait éteint jusqu'à un redémarrage ou une ouverture
+                     manuelle de l'appli, et tout appel tenté entre-temps serait raté. -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

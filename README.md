@@ -23,7 +23,7 @@ service/
   CallListenerService.kt         → écoute Firestore en continu (foreground service permanent,
                                     fonctionne écran éteint) et déclenche IncomingCallService
   IncomingCallService.kt         → affiche l'écran d'appel entrant (foreground service ponctuel)
-  BootReceiver.kt                → relance CallListenerService au démarrage de la tablette
+  BootReceiver.kt                → relance CallListenerService au démarrage de la tablette et après mise à jour
   TimedCallAlertController.kt    → implémentation du minuteur (CountDownTimer)
 
 ui/
@@ -126,6 +126,13 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   brève coupure se résorbant souvent seule) et raccroche proprement de son côté ; chaque étape du
   nettoyage tablette est isolée dans son propre `try/catch` pour que l'échec d'une seule n'empêche
   jamais les suivantes de s'exécuter
+- **Réécoute des appels après une mise à jour silencieuse (MDM)** : `BootReceiver` relance
+  `CallListenerService` non seulement au démarrage de la tablette, mais aussi juste après une mise à
+  jour de l'appli (`ACTION_MY_PACKAGE_REPLACED`) — une mise à jour poussée silencieusement par un MDM
+  (Headwind) tue le processus en cours sans jamais le relancer, ce qui aurait sinon laissé le service
+  d'écoute éteint jusqu'à un redémarrage ou une ouverture manuelle, avec tout appel tenté entre-temps
+  raté (voir `CallSignalingClient.listenForRingingCalls`, qui ignore volontairement tout appel déjà
+  "en sonnerie" au moment où l'écoute démarre, pour ne pas re-déclencher un vieil appel oublié)
 - **Photo du proche à la réception de l'appel** : le PWA capture une photo (240x240, JPEG compressé)
   depuis la caméra du proche dès le début de l'appel et l'envoie via Firestore ; la tablette l'affiche
   en rond au-dessus du nom pendant le décompte, pour une reconnaissance immédiate. Non bloquant si la
