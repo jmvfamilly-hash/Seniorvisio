@@ -33,18 +33,24 @@ jobs:
       - name: Build debug APK
         run: gradle assembleDebug --stacktrace
 
+      - name: Rename APK with revision number
+        run: |
+          apk_name="seniorvisio-rev${{ github.run_number }}.apk"
+          echo "APK_NAME=$apk_name" >> "$GITHUB_ENV"
+          cp app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/$apk_name"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: senior-visio-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/${{ env.APK_NAME }}
 
       - name: Publish APK as GitHub Release asset
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="debug-apk-${{ github.run_id }}"
-          gh release create "$tag" app/build/outputs/apk/debug/app-debug.apk \
+          gh release create "$tag" "app/build/outputs/apk/debug/${{ env.APK_NAME }}" \
             --title "Senior Visio debug APK (run ${{ github.run_number }})" \
             --notes "Build automatique du module app/ en mode debug, commit ${{ github.sha }}." \
             --target "${{ github.sha }}"
