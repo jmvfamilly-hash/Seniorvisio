@@ -28,6 +28,7 @@ class RealCallEngine extends CallEngine {
     this._fullscreenCaptionInterval = null;
     this._silenceTimer = null;
     this._silenceActive = false;
+    this._hasNotifiedConnected = false;
 
     try {
       firebase.initializeApp(firebaseConfig);
@@ -122,7 +123,15 @@ class RealCallEngine extends CallEngine {
         this._lastLagSeconds = data.captionCatchUpLagSeconds;
         this._captionCatchUpLagCb && this._captionCatchUpLagCb(data.captionCatchUpLagSeconds);
       }
-      if (data.status === "connected") this._connectedCb && this._connectedCb();
+      // Ce listener se redéclenche à chaque écriture sur le document d'appel
+      // (curseurs, sous-titres, retard de lecture…), pas seulement au
+      // passage à "connected" — sans ce garde-fou, onConnected repartait à
+      // chaque mise à jour et ramenait le proche sur l'onglet visio même
+      // s'il venait de passer sur l'onglet réglages.
+      if (data.status === "connected" && !this._hasNotifiedConnected) {
+        this._hasNotifiedConnected = true;
+        this._connectedCb && this._connectedCb();
+      }
       if (data.status === "blocked") {
         this._blockedCb && this._blockedCb();
         this._teardown();
@@ -440,6 +449,7 @@ class RealCallEngine extends CallEngine {
     }
     this._transcriptBuffer = [];
     this._lastLagSeconds = 0;
+    this._hasNotifiedConnected = false;
     if (this._unsubscribeCallDoc) this._unsubscribeCallDoc();
     this._unsubscribeCallDoc = null;
     if (this._unsubscribeCalleeCandidates) this._unsubscribeCalleeCandidates();
