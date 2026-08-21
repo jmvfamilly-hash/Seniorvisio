@@ -128,7 +128,11 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   maintenant" permet aussi de forcer la connexion immédiatement, sans attendre la fin du décompte —
   désactivé tant que l'appel n'est pas prêt côté PWA (caméra, offre créée) : un appui trop tôt tombait
   dans le vide (le document d'appel n'existait pas encore) tout en désactivant le bouton, sans plus
-  aucun moyen de relancer la connexion pour cet appel
+  aucun moyen de relancer la connexion pour cet appel. À l'inverse, "Annuler" reste actif et efficace
+  à tout moment pendant cette même préparation : `startCall()` vérifie à chaque étape (caméra, offre,
+  écriture Firestore) si l'appel a entre-temps été annulé, pour ne jamais faire sonner Jean pour un
+  appel déjà abandonné — sans ce garde-fou, l'exécution en cours continuait en arrière-plan après un
+  "Annuler" et le déclenchait quand même
 - **Miroir de transcription côté PWA** : pendant l'appel, le proche voit exactement le texte que Jean
   reçoit (même source que ce qui est envoyé), avec les 2-3 dernières phrases finalisées en historique.
   Les segments à faible confiance de reconnaissance sont colorés (orange/jaune) pour repérer les

@@ -30,6 +30,12 @@ class RealCallEngine extends CallEngine {
     this._silenceTimer = null;
     this._silenceActive = false;
     this._hasNotifiedConnected = false;
+    // Incrémenté à chaque nouvel appel et à chaque annulation (voir
+    // cancelCall) : permet à startCall() de détecter, à chaque point
+    // d'attente, qu'il a été annulé entre-temps et d'arrêter proprement
+    // plutôt que de continuer en arrière-plan et écraser l'état déjà
+    // remis à zéro par cancelCall (voir isStale() dans startCall).
+    this._callGeneration = 0;
 
     try {
       firebase.initializeApp(firebaseConfig);
@@ -65,6 +71,16 @@ class RealCallEngine extends CallEngine {
   onFullscreenCaption(callback) { this._fullscreenCaptionCb = callback; }
 
   async startCall(targetId, callerName) {
+    // Capturé au tout début : si cancelCall() est appelé pendant que cette
+    // fonction attend encore (caméra, création de l'offre, écriture
+    // Firestore...), la génération change et isStale() le détecte au
+    // prochain point de contrôle ci-dessous — sans ça, l'exécution en cours
+    // continuait en arrière-plan après un "Annuler" et finissait quand même
+    // par faire sonner Jean (l'appel semblait alors "ignorer" l'annulation
+    // tant que la connexion n'avait pas eu lieu).
+    const myGeneration = ++this._callGeneration;
+    const isStale = () => myGeneration !== this._callGeneration;
+
     if (!this._available) {
       console.error("[RealCallEngine] Firebase non configuré (voir firebase-config.js), appel impossible.");
       this._endedCb && this._endedCb();
@@ -75,7 +91,8 @@ class RealCallEngine extends CallEngine {
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
     ];
-    this._pc = new RTCPeerConnection({ iceServers });
+    const pc = new RTCPeerConnection({ iceServers });
+    this._pc = pc;
 
     // Sans ce garde-fou, un refus/échec de la caméra ou du micro (permission
     // refusée pour ce site, caméra déjà utilisée par un autre onglet, pas de
@@ -84,42 +101,59 @@ class RealCallEngine extends CallEngine {
     // sans que rien n'indique pourquoi. L'accès caméra/micro d'un site web
     // est une autorisation distincte de celle d'une appli native (WhatsApp,
     // etc.) : les deux peuvent diverger sur un même appareil.
+    let localStream;
     try {
-      this._localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     } catch (e) {
       console.error("[RealCallEngine] Accès caméra/micro refusé ou impossible :", e);
       this._errorCb && this._errorCb(
         "Impossible d'accéder à la caméra/au micro de ce navigateur. Vérifie l'autorisation " +
         "accordée à ce site (icône 🔒 ou ⓘ à côté de l'adresse), puis réessaie."
       );
-      this._pc.close();
-      this._pc = null;
+      pc.close();
+      if (this._pc === pc) this._pc = null;
       return;
     }
-    document.getElementById("localVideo").srcObject = this._localStream;
-    this._localStream.getTracks().forEach((track) => this._pc.addTrack(track, this._localStream));
+    if (isStale()) {
+      // Annulé pendant que la caméra se préparait.
+      localStream.getTracks().forEach((track) => track.stop());
+      pc.close();
+      return;
+    }
+    this._localStream = localStream;
+    document.getElementById("localVideo").srcObject = localStream;
+    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
     const remoteStream = new MediaStream();
     document.getElementById("remoteVideo").srcObject = remoteStream;
-    this._pc.ontrack = (event) => {
+    pc.ontrack = (event) => {
       event.streams[0].getTracks().forEach((track) => remoteStream.addTrack(track));
     };
 
-    this._callDocRef = this._db.collection("calls").doc();
-    const callerCandidates = this._callDocRef.collection("callerCandidates");
-    const calleeCandidates = this._callDocRef.collection("calleeCandidates");
+    const callDocRef = this._db.collection("calls").doc();
+    const callerCandidates = callDocRef.collection("callerCandidates");
+    const calleeCandidates = callDocRef.collection("calleeCandidates");
 
-    this._pc.onicecandidate = (event) => {
+    pc.onicecandidate = (event) => {
       if (event.candidate) callerCandidates.add(event.candidate.toJSON());
     };
 
     const photoPromise = this._captureCallerPhoto();
 
-    const offer = await this._pc.createOffer();
-    await this._pc.setLocalDescription(offer);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
     const callerPhotoBase64 = await photoPromise;
 
-    await this._callDocRef.set({
+    if (isStale()) {
+      // Annulé pendant la préparation de l'offre : le document d'appel n'a
+      // pas encore été écrit, Jean ne sonnera jamais.
+      localStream.getTracks().forEach((track) => track.stop());
+      pc.close();
+      return;
+    }
+
+    this._callDocRef = callDocRef;
+    await callDocRef.set({
       callerName: callerName || "Un proche",
       status: "ringing",
       offerSdp: offer.sdp,
@@ -131,7 +165,17 @@ class RealCallEngine extends CallEngine {
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
 
-    this._unsubscribeCallDoc = this._callDocRef.onSnapshot((snapshot) => {
+    if (isStale()) {
+      // Annulé pendant l'écriture Firestore : le document existe déjà côté
+      // serveur, il faut le clôturer tout de suite pour ne pas laisser
+      // sonner la tablette de Jean pour un appel déjà abandonné.
+      await callDocRef.update({ status: "ended" }).catch(() => {});
+      localStream.getTracks().forEach((track) => track.stop());
+      pc.close();
+      return;
+    }
+
+    this._unsubscribeCallDoc = callDocRef.onSnapshot((snapshot) => {
       const data = snapshot.data();
       if (!data) return;
       if (data.answerSdp && this._pc && !this._pc.currentRemoteDescription) {
@@ -452,6 +496,12 @@ class RealCallEngine extends CallEngine {
   }
 
   async cancelCall() {
+    // Invalide toute exécution de startCall() encore en cours (voir
+    // isStale() dans startCall) : sans ça, Annuler pendant la préparation
+    // de l'appel (caméra, offre, écriture Firestore) n'avait aucun effet
+    // visible tant que la connexion n'avait pas déjà eu lieu — l'exécution
+    // en cours continuait en arrière-plan et refaisait sonner Jean.
+    this._callGeneration++;
     if (this._callDocRef) {
       await this._callDocRef.update({ status: "ended" }).catch(() => {});
     }
