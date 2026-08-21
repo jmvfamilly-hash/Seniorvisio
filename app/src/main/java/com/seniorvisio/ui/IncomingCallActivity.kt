@@ -214,8 +214,14 @@ class IncomingCallActivity : AppCompatActivity() {
         val remoteRenderer = findViewById<SurfaceViewRenderer>(R.id.remoteRenderer)
         // Miniature de Jean masquée par défaut (retirée de l'écran) : ne
         // s'affiche que si le proche l'active à distance depuis le PWA, voir
-        // listenForSelfPreviewMode ci-dessous.
-        localRenderer.visibility = View.GONE
+        // listenForSelfPreviewMode ci-dessous. INVISIBLE plutôt que GONE :
+        // un SurfaceViewRenderer en GONE (taille nulle, jamais posé à
+        // l'écran) ne crée jamais sa surface, ce qui perturbait aussi le
+        // rendu de la vidéo du proche (écran noir constaté en test réel) —
+        // les deux renderers partagent le même contexte EGL (voir
+        // attachRenderers). INVISIBLE garde la vue mise en page normalement
+        // (donc sa surface bien créée), juste non dessinée à l'écran.
+        localRenderer.visibility = View.INVISIBLE
         remoteRenderer.visibility = View.VISIBLE
         callEngine.attachRenderers(localRenderer, remoteRenderer)
         callEngine.answer()
@@ -225,7 +231,7 @@ class IncomingCallActivity : AppCompatActivity() {
         setupCaptionMode()
         callEngine.listenForRemoteVolumeControl()
         callEngine.listenForSelfPreviewMode { enabled ->
-            runOnUiThread { localRenderer.visibility = if (enabled) View.VISIBLE else View.GONE }
+            runOnUiThread { localRenderer.visibility = if (enabled) View.VISIBLE else View.INVISIBLE }
         }
         // Applique tout de suite la disposition correspondant à l'orientation
         // actuelle (la tablette peut déjà être en paysage au moment où

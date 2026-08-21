@@ -102,7 +102,11 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
 - **Aperçu de sa propre caméra chez Jean, masqué par défaut** : la petite vignette qui montrait à Jean
   sa propre image (en haut à droite de son écran, portrait comme paysage) est retirée par défaut —
   simplifie l'écran et libère la place que le bouton Raccrocher occupe désormais en paysage à cet
-  endroit. Le proche peut la réactiver à tout moment depuis le PWA (case à cocher pendant l'appel)
+  endroit. Le proche peut la réactiver à tout moment depuis le PWA (case à cocher pendant l'appel).
+  Masquée avec `View.INVISIBLE`, pas `View.GONE` : un `SurfaceViewRenderer` en `GONE` (taille nulle,
+  jamais posé à l'écran) ne crée jamais sa surface, ce qui perturbait aussi le rendu de la vidéo du
+  proche côté Jean (écran noir constaté en test réel) — les deux renderers partagent le même contexte
+  EGL (voir `WebRtcCallEngine.attachRenderers`)
 - **Photo du proche à la réception de l'appel** : le PWA capture une photo (240x240, JPEG compressé)
   depuis la caméra du proche dès le début de l'appel et l'envoie via Firestore ; la tablette l'affiche
   en rond au-dessus du nom pendant le décompte, pour une reconnaissance immédiate. Non bloquant si la
