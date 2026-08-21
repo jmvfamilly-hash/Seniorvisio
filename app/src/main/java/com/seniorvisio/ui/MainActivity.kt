@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.speech.RecognitionListener
+import android.util.Log
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.view.View
@@ -162,6 +163,15 @@ class MainActivity : AppCompatActivity() {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            // Le silence par défaut (courte pause naturelle entre deux phrases
+            // d'une conversation) fait sinon expirer la reconnaissance très
+            // vite (ERROR_SPEECH_TIMEOUT), relançant en boucle rapprochée —
+            // et chaque relance rejoue le bip de début d'écoute du service de
+            // reconnaissance d'Android, d'où des bips répétitifs sans jamais
+            // laisser le temps de capter une phrase entière.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4000)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4000)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 15000)
         }
         speechRecognizer?.startListening(intent)
         roomCaptionsActive = true
@@ -182,6 +192,15 @@ class MainActivity : AppCompatActivity() {
         if (!roomCaptionsUserEnabled) return
         textRoomCaption.postDelayed({ if (roomCaptionsUserEnabled) startRoomCaptions() }, 300)
     }
+
+    // Nombre d'échecs à la suite (aucun résultat entre-temps) avant
+    // d'abandonner : sans ce garde-fou, une erreur qui se reproduit à
+    // chaque relance (micro indisponible, service de reconnaissance non
+    // fonctionnel sur cet appareil...) bouclait indéfiniment, avec à chaque
+    // tentative le bip de début d'écoute du service Android — de vrais bips
+    // répétitifs sans jamais rien afficher, plutôt qu'un message clair.
+    private var consecutiveErrorCount = 0
+    private val maxConsecutiveErrors = 3
 
     private fun appendRoomCaption(text: String) {
         if (roomCaptionHistory.isNotEmpty()) roomCaptionHistory.append("\n")
@@ -208,16 +227,32 @@ class MainActivity : AppCompatActivity() {
         override fun onEvent(eventType: Int, params: Bundle?) {}
 
         override fun onError(error: Int) {
+            Log.w(TAG, "Sous-titres de la pièce : erreur reconnaissance vocale (code $error)")
+            consecutiveErrorCount++
+            if (consecutiveErrorCount >= maxConsecutiveErrors) {
+                consecutiveErrorCount = 0
+                roomCaptionsUserEnabled = false
+                Toast.makeText(
+                    this@MainActivity,
+                    "La reconnaissance vocale ne fonctionne pas pour l'instant sur cette tablette",
+                    Toast.LENGTH_LONG
+                ).show()
+                stopRoomCaptions()
+                showIdleView()
+                return
+            }
             restartRoomCaptionsIfEnabled()
         }
 
         override fun onResults(results: Bundle?) {
+            consecutiveErrorCount = 0
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
             if (!text.isNullOrEmpty()) appendRoomCaption(text)
             restartRoomCaptionsIfEnabled()
         }
 
         override fun onPartialResults(partialResults: Bundle?) {
+            consecutiveErrorCount = 0
             val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
             if (!text.isNullOrEmpty()) {
                 val preview = if (roomCaptionHistory.isNotEmpty()) "$roomCaptionHistory\n$text" else text
@@ -246,5 +281,9 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         speechRecognizer?.destroy()
         speechRecognizer = null
+    }
+
+    companion object {
+        private const val TAG = "MainActivity"
     }
 }

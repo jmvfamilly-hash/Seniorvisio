@@ -143,7 +143,13 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   conversations dans la pièce avec Jean, pour un besoin distinct des sous-titres d'appel vidéo :
   personne côté "proche" ici, donc la reconnaissance doit obligatoirement tourner sur l'appareil
   lui-même. Se coupe automatiquement si un appel entrant prend l'écran (conflit de micro avec la vidéo)
-  et reprend seule au retour sur l'écran d'accueil, sans que Jean ait à rappuyer sur le bouton
+  et reprend seule au retour sur l'écran d'accueil, sans que Jean ait à rappuyer sur le bouton. Le
+  service de reconnaissance d'Android joue un bip audible à chaque début d'écoute (comportement du
+  système, pas de l'appli) : un court silence entre deux phrases suffisait à faire expirer la
+  reconnaissance (`ERROR_SPEECH_TIMEOUT`) et relancer aussitôt, donnant des bips répétitifs sans
+  jamais laisser le temps de capter une phrase entière — corrigé en allongeant la tolérance au silence
+  (`EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS`) et en abandonnant proprement (message clair,
+  plutôt qu'une boucle de bips) après plusieurs échecs consécutifs
 - **Détection de silence côté PWA** : si la reconnaissance vocale ne capte plus rien pendant 5s
   pendant que le micro écoute, un indicateur discret ("Aucun son détecté") prévient le proche que rien
   n'est transmis (micro coupé, téléphone trop loin, etc.)
