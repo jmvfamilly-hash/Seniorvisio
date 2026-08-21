@@ -10,10 +10,11 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.speech.RecognitionListener
-import android.util.Log
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.view.View
+import android.util.Log
+import android.view.Choreographer
+import android.view.MotionEvent
 import android.widget.Button
 import android.widget.ScrollView
 import android.widget.TextView
@@ -23,12 +24,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.seniorvisio.R
 import com.seniorvisio.service.CallListenerService
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Écran affiché quand aucun appel n'est en cours. Volontairement épuré pour
- * l'usage senior : juste un message d'accueil et un unique bouton pour
- * activer/désactiver le sous-titrage des conversations de la pièce (voir
- * plus bas) — rien d'autre à comprendre.
+ * l'usage senior : un historique de dictées et un unique bouton à maintenir
+ * enfoncé pour dicter (voir plus bas) — rien d'autre à comprendre.
  *
  * La détection d'appel entrant ne dépend pas du cycle de vie de cet écran :
  * elle tourne en continu dans CallListenerService (démarré ci-dessous),
@@ -39,32 +41,65 @@ class MainActivity : AppCompatActivity() {
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { /* no-op : voir startLocalMedia() pour le repli si refusé */ }
 
-    private lateinit var idleContent: View
     private lateinit var roomCaptionScroll: ScrollView
     private lateinit var textRoomCaption: TextView
     private lateinit var buttonRoomCaptions: Button
-    private lateinit var buttonStopRoomCaptions: Button
 
     private var speechRecognizer: SpeechRecognizer? = null
-    private var roomCaptionsActive = false
-    // Distinct de roomCaptionsActive : reflète le choix de Jean, pas l'état
-    // technique du moment (coupé pendant un appel entrant, voir onPause/
-    // onResume) — permet de reprendre automatiquement les sous-titres de la
-    // pièce au retour sur cet écran, sans que Jean ait à rappuyer dessus.
-    private var roomCaptionsUserEnabled = false
-    private val roomCaptionHistory = StringBuilder()
+
+    // ---- État de la dictée en cours (bouton maintenu) ----
+    private var isHeld = false
+    private var currentDictationText = ""
+    private var consecutiveErrorCount = 0
+    private val maxConsecutiveErrors = 3
+
+    // Texte déjà validé (dictées précédentes, séparateurs inclus).
+    private val finalizedHistory = StringBuilder()
+
+    // ---- Défilement automatique à vitesse plafonnée (même principe que les
+    // sous-titres d'appel, voir IncomingCallActivity.setupCaptionMode) ----
+    private var lerpTargetScroll = 0
+    private var lerpFrameScheduled = false
+    private var lastFrameTimeNanos = 0L
+    private var userScrolling = false
+    private val maxScrollSpeedPxPerSec by lazy { 50f * resources.displayMetrics.density }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        idleContent = findViewById(R.id.idleContent)
         roomCaptionScroll = findViewById(R.id.roomCaptionScroll)
         textRoomCaption = findViewById(R.id.textRoomCaption)
         buttonRoomCaptions = findViewById(R.id.buttonRoomCaptions)
-        buttonStopRoomCaptions = findViewById(R.id.buttonStopRoomCaptions)
-        buttonRoomCaptions.setOnClickListener { toggleRoomCaptions() }
-        buttonStopRoomCaptions.setOnClickListener { toggleRoomCaptions() }
+
+        buttonRoomCaptions.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    startDictation()
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    stopDictation()
+                    true
+                }
+                else -> false
+            }
+        }
+
+        // Laisse le défilement tactile normal se produire (contrairement aux
+        // sous-titres d'appel, entièrement pilotés par le code) : ne fait que
+        // repérer quand Jean touche l'écran pour mettre en pause le
+        // défilement automatique le temps qu'il navigue dans l'historique.
+        roomCaptionScroll.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> userScrolling = true
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    userScrolling = false
+                    requestLerpFrame()
+                }
+            }
+            false
+        }
 
         permissionLauncher.launch(
             arrayOf(
@@ -113,45 +148,39 @@ class MainActivity : AppCompatActivity() {
 
     // ---- Sous-titres de la pièce (aucun proche impliqué : contrairement
     // aux sous-titres d'appel, la reconnaissance doit obligatoirement
-    // tourner sur la tablette elle-même) ----
+    // tourner sur la tablette elle-même). Modèle "appui maintenu" façon
+    // talkie-walkie : le bouton n'est actif que pendant qu'il est enfoncé,
+    // une dictée = une pression. ----
 
-    private fun toggleRoomCaptions() {
-        if (roomCaptionsUserEnabled) {
-            roomCaptionsUserEnabled = false
-            stopRoomCaptions()
-            showIdleView()
-        } else {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                Toast.makeText(this, "Micro non autorisé", Toast.LENGTH_SHORT).show()
-                return
-            }
-            roomCaptionsUserEnabled = true
-            showRoomCaptionView()
-            startRoomCaptions()
+    private fun startDictation() {
+        if (isHeld) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            Toast.makeText(this, "Micro non autorisé", Toast.LENGTH_SHORT).show()
+            return
         }
+        isHeld = true
+        currentDictationText = ""
+        consecutiveErrorCount = 0
+        buttonRoomCaptions.text = "🔴 Enregistrement…"
+        startListeningOnce()
     }
 
-    private fun showIdleView() {
-        idleContent.visibility = View.VISIBLE
-        roomCaptionScroll.visibility = View.GONE
-        buttonStopRoomCaptions.visibility = View.GONE
+    private fun stopDictation() {
+        if (!isHeld) return
+        isHeld = false
+        buttonRoomCaptions.text = "🎙️ Maintenir pour dicter"
+        // Le dernier résultat (ce qui vient d'être dit avant le relâchement)
+        // arrive via onResults/onError, qui finalisera la dictée là-bas.
+        speechRecognizer?.stopListening()
     }
 
-    private fun showRoomCaptionView() {
-        idleContent.visibility = View.GONE
-        roomCaptionScroll.visibility = View.VISIBLE
-        buttonStopRoomCaptions.visibility = View.VISIBLE
-        roomCaptionHistory.clear()
-        textRoomCaption.text = ""
-    }
-
-    private fun startRoomCaptions() {
+    private fun startListeningOnce() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             Toast.makeText(this, "Reconnaissance vocale indisponible sur cette tablette", Toast.LENGTH_SHORT).show()
-            roomCaptionsUserEnabled = false
-            showIdleView()
+            isHeld = false
+            buttonRoomCaptions.text = "🎙️ Maintenir pour dicter"
             return
         }
         if (speechRecognizer == null) {
@@ -163,59 +192,80 @@ class MainActivity : AppCompatActivity() {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            // Le silence par défaut (courte pause naturelle entre deux phrases
-            // d'une conversation) fait sinon expirer la reconnaissance très
-            // vite (ERROR_SPEECH_TIMEOUT), relançant en boucle rapprochée —
-            // et chaque relance rejoue le bip de début d'écoute du service de
-            // reconnaissance d'Android, d'où des bips répétitifs sans jamais
-            // laisser le temps de capter une phrase entière.
+            // Laisse une bonne marge avant qu'une pause naturelle ne mette fin
+            // à l'écoute (voir plus bas : tant que le bouton reste maintenu,
+            // une fin anticipée relance simplement l'écoute pour la même
+            // dictée, mais autant limiter la fréquence des relances — et donc
+            // du bip de début d'écoute du service Android à chaque fois).
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4000)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4000)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 15000)
         }
         speechRecognizer?.startListening(intent)
-        roomCaptionsActive = true
     }
 
-    private fun stopRoomCaptions() {
-        roomCaptionsActive = false
-        speechRecognizer?.stopListening()
-        speechRecognizer?.cancel()
-    }
-
-    /**
-     * L'API SpeechRecognizer traite une phrase à la fois : sans relance
-     * après chaque résultat/erreur, elle s'arrête au premier silence — même
-     * principe que côté PWA (voir webrtc-engine.js, recognition.onend).
-     */
-    private fun restartRoomCaptionsIfEnabled() {
-        if (!roomCaptionsUserEnabled) return
-        textRoomCaption.postDelayed({ if (roomCaptionsUserEnabled) startRoomCaptions() }, 300)
-    }
-
-    // Nombre d'échecs à la suite (aucun résultat entre-temps) avant
-    // d'abandonner : sans ce garde-fou, une erreur qui se reproduit à
-    // chaque relance (micro indisponible, service de reconnaissance non
-    // fonctionnel sur cet appareil...) bouclait indéfiniment, avec à chaque
-    // tentative le bip de début d'écoute du service Android — de vrais bips
-    // répétitifs sans jamais rien afficher, plutôt qu'un message clair.
-    private var consecutiveErrorCount = 0
-    private val maxConsecutiveErrors = 3
-
-    private fun appendRoomCaption(text: String) {
-        if (roomCaptionHistory.isNotEmpty()) roomCaptionHistory.append("\n")
-        roomCaptionHistory.append(text)
-        // Historique borné : évite une zone de texte qui grossirait indéfiniment.
-        val maxChars = 2000
-        if (roomCaptionHistory.length > maxChars) {
-            roomCaptionHistory.delete(0, roomCaptionHistory.length - maxChars)
+    /** Ajoute la dictée en cours à l'historique, séparée de la précédente, puis l'efface. */
+    private fun finalizeDictation() {
+        val text = currentDictationText.trim()
+        currentDictationText = ""
+        if (text.isNotEmpty()) {
+            if (finalizedHistory.isNotEmpty()) finalizedHistory.append(DICTATION_SEPARATOR)
+            finalizedHistory.append(text)
+            // Historique borné : évite une zone de texte qui grossirait indéfiniment.
+            val maxChars = 4000
+            if (finalizedHistory.length > maxChars) {
+                finalizedHistory.delete(0, finalizedHistory.length - maxChars)
+            }
         }
-        showRoomCaptionText(roomCaptionHistory.toString())
+        showRoomCaptionText(finalizedHistory.toString())
+    }
+
+    private fun showLivePreview(partialText: String) {
+        val combined = if (finalizedHistory.isEmpty()) partialText else "$finalizedHistory$DICTATION_SEPARATOR$partialText"
+        showRoomCaptionText(combined)
     }
 
     private fun showRoomCaptionText(text: String) {
         textRoomCaption.text = text
-        textRoomCaption.post { roomCaptionScroll.smoothScrollTo(0, textRoomCaption.height) }
+        textRoomCaption.post {
+            lerpTargetScroll = (textRoomCaption.height - roomCaptionScroll.height).coerceAtLeast(0)
+            requestLerpFrame()
+        }
+    }
+
+    /**
+     * Défilement à vitesse plafonnée plutôt qu'instantané, pour laisser à
+     * Jean le temps de lire — même principe que les sous-titres d'appel
+     * (voir IncomingCallActivity.setupCaptionMode). En pause tant que Jean
+     * touche l'écran pour naviguer manuellement (voir userScrolling), reprend
+     * son rythme dès qu'il relâche.
+     */
+    private fun requestLerpFrame() {
+        if (lerpFrameScheduled || userScrolling) return
+        lerpFrameScheduled = true
+        Choreographer.getInstance().postFrameCallback { frameTimeNanos ->
+            lerpFrameScheduled = false
+            if (userScrolling) {
+                lastFrameTimeNanos = 0L
+                return@postFrameCallback
+            }
+            val dtSeconds = if (lastFrameTimeNanos == 0L) {
+                0f
+            } else {
+                ((frameTimeNanos - lastFrameTimeNanos) / 1_000_000_000f).coerceIn(0f, 0.1f)
+            }
+            lastFrameTimeNanos = frameTimeNanos
+            val current = roomCaptionScroll.scrollY
+            val diff = (lerpTargetScroll - current).toFloat()
+            if (abs(diff) < 1f) {
+                roomCaptionScroll.scrollTo(0, lerpTargetScroll)
+            } else {
+                val maxStep = (maxScrollSpeedPxPerSec * dtSeconds).coerceAtLeast(1f)
+                val step = diff.coerceIn(-maxStep, maxStep)
+                roomCaptionScroll.scrollTo(0, (current + step).roundToInt())
+                requestLerpFrame()
+            }
+        }
     }
 
     private val roomCaptionListener = object : RecognitionListener {
@@ -228,53 +278,64 @@ class MainActivity : AppCompatActivity() {
 
         override fun onError(error: Int) {
             Log.w(TAG, "Sous-titres de la pièce : erreur reconnaissance vocale (code $error)")
+            if (!isHeld) {
+                finalizeDictation()
+                return
+            }
             consecutiveErrorCount++
             if (consecutiveErrorCount >= maxConsecutiveErrors) {
                 consecutiveErrorCount = 0
-                roomCaptionsUserEnabled = false
+                isHeld = false
+                buttonRoomCaptions.text = "🎙️ Maintenir pour dicter"
                 Toast.makeText(
                     this@MainActivity,
                     "La reconnaissance vocale ne fonctionne pas pour l'instant sur cette tablette",
                     Toast.LENGTH_LONG
                 ).show()
-                stopRoomCaptions()
-                showIdleView()
+                finalizeDictation()
                 return
             }
-            restartRoomCaptionsIfEnabled()
+            // Bouton encore maintenu : Jean continue de parler, on relance
+            // pour capter la suite de la même dictée.
+            startListeningOnce()
         }
 
         override fun onResults(results: Bundle?) {
             consecutiveErrorCount = 0
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-            if (!text.isNullOrEmpty()) appendRoomCaption(text)
-            restartRoomCaptionsIfEnabled()
+            if (!text.isNullOrEmpty()) {
+                currentDictationText = if (currentDictationText.isEmpty()) text else "$currentDictationText $text"
+            }
+            if (isHeld) {
+                showLivePreview(currentDictationText)
+                startListeningOnce()
+            } else {
+                finalizeDictation()
+            }
         }
 
         override fun onPartialResults(partialResults: Bundle?) {
-            consecutiveErrorCount = 0
             val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
             if (!text.isNullOrEmpty()) {
-                val preview = if (roomCaptionHistory.isNotEmpty()) "$roomCaptionHistory\n$text" else text
-                showRoomCaptionText(preview)
+                val preview = if (currentDictationText.isEmpty()) text else "$currentDictationText $text"
+                showLivePreview(preview)
             }
         }
     }
 
     /**
-     * Coupe le micro dès que cet écran n'est plus au premier plan (typiquement
-     * un appel entrant qui prend l'écran) : sans ça, la reconnaissance de la
-     * pièce entrerait en conflit avec le micro de l'appel vidéo.
+     * Sécurité si un appel entrant interrompt une dictée en cours (le doigt
+     * ne peut de toute façon plus être sur le bouton une fois l'écran
+     * changé) : coupe proprement plutôt que de laisser le micro engagé.
      */
     override fun onPause() {
         super.onPause()
-        if (roomCaptionsActive) stopRoomCaptions()
-    }
-
-    /** Reprend automatiquement les sous-titres de la pièce si Jean les avait activés. */
-    override fun onResume() {
-        super.onResume()
-        if (roomCaptionsUserEnabled && !roomCaptionsActive) startRoomCaptions()
+        if (isHeld) {
+            isHeld = false
+            currentDictationText = ""
+            buttonRoomCaptions.text = "🎙️ Maintenir pour dicter"
+            speechRecognizer?.cancel()
+        }
     }
 
     override fun onDestroy() {
@@ -285,5 +346,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+        private const val DICTATION_SEPARATOR = "\n\n───────────\n\n"
     }
 }
