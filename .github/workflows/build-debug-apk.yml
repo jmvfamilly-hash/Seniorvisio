@@ -31,7 +31,7 @@ jobs:
           gradle-version: '8.7'
 
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace "-PbuildRev=rev${{ github.run_number }}"
 
       - name: Rename APK with revision number
         run: |

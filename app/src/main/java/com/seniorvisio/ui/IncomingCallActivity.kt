@@ -24,6 +24,7 @@ import android.widget.ScrollView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import android.widget.TextView
+import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.WebRtcCallEngine
@@ -98,6 +99,7 @@ class IncomingCallActivity : AppCompatActivity() {
             .cancel(IncomingCallService.CALL_NOTIFICATION_ID)
 
         setContentView(R.layout.activity_incoming_call)
+        findViewById<TextView>(R.id.textBuildRev).text = BuildConfig.BUILD_REV
 
         val callId = intent.getStringExtra(EXTRA_CALL_ID)
         if (callId == null) {

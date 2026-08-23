@@ -65,6 +65,20 @@
             android:text="" />
     </ScrollView>
 
+    <!-- Version affichée en permanence, discrètement, pour vérifier à distance
+         quel APK tourne réellement sur la tablette (voir BuildConfig.BUILD_REV) —
+         sans ça, impossible de savoir si un déploiement Headwind a pris effet
+         sans brancher physiquement l'appareil. -->
+    <TextView
+        android:id="@+id/textBuildRev"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="8dp"
+        android:textColor="#4DFFFFFF"
+        android:textSize="11sp"
+        android:text="" />
+
     <Button
         android:id="@+id/buttonStopRoomCaptions"
         android:layout_width="wrap_content"

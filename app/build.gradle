@@ -20,6 +20,11 @@ android {
         targetSdk 34
         versionCode 1
         versionName "0.1-dev"
+        // Passé par la CI (-PbuildRev=revNN, même numéro que le nom du fichier
+        // APK publié) pour afficher discrètement quelle version tourne sur la
+        // tablette — utile pour diagnostiquer un déploiement Headwind qui n'a
+        // pas encore pris effet, sans avoir à brancher la tablette.
+        buildConfigField "String", "BUILD_REV", "\"${project.findProperty('buildRev') ?: "dev"}\""
     }
 
     buildTypes {
@@ -39,6 +44,7 @@ android {
 
     buildFeatures {
         viewBinding true
+        buildConfig true
     }
 }
 

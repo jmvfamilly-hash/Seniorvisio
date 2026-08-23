@@ -117,6 +117,18 @@
         </ScrollView>
     </LinearLayout>
 
+    <!-- Version affichée en permanence, discrètement, pour vérifier à distance
+         quel APK tourne réellement sur la tablette (voir BuildConfig.BUILD_REV). -->
+    <TextView
+        android:id="@+id/textBuildRev"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="8dp"
+        android:textColor="#4DFFFFFF"
+        android:textSize="11sp"
+        android:text="" />
+
     <Button
         android:id="@+id/buttonBlock"
         android:layout_width="wrap_content"

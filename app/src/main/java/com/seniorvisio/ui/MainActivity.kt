@@ -22,6 +22,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
+import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.signaling.CallSignalingClient
@@ -59,6 +60,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        findViewById<TextView>(R.id.textBuildRev).text = BuildConfig.BUILD_REV
 
         idleContent = findViewById(R.id.idleContent)
         roomCaptionScroll = findViewById(R.id.roomCaptionScroll)
