@@ -2,6 +2,9 @@ name: Fetch Cloud Functions logs
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/functions-logs.yml'
 
 jobs:
   logs:
