@@ -5,6 +5,7 @@ import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.SetOptions
 
 data class RemoteIceCandidate(
     val sdpMid: String?,
@@ -198,6 +199,18 @@ class CallSignalingClient {
         }
     }
 
+    /**
+     * Enregistre le token FCM courant de la tablette, pour que la Cloud
+     * Function (functions/index.js) puisse la réveiller par notification
+     * push dès qu'un appel apparaît — voir SeniorVisioMessagingService.
+     * Appelé au démarrage de l'appli et à chaque renouvellement du token
+     * (celui-ci peut changer à tout moment, décision d'Android/Firebase).
+     */
+    fun registerDeviceToken(token: String) {
+        if (!isAvailable()) return
+        db.document(DEVICE_TOKEN_DOC).set(mapOf(FIELD_FCM_TOKEN to token), SetOptions.merge())
+    }
+
     fun listenForCallerCandidates(callId: String, onCandidate: (RemoteIceCandidate) -> Unit): ListenerRegistration {
         return callDoc(callId).collection(CALLER_CANDIDATES)
             .addSnapshotListener { snapshot, _ ->
@@ -237,6 +250,9 @@ class CallSignalingClient {
         private const val FIELD_SELF_PREVIEW = "selfPreviewEnabled"
         private const val FIELD_CAPTION_SCROLL_SPEED = "captionMaxScrollSpeedDpPerSec"
         private const val FIELD_CAPTION_CATCHUP_LAG = "captionCatchUpLagSeconds"
+
+        private const val DEVICE_TOKEN_DOC = "devices/jean_tablet"
+        private const val FIELD_FCM_TOKEN = "fcmToken"
 
         const val STATUS_RINGING = "ringing"
         const val STATUS_CONNECTED = "connected"

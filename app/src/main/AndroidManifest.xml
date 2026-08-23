@@ -52,6 +52,18 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Réveil par notification push (voir functions/index.js et
+             SeniorVisioMessagingService.kt) : complète l'écoute Firestore
+             permanente de CallListenerService, qu'Android peut suspendre une
+             fois l'écran éteint depuis un moment (Doze). -->
+        <service
+            android:name=".service.SeniorVisioMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".service.BootReceiver"
             android:exported="false">
@@ -65,8 +77,6 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
-
-        <!-- TODO : receiver FCM pour un réveil encore plus fiable (voir README) -->
 
     </application>
 </manifest>

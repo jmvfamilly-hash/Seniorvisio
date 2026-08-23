@@ -1,0 +1,13 @@
+{
+  "name": "seniorvisio-functions",
+  "description": "Cloud Function : réveil push (FCM) de la tablette Senior Visio à l'arrivée d'un appel",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.1.0",
+    "firebase-functions": "^5.0.0"
+  }
+}

@@ -21,8 +21,10 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.google.firebase.messaging.FirebaseMessaging
 import com.seniorvisio.R
 import com.seniorvisio.service.CallListenerService
+import com.seniorvisio.signaling.CallSignalingClient
 
 /**
  * Écran affiché quand aucun appel n'est en cours. Volontairement épuré pour
@@ -77,6 +79,20 @@ class MainActivity : AppCompatActivity() {
         ContextCompat.startForegroundService(this, Intent(this, CallListenerService::class.java))
         requestIgnoreBatteryOptimizations()
         requestFullScreenIntentPermission()
+        registerFcmToken()
+    }
+
+    /**
+     * Renvoie le token FCM courant au démarrage, en plus de
+     * SeniorVisioMessagingService.onNewToken : ce dernier n'est appelé que
+     * lorsqu'Android (re)génère le token, pas s'il existait déjà avant que ce
+     * service ait eu l'occasion de tourner (ex. premier lancement après
+     * l'installation).
+     */
+    private fun registerFcmToken() {
+        FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+            CallSignalingClient().registerDeviceToken(token)
+        }
     }
 
     /**

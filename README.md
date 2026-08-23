@@ -213,8 +213,8 @@ config pour éviter de planter.
 2. Tester un appel complet en conditions réelles (deux appareils), ajuster l'ergonomie
 3. Éventuellement ajouter un serveur TURN (ex. Open Relay gratuit, ou coturn auto-hébergé) si
    certains réseaux/box échouent à se connecter avec les seuls serveurs STUN publics
-4. Éventuellement passer au réveil par notification push (FCM) si `CallListenerService` s'avère
-   pas assez fiable sur certains appareils (voir note ci-dessous)
+4. Déployer la Cloud Function de réveil push (voir note ci-dessous) : nécessite de passer le projet
+   Firebase au plan payant "Blaze" et d'ajouter le secret GitHub `FIREBASE_SERVICE_ACCOUNT`
 
 ### Note sur la fiabilité du réveil en arrière-plan
 La détection d'appel entrant tourne dans `CallListenerService`, un foreground service permanent
@@ -226,12 +226,37 @@ cas pour une tablette qui reste allumée/branchée en continu.
 Limite connue : certains constructeurs (Xiaomi/MIUI, Huawei, Oppo notamment) tuent parfois les
 foreground services malgré tout, sauf si l'app est explicitement exemptée d'optimisation batterie
 (demandé automatiquement au premier lancement) et/ou autorisée manuellement à "démarrer
-automatiquement" dans les réglages de batterie du fabricant. Si des appels manqués persistent malgré
-ça sur la tablette utilisée, la solution la plus robuste serait de migrer vers un réveil par
-notification push (Firebase Cloud Messaging) déclenché par une Cloud Function côté serveur — mais
-cela nécessite de passer le projet Firebase au plan payant "Blaze" (le volume réel resterait dans le
-quota gratuit, mais Blaze exige une carte bancaire enregistrée), donc volontairement pas fait par
-défaut ici pour rester sur du 100% gratuit sans engagement.
+automatiquement" dans les réglages de batterie du fabricant. Confirmé en déploiement réel : sans
+notification push, un appel entrant ne réveillait la tablette de façon fiable que si l'écran restait
+allumé en permanence ("always on display") — dès que l'écran s'éteignait pour de bon, la connexion
+Firestore permanente de `CallListenerService` finissait par être suspendue (Doze), avant même que le
+mécanisme de réveil plein écran n'ait sa chance de s'exécuter.
+
+**Réveil push (FCM), implémenté** : `functions/index.js` (Cloud Function déclenchée à la création
+d'un document `calls/{callId}`) envoie un message FCM en priorité haute à la tablette dès qu'un appel
+apparaît — c'est le seul mécanisme qu'Android garantit de faire percer la mise en veille profonde,
+sans dépendre d'une connexion réseau qui reste ouverte. Côté Android, `SeniorVisioMessagingService`
+reçoit ce message et démarre directement `IncomingCallService`, exactement comme le fait
+`CallListenerService` — les deux voies coexistent (le push est la voie fiable, l'écoute Firestore
+permanente reste une redondance qui ne coûte rien). Le token FCM de la tablette est enregistré dans
+Firestore (`devices/jean_tablet`) au démarrage de `MainActivity` et à chaque renouvellement du token.
+Le message push ne contient volontairement que l'identifiant d'appel et le nom de l'appelant (FCM
+limite chaque message à 4 Ko, largement dépassé par une photo encodée en base64) ; le reste de
+l'écran d'appel suit son circuit habituel une fois l'appel décroché.
+
+**Mise en service, deux étapes manuelles restantes** (pas faisables depuis ce dépôt) :
+1. Passer le projet Firebase `seniorvisio` au plan payant "Blaze" dans la console Firebase — requis
+   par Google pour toute Cloud Function, le volume réel de cette appli restera dans le quota gratuit
+   (Blaze n'implique pas d'être facturé, juste d'avoir une carte enregistrée).
+2. Générer une clé de compte de service (console Firebase → ⚙️ Paramètres du projet → Comptes de
+   service → Générer une nouvelle clé privée) et l'ajouter comme secret GitHub du dépôt sous le nom
+   `FIREBASE_SERVICE_ACCOUNT` (coller le contenu JSON tel quel). Une fois ce secret présent, le
+   workflow `.github/workflows/deploy-functions.yml` déploie automatiquement la fonction à chaque
+   modification de `functions/`.
+
+Tant que ces deux étapes ne sont pas faites, la Cloud Function n'est pas déployée : les appels
+continuent de fonctionner via la voie existante (`CallListenerService`), sans le bénéfice du réveil
+push.
 
 En complément de l'exemption d'optimisation batterie ci-dessus, `IncomingCallService` acquiert aussi
 un `WakeLock` partiel (toujours avec un timeout de sécurité de 10s, pour ne jamais fuiter en cas de
