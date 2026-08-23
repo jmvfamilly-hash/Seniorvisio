@@ -31,4 +31,4 @@ jobs:
       - name: Deploy functions
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
-        run: npx firebase-tools deploy --only functions --project seniorvisio --non-interactive
+        run: npx firebase-tools deploy --only functions --project seniorvisio --non-interactive --force
