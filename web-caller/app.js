@@ -10,6 +10,48 @@ const CONFIG = {
   callerName: "Un proche",
 };
 
+// --- Réglages mémorisés d'un appel à l'autre (volume, taille de texte...) ---
+// Stockés dans ce navigateur uniquement (localStorage) : chaque proche qui
+// appelle depuis son propre téléphone garde ses propres réglages préférés,
+// plutôt qu'un réglage partagé côté tablette qui écraserait les préférences
+// des autres appelants.
+const SETTINGS_STORAGE_KEY = "seniorvisio_caller_settings";
+const DEFAULT_SETTINGS = {
+  volume: 100,
+  captionEnabled: false,
+  selfPreview: false,
+  textSize: 56,
+  scrollSpeed: 50,
+};
+
+function loadSavedSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return null;
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+  } catch (e) {
+    return null;
+  }
+}
+
+function currentSettingsFromUi() {
+  return {
+    volume: Number(els.volumeSlider.value),
+    captionEnabled: els.captionToggle.checked,
+    selfPreview: els.selfPreviewToggle.checked,
+    textSize: Number(els.textSizeSlider.value),
+    scrollSpeed: Number(els.scrollSpeedSlider.value),
+  };
+}
+
+function applySettingsToUi(settings) {
+  els.volumeSlider.value = settings.volume;
+  els.captionToggle.checked = settings.captionEnabled;
+  els.selfPreviewToggle.checked = settings.selfPreview;
+  els.textSizeSlider.value = settings.textSize;
+  els.scrollSpeedSlider.value = settings.scrollSpeed;
+}
+
 // --- Câblage UI ---
 const engine = new RealCallEngine(FIREBASE_CONFIG);
 
@@ -24,6 +66,7 @@ const els = {
   retryButton: document.getElementById("retryButton"),
   hangupButton: document.getElementById("hangupButton"),
   toggleViewButton: document.getElementById("toggleViewButton"),
+  rememberSettingsButton: document.getElementById("rememberSettingsButton"),
   callStats: document.getElementById("callStats"),
   volumeSlider: document.getElementById("volumeSlider"),
   captionToggle: document.getElementById("captionToggle"),
@@ -81,11 +124,8 @@ els.toggleViewButton.addEventListener("click", () => {
 });
 
 els.callButton.addEventListener("click", async () => {
-  els.volumeSlider.value = 100;
-  els.captionToggle.checked = false;
-  els.selfPreviewToggle.checked = false;
-  els.textSizeSlider.value = 56;
-  els.scrollSpeedSlider.value = 50;
+  const settings = loadSavedSettings() || DEFAULT_SETTINGS;
+  applySettingsToUi(settings);
   els.callingHint.textContent = "Connexion à sa tablette…";
   els.countdownFill.style.width = "0%";
   els.countdownText.textContent = "";
@@ -101,8 +141,23 @@ els.callButton.addEventListener("click", async () => {
   // le bouton, sans plus aucun moyen de relancer la connexion pour cet appel.
   els.forceConnectButton.disabled = true;
   showState("calling");
-  await engine.startCall(CONFIG.targetDeviceId, CONFIG.callerName);
+  await engine.startCall(CONFIG.targetDeviceId, CONFIG.callerName, {
+    remoteVolume: settings.volume / 100,
+    captionModeEnabled: settings.captionEnabled,
+    captionTextSize: settings.textSize,
+    captionMaxScrollSpeedDpPerSec: settings.scrollSpeed,
+    selfPreviewEnabled: settings.selfPreview,
+  });
   els.forceConnectButton.disabled = false;
+});
+
+els.rememberSettingsButton.addEventListener("click", () => {
+  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(currentSettingsFromUi()));
+  const original = els.rememberSettingsButton.textContent;
+  els.rememberSettingsButton.textContent = "✅ Réglages mémorisés";
+  setTimeout(() => {
+    els.rememberSettingsButton.textContent = original;
+  }, 2000);
 });
 
 engine.onCountdown((remaining, total) => {

@@ -32,6 +32,7 @@ button {
 }
 
 button.secondary { background: #7F8C8D; }
+#rememberSettingsButton { margin-top: 16px; font-size: 13px; }
 button.danger { background: #C0392B; }
 
 .hint { color: #AAB4C8; font-size: 14px; margin-top: 8px; }

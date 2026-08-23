@@ -133,6 +133,13 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   d'écoute éteint jusqu'à un redémarrage ou une ouverture manuelle, avec tout appel tenté entre-temps
   raté (voir `CallSignalingClient.listenForRingingCalls`, qui ignore volontairement tout appel déjà
   "en sonnerie" au moment où l'écoute démarre, pour ne pas re-déclencher un vieil appel oublié)
+- **Mémorisation des réglages du proche d'un appel à l'autre** : bouton "💾 Mémoriser ces réglages pour
+  la prochaine fois" côté PWA (onglet réglages), qui sauvegarde volume/sous-titres/taille de
+  texte/vitesse de défilement/aperçu de soi dans le `localStorage` du navigateur du proche (propre à
+  chaque appelant, pas partagé). Au prochain appel, ces valeurs sont réappliquées à l'interface et
+  transmises dès la création du document Firestore (`WebRtcCallEngine.startCall(..., initialSettings)`),
+  pour que Jean retrouve directement le confort habituel sans que le proche ait à retoucher chaque
+  curseur avant que la vidéo ne soit connectée
 - **Photo du proche à la réception de l'appel** : le PWA capture une photo (240x240, JPEG compressé)
   depuis la caméra du proche dès le début de l'appel et l'envoie via Firestore ; la tablette l'affiche
   en rond au-dessus du nom pendant le décompte, pour une reconnaissance immédiate. Non bloquant si la

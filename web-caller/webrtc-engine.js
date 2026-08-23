@@ -70,7 +70,7 @@ class RealCallEngine extends CallEngine {
    */
   onFullscreenCaption(callback) { this._fullscreenCaptionCb = callback; }
 
-  async startCall(targetId, callerName) {
+  async startCall(targetId, callerName, initialSettings = {}) {
     // Capturé au tout début : si cancelCall() est appelé pendant que cette
     // fonction attend encore (caméra, création de l'offre, écriture
     // Firestore...), la génération change et isStale() le détecte au
@@ -181,10 +181,15 @@ class RealCallEngine extends CallEngine {
       status: "ringing",
       offerSdp: offer.sdp,
       callerPhotoBase64: callerPhotoBase64 || null,
-      captionModeEnabled: false,
-      captionTextSize: 56,
-      captionMaxScrollSpeedDpPerSec: 50,
-      selfPreviewEnabled: false,
+      // Réglages mémorisés d'un appel précédent (voir app.js, bouton
+      // "Mémoriser ces réglages") appliqués dès la sonnerie plutôt que
+      // seulement une fois connecté, pour que Jean retrouve directement le
+      // confort habituel sans que le proche ait à retoucher chaque curseur.
+      remoteVolume: initialSettings.remoteVolume ?? 1,
+      captionModeEnabled: initialSettings.captionModeEnabled ?? false,
+      captionTextSize: initialSettings.captionTextSize ?? 56,
+      captionMaxScrollSpeedDpPerSec: initialSettings.captionMaxScrollSpeedDpPerSec ?? 50,
+      selfPreviewEnabled: initialSettings.selfPreviewEnabled ?? false,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
 

@@ -5,7 +5,8 @@
  * transport.
  */
 class CallEngine {
-  async startCall(targetId, callerName) { throw new Error("not implemented"); }
+  /** initialSettings (optionnel) : réglages à appliquer dès la création de l'appel (voir app.js, "Mémoriser ces réglages"). */
+  async startCall(targetId, callerName, initialSettings) { throw new Error("not implemented"); }
   async cancelCall() { throw new Error("not implemented"); }
   onBlocked(callback) { throw new Error("not implemented"); }
   onConnected(callback) { throw new Error("not implemented"); }
