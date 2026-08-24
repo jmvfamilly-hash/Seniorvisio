@@ -5,18 +5,34 @@ Génère le QR code de provisioning "Device Owner" Android pour Senior Visio
 mot de passe Wi-Fi en clair — celui-ci vient d'un secret GitHub.
 """
 
-import hashlib
 import base64
+import binascii
 import json
 import os
+import re
+import subprocess
 
 import qrcode
 
 
-def apk_checksum(path: str) -> str:
-    with open(path, "rb") as f:
-        digest = hashlib.sha256(f.read()).digest()
-    return base64.urlsafe_b64encode(digest).decode().rstrip("=")
+def signature_checksum(apk_path: str) -> str:
+    """
+    Empreinte de la clé de signature de l'APK (PROVISIONING_DEVICE_ADMIN_
+    SIGNATURE_CHECKSUM), pas du fichier lui-même (PACKAGE_CHECKSUM) — ce
+    dernier est peu fiable pour le provisioning Device Owner par QR code à
+    partir d'Android 14, Google recommande désormais explicitement la
+    variante par empreinte de certificat.
+    """
+    output = subprocess.run(
+        ["keytool", "-printcert", "-jarfile", apk_path],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    match = re.search(r"SHA256:\s*([0-9A-Fa-f:]+)", output)
+    if not match:
+        raise RuntimeError(f"Empreinte SHA256 introuvable dans la sortie de keytool:\n{output}")
+    hex_digest = match.group(1).replace(":", "")
+    digest_bytes = binascii.unhexlify(hex_digest)
+    return base64.urlsafe_b64encode(digest_bytes).decode().rstrip("=")
 
 
 def main() -> None:
@@ -25,8 +41,8 @@ def main() -> None:
             "com.seniorvisio/.admin.SeniorVisioDeviceAdminReceiver",
         "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION":
             os.environ["APK_URL"],
-        "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_CHECKSUM":
-            apk_checksum("target.apk"),
+        "android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM":
+            signature_checksum("target.apk"),
         "android.app.extra.PROVISIONING_WIFI_SSID": os.environ["WIFI_SSID"],
         "android.app.extra.PROVISIONING_WIFI_PASSWORD": os.environ["WIFI_PASSWORD"],
         "android.app.extra.PROVISIONING_WIFI_SECURITY_TYPE": "WPA",

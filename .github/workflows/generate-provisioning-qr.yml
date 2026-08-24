@@ -34,6 +34,12 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Set up JDK (pour keytool)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Install qrcode
         run: pip install "qrcode[pil]"
 
