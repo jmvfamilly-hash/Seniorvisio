@@ -43,7 +43,7 @@ def signature_checksum(apk_path: str) -> str:
 def main() -> None:
     payload = {
         "android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME":
-            "com.seniorvisio/.admin.SeniorVisioDeviceAdminReceiver",
+            os.environ.get("ADMIN_COMPONENT", "com.seniorvisio/.admin.SeniorVisioDeviceAdminReceiver"),
         "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION":
             os.environ["APK_URL"],
         "android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM":

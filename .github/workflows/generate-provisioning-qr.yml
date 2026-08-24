@@ -21,6 +21,11 @@ on:
         description: "URL de téléchargement de l'APK à utiliser pour le provisioning"
         required: true
         type: string
+      admin_component:
+        description: "Composant DeviceAdminReceiver (par défaut : Senior Visio)"
+        required: false
+        type: string
+        default: "com.seniorvisio/.admin.SeniorVisioDeviceAdminReceiver"
 
 jobs:
   generate-qr:
@@ -57,6 +62,7 @@ jobs:
           WIFI_SSID: ${{ inputs.wifi_ssid }}
           WIFI_PASSWORD: ${{ secrets.WIFI_PASSWORD }}
           APK_URL: ${{ inputs.apk_url }}
+          ADMIN_COMPONENT: ${{ inputs.admin_component }}
         run: python3 scripts/generate_provisioning_qr.py
 
       - name: Upload QR code
