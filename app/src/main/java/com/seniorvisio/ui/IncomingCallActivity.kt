@@ -27,6 +27,7 @@ import android.widget.TextView
 import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.service.IncomingCallService
 import com.seniorvisio.service.TimedCallAlertController
@@ -100,6 +101,7 @@ class IncomingCallActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_incoming_call)
         findViewById<TextView>(R.id.textBuildRev).text = BuildConfig.BUILD_REV
+        KioskManager.startIfDeviceOwner(this)
 
         val callId = intent.getStringExtra(EXTRA_CALL_ID)
         if (callId == null) {

@@ -6,9 +6,12 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.google.firebase.firestore.ListenerRegistration
+import com.seniorvisio.core.DeviceStatusReporter
 import com.seniorvisio.signaling.CallSignalingClient
 
 /**
@@ -29,10 +32,25 @@ class CallListenerService : LifecycleService() {
     private val signaling = CallSignalingClient()
     private var callListener: ListenerRegistration? = null
 
+    // Remplace le tableau de bord Headwind (abandonné, voir README > Déploiement) :
+    // statut régulier + mise à jour à distance, portés par ce service permanent
+    // plutôt qu'un composant séparé, pour ne pas dépendre d'un cycle de vie
+    // supplémentaire à maintenir en vie.
+    private val statusReporter = DeviceStatusReporter(this)
+    private val heartbeatHandler = Handler(Looper.getMainLooper())
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            statusReporter.reportHeartbeat()
+            heartbeatHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         startForeground(FOREGROUND_ID, buildForegroundNotification())
         startListening()
+        statusReporter.listenForRemoteUpdate()
+        heartbeatHandler.post(heartbeatRunnable)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -56,6 +74,7 @@ class CallListenerService : LifecycleService() {
     override fun onDestroy() {
         callListener?.remove()
         callListener = null
+        heartbeatHandler.removeCallbacks(heartbeatRunnable)
         super.onDestroy()
     }
 
@@ -79,5 +98,6 @@ class CallListenerService : LifecycleService() {
     companion object {
         private const val FOREGROUND_ID = 43
         private const val CHANNEL_ID = "senior_visio_listener"
+        private const val HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000L
     }
 }

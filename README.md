@@ -126,13 +126,14 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   brève coupure se résorbant souvent seule) et raccroche proprement de son côté ; chaque étape du
   nettoyage tablette est isolée dans son propre `try/catch` pour que l'échec d'une seule n'empêche
   jamais les suivantes de s'exécuter
-- **Réécoute des appels après une mise à jour silencieuse (MDM)** : `BootReceiver` relance
+- **Réécoute des appels après une mise à jour silencieuse** : `BootReceiver` relance
   `CallListenerService` non seulement au démarrage de la tablette, mais aussi juste après une mise à
-  jour de l'appli (`ACTION_MY_PACKAGE_REPLACED`) — une mise à jour poussée silencieusement par un MDM
-  (Headwind) tue le processus en cours sans jamais le relancer, ce qui aurait sinon laissé le service
-  d'écoute éteint jusqu'à un redémarrage ou une ouverture manuelle, avec tout appel tenté entre-temps
-  raté (voir `CallSignalingClient.listenForRingingCalls`, qui ignore volontairement tout appel déjà
-  "en sonnerie" au moment où l'écoute démarre, pour ne pas re-déclencher un vieil appel oublié)
+  jour de l'appli (`ACTION_MY_PACKAGE_REPLACED`) — une mise à jour silencieuse (celle déclenchée à
+  distance par `DeviceStatusReporter`, voir plus bas) tue le processus en cours sans jamais le
+  relancer, ce qui aurait sinon laissé le service d'écoute éteint jusqu'à un redémarrage ou une
+  ouverture manuelle, avec tout appel tenté entre-temps raté (voir
+  `CallSignalingClient.listenForRingingCalls`, qui ignore volontairement tout appel déjà "en sonnerie"
+  au moment où l'écoute démarre, pour ne pas re-déclencher un vieil appel oublié)
 - **Mémorisation des réglages du proche d'un appel à l'autre** : bouton "💾 Mémoriser ces réglages pour
   la prochaine fois" côté PWA (onglet réglages), qui sauvegarde volume/sous-titres/taille de
   texte/vitesse de défilement/aperçu de soi dans le `localStorage` du navigateur du proche (propre à
@@ -276,11 +277,35 @@ garder l'écran forcé allumé hors appel. Le délai réel entre la réception d
 l'écran est tracé dans les logs (`Log.i`, tag `IncomingCallActivity`), pour pouvoir diagnostiquer une
 régression après une future mise à jour Android sur le parc de tablettes.
 
-Reste à configurer côté console Headwind MDM (une fois le compte créé, voir plan de déploiement) :
-timeout de mise en veille écran (30-60s), et surtout la liste blanche d'optimisation batterie poussée
-par policy plutôt que dépendre uniquement de la demande faite au premier lancement — c'est le réglage
-qui se réinitialise le plus souvent après une mise à jour Android ou un reset du device owner, donc à
-vérifier après chaque redémarrage/mise à jour de la tablette de test avant promotion en production.
+## Kiosque et déploiement : Device Owner intégré, plus de MDM tiers
+
+Le déploiement via Headwind MDM (essayé initialement) a été abandonné : disproportionné pour le
+besoin réel (empêcher de quitter l'appli, forcer une mise à jour à distance, connaître l'état de la
+tablette), et un blocage Knox est survenu après suppression d'un appareil côté console sans
+désenrôlement propre (la tablette restait verrouillée en Device Owner, liée à un enregistrement qui
+n'existait plus côté serveur, sans qu'aucune combinaison de touches ne permette d'y accéder à
+nouveau). Remplacé par un mécanisme intégré à l'appli, sans compte ni service tiers :
+
+- **Kiosque** (`KioskManager.kt`) : Senior Visio se déclare lui-même en mode kiosque natif Android
+  (`Activity.startLockTask()`) si — et seulement si — il est provisionné comme **Device Owner** de la
+  tablette (`SeniorVisioDeviceAdminReceiver.kt`). Appelé au démarrage de `MainActivity` et
+  `IncomingCallActivity` ; ne fait rien tant que l'appli n'est pas provisionnée (développement, test).
+- **Mise à jour à distance** (`DeviceStatusReporter.kt`) : `CallListenerService` (déjà un foreground
+  service permanent) écoute en continu un champ Firestore (`devices/jean_tablet.requestedVersion` +
+  `.requestedApkUrl`) ; dès qu'une version différente de celle installée est demandée, télécharge l'APK
+  et l'installe silencieusement via `PackageInstaller` — seul un Device Owner peut le faire sans
+  confirmation manuelle affichée sur l'écran de la tablette. Le résultat (succès/échec) est remonté
+  dans Firestore par `UpdateStatusReceiver.kt`.
+- **Statut** : le même service publie toutes les 5 minutes un signe de vie dans Firestore (niveau de
+  batterie, version installée `BuildConfig.BUILD_REV`, horodatage) — reste à construire une petite page
+  de suivi (sur le modèle de `web-caller/`) pour le consulter facilement ; en attendant, consultable
+  directement dans la console Firebase (Firestore Database → `devices/jean_tablet`).
+
+**Provisionnement (une seule fois, après reset d'usine de la tablette)** : le Device Owner ne peut être
+défini que sur un appareil sans aucun compte configuré. Au premier démarrage, avant l'assistant de
+configuration Android, tapoter 6 fois sur l'écran de bienvenue déclenche le scanner QR — reste à
+générer ce QR (charge utile de provisioning Android standard pointant vers `SeniorVisioDeviceAdminReceiver`
+et l'URL de téléchargement de l'APK) une fois la tablette prête à être réenrôlée.
 
 **Test réel sur Android 16 (One UI 8.5)** : l'écran d'appel ne s'affichait jamais si l'application
 n'était plus au premier plan, y compris avec le service actif (notification visible) et l'app déjà

@@ -24,6 +24,7 @@ import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
 import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
+import com.seniorvisio.core.KioskManager
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.signaling.CallSignalingClient
 
@@ -83,6 +84,7 @@ class MainActivity : AppCompatActivity() {
         requestIgnoreBatteryOptimizations()
         requestFullScreenIntentPermission()
         registerFcmToken()
+        KioskManager.startIfDeviceOwner(this)
     }
 
     /**

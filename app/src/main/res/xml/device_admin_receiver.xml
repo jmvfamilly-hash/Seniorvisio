@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Déclaration minimale requise par Android pour tout DeviceAdminReceiver.
+     Les capacités réelles de Senior Visio en tant que "Device Owner" (mode
+     kiosque, installation silencieuse de mises à jour) viennent des appels
+     DevicePolicyManager dans le code, pas de cette liste de politiques —
+     qui ne sert qu'aux apps de simple "Device Admin" avec confirmation
+     utilisateur, non au statut Device Owner provisionné une fois pour
+     toutes au premier démarrage de la tablette.
+-->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies>
+        <force-lock />
+        <wipe-data />
+    </uses-policies>
+</device-admin>
