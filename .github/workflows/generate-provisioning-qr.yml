@@ -1,0 +1,52 @@
+name: Generate Device Owner provisioning QR code
+
+# Génère le QR code de provisioning Android (scanné au tout premier démarrage
+# d'une tablette fraîchement réinitialisée, voir README > Kiosque et
+# déploiement) sans jamais faire transiter le mot de passe Wi-Fi par la
+# conversation avec l'assistant : le SSID est passé en paramètre (non
+# sensible, diffusé publiquement par la box elle-même), le mot de passe vient
+# du secret WIFI_PASSWORD du dépôt.
+
+on:
+  workflow_dispatch:
+    inputs:
+      wifi_ssid:
+        description: "Nom du réseau Wi-Fi (SSID)"
+        required: true
+        type: string
+      apk_url:
+        description: "URL de téléchargement de l'APK à utiliser pour le provisioning"
+        required: true
+        type: string
+
+jobs:
+  generate-qr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install qrcode
+        run: pip install "qrcode[pil]"
+
+      - name: Download target APK
+        run: curl -L -o target.apk "${{ inputs.apk_url }}"
+
+      - name: Build provisioning QR code
+        env:
+          WIFI_SSID: ${{ inputs.wifi_ssid }}
+          WIFI_PASSWORD: ${{ secrets.WIFI_PASSWORD }}
+          APK_URL: ${{ inputs.apk_url }}
+        run: python3 scripts/generate_provisioning_qr.py
+
+      - name: Upload QR code
+        uses: actions/upload-artifact@v4
+        with:
+          name: provisioning-qr
+          path: provisioning-qr.png
+          retention-days: 1
