@@ -8,6 +8,9 @@ name: Generate Device Owner provisioning QR code
 # du secret WIFI_PASSWORD du dépôt.
 
 on:
+  push:
+    paths:
+      - '.github/workflows/generate-provisioning-qr.yml'
   workflow_dispatch:
     inputs:
       wifi_ssid:
