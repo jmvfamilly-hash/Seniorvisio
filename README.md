@@ -301,6 +301,14 @@ nouveau). Remplacé par un mécanisme intégré à l'appli, sans compte ni servi
   de suivi (sur le modèle de `web-caller/`) pour le consulter facilement ; en attendant, consultable
   directement dans la console Firebase (Firestore Database → `devices/jean_tablet`).
 
+- **Configuration Wi-Fi à distance de tout accès aux Réglages système**
+  (`WifiConfigurator.kt`) : écran de réglages admin (`AdminSettingsActivity`, accessible par un appui
+  long sur le numéro de version en haut à gauche + PIN admin) avec un champ SSID/mot de passe — utile en
+  particulier à l'arrivée dans un nouveau lieu (ex. maison de retraite), où le réseau diffère de celui
+  utilisé pendant les tests. Repose sur l'ancienne API `WifiManager` (dépréciée pour les apps
+  classiques depuis Android 10), qu'Android continue explicitement d'autoriser pour les apps Device
+  Owner — ne fonctionne donc, comme le reste, que sur la tablette réellement déployée.
+
 **Provisionnement (une seule fois, après reset d'usine de la tablette)** : le Device Owner ne peut être
 défini que sur un appareil sans aucun compte configuré. Au premier démarrage, avant l'assistant de
 configuration Android, tapoter 6 fois sur l'écran de bienvenue déclenche le scanner QR — reste à

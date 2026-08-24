@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_height="match_parent">
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="32dp">
 
@@ -37,4 +40,50 @@
         android:layout_marginTop="32dp"
         android:text="Enregistrer" />
 
+    <!-- Utile à l'arrivée dans un nouveau lieu (ex. maison de retraite), où
+         le réseau diffère de celui utilisé pendant les tests — seul moyen de
+         changer de Wi-Fi une fois en mode kiosque, sans accès aux Réglages
+         système (voir WifiConfigurator.kt). Fonctionne uniquement une fois
+         la tablette provisionnée en Device Owner. -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="40dp"
+        android:text="Wi-Fi de la tablette"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Nom du réseau (SSID)"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/inputWifiSsid"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Mot de passe"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/inputWifiPassword"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textPassword" />
+
+    <Button
+        android:id="@+id/buttonConnectWifi"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Se connecter à ce Wi-Fi" />
+
 </LinearLayout>
+</ScrollView>

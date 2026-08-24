@@ -1,8 +1,10 @@
 package com.seniorvisio.ui
 
 import android.Manifest
+import android.app.AlertDialog
 import android.app.NotificationManager
 import android.content.Intent
+import android.text.InputType
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -24,6 +26,8 @@ import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
 import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
+import com.seniorvisio.admin.AdminSettingsActivity
+import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.signaling.CallSignalingClient
@@ -62,7 +66,12 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        findViewById<TextView>(R.id.textBuildRev).text = BuildConfig.BUILD_REV
+        val textBuildRev = findViewById<TextView>(R.id.textBuildRev)
+        textBuildRev.text = BuildConfig.BUILD_REV
+        // Point d'entrée discret vers les réglages admin (Wi-Fi, PIN, durée
+        // du décompte) : une fois en mode kiosque, plus aucun autre moyen d'y
+        // accéder (Réglages système bloqués), voir KioskManager.
+        textBuildRev.setOnLongClickListener { promptAdminPin(); true }
 
         idleContent = findViewById(R.id.idleContent)
         roomCaptionScroll = findViewById(R.id.roomCaptionScroll)
@@ -85,6 +94,24 @@ class MainActivity : AppCompatActivity() {
         requestFullScreenIntentPermission()
         registerFcmToken()
         KioskManager.startIfDeviceOwner(this)
+    }
+
+    private fun promptAdminPin() {
+        val input = android.widget.EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        }
+        AlertDialog.Builder(this)
+            .setTitle("PIN admin")
+            .setView(input)
+            .setPositiveButton("OK") { _, _ ->
+                if (input.text.toString() == AdminConfig(this).adminPin) {
+                    startActivity(Intent(this, AdminSettingsActivity::class.java))
+                } else {
+                    Toast.makeText(this, "PIN incorrect", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Annuler", null)
+            .show()
     }
 
     /**
