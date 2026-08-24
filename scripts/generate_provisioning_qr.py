@@ -22,14 +22,19 @@ def signature_checksum(apk_path: str) -> str:
     dernier est peu fiable pour le provisioning Device Owner par QR code à
     partir d'Android 14, Google recommande désormais explicitement la
     variante par empreinte de certificat.
+
+    keytool -printcert ne comprend que l'ancien format de signature JAR
+    (META-INF/*.RSA) : nos APK, signés uniquement au format moderne v2/v3
+    (comportement par défaut d'AGP pour minSdk >= 24), le font échouer avec
+    "Not a signed jar file". apksigner, lui, comprend tous les formats.
     """
     output = subprocess.run(
-        ["keytool", "-printcert", "-jarfile", apk_path],
+        [os.environ["APKSIGNER"], "verify", "--print-certs", apk_path],
         check=True, capture_output=True, text=True,
     ).stdout
-    match = re.search(r"SHA256:\s*([0-9A-Fa-f:]+)", output)
+    match = re.search(r"SHA-256 digest:\s*([0-9A-Fa-f:]+)", output)
     if not match:
-        raise RuntimeError(f"Empreinte SHA256 introuvable dans la sortie de keytool:\n{output}")
+        raise RuntimeError(f"Empreinte SHA-256 introuvable dans la sortie d'apksigner:\n{output}")
     hex_digest = match.group(1).replace(":", "")
     digest_bytes = binascii.unhexlify(hex_digest)
     return base64.urlsafe_b64encode(digest_bytes).decode().rstrip("=")

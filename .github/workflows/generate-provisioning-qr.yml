@@ -34,11 +34,17 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Set up JDK (pour keytool)
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: Install Android build-tools (pour apksigner)
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;34.0.0"
+          echo "APKSIGNER=$ANDROID_HOME/build-tools/34.0.0/apksigner" >> "$GITHUB_ENV"
 
       - name: Install qrcode
         run: pip install "qrcode[pil]"
