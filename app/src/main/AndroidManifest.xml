@@ -45,6 +45,14 @@
             android:exported="false"
             android:label="Réglages (admin)" />
 
+        <!-- Labo d'étude, sans lien avec l'usage normal (voir
+             TranscriptionLabActivity.kt) : compare les moteurs de
+             transcription vocale disponibles. -->
+        <activity
+            android:name=".ui.TranscriptionLabActivity"
+            android:exported="false"
+            android:label="Labo transcription" />
+
         <service
             android:name=".service.IncomingCallService"
             android:exported="false"

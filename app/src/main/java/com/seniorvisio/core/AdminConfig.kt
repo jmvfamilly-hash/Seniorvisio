@@ -50,6 +50,13 @@ class AdminConfig(context: Context) {
         get() = prefs.getString(KEY_ADMIN_PIN, "0000") ?: "0000"
         set(value) = prefs.edit().putString(KEY_ADMIN_PIN, value).apply()
 
+    // --- Clé API AssemblyAI, utilisée uniquement par le labo de comparaison
+    // de transcription (voir TranscriptionLabActivity) — jamais par les
+    // sous-titres de la pièce ou d'appel en usage normal. ---
+    var assemblyAiApiKey: String
+        get() = prefs.getString(KEY_ASSEMBLYAI_API_KEY, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_ASSEMBLYAI_API_KEY, value).apply()
+
     fun isCurrentlyNightWindow(hourNow: Int): Boolean {
         return if (nightStartHour <= nightEndHour) {
             hourNow in nightStartHour until nightEndHour
@@ -77,5 +84,6 @@ class AdminConfig(context: Context) {
         private const val KEY_COUNTDOWN_SECONDS = "countdown_seconds"
         private const val KEY_BLOCKING_ENABLED = "blocking_enabled"
         private const val KEY_ADMIN_PIN = "admin_pin"
+        private const val KEY_ASSEMBLYAI_API_KEY = "assemblyai_api_key"
     }
 }

@@ -277,6 +277,32 @@ garder l'écran forcé allumé hors appel. Le délai réel entre la réception d
 l'écran est tracé dans les logs (`Log.i`, tag `IncomingCallActivity`), pour pouvoir diagnostiquer une
 régression après une future mise à jour Android sur le parc de tablettes.
 
+## Labo de comparaison de transcription (étude, sans lien avec l'usage normal)
+
+Accessible par un appui long sur le bouton vert "🔤 Sous-titres" de l'écran d'accueil
+(`TranscriptionLabActivity.kt`). Objectif : comparer la qualité de plusieurs moteurs de
+reconnaissance vocale sur un seul et même enregistrement, pour que la comparaison porte sur le
+moteur et non sur la variabilité naturelle de deux prises différentes de la même phrase.
+
+- Enregistre une phrase test une fois (`MediaRecorder`, fichier `.m4a`).
+- Teste chaque moteur de reconnaissance vocale déclaré sur la tablette (natif Samsung, Google...),
+  détectés dynamiquement via `PackageManager.queryIntentServices`. Limite technique assumée : l'API
+  `SpeechRecognizer` d'Android n'accepte que le micro en direct, jamais un fichier — l'enregistrement
+  est donc rejoué à travers le haut-parleur pendant que chaque moteur écoute à son tour (acoustique de
+  la pièce non maîtrisée, mais phrase strictement identique pour chacun).
+- Envoie ensuite le même enregistrement à **AssemblyAI** (clé API à renseigner dans Réglages admin —
+  appui long sur le numéro de version + PIN), avec diarisation activée (`speaker_labels: true`) :
+  identifie des locuteurs distincts ("Locuteur A/B...") dans l'enregistrement.
+- Résultats affichés côte à côte (texte, confiance si disponible, tours de parole par locuteur pour
+  AssemblyAI) et exportables en JSON (bouton "Copier le JSON").
+
+**Sur l'objectif final** (filtrer la voix de Jean de celle des autres personnes présentes) : la
+diarisation d'AssemblyAI distingue des locuteurs différents dans un enregistrement donné, mais ne
+"reconnaît" pas Jean spécifiquement d'une session à l'autre — un repérage manuel reste nécessaire
+("c'est Jean qui parle ici"), pas encore une empreinte vocale personnelle apprise une fois pour
+toutes. Une vraie reconnaissance de locuteur persistante serait une étape ultérieure distincte,
+nécessitant un enrôlement explicite de la voix de Jean.
+
 ## Kiosque et déploiement : Device Owner intégré, plus de MDM tiers
 
 Le déploiement via Headwind MDM (essayé initialement) a été abandonné : disproportionné pour le

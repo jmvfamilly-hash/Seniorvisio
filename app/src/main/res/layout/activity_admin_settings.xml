@@ -85,5 +85,22 @@
         android:layout_marginTop="16dp"
         android:text="Se connecter à ce Wi-Fi" />
 
+    <!-- Utilisée uniquement par le labo de comparaison de transcription
+         (voir TranscriptionLabActivity.kt), jamais par les sous-titres en
+         usage normal. -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="40dp"
+        android:text="Clé API AssemblyAI (labo de transcription)"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/inputAssemblyAiKey"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textPassword" />
+
 </LinearLayout>
 </ScrollView>

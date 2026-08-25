@@ -80,6 +80,13 @@ class MainActivity : AppCompatActivity() {
         buttonStopRoomCaptions = findViewById(R.id.buttonStopRoomCaptions)
         buttonRoomCaptions.setOnClickListener { toggleRoomCaptions() }
         buttonStopRoomCaptions.setOnClickListener { toggleRoomCaptions() }
+        // Appui long : labo d'étude comparant les moteurs de transcription
+        // (voir TranscriptionLabActivity), sans toucher à l'usage normal du
+        // bouton (appui simple, inchangé).
+        buttonRoomCaptions.setOnLongClickListener {
+            startActivity(Intent(this, TranscriptionLabActivity::class.java))
+            true
+        }
 
         permissionLauncher.launch(
             arrayOf(
