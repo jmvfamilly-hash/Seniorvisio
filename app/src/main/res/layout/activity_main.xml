@@ -61,7 +61,7 @@
             android:gravity="center"
             android:textColor="#FFFFFF"
             android:textStyle="bold"
-            android:textSize="40sp"
+            android:textSize="@dimen/caption_text_size_default"
             android:text="" />
     </ScrollView>
 

@@ -11,10 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
-import android.speech.RecognitionListener
 import android.util.Log
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import android.view.View
 import android.widget.Button
 import android.widget.ScrollView
@@ -28,7 +25,10 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.AssemblyAiRollingTranscriber
 import com.seniorvisio.core.KioskManager
+import com.seniorvisio.core.MicPcmStreamer
+import com.seniorvisio.core.SpeakerUtterance
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.signaling.CallSignalingClient
 
@@ -53,7 +53,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var buttonRoomCaptions: Button
     private lateinit var buttonStopRoomCaptions: Button
 
-    private var speechRecognizer: SpeechRecognizer? = null
+    private var micStreamer: MicPcmStreamer? = null
+    private var transcriber: AssemblyAiRollingTranscriber? = null
     private var roomCaptionsActive = false
     // Distinct de roomCaptionsActive : reflète le choix de Jean, pas l'état
     // technique du moment (coupé pendant un appel entrant, voir onPause/
@@ -203,59 +204,67 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startRoomCaptions() {
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            Toast.makeText(this, "Reconnaissance vocale indisponible sur cette tablette", Toast.LENGTH_SHORT).show()
+        val apiKey = AdminConfig(this).assemblyAiApiKey
+        if (apiKey.isBlank()) {
+            Toast.makeText(this, "Clé AssemblyAI manquante (réglages admin)", Toast.LENGTH_LONG).show()
             roomCaptionsUserEnabled = false
             showIdleView()
             return
         }
-        if (speechRecognizer == null) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
-                setRecognitionListener(roomCaptionListener)
-            }
+        val newTranscriber = AssemblyAiRollingTranscriber(
+            apiKey = apiKey,
+            cacheDir = cacheDir,
+            onUtterance = { utterance -> runOnUiThread { onRoomUtterance(utterance) } },
+            onError = { message -> runOnUiThread { onRoomTranscriptionError(message) } },
+        )
+        val streamer = MicPcmStreamer { pcm, sampleRate -> newTranscriber.feed(pcm, sampleRate) }
+        if (!streamer.start()) {
+            Toast.makeText(this, "Micro indisponible sur cette tablette", Toast.LENGTH_SHORT).show()
+            roomCaptionsUserEnabled = false
+            showIdleView()
+            return
         }
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR")
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            // Le silence par défaut (courte pause naturelle entre deux phrases
-            // d'une conversation) fait sinon expirer la reconnaissance très
-            // vite (ERROR_SPEECH_TIMEOUT), relançant en boucle rapprochée —
-            // et chaque relance rejoue le bip de début d'écoute du service de
-            // reconnaissance d'Android, d'où des bips répétitifs sans jamais
-            // laisser le temps de capter une phrase entière.
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4000)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4000)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 15000)
-        }
-        speechRecognizer?.startListening(intent)
+        newTranscriber.start()
+        transcriber = newTranscriber
+        micStreamer = streamer
         roomCaptionsActive = true
     }
 
     private fun stopRoomCaptions() {
         roomCaptionsActive = false
-        speechRecognizer?.stopListening()
-        speechRecognizer?.cancel()
+        micStreamer?.stop()
+        micStreamer = null
+        transcriber?.stop()
+        transcriber = null
     }
 
-    /**
-     * L'API SpeechRecognizer traite une phrase à la fois : sans relance
-     * après chaque résultat/erreur, elle s'arrête au premier silence — même
-     * principe que côté PWA (voir webrtc-engine.js, recognition.onend).
-     */
-    private fun restartRoomCaptionsIfEnabled() {
-        if (!roomCaptionsUserEnabled) return
-        textRoomCaption.postDelayed({ if (roomCaptionsUserEnabled) startRoomCaptions() }, 300)
+    private fun onRoomUtterance(utterance: SpeakerUtterance) {
+        consecutiveErrorCount = 0
+        val text = if (utterance.speaker.isNotBlank()) "${utterance.speaker} : ${utterance.text}" else utterance.text
+        if (text.isNotBlank()) appendRoomCaption(text)
     }
 
-    // Nombre d'échecs à la suite (aucun résultat entre-temps) avant
-    // d'abandonner : sans ce garde-fou, une erreur qui se reproduit à
-    // chaque relance (micro indisponible, service de reconnaissance non
-    // fonctionnel sur cet appareil...) bouclait indéfiniment, avec à chaque
-    // tentative le bip de début d'écoute du service Android — de vrais bips
-    // répétitifs sans jamais rien afficher, plutôt qu'un message clair.
+    // Nombre d'échecs consécutifs (réseau, clé invalide...) avant d'abandonner
+    // et de revenir à l'écran d'accueil avec un message clair, plutôt que de
+    // continuer à tenter indéfiniment sans jamais rien afficher à Jean.
     private var consecutiveErrorCount = 0
     private val maxConsecutiveErrors = 3
+
+    private fun onRoomTranscriptionError(message: String) {
+        Log.w(TAG, "Sous-titres de la pièce : erreur AssemblyAI ($message)")
+        consecutiveErrorCount++
+        if (consecutiveErrorCount >= maxConsecutiveErrors) {
+            consecutiveErrorCount = 0
+            roomCaptionsUserEnabled = false
+            Toast.makeText(
+                this,
+                "La transcription ne fonctionne pas pour l'instant (connexion internet ?)",
+                Toast.LENGTH_LONG
+            ).show()
+            stopRoomCaptions()
+            showIdleView()
+        }
+    }
 
     private fun appendRoomCaption(text: String) {
         if (roomCaptionHistory.isNotEmpty()) roomCaptionHistory.append("\n")
@@ -271,49 +280,6 @@ class MainActivity : AppCompatActivity() {
     private fun showRoomCaptionText(text: String) {
         textRoomCaption.text = text
         textRoomCaption.post { roomCaptionScroll.smoothScrollTo(0, textRoomCaption.height) }
-    }
-
-    private val roomCaptionListener = object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) {}
-        override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rmsdB: Float) {}
-        override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() {}
-        override fun onEvent(eventType: Int, params: Bundle?) {}
-
-        override fun onError(error: Int) {
-            Log.w(TAG, "Sous-titres de la pièce : erreur reconnaissance vocale (code $error)")
-            consecutiveErrorCount++
-            if (consecutiveErrorCount >= maxConsecutiveErrors) {
-                consecutiveErrorCount = 0
-                roomCaptionsUserEnabled = false
-                Toast.makeText(
-                    this@MainActivity,
-                    "La reconnaissance vocale ne fonctionne pas pour l'instant sur cette tablette",
-                    Toast.LENGTH_LONG
-                ).show()
-                stopRoomCaptions()
-                showIdleView()
-                return
-            }
-            restartRoomCaptionsIfEnabled()
-        }
-
-        override fun onResults(results: Bundle?) {
-            consecutiveErrorCount = 0
-            val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-            if (!text.isNullOrEmpty()) appendRoomCaption(text)
-            restartRoomCaptionsIfEnabled()
-        }
-
-        override fun onPartialResults(partialResults: Bundle?) {
-            consecutiveErrorCount = 0
-            val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-            if (!text.isNullOrEmpty()) {
-                val preview = if (roomCaptionHistory.isNotEmpty()) "$roomCaptionHistory\n$text" else text
-                showRoomCaptionText(preview)
-            }
-        }
     }
 
     /**
@@ -334,8 +300,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        speechRecognizer?.destroy()
-        speechRecognizer = null
+        stopRoomCaptions()
     }
 
     companion object {

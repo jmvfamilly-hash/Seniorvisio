@@ -322,7 +322,6 @@ class RealCallEngine extends CallEngine {
     };
     resetSilenceTimer();
 
-    let lastSent = 0;
     recognition.onresult = (event) => {
       let text = "";
       let hasFinal = false;
@@ -338,15 +337,14 @@ class RealCallEngine extends CallEngine {
 
       resetSilenceTimer();
 
-      // Envoi toutes les ~300ms (plutôt que 500ms) : des incréments plus
-      // petits et plus fréquents donnent un défilement plus fluide côté
-      // tablette (voir IncomingCallActivity.setupCaptionMode) qu'un texte
-      // qui avance par gros blocs.
+      // Ne sert plus qu'au miroir local ci-dessous (onTranscript,
+      // onFullscreenCaption) : les sous-titres que Jean voit sur la tablette
+      // sont désormais transcrits directement là-bas depuis le flux audio
+      // WebRTC reçu, via AssemblyAI (voir WebRtcCallEngine.startAssemblyAiCaptions)
+      // — plus besoin d'envoyer ce texte par Firestore, ce qui évite de
+      // dépendre du support de la reconnaissance vocale par le navigateur du
+      // proche pour que Jean ait des sous-titres.
       const now = Date.now();
-      if (text && now - lastSent > 300 && this._callDocRef) {
-        lastSent = now;
-        this._callDocRef.update({ callerSpeechText: text }).catch(() => {});
-      }
 
       // Historique horodaté pour reconstituer ce que Jean voit avec le
       // retard mesuré côté tablette (voir _startFullscreenCaptionTick) —

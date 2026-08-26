@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Taille de départ commune aux sous-titres de la pièce (activity_main)
+         et aux sous-titres d'appel (activity_incoming_call) — ceux d'appel
+         restent ensuite ajustables à distance par le proche (voir
+         WebRtcCallEngine.listenForCaptionTextSize), ceux de la pièce non. -->
+    <dimen name="caption_text_size_default">32sp</dimen>
+</resources>

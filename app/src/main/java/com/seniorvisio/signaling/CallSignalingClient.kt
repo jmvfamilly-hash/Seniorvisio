@@ -83,25 +83,6 @@ class CallSignalingClient {
         )
     }
 
-    /**
-     * Texte transcrit en direct de la voix de l'appelant (voir
-     * web-caller/webrtc-engine.js). Ce listener écoute tout le document
-     * d'appel, donc il se redéclenche à chaque écriture Firestore pendant
-     * l'appel (volume, etc.), pas seulement quand le texte change — on ne
-     * notifie que sur un texte réellement différent, pour éviter de relancer
-     * inutilement l'animation de défilement côté tablette.
-     */
-    fun listenForCallerSpeech(callId: String, onText: (String) -> Unit): ListenerRegistration {
-        var lastText: String? = null
-        return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val text = snapshot?.getString(FIELD_CALLER_SPEECH)
-            if (!text.isNullOrEmpty() && text != lastText) {
-                lastText = text
-                onText(text)
-            }
-        }
-    }
-
     /** Niveau de volume choisi à distance par l'appelant (voir web-caller/webrtc-engine.js). */
     fun listenForRemoteVolume(callId: String, onVolume: (Double) -> Unit): ListenerRegistration {
         return callDoc(callId).addSnapshotListener { snapshot, _ ->
@@ -240,7 +221,6 @@ class CallSignalingClient {
         private const val FIELD_CALLER_PHOTO = "callerPhotoBase64"
         private const val FIELD_OFFER_SDP = "offerSdp"
         private const val FIELD_ANSWER_SDP = "answerSdp"
-        private const val FIELD_CALLER_SPEECH = "callerSpeechText"
         private const val FIELD_REMOTE_VOLUME = "remoteVolume"
         private const val FIELD_ALERT_STARTED_AT = "alertStartedAt"
         private const val FIELD_ALERT_DURATION = "alertDurationSeconds"

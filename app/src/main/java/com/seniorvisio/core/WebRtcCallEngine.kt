@@ -11,6 +11,7 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.seniorvisio.signaling.CallSignalingClient
 import com.seniorvisio.signaling.RemoteIceCandidate
 import org.webrtc.AudioTrack
+import org.webrtc.AudioTrackSink
 import org.webrtc.Camera2Enumerator
 import org.webrtc.CameraVideoCapturer
 import org.webrtc.DataChannel
@@ -28,6 +29,7 @@ import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
+import java.io.File
 
 /**
  * Implémentation WebRTC de [CallEngine]. Le signaling (échange de l'offre,
@@ -52,13 +54,14 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var localVideoTrack: VideoTrack? = null
     private var remoteVideoTrack: VideoTrack? = null
     private var remoteAudioTrack: AudioTrack? = null
+    private var assemblyAiTranscriber: AssemblyAiRollingTranscriber? = null
+    private var assemblyAiSink: AudioTrackSink? = null
 
     private var callerCandidatesListener: ListenerRegistration? = null
     private var callId: String? = null
 
     private var localRenderer: SurfaceViewRenderer? = null
     private var remoteRenderer: SurfaceViewRenderer? = null
-    private var speechListener: ListenerRegistration? = null
     private var volumeListener: ListenerRegistration? = null
     private var captionModeListener: ListenerRegistration? = null
     private var captionTextSizeListener: ListenerRegistration? = null
@@ -155,15 +158,48 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     /**
-     * Écoute le texte transcrit en direct de la voix de l'appelant (envoyé par
-     * webrtc-engine.js via reconnaissance vocale navigateur) pour le mode
-     * "sous-titres géants". Ne fait rien si le navigateur appelant ne
-     * supporte pas la reconnaissance vocale (ex. Safari/iOS) : aucun texte
-     * n'arrivera jamais, l'appel vidéo reste inchangé.
+     * Sous-titres d'appel transcrits directement depuis le flux audio WebRTC
+     * reçu par la tablette (voix du proche), via AssemblyAI — remplace
+     * l'ancien mécanisme où le navigateur appelant transcrivait lui-même sa
+     * propre voix (Web Speech API, voir historique web-caller/webrtc-engine.js)
+     * et l'envoyait par Firestore : ce dernier ne fonctionnait que sur les
+     * navigateurs supportant la reconnaissance vocale (Chrome desktop
+     * essentiellement), une contrainte côté proche qu'on voulait justement
+     * éliminer. Ici, la tablette transcrit elle-même ce qu'elle reçoit déjà
+     * pour la lecture audio de l'appel — aucune contrainte sur ce que le
+     * proche utilise pour appeler.
      */
-    fun listenForCaptions(onText: (String) -> Unit) {
-        val id = callId ?: return
-        speechListener = signaling.listenForCallerSpeech(id, onText)
+    fun startAssemblyAiCaptions(apiKey: String, cacheDir: File, onUtterance: (SpeakerUtterance) -> Unit) {
+        val transcriber = AssemblyAiRollingTranscriber(apiKey = apiKey, cacheDir = cacheDir, onUtterance = onUtterance)
+        assemblyAiTranscriber = transcriber
+        transcriber.start()
+        attachAssemblyAiSinkIfReady()
+    }
+
+    fun stopAssemblyAiCaptions() {
+        assemblyAiSink?.let { sink -> remoteAudioTrack?.removeSink(sink) }
+        assemblyAiSink = null
+        assemblyAiTranscriber?.stop()
+        assemblyAiTranscriber = null
+    }
+
+    /**
+     * La piste audio distante peut n'arriver qu'après [startAssemblyAiCaptions]
+     * (négociation ICE/SDP encore en cours) : appelé ici et à nouveau dès que
+     * la piste arrive (voir onTrack ci-dessous), pour couvrir les deux ordres.
+     */
+    private fun attachAssemblyAiSinkIfReady() {
+        val transcriber = assemblyAiTranscriber ?: return
+        val track = remoteAudioTrack ?: return
+        if (assemblyAiSink != null) return
+        val sink = AudioTrackSink { audioData, _, sampleRate, numberOfChannels, _ ->
+            val bytes = ByteArray(audioData.remaining())
+            audioData.get(bytes)
+            val mono = if (numberOfChannels > 1) downmixToMono(bytes, numberOfChannels) else bytes
+            transcriber.feed(mono, sampleRate)
+        }
+        track.addSink(sink)
+        assemblyAiSink = sink
     }
 
     /**
@@ -381,6 +417,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                     remoteAudioTrack = track
                     track.setVolume(pendingVolume)
                     currentVolume = pendingVolume
+                    attachAssemblyAiSinkIfReady()
                 }
             }
 
@@ -462,10 +499,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private fun cleanup() {
         cancelScheduledAutoHangup()
         restoreAudio()
+        stopAssemblyAiCaptions()
         callerCandidatesListener?.remove()
         callerCandidatesListener = null
-        speechListener?.remove()
-        speechListener = null
         volumeListener?.remove()
         volumeListener = null
         captionModeListener?.remove()

@@ -28,6 +28,7 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.KioskManager
+import com.seniorvisio.core.SpeakerUtterance
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.service.IncomingCallService
 import com.seniorvisio.service.TimedCallAlertController
@@ -369,11 +370,31 @@ class IncomingCallActivity : AppCompatActivity() {
         // Le défilement est piloté par le code (voir plus bas), pas par Jean.
         captionScroll.setOnTouchListener { _, _ -> true }
 
-        // L'écoute Firestore porte sur tout le document d'appel : elle se
-        // redéclenche à chaque nouveau texte transcrit (toutes les ~500ms),
-        // pas seulement quand l'activation change. Sans ce garde-fou, le
-        // fondu d'apparition repartirait de zéro à chaque sous-titre reçu,
-        // donnant un clignotement au lieu d'une simple mise à jour du texte.
+        val callCaptionHistory = StringBuilder()
+
+        // La transcription (et son coût API) ne tourne que pendant que le
+        // proche a explicitement activé les sous-titres — pas pendant tout
+        // l'appel par défaut.
+        fun startCallCaptioning() {
+            val apiKey = adminConfig.assemblyAiApiKey
+            if (apiKey.isBlank()) {
+                Log.w(TAG, "Sous-titres d'appel : clé AssemblyAI manquante (réglages admin)")
+                return
+            }
+            callCaptionHistory.clear()
+            callEngine.startAssemblyAiCaptions(apiKey, cacheDir) { utterance ->
+                if (callCaptionHistory.isNotEmpty()) callCaptionHistory.append("\n")
+                callCaptionHistory.append(
+                    if (utterance.speaker.isNotBlank()) "${utterance.speaker} : ${utterance.text}" else utterance.text
+                )
+                onCallCaptionText(callCaptionHistory.toString())
+            }
+        }
+
+        // Ce listener écoute tout le document d'appel Firestore, donc il se
+        // redéclenche à chaque écriture (volume, etc.), pas seulement quand
+        // l'activation change. Sans ce garde-fou, le fondu d'apparition
+        // repartirait de zéro à chaque écriture, donnant un clignotement.
         var captionsCurrentlyEnabled: Boolean? = null
         callEngine.listenForCaptionMode { enabled ->
             runOnUiThread {
@@ -382,10 +403,12 @@ class IncomingCallActivity : AppCompatActivity() {
                 if (enabled) {
                     captionBanner.visibility = View.VISIBLE
                     captionBanner.animate().alpha(1f).setDuration(400).start()
+                    startCallCaptioning()
                 } else {
                     captionBanner.animate().alpha(0f).setDuration(400)
                         .withEndAction { captionBanner.visibility = View.GONE }
                         .start()
+                    callEngine.stopAssemblyAiCaptions()
                 }
             }
         }
@@ -467,7 +490,13 @@ class IncomingCallActivity : AppCompatActivity() {
             maxScrollSpeedPxPerSec = dpPerSec * resources.displayMetrics.density
         }
 
-        callEngine.listenForCaptions { text ->
+        // Alimentée par startCallCaptioning() (transcription AssemblyAI de la
+        // piste audio distante, voir plus haut) — le texte reçu ne fait que
+        // grandir (chaque nouvelle tranche s'ajoute à l'historique), donc
+        // isContinuation reste vrai après la première tranche : le défilement
+        // suit sans jamais revenir en haut, jusqu'à une vraie coupure (arrêt
+        // puis réactivation des sous-titres par le proche).
+        fun onCallCaptionText(text: String) {
             runOnUiThread {
                 val isContinuation = lastCaptionText.isNotEmpty() && text.startsWith(lastCaptionText)
                 lastCaptionText = text
