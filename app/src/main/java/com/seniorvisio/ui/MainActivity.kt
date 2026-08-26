@@ -25,10 +25,9 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
-import com.seniorvisio.core.AssemblyAiRollingTranscriber
+import com.seniorvisio.core.AssemblyAiRealtimeTranscriber
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.MicPcmStreamer
-import com.seniorvisio.core.SpeakerUtterance
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.signaling.CallSignalingClient
 
@@ -54,7 +53,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var buttonStopRoomCaptions: Button
 
     private var micStreamer: MicPcmStreamer? = null
-    private var transcriber: AssemblyAiRollingTranscriber? = null
+    private var transcriber: AssemblyAiRealtimeTranscriber? = null
     private var roomCaptionsActive = false
     // Distinct de roomCaptionsActive : reflète le choix de Jean, pas l'état
     // technique du moment (coupé pendant un appel entrant, voir onPause/
@@ -211,20 +210,19 @@ class MainActivity : AppCompatActivity() {
             showIdleView()
             return
         }
-        val newTranscriber = AssemblyAiRollingTranscriber(
+        val newTranscriber = AssemblyAiRealtimeTranscriber(
             apiKey = apiKey,
-            cacheDir = cacheDir,
-            onUtterance = { utterance -> runOnUiThread { onRoomUtterance(utterance) } },
+            onTranscript = { text, isFinal -> runOnUiThread { onRoomTranscript(text, isFinal) } },
             onError = { message -> runOnUiThread { onRoomTranscriptionError(message) } },
         )
-        val streamer = MicPcmStreamer { pcm, sampleRate -> newTranscriber.feed(pcm, sampleRate) }
+        val streamer = MicPcmStreamer { pcm, _ -> newTranscriber.feed(pcm) }
         if (!streamer.start()) {
             Toast.makeText(this, "Micro indisponible sur cette tablette", Toast.LENGTH_SHORT).show()
             roomCaptionsUserEnabled = false
             showIdleView()
             return
         }
-        newTranscriber.start()
+        newTranscriber.start(sampleRate = 16000)
         transcriber = newTranscriber
         micStreamer = streamer
         roomCaptionsActive = true
@@ -238,32 +236,32 @@ class MainActivity : AppCompatActivity() {
         transcriber = null
     }
 
-    private fun onRoomUtterance(utterance: SpeakerUtterance) {
-        consecutiveErrorCount = 0
-        val text = if (utterance.speaker.isNotBlank()) "${utterance.speaker} : ${utterance.text}" else utterance.text
-        if (text.isNotBlank()) appendRoomCaption(text)
+    /** Même logique partiel/final que l'ancien SpeechRecognizer : la phrase en
+     * cours s'affiche en aperçu, et n'est ajoutée à l'historique qu'une fois
+     * confirmée (end_of_turn), pour ne pas la dupliquer. */
+    private fun onRoomTranscript(text: String, isFinal: Boolean) {
+        if (isFinal) {
+            if (text.isNotBlank()) appendRoomCaption(text)
+        } else if (text.isNotBlank()) {
+            val preview = if (roomCaptionHistory.isNotEmpty()) "$roomCaptionHistory\n$text" else text
+            showRoomCaptionText(preview)
+        }
     }
 
-    // Nombre d'échecs consécutifs (réseau, clé invalide...) avant d'abandonner
-    // et de revenir à l'écran d'accueil avec un message clair, plutôt que de
-    // continuer à tenter indéfiniment sans jamais rien afficher à Jean.
-    private var consecutiveErrorCount = 0
-    private val maxConsecutiveErrors = 3
-
+    // La connexion temps réel est fermée après une erreur (réseau, clé
+    // invalide...) : contrairement à l'ancien SpeechRecognizer, qui déclenchait
+    // une erreur bénigne à chaque silence prolongé, une erreur ici signale
+    // une vraie coupure — inutile d'attendre plusieurs échecs avant d'abandonner.
     private fun onRoomTranscriptionError(message: String) {
         Log.w(TAG, "Sous-titres de la pièce : erreur AssemblyAI ($message)")
-        consecutiveErrorCount++
-        if (consecutiveErrorCount >= maxConsecutiveErrors) {
-            consecutiveErrorCount = 0
-            roomCaptionsUserEnabled = false
-            Toast.makeText(
-                this,
-                "La transcription ne fonctionne pas pour l'instant (connexion internet ?)",
-                Toast.LENGTH_LONG
-            ).show()
-            stopRoomCaptions()
-            showIdleView()
-        }
+        roomCaptionsUserEnabled = false
+        Toast.makeText(
+            this,
+            "La transcription ne fonctionne pas pour l'instant (connexion internet ?)",
+            Toast.LENGTH_LONG
+        ).show()
+        stopRoomCaptions()
+        showIdleView()
     }
 
     private fun appendRoomCaption(text: String) {

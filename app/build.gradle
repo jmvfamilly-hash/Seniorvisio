@@ -73,4 +73,9 @@ dependencies {
     // (Google ne publie plus de build prêt à l'emploi depuis 2020), voir
     // core/CallEngine.kt / core/WebRtcCallEngine.kt
     implementation 'io.github.webrtc-sdk:android:144.7559.09'
+
+    // Connexion WebSocket vers l'API streaming temps réel d'AssemblyAI (voir
+    // core/AssemblyAiRealtimeTranscriber.kt) — le framing WebSocket (RFC 6455)
+    // n'est pas quelque chose à réimplémenter à la main de façon fiable.
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 }

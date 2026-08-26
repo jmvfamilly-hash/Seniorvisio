@@ -28,7 +28,6 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.KioskManager
-import com.seniorvisio.core.SpeakerUtterance
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.service.IncomingCallService
 import com.seniorvisio.service.TimedCallAlertController
@@ -478,7 +477,10 @@ class IncomingCallActivity : AppCompatActivity() {
 
         // La transcription (et son coût API) ne tourne que pendant que le
         // proche a explicitement activé les sous-titres — pas pendant tout
-        // l'appel par défaut.
+        // l'appel par défaut. Même logique partiel/final que côté sous-titres
+        // de la pièce (voir MainActivity.onRoomTranscript) : la phrase en
+        // cours s'affiche en aperçu, ajoutée à l'historique seulement une
+        // fois confirmée (end_of_turn), pour ne pas la dupliquer.
         fun startCallCaptioning() {
             val apiKey = adminConfig.assemblyAiApiKey
             if (apiKey.isBlank()) {
@@ -486,12 +488,17 @@ class IncomingCallActivity : AppCompatActivity() {
                 return
             }
             callCaptionHistory.clear()
-            callEngine.startAssemblyAiCaptions(apiKey, cacheDir) { utterance ->
-                if (callCaptionHistory.isNotEmpty()) callCaptionHistory.append("\n")
-                callCaptionHistory.append(
-                    if (utterance.speaker.isNotBlank()) "${utterance.speaker} : ${utterance.text}" else utterance.text
-                )
-                onCallCaptionText(callCaptionHistory.toString())
+            callEngine.startAssemblyAiCaptions(apiKey) { text, isFinal ->
+                if (isFinal) {
+                    if (text.isNotBlank()) {
+                        if (callCaptionHistory.isNotEmpty()) callCaptionHistory.append("\n")
+                        callCaptionHistory.append(text)
+                        onCallCaptionText(callCaptionHistory.toString())
+                    }
+                } else if (text.isNotBlank()) {
+                    val preview = if (callCaptionHistory.isNotEmpty()) "$callCaptionHistory\n$text" else text
+                    onCallCaptionText(preview)
+                }
             }
         }
 

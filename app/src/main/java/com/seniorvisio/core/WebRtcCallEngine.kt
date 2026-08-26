@@ -29,7 +29,6 @@ import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
-import java.io.File
 
 /**
  * Implémentation WebRTC de [CallEngine]. Le signaling (échange de l'offre,
@@ -54,7 +53,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var localVideoTrack: VideoTrack? = null
     private var remoteVideoTrack: VideoTrack? = null
     private var remoteAudioTrack: AudioTrack? = null
-    private var assemblyAiTranscriber: AssemblyAiRollingTranscriber? = null
+    private var assemblyAiTranscriber: AssemblyAiRealtimeTranscriber? = null
     private var assemblyAiSink: AudioTrackSink? = null
 
     private var callerCandidatesListener: ListenerRegistration? = null
@@ -158,21 +157,19 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     /**
-     * Sous-titres d'appel transcrits directement depuis le flux audio WebRTC
-     * reçu par la tablette (voix du proche), via AssemblyAI — remplace
-     * l'ancien mécanisme où le navigateur appelant transcrivait lui-même sa
-     * propre voix (Web Speech API, voir historique web-caller/webrtc-engine.js)
-     * et l'envoyait par Firestore : ce dernier ne fonctionnait que sur les
-     * navigateurs supportant la reconnaissance vocale (Chrome desktop
-     * essentiellement), une contrainte côté proche qu'on voulait justement
-     * éliminer. Ici, la tablette transcrit elle-même ce qu'elle reçoit déjà
-     * pour la lecture audio de l'appel — aucune contrainte sur ce que le
-     * proche utilise pour appeler.
+     * Sous-titres d'appel transcrits en direct depuis le flux audio WebRTC
+     * reçu par la tablette (voix du proche), via l'API streaming temps réel
+     * d'AssemblyAI — remplace l'ancien mécanisme où le navigateur appelant
+     * transcrivait lui-même sa propre voix (Web Speech API, voir historique
+     * web-caller/webrtc-engine.js) et l'envoyait par Firestore : ce dernier
+     * ne fonctionnait que sur les navigateurs supportant la reconnaissance
+     * vocale (Chrome desktop essentiellement), une contrainte côté proche
+     * qu'on voulait justement éliminer. Ici, la tablette transcrit elle-même
+     * ce qu'elle reçoit déjà pour la lecture audio de l'appel — aucune
+     * contrainte sur ce que le proche utilise pour appeler.
      */
-    fun startAssemblyAiCaptions(apiKey: String, cacheDir: File, onUtterance: (SpeakerUtterance) -> Unit) {
-        val transcriber = AssemblyAiRollingTranscriber(apiKey = apiKey, cacheDir = cacheDir, onUtterance = onUtterance)
-        assemblyAiTranscriber = transcriber
-        transcriber.start()
+    fun startAssemblyAiCaptions(apiKey: String, onTranscript: (text: String, isFinal: Boolean) -> Unit) {
+        assemblyAiTranscriber = AssemblyAiRealtimeTranscriber(apiKey = apiKey, onTranscript = onTranscript)
         attachAssemblyAiSinkIfReady()
     }
 
@@ -187,16 +184,24 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * La piste audio distante peut n'arriver qu'après [startAssemblyAiCaptions]
      * (négociation ICE/SDP encore en cours) : appelé ici et à nouveau dès que
      * la piste arrive (voir onTrack ci-dessous), pour couvrir les deux ordres.
+     * La connexion temps réel n'est ouverte qu'une fois la fréquence
+     * d'échantillonnage réelle connue (donnée par le premier bloc audio reçu),
+     * l'API AssemblyAI exigeant qu'elle soit déclarée à la connexion.
      */
     private fun attachAssemblyAiSinkIfReady() {
         val transcriber = assemblyAiTranscriber ?: return
         val track = remoteAudioTrack ?: return
         if (assemblyAiSink != null) return
+        var started = false
         val sink = AudioTrackSink { audioData, _, sampleRate, numberOfChannels, _, _ ->
+            if (!started) {
+                started = true
+                transcriber.start(sampleRate)
+            }
             val bytes = ByteArray(audioData.remaining())
             audioData.get(bytes)
             val mono = if (numberOfChannels > 1) downmixToMono(bytes, numberOfChannels) else bytes
-            transcriber.feed(mono, sampleRate)
+            transcriber.feed(mono)
         }
         track.addSink(sink)
         assemblyAiSink = sink
