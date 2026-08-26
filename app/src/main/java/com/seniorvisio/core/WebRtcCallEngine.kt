@@ -192,7 +192,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         val transcriber = assemblyAiTranscriber ?: return
         val track = remoteAudioTrack ?: return
         if (assemblyAiSink != null) return
-        val sink = AudioTrackSink { audioData, _, sampleRate, numberOfChannels, _ ->
+        val sink = AudioTrackSink { audioData, _, sampleRate, numberOfChannels, _, _ ->
             val bytes = ByteArray(audioData.remaining())
             audioData.get(bytes)
             val mono = if (numberOfChannels > 1) downmixToMono(bytes, numberOfChannels) else bytes
