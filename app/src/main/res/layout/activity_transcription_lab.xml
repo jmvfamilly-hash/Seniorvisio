@@ -38,6 +38,21 @@
         android:orientation="vertical"
         android:layout_marginTop="8dp" />
 
+    <CheckBox
+        android:id="@+id/checkboxExternalPlayback"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Lecture externe (téléphone) au lieu du haut-parleur de la tablette" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Le micro d'un appareil filtre le son émis par son propre haut-parleur (anti-écho) — pour tester un moteur sur cet appareil, enregistre la phrase sur un autre appareil (téléphone) et rejoue-la à voix haute près de la tablette quand demandé."
+        android:textSize="12sp"
+        android:textColor="#666666" />
+
     <Button
         android:id="@+id/buttonRecord"
         android:layout_width="wrap_content"

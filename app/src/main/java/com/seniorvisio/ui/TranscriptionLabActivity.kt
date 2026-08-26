@@ -48,9 +48,12 @@ import java.io.File
  *
  * Les moteurs sur appareil ne peuvent pas être nourris d'un fichier audio
  * directement (l'API SpeechRecognizer n'écoute que le micro) : l'enregistrement
- * est donc rejoué à travers le haut-parleur pendant que chaque moteur écoute
- * à son tour — imparfait (acoustique de la pièce, qualité du haut-parleur)
- * mais garantit que tous entendent exactement la même phrase.
+ * est donc rejoué pendant que chaque moteur écoute à son tour. Par défaut via
+ * le haut-parleur de la tablette elle-même — mais l'annulation d'écho du
+ * micro tend alors à filtrer ce qu'elle vient de jouer, donnant
+ * systématiquement un résultat vide (constaté en test réel). La case
+ * "lecture externe" contourne ça : la phrase est rejouée à la main depuis un
+ * autre appareil (téléphone) pendant que la tablette écoute simplement.
  */
 class TranscriptionLabActivity : AppCompatActivity() {
 
@@ -62,6 +65,7 @@ class TranscriptionLabActivity : AppCompatActivity() {
     private lateinit var buttonRecord: Button
     private lateinit var buttonCompare: Button
     private lateinit var buttonCopyJson: Button
+    private lateinit var checkboxExternalPlayback: CheckBox
 
     private var mediaRecorder: MediaRecorder? = null
     private var recordedFile: File? = null
@@ -82,6 +86,7 @@ class TranscriptionLabActivity : AppCompatActivity() {
         buttonRecord = findViewById(R.id.buttonRecord)
         buttonCompare = findViewById(R.id.buttonCompare)
         buttonCopyJson = findViewById(R.id.buttonCopyJson)
+        checkboxExternalPlayback = findViewById(R.id.checkboxExternalPlayback)
 
         populateEngineList()
 
@@ -174,6 +179,11 @@ class TranscriptionLabActivity : AppCompatActivity() {
             return
         }
         val component = remaining.removeAt(0)
+        if (checkboxExternalPlayback.isChecked) {
+            textLabStatus.text = "Rejoue la phrase sur ton téléphone maintenant, près de la tablette (${component.packageName})…"
+        } else {
+            textLabStatus.text = "Test en cours (${component.packageName})…"
+        }
         testEngine(component, file) { transcript ->
             addResultRow(component.packageName, transcript ?: "(aucun résultat)")
             testNextEngine(remaining, file)
@@ -192,9 +202,14 @@ class TranscriptionLabActivity : AppCompatActivity() {
 
         recognizer.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
-                // Laisse le moteur s'installer avant de rejouer l'enregistrement,
-                // sinon le tout début de la phrase peut être manqué.
-                handler.postDelayed({ playRecording(file) }, 300)
+                // En lecture externe, la phrase est rejouée à la main depuis un
+                // autre appareil (voir checkboxExternalPlayback) : le micro de la
+                // tablette écoute simplement, sans qu'elle rejoue rien elle-même.
+                if (!checkboxExternalPlayback.isChecked) {
+                    // Laisse le moteur s'installer avant de rejouer l'enregistrement,
+                    // sinon le tout début de la phrase peut être manqué.
+                    handler.postDelayed({ playRecording(file) }, 300)
+                }
             }
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
