@@ -2,6 +2,7 @@ package com.seniorvisio.core
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.seniorvisio.BuildConfig
 import org.json.JSONObject
 
 /**
@@ -52,9 +53,13 @@ class AdminConfig(context: Context) {
 
     // --- Clé API AssemblyAI, utilisée uniquement par le labo de comparaison
     // de transcription (voir TranscriptionLabActivity) — jamais par les
-    // sous-titres de la pièce ou d'appel en usage normal. ---
+    // sous-titres de la pièce ou d'appel en usage normal. Si l'admin n'a rien
+    // saisi sur la tablette, on retombe sur celle injectée par la CI depuis
+    // le secret GitHub ASSEMBLYAI_API_KEY (voir build.gradle). ---
     var assemblyAiApiKey: String
-        get() = prefs.getString(KEY_ASSEMBLYAI_API_KEY, "") ?: ""
+        get() = prefs.getString(KEY_ASSEMBLYAI_API_KEY, "")
+            ?.takeIf { it.isNotBlank() }
+            ?: BuildConfig.ASSEMBLYAI_API_KEY_DEFAULT
         set(value) = prefs.edit().putString(KEY_ASSEMBLYAI_API_KEY, value).apply()
 
     fun isCurrentlyNightWindow(hourNow: Int): Boolean {

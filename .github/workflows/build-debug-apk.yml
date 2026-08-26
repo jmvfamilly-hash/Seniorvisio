@@ -31,7 +31,12 @@ jobs:
           gradle-version: '8.7'
 
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace "-PbuildRev=rev${{ github.run_number }}"
+        env:
+          ASSEMBLYAI_API_KEY: ${{ secrets.ASSEMBLYAI_API_KEY }}
+        run: |
+          gradle assembleDebug --stacktrace \
+            "-PbuildRev=rev${{ github.run_number }}" \
+            "-PassemblyAiApiKey=${ASSEMBLYAI_API_KEY}"
 
       - name: Rename APK with revision number
         run: |

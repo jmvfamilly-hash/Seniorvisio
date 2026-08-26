@@ -25,6 +25,12 @@ android {
         // tablette — utile pour diagnostiquer un déploiement Headwind qui n'a
         // pas encore pris effet, sans avoir à brancher la tablette.
         buildConfigField "String", "BUILD_REV", "\"${project.findProperty('buildRev') ?: "dev"}\""
+
+        // Clé AssemblyAI par défaut, injectée par la CI depuis le secret GitHub
+        // ASSEMBLYAI_API_KEY (voir workflow build-debug-apk.yml) — évite de
+        // devoir la saisir à la main dans le panneau admin sur la tablette.
+        // Reste modifiable là-bas pour une clé différente (voir AdminConfig).
+        buildConfigField "String", "ASSEMBLYAI_API_KEY_DEFAULT", "\"${project.findProperty('assemblyAiApiKey') ?: ""}\""
     }
 
     buildTypes {
