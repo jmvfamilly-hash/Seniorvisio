@@ -3,6 +3,7 @@ package com.seniorvisio.core
 import android.os.Handler
 import android.os.Looper
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -27,7 +28,13 @@ class AssemblyAiRealtimeTranscriber(
     private val onError: ((String) -> Unit)? = null,
 ) {
     private val handler = Handler(Looper.getMainLooper())
+    // Force HTTP/1.1 : un WebSocket standard n'est pas compatible avec HTTP/2,
+    // qu'OkHttp négocierait sinon par défaut (ALPN) avec ce serveur — le
+    // serveur ferme alors la connexion dès la première écriture ("Write
+    // error... Broken pipe" constaté en test réel), la requête de mise à
+    // niveau WebSocket n'ayant pas de sens sur une connexion HTTP/2.
     private val client = OkHttpClient.Builder()
+        .protocols(listOf(Protocol.HTTP_1_1))
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
     private var webSocket: WebSocket? = null
