@@ -488,18 +488,22 @@ class IncomingCallActivity : AppCompatActivity() {
                 return
             }
             callCaptionHistory.clear()
-            callEngine.startAssemblyAiCaptions(apiKey) { text, isFinal ->
-                if (isFinal) {
-                    if (text.isNotBlank()) {
-                        if (callCaptionHistory.isNotEmpty()) callCaptionHistory.append("\n")
-                        callCaptionHistory.append(text)
-                        onCallCaptionText(callCaptionHistory.toString())
+            callEngine.startAssemblyAiCaptions(
+                apiKey,
+                onTranscript = { text, isFinal ->
+                    if (isFinal) {
+                        if (text.isNotBlank()) {
+                            if (callCaptionHistory.isNotEmpty()) callCaptionHistory.append("\n")
+                            callCaptionHistory.append(text)
+                            onCallCaptionText(callCaptionHistory.toString())
+                        }
+                    } else if (text.isNotBlank()) {
+                        val preview = if (callCaptionHistory.isNotEmpty()) "$callCaptionHistory\n$text" else text
+                        onCallCaptionText(preview)
                     }
-                } else if (text.isNotBlank()) {
-                    val preview = if (callCaptionHistory.isNotEmpty()) "$callCaptionHistory\n$text" else text
-                    onCallCaptionText(preview)
-                }
-            }
+                },
+                onError = { message -> Log.w(TAG, "Sous-titres d'appel : erreur AssemblyAI ($message)") },
+            )
         }
 
         // Ce listener écoute tout le document d'appel Firestore, donc il se

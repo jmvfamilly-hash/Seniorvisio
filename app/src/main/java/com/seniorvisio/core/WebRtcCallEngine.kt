@@ -168,8 +168,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * ce qu'elle reçoit déjà pour la lecture audio de l'appel — aucune
      * contrainte sur ce que le proche utilise pour appeler.
      */
-    fun startAssemblyAiCaptions(apiKey: String, onTranscript: (text: String, isFinal: Boolean) -> Unit) {
-        assemblyAiTranscriber = AssemblyAiRealtimeTranscriber(apiKey = apiKey, onTranscript = onTranscript)
+    fun startAssemblyAiCaptions(
+        apiKey: String,
+        onTranscript: (text: String, isFinal: Boolean) -> Unit,
+        onError: ((String) -> Unit)? = null,
+    ) {
+        assemblyAiTranscriber = AssemblyAiRealtimeTranscriber(apiKey = apiKey, onTranscript = onTranscript, onError = onError)
         attachAssemblyAiSinkIfReady()
     }
 

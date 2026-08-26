@@ -255,11 +255,9 @@ class MainActivity : AppCompatActivity() {
     private fun onRoomTranscriptionError(message: String) {
         Log.w(TAG, "Sous-titres de la pièce : erreur AssemblyAI ($message)")
         roomCaptionsUserEnabled = false
-        Toast.makeText(
-            this,
-            "La transcription ne fonctionne pas pour l'instant (connexion internet ?)",
-            Toast.LENGTH_LONG
-        ).show()
+        // Message réel affiché (pas un texte générique) : c'est souvent la
+        // seule façon de diagnostiquer sans brancher la tablette à un PC.
+        Toast.makeText(this, "Transcription indisponible : $message", Toast.LENGTH_LONG).show()
         stopRoomCaptions()
         showIdleView()
     }

@@ -56,7 +56,14 @@ class AssemblyAiRealtimeTranscriber(
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 connected = false
-                handler.post { onError?.invoke(t.message ?: "connexion perdue") }
+                // Le corps de la réponse HTTP (si le serveur en a renvoyé un,
+                // ex. clé refusée, paramètre invalide) est bien plus parlant
+                // que le message d'exception générique d'OkHttp seul.
+                val bodySnippet = try { response?.body?.string()?.take(200) } catch (e: Exception) { null }
+                val detail = listOfNotNull(response?.let { "HTTP ${it.code}" }, t.message, bodySnippet)
+                    .joinToString(" — ")
+                    .ifBlank { "connexion perdue" }
+                handler.post { onError?.invoke(detail) }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
