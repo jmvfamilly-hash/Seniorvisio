@@ -255,9 +255,19 @@ class MainActivity : AppCompatActivity() {
     private fun onRoomTranscriptionError(message: String) {
         Log.w(TAG, "Sous-titres de la pièce : erreur AssemblyAI ($message)")
         roomCaptionsUserEnabled = false
-        // Message réel affiché (pas un texte générique) : c'est souvent la
-        // seule façon de diagnostiquer sans brancher la tablette à un PC.
-        Toast.makeText(this, "Transcription indisponible : $message", Toast.LENGTH_LONG).show()
+        // Une AlertDialog (texte sélectionnable, bouton copier) plutôt qu'un
+        // toast : le message d'erreur réel est souvent trop long pour tenir
+        // dans la fenêtre étroite d'un toast, et impossible à en extraire le
+        // texte complet autrement que par une capture d'écran.
+        AlertDialog.Builder(this)
+            .setTitle("Transcription indisponible")
+            .setMessage(message)
+            .setPositiveButton("Copier") { _, _ ->
+                val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("erreur transcription", message))
+            }
+            .setNegativeButton("Fermer", null)
+            .show()
         stopRoomCaptions()
         showIdleView()
     }
