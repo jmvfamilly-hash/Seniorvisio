@@ -446,7 +446,7 @@ class IncomingCallActivity : AppCompatActivity() {
             maxScrollSpeedPxPerSec = dpPerSec * resources.displayMetrics.density
         }
 
-        // Alimentée par startCallCaptioning() (transcription AssemblyAI de la
+        // Alimentée par startCallCaptioning() (transcription Deepgram de la
         // piste audio distante, voir plus bas) — le texte reçu ne fait que
         // grandir (chaque nouvelle tranche s'ajoute à l'historique), donc
         // isContinuation reste vrai après la première tranche : le défilement
@@ -482,13 +482,13 @@ class IncomingCallActivity : AppCompatActivity() {
         // cours s'affiche en aperçu, ajoutée à l'historique seulement une
         // fois confirmée (end_of_turn), pour ne pas la dupliquer.
         fun startCallCaptioning() {
-            val apiKey = adminConfig.assemblyAiApiKey
+            val apiKey = adminConfig.deepgramApiKey
             if (apiKey.isBlank()) {
-                Log.w(TAG, "Sous-titres d'appel : clé AssemblyAI manquante (réglages admin)")
+                Log.w(TAG, "Sous-titres d'appel : clé Deepgram manquante (réglages admin)")
                 return
             }
             callCaptionHistory.clear()
-            callEngine.startAssemblyAiCaptions(
+            callEngine.startDeepgramCaptions(
                 apiKey,
                 onTranscript = { text, isFinal ->
                     if (isFinal) {
@@ -502,7 +502,7 @@ class IncomingCallActivity : AppCompatActivity() {
                         onCallCaptionText(preview)
                     }
                 },
-                onError = { message -> Log.w(TAG, "Sous-titres d'appel : erreur AssemblyAI ($message)") },
+                onError = { message -> Log.w(TAG, "Sous-titres d'appel : erreur Deepgram ($message)") },
             )
         }
 
@@ -523,7 +523,7 @@ class IncomingCallActivity : AppCompatActivity() {
                     captionBanner.animate().alpha(0f).setDuration(400)
                         .withEndAction { captionBanner.visibility = View.GONE }
                         .start()
-                    callEngine.stopAssemblyAiCaptions()
+                    callEngine.stopDeepgramCaptions()
                 }
             }
         }

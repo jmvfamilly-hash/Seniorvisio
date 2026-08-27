@@ -33,10 +33,12 @@ jobs:
       - name: Build debug APK
         env:
           ASSEMBLYAI_API_KEY: ${{ secrets.ASSEMBLYAI_API_KEY }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
         run: |
           gradle assembleDebug --stacktrace \
             "-PbuildRev=rev${{ github.run_number }}" \
-            "-PassemblyAiApiKey=${ASSEMBLYAI_API_KEY}"
+            "-PassemblyAiApiKey=${ASSEMBLYAI_API_KEY}" \
+            "-PdeepgramApiKey=${DEEPGRAM_API_KEY}"
 
       - name: Rename APK with revision number
         run: |

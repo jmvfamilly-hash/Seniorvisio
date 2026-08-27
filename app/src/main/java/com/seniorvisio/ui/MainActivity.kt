@@ -25,7 +25,7 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
-import com.seniorvisio.core.AssemblyAiRealtimeTranscriber
+import com.seniorvisio.core.DeepgramRealtimeTranscriber
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.MicPcmStreamer
 import com.seniorvisio.service.CallListenerService
@@ -53,7 +53,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var buttonStopRoomCaptions: Button
 
     private var micStreamer: MicPcmStreamer? = null
-    private var transcriber: AssemblyAiRealtimeTranscriber? = null
+    private var transcriber: DeepgramRealtimeTranscriber? = null
     private var roomCaptionsActive = false
     // Distinct de roomCaptionsActive : reflète le choix de Jean, pas l'état
     // technique du moment (coupé pendant un appel entrant, voir onPause/
@@ -203,14 +203,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startRoomCaptions() {
-        val apiKey = AdminConfig(this).assemblyAiApiKey
+        val apiKey = AdminConfig(this).deepgramApiKey
         if (apiKey.isBlank()) {
-            Toast.makeText(this, "Clé AssemblyAI manquante (réglages admin)", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Clé Deepgram manquante (réglages admin)", Toast.LENGTH_LONG).show()
             roomCaptionsUserEnabled = false
             showIdleView()
             return
         }
-        val newTranscriber = AssemblyAiRealtimeTranscriber(
+        val newTranscriber = DeepgramRealtimeTranscriber(
             apiKey = apiKey,
             onTranscript = { text, isFinal -> runOnUiThread { onRoomTranscript(text, isFinal) } },
             onError = { message -> runOnUiThread { onRoomTranscriptionError(message) } },
@@ -253,7 +253,7 @@ class MainActivity : AppCompatActivity() {
     // une erreur bénigne à chaque silence prolongé, une erreur ici signale
     // une vraie coupure — inutile d'attendre plusieurs échecs avant d'abandonner.
     private fun onRoomTranscriptionError(message: String) {
-        Log.w(TAG, "Sous-titres de la pièce : erreur AssemblyAI ($message)")
+        Log.w(TAG, "Sous-titres de la pièce : erreur Deepgram ($message)")
         roomCaptionsUserEnabled = false
         // Une AlertDialog (texte sélectionnable, bouton copier) plutôt qu'un
         // toast : le message d'erreur réel est souvent trop long pour tenir

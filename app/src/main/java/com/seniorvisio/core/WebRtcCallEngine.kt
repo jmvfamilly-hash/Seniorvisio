@@ -53,8 +53,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var localVideoTrack: VideoTrack? = null
     private var remoteVideoTrack: VideoTrack? = null
     private var remoteAudioTrack: AudioTrack? = null
-    private var assemblyAiTranscriber: AssemblyAiRealtimeTranscriber? = null
-    private var assemblyAiSink: AudioTrackSink? = null
+    private var deepgramTranscriber: DeepgramRealtimeTranscriber? = null
+    private var deepgramSink: AudioTrackSink? = null
 
     private var callerCandidatesListener: ListenerRegistration? = null
     private var callId: String? = null
@@ -159,7 +159,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     /**
      * Sous-titres d'appel transcrits en direct depuis le flux audio WebRTC
      * reçu par la tablette (voix du proche), via l'API streaming temps réel
-     * d'AssemblyAI — remplace l'ancien mécanisme où le navigateur appelant
+     * de Deepgram — remplace l'ancien mécanisme où le navigateur appelant
      * transcrivait lui-même sa propre voix (Web Speech API, voir historique
      * web-caller/webrtc-engine.js) et l'envoyait par Firestore : ce dernier
      * ne fonctionnait que sur les navigateurs supportant la reconnaissance
@@ -168,34 +168,34 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * ce qu'elle reçoit déjà pour la lecture audio de l'appel — aucune
      * contrainte sur ce que le proche utilise pour appeler.
      */
-    fun startAssemblyAiCaptions(
+    fun startDeepgramCaptions(
         apiKey: String,
         onTranscript: (text: String, isFinal: Boolean) -> Unit,
         onError: ((String) -> Unit)? = null,
     ) {
-        assemblyAiTranscriber = AssemblyAiRealtimeTranscriber(apiKey = apiKey, onTranscript = onTranscript, onError = onError)
-        attachAssemblyAiSinkIfReady()
+        deepgramTranscriber = DeepgramRealtimeTranscriber(apiKey = apiKey, onTranscript = onTranscript, onError = onError)
+        attachDeepgramSinkIfReady()
     }
 
-    fun stopAssemblyAiCaptions() {
-        assemblyAiSink?.let { sink -> remoteAudioTrack?.removeSink(sink) }
-        assemblyAiSink = null
-        assemblyAiTranscriber?.stop()
-        assemblyAiTranscriber = null
+    fun stopDeepgramCaptions() {
+        deepgramSink?.let { sink -> remoteAudioTrack?.removeSink(sink) }
+        deepgramSink = null
+        deepgramTranscriber?.stop()
+        deepgramTranscriber = null
     }
 
     /**
-     * La piste audio distante peut n'arriver qu'après [startAssemblyAiCaptions]
+     * La piste audio distante peut n'arriver qu'après [startDeepgramCaptions]
      * (négociation ICE/SDP encore en cours) : appelé ici et à nouveau dès que
      * la piste arrive (voir onTrack ci-dessous), pour couvrir les deux ordres.
      * La connexion temps réel n'est ouverte qu'une fois la fréquence
      * d'échantillonnage réelle connue (donnée par le premier bloc audio reçu),
-     * l'API AssemblyAI exigeant qu'elle soit déclarée à la connexion.
+     * l'API Deepgram exigeant qu'elle soit déclarée à la connexion.
      */
-    private fun attachAssemblyAiSinkIfReady() {
-        val transcriber = assemblyAiTranscriber ?: return
+    private fun attachDeepgramSinkIfReady() {
+        val transcriber = deepgramTranscriber ?: return
         val track = remoteAudioTrack ?: return
-        if (assemblyAiSink != null) return
+        if (deepgramSink != null) return
         var started = false
         val sink = AudioTrackSink { audioData, _, sampleRate, numberOfChannels, _, _ ->
             if (!started) {
@@ -208,7 +208,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             transcriber.feed(mono)
         }
         track.addSink(sink)
-        assemblyAiSink = sink
+        deepgramSink = sink
     }
 
     /**
@@ -426,7 +426,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                     remoteAudioTrack = track
                     track.setVolume(pendingVolume)
                     currentVolume = pendingVolume
-                    attachAssemblyAiSinkIfReady()
+                    attachDeepgramSinkIfReady()
                 }
             }
 
@@ -508,7 +508,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private fun cleanup() {
         cancelScheduledAutoHangup()
         restoreAudio()
-        stopAssemblyAiCaptions()
+        stopDeepgramCaptions()
         callerCandidatesListener?.remove()
         callerCandidatesListener = null
         volumeListener?.remove()

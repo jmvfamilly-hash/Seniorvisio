@@ -85,6 +85,22 @@
         android:layout_marginTop="16dp"
         android:text="Se connecter à ce Wi-Fi" />
 
+    <!-- Utilisée par les sous-titres temps réel en usage normal (pièce et
+         appel, voir DeepgramRealtimeTranscriber.kt). -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="40dp"
+        android:text="Clé API Deepgram (sous-titres temps réel)"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/inputDeepgramKey"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textPassword" />
+
     <!-- Utilisée uniquement par le labo de comparaison de transcription
          (voir TranscriptionLabActivity.kt), jamais par les sous-titres en
          usage normal. -->

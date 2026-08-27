@@ -62,6 +62,17 @@ class AdminConfig(context: Context) {
             ?: BuildConfig.ASSEMBLYAI_API_KEY_DEFAULT
         set(value) = prefs.edit().putString(KEY_ASSEMBLYAI_API_KEY, value).apply()
 
+    // --- Clé API Deepgram, utilisée par les sous-titres temps réel (pièce et
+    // appel, voir DeepgramRealtimeTranscriber) — AssemblyAI en temps réel
+    // s'est révélé peu fiable en test réel (connexions coupées sans cause
+    // identifiée malgré plusieurs correctifs), Deepgram le remplace ici.
+    // Même mécanisme de repli que la clé AssemblyAI ci-dessus. ---
+    var deepgramApiKey: String
+        get() = prefs.getString(KEY_DEEPGRAM_API_KEY, "")
+            ?.takeIf { it.isNotBlank() }
+            ?: BuildConfig.DEEPGRAM_API_KEY_DEFAULT
+        set(value) = prefs.edit().putString(KEY_DEEPGRAM_API_KEY, value).apply()
+
     fun isCurrentlyNightWindow(hourNow: Int): Boolean {
         return if (nightStartHour <= nightEndHour) {
             hourNow in nightStartHour until nightEndHour
@@ -90,5 +101,6 @@ class AdminConfig(context: Context) {
         private const val KEY_BLOCKING_ENABLED = "blocking_enabled"
         private const val KEY_ADMIN_PIN = "admin_pin"
         private const val KEY_ASSEMBLYAI_API_KEY = "assemblyai_api_key"
+        private const val KEY_DEEPGRAM_API_KEY = "deepgram_api_key"
     }
 }
