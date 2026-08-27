@@ -73,11 +73,4 @@ dependencies {
     // (Google ne publie plus de build prêt à l'emploi depuis 2020), voir
     // core/CallEngine.kt / core/WebRtcCallEngine.kt
     implementation 'io.github.webrtc-sdk:android:144.7559.09'
-
-    // Reconnaissance vocale embarquée sur la tablette pour les sous-titres
-    // (pièce et appel), gratuite et 100% hors-ligne une fois le modèle
-    // téléchargé (voir core/VoskModelProvider.kt / core/VoskTranscriber.kt)
-    // — remplace AssemblyAI/Deepgram (facturés à la minute) pour cet usage.
-    implementation 'com.alphacephei:vosk-android:0.3.47'
-    implementation 'net.java.dev.jna:jna:5.13.0@aar'
 }

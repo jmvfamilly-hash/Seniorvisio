@@ -11,7 +11,6 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.seniorvisio.signaling.CallSignalingClient
 import com.seniorvisio.signaling.RemoteIceCandidate
 import org.webrtc.AudioTrack
-import org.webrtc.AudioTrackSink
 import org.webrtc.Camera2Enumerator
 import org.webrtc.CameraVideoCapturer
 import org.webrtc.DataChannel
@@ -53,8 +52,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var localVideoTrack: VideoTrack? = null
     private var remoteVideoTrack: VideoTrack? = null
     private var remoteAudioTrack: AudioTrack? = null
-    private var voskTranscriber: VoskTranscriber? = null
-    private var voskSink: AudioTrackSink? = null
+    private var speechListener: ListenerRegistration? = null
 
     private var callerCandidatesListener: ListenerRegistration? = null
     private var callId: String? = null
@@ -94,7 +92,6 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         this.callId = callId
         state = CallState.RINGING_SILENT
         ensureFactory()
-        VoskModelProvider.prepare(context)
 
         signaling.fetchOfferSdp(callId) { sdp ->
             if (sdp == null) {
@@ -158,59 +155,17 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     /**
-     * Sous-titres d'appel transcrits en direct depuis le flux audio WebRTC
-     * reçu par la tablette (voix du proche), avec Vosk (gratuit, embarqué,
-     * 100% hors-ligne — voir VoskTranscriber/VoskModelProvider) — remplace
-     * l'ancien mécanisme où le navigateur appelant transcrivait lui-même sa
-     * propre voix (Web Speech API, voir historique web-caller/webrtc-engine.js)
-     * et l'envoyait par Firestore : ce dernier ne fonctionnait que sur les
-     * navigateurs supportant la reconnaissance vocale (Chrome desktop
-     * essentiellement), une contrainte côté proche qu'on voulait justement
-     * éliminer. Ici, la tablette transcrit elle-même ce qu'elle reçoit déjà
-     * pour la lecture audio de l'appel — aucune contrainte sur ce que le
-     * proche utilise pour appeler, et aucun coût par minute transcrite
-     * (contrairement à AssemblyAI/Deepgram utilisés auparavant pour cet usage).
+     * Écoute le texte transcrit en direct de la voix de l'appelant (envoyé par
+     * webrtc-engine.js via reconnaissance vocale navigateur) pour le mode
+     * "sous-titres géants". Ne fait rien si le navigateur appelant ne
+     * supporte pas la reconnaissance vocale (ex. Safari/iOS) : aucun texte
+     * n'arrivera jamais, l'appel vidéo reste inchangé — limitation acceptée
+     * pour rester gratuit et sans dépendance à un service tiers (AssemblyAI/
+     * Deepgram/Vosk essayés puis abandonnés pour cet usage).
      */
-    fun startCallCaptions(
-        onTranscript: (text: String, isFinal: Boolean) -> Unit,
-        onError: ((String) -> Unit)? = null,
-    ) {
-        VoskModelProvider.prepare(context)
-        voskTranscriber = VoskTranscriber(onTranscript = onTranscript, onError = onError)
-        attachVoskSinkIfReady()
-    }
-
-    fun stopCallCaptions() {
-        voskSink?.let { sink -> remoteAudioTrack?.removeSink(sink) }
-        voskSink = null
-        voskTranscriber?.stop()
-        voskTranscriber = null
-    }
-
-    /**
-     * La piste audio distante peut n'arriver qu'après [startCallCaptions]
-     * (négociation ICE/SDP encore en cours) : appelé ici et à nouveau dès que
-     * la piste arrive (voir onTrack ci-dessous), pour couvrir les deux ordres.
-     * Le recognizer Vosk n'est créé qu'une fois la fréquence d'échantillonnage
-     * réelle connue (donnée par le premier bloc audio reçu).
-     */
-    private fun attachVoskSinkIfReady() {
-        val transcriber = voskTranscriber ?: return
-        val track = remoteAudioTrack ?: return
-        if (voskSink != null) return
-        var started = false
-        val sink = AudioTrackSink { audioData, _, sampleRate, numberOfChannels, _, _ ->
-            if (!started) {
-                started = true
-                transcriber.start(sampleRate)
-            }
-            val bytes = ByteArray(audioData.remaining())
-            audioData.get(bytes)
-            val mono = if (numberOfChannels > 1) downmixToMono(bytes, numberOfChannels) else bytes
-            transcriber.feed(mono)
-        }
-        track.addSink(sink)
-        voskSink = sink
+    fun listenForCaptions(onText: (String) -> Unit) {
+        val id = callId ?: return
+        speechListener = signaling.listenForCallerSpeech(id, onText)
     }
 
     /**
@@ -428,7 +383,6 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                     remoteAudioTrack = track
                     track.setVolume(pendingVolume)
                     currentVolume = pendingVolume
-                    attachVoskSinkIfReady()
                 }
             }
 
@@ -510,7 +464,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private fun cleanup() {
         cancelScheduledAutoHangup()
         restoreAudio()
-        stopCallCaptions()
+        speechListener?.remove()
+        speechListener = null
         callerCandidatesListener?.remove()
         callerCandidatesListener = null
         volumeListener?.remove()

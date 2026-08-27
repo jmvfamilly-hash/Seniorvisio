@@ -12,7 +12,6 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.google.firebase.firestore.ListenerRegistration
 import com.seniorvisio.core.DeviceStatusReporter
-import com.seniorvisio.core.VoskModelProvider
 import com.seniorvisio.signaling.CallSignalingClient
 
 /**
@@ -49,11 +48,6 @@ class CallListenerService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         startForeground(FOREGROUND_ID, buildForegroundNotification())
-        // Démarré ici plutôt qu'à l'ouverture d'un appel : le modèle Vosk
-        // prend du temps à télécharger (~45 Mo) et à charger, autant lancer
-        // ça dès que la tablette est prête à recevoir des appels (voir
-        // VoskModelProvider, idempotent).
-        VoskModelProvider.prepare(applicationContext)
         startListening()
         statusReporter.listenForRemoteUpdate()
         heartbeatHandler.post(heartbeatRunnable)

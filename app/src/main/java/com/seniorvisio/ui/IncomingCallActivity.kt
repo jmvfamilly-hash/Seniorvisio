@@ -446,13 +446,13 @@ class IncomingCallActivity : AppCompatActivity() {
             maxScrollSpeedPxPerSec = dpPerSec * resources.displayMetrics.density
         }
 
-        // Alimentée par startCallCaptioning() (transcription Vosk embarquée de
-        // la piste audio distante, voir plus bas) — le texte reçu ne fait que
-        // grandir (chaque nouvelle tranche s'ajoute à l'historique), donc
-        // isContinuation reste vrai après la première tranche : le défilement
-        // suit sans jamais revenir en haut, jusqu'à une vraie coupure (arrêt
-        // puis réactivation des sous-titres par le proche).
-        fun onCallCaptionText(text: String) {
+        // Texte relayé tel quel par le proche (reconnaissance vocale de son
+        // propre navigateur, Web Speech API — voir web-caller/webrtc-engine.js
+        // et WebRtcCallEngine.listenForCaptions) : ne fonctionne que sur les
+        // navigateurs qui la supportent (Chrome desktop essentiellement, pas
+        // Safari/iOS), limitation acceptée pour rester gratuit et sans
+        // dépendance à un service tiers.
+        callEngine.listenForCaptions { text ->
             runOnUiThread {
                 val isContinuation = lastCaptionText.isNotEmpty() && text.startsWith(lastCaptionText)
                 lastCaptionText = text
@@ -473,33 +473,6 @@ class IncomingCallActivity : AppCompatActivity() {
             }
         }
 
-        val callCaptionHistory = StringBuilder()
-
-        // La transcription (gratuite, embarquée, sans clé API) ne tourne que
-        // pendant que le proche a explicitement activé les sous-titres — pas
-        // pendant tout l'appel par défaut. Même logique partiel/final que
-        // côté sous-titres de la pièce (voir MainActivity.onRoomTranscript) :
-        // la phrase en cours s'affiche en aperçu, ajoutée à l'historique
-        // seulement une fois confirmée, pour ne pas la dupliquer.
-        fun startCallCaptioning() {
-            callCaptionHistory.clear()
-            callEngine.startCallCaptions(
-                onTranscript = { text, isFinal ->
-                    if (isFinal) {
-                        if (text.isNotBlank()) {
-                            if (callCaptionHistory.isNotEmpty()) callCaptionHistory.append("\n")
-                            callCaptionHistory.append(text)
-                            onCallCaptionText(callCaptionHistory.toString())
-                        }
-                    } else if (text.isNotBlank()) {
-                        val preview = if (callCaptionHistory.isNotEmpty()) "$callCaptionHistory\n$text" else text
-                        onCallCaptionText(preview)
-                    }
-                },
-                onError = { message -> Log.w(TAG, "Sous-titres d'appel : erreur reconnaissance vocale ($message)") },
-            )
-        }
-
         // Ce listener écoute tout le document d'appel Firestore, donc il se
         // redéclenche à chaque écriture (volume, etc.), pas seulement quand
         // l'activation change. Sans ce garde-fou, le fondu d'apparition
@@ -512,12 +485,10 @@ class IncomingCallActivity : AppCompatActivity() {
                 if (enabled) {
                     captionBanner.visibility = View.VISIBLE
                     captionBanner.animate().alpha(1f).setDuration(400).start()
-                    startCallCaptioning()
                 } else {
                     captionBanner.animate().alpha(0f).setDuration(400)
                         .withEndAction { captionBanner.visibility = View.GONE }
                         .start()
-                    callEngine.stopCallCaptions()
                 }
             }
         }
