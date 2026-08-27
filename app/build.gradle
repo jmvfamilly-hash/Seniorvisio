@@ -31,11 +31,6 @@ android {
         // devoir la saisir à la main dans le panneau admin sur la tablette.
         // Reste modifiable là-bas pour une clé différente (voir AdminConfig).
         buildConfigField "String", "ASSEMBLYAI_API_KEY_DEFAULT", "\"${project.findProperty('assemblyAiApiKey') ?: ""}\""
-
-        // Même mécanisme pour la clé Deepgram (sous-titres temps réel, voir
-        // core/DeepgramRealtimeTranscriber.kt), injectée depuis le secret
-        // GitHub DEEPGRAM_API_KEY.
-        buildConfigField "String", "DEEPGRAM_API_KEY_DEFAULT", "\"${project.findProperty('deepgramApiKey') ?: ""}\""
     }
 
     buildTypes {
@@ -79,8 +74,10 @@ dependencies {
     // core/CallEngine.kt / core/WebRtcCallEngine.kt
     implementation 'io.github.webrtc-sdk:android:144.7559.09'
 
-    // Connexion WebSocket vers l'API streaming temps réel de Deepgram (voir
-    // core/DeepgramRealtimeTranscriber.kt) — le framing WebSocket (RFC 6455)
-    // n'est pas quelque chose à réimplémenter à la main de façon fiable.
-    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    // Reconnaissance vocale embarquée sur la tablette pour les sous-titres
+    // (pièce et appel), gratuite et 100% hors-ligne une fois le modèle
+    // téléchargé (voir core/VoskModelProvider.kt / core/VoskTranscriber.kt)
+    // — remplace AssemblyAI/Deepgram (facturés à la minute) pour cet usage.
+    implementation 'com.alphacephei:vosk-android:0.3.47'
+    implementation 'net.java.dev.jna:jna:5.13.0@aar'
 }

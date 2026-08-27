@@ -53,8 +53,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var localVideoTrack: VideoTrack? = null
     private var remoteVideoTrack: VideoTrack? = null
     private var remoteAudioTrack: AudioTrack? = null
-    private var deepgramTranscriber: DeepgramRealtimeTranscriber? = null
-    private var deepgramSink: AudioTrackSink? = null
+    private var voskTranscriber: VoskTranscriber? = null
+    private var voskSink: AudioTrackSink? = null
 
     private var callerCandidatesListener: ListenerRegistration? = null
     private var callId: String? = null
@@ -94,6 +94,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         this.callId = callId
         state = CallState.RINGING_SILENT
         ensureFactory()
+        VoskModelProvider.prepare(context)
 
         signaling.fetchOfferSdp(callId) { sdp ->
             if (sdp == null) {
@@ -158,44 +159,45 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
     /**
      * Sous-titres d'appel transcrits en direct depuis le flux audio WebRTC
-     * reçu par la tablette (voix du proche), via l'API streaming temps réel
-     * de Deepgram — remplace l'ancien mécanisme où le navigateur appelant
-     * transcrivait lui-même sa propre voix (Web Speech API, voir historique
-     * web-caller/webrtc-engine.js) et l'envoyait par Firestore : ce dernier
-     * ne fonctionnait que sur les navigateurs supportant la reconnaissance
-     * vocale (Chrome desktop essentiellement), une contrainte côté proche
-     * qu'on voulait justement éliminer. Ici, la tablette transcrit elle-même
-     * ce qu'elle reçoit déjà pour la lecture audio de l'appel — aucune
-     * contrainte sur ce que le proche utilise pour appeler.
+     * reçu par la tablette (voix du proche), avec Vosk (gratuit, embarqué,
+     * 100% hors-ligne — voir VoskTranscriber/VoskModelProvider) — remplace
+     * l'ancien mécanisme où le navigateur appelant transcrivait lui-même sa
+     * propre voix (Web Speech API, voir historique web-caller/webrtc-engine.js)
+     * et l'envoyait par Firestore : ce dernier ne fonctionnait que sur les
+     * navigateurs supportant la reconnaissance vocale (Chrome desktop
+     * essentiellement), une contrainte côté proche qu'on voulait justement
+     * éliminer. Ici, la tablette transcrit elle-même ce qu'elle reçoit déjà
+     * pour la lecture audio de l'appel — aucune contrainte sur ce que le
+     * proche utilise pour appeler, et aucun coût par minute transcrite
+     * (contrairement à AssemblyAI/Deepgram utilisés auparavant pour cet usage).
      */
-    fun startDeepgramCaptions(
-        apiKey: String,
+    fun startCallCaptions(
         onTranscript: (text: String, isFinal: Boolean) -> Unit,
         onError: ((String) -> Unit)? = null,
     ) {
-        deepgramTranscriber = DeepgramRealtimeTranscriber(apiKey = apiKey, onTranscript = onTranscript, onError = onError)
-        attachDeepgramSinkIfReady()
+        VoskModelProvider.prepare(context)
+        voskTranscriber = VoskTranscriber(onTranscript = onTranscript, onError = onError)
+        attachVoskSinkIfReady()
     }
 
-    fun stopDeepgramCaptions() {
-        deepgramSink?.let { sink -> remoteAudioTrack?.removeSink(sink) }
-        deepgramSink = null
-        deepgramTranscriber?.stop()
-        deepgramTranscriber = null
+    fun stopCallCaptions() {
+        voskSink?.let { sink -> remoteAudioTrack?.removeSink(sink) }
+        voskSink = null
+        voskTranscriber?.stop()
+        voskTranscriber = null
     }
 
     /**
-     * La piste audio distante peut n'arriver qu'après [startDeepgramCaptions]
+     * La piste audio distante peut n'arriver qu'après [startCallCaptions]
      * (négociation ICE/SDP encore en cours) : appelé ici et à nouveau dès que
      * la piste arrive (voir onTrack ci-dessous), pour couvrir les deux ordres.
-     * La connexion temps réel n'est ouverte qu'une fois la fréquence
-     * d'échantillonnage réelle connue (donnée par le premier bloc audio reçu),
-     * l'API Deepgram exigeant qu'elle soit déclarée à la connexion.
+     * Le recognizer Vosk n'est créé qu'une fois la fréquence d'échantillonnage
+     * réelle connue (donnée par le premier bloc audio reçu).
      */
-    private fun attachDeepgramSinkIfReady() {
-        val transcriber = deepgramTranscriber ?: return
+    private fun attachVoskSinkIfReady() {
+        val transcriber = voskTranscriber ?: return
         val track = remoteAudioTrack ?: return
-        if (deepgramSink != null) return
+        if (voskSink != null) return
         var started = false
         val sink = AudioTrackSink { audioData, _, sampleRate, numberOfChannels, _, _ ->
             if (!started) {
@@ -208,7 +210,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             transcriber.feed(mono)
         }
         track.addSink(sink)
-        deepgramSink = sink
+        voskSink = sink
     }
 
     /**
@@ -426,7 +428,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                     remoteAudioTrack = track
                     track.setVolume(pendingVolume)
                     currentVolume = pendingVolume
-                    attachDeepgramSinkIfReady()
+                    attachVoskSinkIfReady()
                 }
             }
 
@@ -508,7 +510,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private fun cleanup() {
         cancelScheduledAutoHangup()
         restoreAudio()
-        stopDeepgramCaptions()
+        stopCallCaptions()
         callerCandidatesListener?.remove()
         callerCandidatesListener = null
         volumeListener?.remove()

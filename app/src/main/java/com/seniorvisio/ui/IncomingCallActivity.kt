@@ -446,8 +446,8 @@ class IncomingCallActivity : AppCompatActivity() {
             maxScrollSpeedPxPerSec = dpPerSec * resources.displayMetrics.density
         }
 
-        // Alimentée par startCallCaptioning() (transcription Deepgram de la
-        // piste audio distante, voir plus bas) — le texte reçu ne fait que
+        // Alimentée par startCallCaptioning() (transcription Vosk embarquée de
+        // la piste audio distante, voir plus bas) — le texte reçu ne fait que
         // grandir (chaque nouvelle tranche s'ajoute à l'historique), donc
         // isContinuation reste vrai après la première tranche : le défilement
         // suit sans jamais revenir en haut, jusqu'à une vraie coupure (arrêt
@@ -475,21 +475,15 @@ class IncomingCallActivity : AppCompatActivity() {
 
         val callCaptionHistory = StringBuilder()
 
-        // La transcription (et son coût API) ne tourne que pendant que le
-        // proche a explicitement activé les sous-titres — pas pendant tout
-        // l'appel par défaut. Même logique partiel/final que côté sous-titres
-        // de la pièce (voir MainActivity.onRoomTranscript) : la phrase en
-        // cours s'affiche en aperçu, ajoutée à l'historique seulement une
-        // fois confirmée (end_of_turn), pour ne pas la dupliquer.
+        // La transcription (gratuite, embarquée, sans clé API) ne tourne que
+        // pendant que le proche a explicitement activé les sous-titres — pas
+        // pendant tout l'appel par défaut. Même logique partiel/final que
+        // côté sous-titres de la pièce (voir MainActivity.onRoomTranscript) :
+        // la phrase en cours s'affiche en aperçu, ajoutée à l'historique
+        // seulement une fois confirmée, pour ne pas la dupliquer.
         fun startCallCaptioning() {
-            val apiKey = adminConfig.deepgramApiKey
-            if (apiKey.isBlank()) {
-                Log.w(TAG, "Sous-titres d'appel : clé Deepgram manquante (réglages admin)")
-                return
-            }
             callCaptionHistory.clear()
-            callEngine.startDeepgramCaptions(
-                apiKey,
+            callEngine.startCallCaptions(
                 onTranscript = { text, isFinal ->
                     if (isFinal) {
                         if (text.isNotBlank()) {
@@ -502,7 +496,7 @@ class IncomingCallActivity : AppCompatActivity() {
                         onCallCaptionText(preview)
                     }
                 },
-                onError = { message -> Log.w(TAG, "Sous-titres d'appel : erreur Deepgram ($message)") },
+                onError = { message -> Log.w(TAG, "Sous-titres d'appel : erreur reconnaissance vocale ($message)") },
             )
         }
 
@@ -523,7 +517,7 @@ class IncomingCallActivity : AppCompatActivity() {
                     captionBanner.animate().alpha(0f).setDuration(400)
                         .withEndAction { captionBanner.visibility = View.GONE }
                         .start()
-                    callEngine.stopDeepgramCaptions()
+                    callEngine.stopCallCaptions()
                 }
             }
         }

@@ -33,23 +33,16 @@ jobs:
       - name: Vérifier la présence des secrets (sans jamais afficher leur valeur)
         env:
           ASSEMBLYAI_API_KEY: ${{ secrets.ASSEMBLYAI_API_KEY }}
-          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
         run: |
           echo "ASSEMBLYAI_API_KEY : ${#ASSEMBLYAI_API_KEY} caractère(s)"
-          echo "DEEPGRAM_API_KEY : ${#DEEPGRAM_API_KEY} caractère(s)"
-          if [ -z "$DEEPGRAM_API_KEY" ]; then
-            echo "::warning::Le secret GitHub DEEPGRAM_API_KEY est vide ou absent pour ce dépôt/branche — vérifier Settings > Secrets and variables > Actions > Repository secrets (pas Environment secrets, pas Codespaces)."
-          fi
 
       - name: Build debug APK
         env:
           ASSEMBLYAI_API_KEY: ${{ secrets.ASSEMBLYAI_API_KEY }}
-          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
         run: |
           gradle assembleDebug --stacktrace \
             "-PbuildRev=rev${{ github.run_number }}" \
-            "-PassemblyAiApiKey=${ASSEMBLYAI_API_KEY}" \
-            "-PdeepgramApiKey=${DEEPGRAM_API_KEY}"
+            "-PassemblyAiApiKey=${ASSEMBLYAI_API_KEY}"
 
       - name: Rename APK with revision number
         run: |

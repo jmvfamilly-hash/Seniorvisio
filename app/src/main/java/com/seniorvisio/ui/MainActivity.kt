@@ -25,9 +25,10 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
-import com.seniorvisio.core.DeepgramRealtimeTranscriber
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.MicPcmStreamer
+import com.seniorvisio.core.VoskModelProvider
+import com.seniorvisio.core.VoskTranscriber
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.signaling.CallSignalingClient
 
@@ -53,7 +54,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var buttonStopRoomCaptions: Button
 
     private var micStreamer: MicPcmStreamer? = null
-    private var transcriber: DeepgramRealtimeTranscriber? = null
+    private var transcriber: VoskTranscriber? = null
     private var roomCaptionsActive = false
     // Distinct de roomCaptionsActive : reflète le choix de Jean, pas l'état
     // technique du moment (coupé pendant un appel entrant, voir onPause/
@@ -97,6 +98,10 @@ class MainActivity : AppCompatActivity() {
         )
 
         ContextCompat.startForegroundService(this, Intent(this, CallListenerService::class.java))
+        // Démarré ici pour maximiser les chances que le modèle soit prêt
+        // avant le premier usage des sous-titres (téléchargement/chargement
+        // pris en charge par VoskModelProvider, idempotent).
+        VoskModelProvider.prepare(this)
         requestIgnoreBatteryOptimizations()
         requestFullScreenIntentPermission()
         registerFcmToken()
@@ -203,15 +208,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startRoomCaptions() {
-        val apiKey = AdminConfig(this).deepgramApiKey
-        if (apiKey.isBlank()) {
-            Toast.makeText(this, "Clé Deepgram manquante (réglages admin)", Toast.LENGTH_LONG).show()
-            roomCaptionsUserEnabled = false
-            showIdleView()
-            return
-        }
-        val newTranscriber = DeepgramRealtimeTranscriber(
-            apiKey = apiKey,
+        VoskModelProvider.prepare(this)
+        val newTranscriber = VoskTranscriber(
             onTranscript = { text, isFinal -> runOnUiThread { onRoomTranscript(text, isFinal) } },
             onError = { message -> runOnUiThread { onRoomTranscriptionError(message) } },
         )
@@ -253,7 +251,7 @@ class MainActivity : AppCompatActivity() {
     // une erreur bénigne à chaque silence prolongé, une erreur ici signale
     // une vraie coupure — inutile d'attendre plusieurs échecs avant d'abandonner.
     private fun onRoomTranscriptionError(message: String) {
-        Log.w(TAG, "Sous-titres de la pièce : erreur Deepgram ($message)")
+        Log.w(TAG, "Sous-titres de la pièce : erreur reconnaissance vocale ($message)")
         roomCaptionsUserEnabled = false
         // Une AlertDialog (texte sélectionnable, bouton copier) plutôt qu'un
         // toast : le message d'erreur réel est souvent trop long pour tenir

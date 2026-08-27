@@ -27,12 +27,10 @@ class AdminSettingsActivity : AppCompatActivity() {
         val inputPin = findViewById<EditText>(R.id.inputAdminPin)
         val buttonSave = findViewById<Button>(R.id.buttonSaveAdminSettings)
 
-        val inputDeepgramKey = findViewById<EditText>(R.id.inputDeepgramKey)
         val inputAssemblyAiKey = findViewById<EditText>(R.id.inputAssemblyAiKey)
 
         inputCountdown.setText(adminConfig.countdownSeconds.toString())
         inputPin.setText(adminConfig.adminPin)
-        inputDeepgramKey.setText(adminConfig.deepgramApiKey)
         inputAssemblyAiKey.setText(adminConfig.assemblyAiApiKey)
 
         buttonSave.setOnClickListener {
@@ -43,7 +41,6 @@ class AdminSettingsActivity : AppCompatActivity() {
             }
             adminConfig.countdownSeconds = seconds
             adminConfig.adminPin = inputPin.text.toString().ifBlank { adminConfig.adminPin }
-            adminConfig.deepgramApiKey = inputDeepgramKey.text.toString().trim()
             adminConfig.assemblyAiApiKey = inputAssemblyAiKey.text.toString().trim()
             Toast.makeText(this, "Réglages enregistrés", Toast.LENGTH_SHORT).show()
             finish()

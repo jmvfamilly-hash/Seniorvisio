@@ -7,7 +7,7 @@ import android.media.MediaRecorder
 
 /**
  * Capture continue du micro en PCM 16 bits mono, pour alimenter
- * [DeepgramRealtimeTranscriber] (sous-titres de la pièce). Contrairement à
+ * [VoskTranscriber] (sous-titres de la pièce). Contrairement à
  * MediaRecorder (un fichier par prise), une seule session AudioRecord tourne
  * sans interruption : découper le flux en tranches ne demande jamais de
  * relâcher puis rouvrir le micro, donc aucun blanc entre deux tranches.
