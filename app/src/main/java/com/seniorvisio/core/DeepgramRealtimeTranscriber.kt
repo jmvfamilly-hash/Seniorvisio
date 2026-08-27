@@ -43,7 +43,13 @@ class DeepgramRealtimeTranscriber(
         val request = Request.Builder()
             .url(
                 "wss://api.deepgram.com/v1/listen" +
-                    "?encoding=linear16&sample_rate=$sampleRate&channels=1&language=fr"
+                    "?encoding=linear16&sample_rate=$sampleRate&channels=1&language=fr" +
+                    // Sans le préciser, Deepgram utilise un modèle générique
+                    // nettement moins précis — Nova-3 est leur modèle le plus
+                    // récent avec un vrai support du français (annoncé
+                    // spécifiquement pour cette langue), constaté en test réel :
+                    // trop d'erreurs de reconnaissance sans ce réglage.
+                    "&model=nova-3&smart_format=true&punctuate=true"
             )
             .addHeader("Authorization", "Token $apiKey")
             .build()
