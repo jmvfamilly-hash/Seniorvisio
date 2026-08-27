@@ -38,6 +38,12 @@ class AssemblyAiRealtimeTranscriber(
         .build()
     private var webSocket: WebSocket? = null
     @Volatile private var connected = false
+    // Le serveur envoie un message "Begin" une fois la session prête côté
+    // AssemblyAI, juste après l'ouverture du socket : lui envoyer de l'audio
+    // avant ce signal (ce que le code faisait auparavant, dès onOpen) semble
+    // être ce qui provoquait la coupure "Broken pipe" observée en test réel,
+    // peu après une connexion pourtant réussie.
+    @Volatile private var sessionReady = false
     // A-t-on déjà réussi à ouvrir la connexion au moins une fois ? Distingue
     // "n'a jamais pu se connecter" (souci d'authentification/requête) de
     // "s'est coupée en cours d'envoi audio" (souci réseau/timeout) — le
@@ -61,11 +67,15 @@ class AssemblyAiRealtimeTranscriber(
                 val json = try { JSONObject(text) } catch (e: Exception) {
                     return
                 }
-                if (json.optString("type") != "Turn") return
-                val transcript = json.optString("transcript")
-                if (transcript.isBlank()) return
-                val isFinal = json.optBoolean("end_of_turn", false)
-                handler.post { onTranscript(transcript, isFinal) }
+                when (json.optString("type")) {
+                    "Begin" -> sessionReady = true
+                    "Turn" -> {
+                        val transcript = json.optString("transcript")
+                        if (transcript.isBlank()) return
+                        val isFinal = json.optBoolean("end_of_turn", false)
+                        handler.post { onTranscript(transcript, isFinal) }
+                    }
+                }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -89,23 +99,34 @@ class AssemblyAiRealtimeTranscriber(
                 handler.post { onError?.invoke(detail) }
             }
 
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                Log.w(TAG, "WebSocket AssemblyAI en fermeture : code=$code reason=$reason")
+            }
+
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 connected = false
+                sessionReady = false
             }
         })
     }
 
-    /** Alimente la connexion en direct avec un fragment audio PCM 16 bits mono. */
+    /**
+     * Alimente la connexion en direct avec un fragment audio PCM 16 bits
+     * mono — silencieusement ignoré tant que [sessionReady] n'est pas passé
+     * à vrai (voir onMessage, message "Begin"), l'audio capté pendant cette
+     * courte fenêtre initiale est donc perdu, sans conséquence pratique.
+     */
     fun feed(pcm: ByteArray) {
-        if (!connected) return
+        if (!sessionReady) return
         webSocket?.send(ByteString.of(*pcm))
     }
 
     fun stop() {
-        if (connected) {
+        if (sessionReady) {
             webSocket?.send(JSONObject().apply { put("type", "Terminate") }.toString())
         }
         connected = false
+        sessionReady = false
         webSocket?.close(1000, "fin")
         webSocket = null
     }
