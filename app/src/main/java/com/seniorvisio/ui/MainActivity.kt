@@ -1,28 +1,28 @@
 package com.seniorvisio.ui
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.app.NotificationManager
-import android.content.ComponentName
 import android.content.Intent
 import android.content.res.Configuration
 import android.text.InputType
 import android.content.pm.PackageManager
-import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
-import android.speech.RecognitionListener
-import android.speech.RecognitionService
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
+import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
+import android.webkit.WebChromeClient
+import android.webkit.WebView
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -67,11 +67,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var buttonRoomTextSmaller: Button
     private lateinit var buttonRoomTextLarger: Button
     private lateinit var roomCaptionScrollAnimator: CaptionScrollAnimator
+    private lateinit var roomCaptionWebView: WebView
 
     private val adminConfig by lazy { AdminConfig(this) }
-    private val audioManager by lazy { getSystemService(AUDIO_SERVICE) as AudioManager }
 
-    private var speechRecognizer: SpeechRecognizer? = null
     private var roomCaptionsActive = false
     // Distinct de roomCaptionsActive : reflète le choix de Jean, pas l'état
     // technique du moment (coupé pendant un appel entrant, voir onPause/
@@ -108,6 +107,7 @@ class MainActivity : AppCompatActivity() {
             maxSpeedPxPerSec = { ROOM_CAPTION_SCROLL_SPEED_DP_PER_SEC * resources.displayMetrics.density },
         )
         applyRoomCaptionLayout(resources.configuration.orientation)
+        setupRoomCaptionWebView()
         roomCaptionTextSizeSp = adminConfig.roomCaptionTextSizeSp
         buttonRoomCaptions.setOnClickListener { toggleRoomCaptions() }
         buttonStopRoomCaptions.setOnClickListener { toggleRoomCaptions() }
@@ -296,167 +296,56 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Sur cette tablette Samsung, le service de reconnaissance vocale par
-     * défaut de SpeechRecognizer.createSpeechRecognizer(this) donne des
-     * résultats nettement moins bons que la reconnaissance vocale du
-     * navigateur côté appel (Web Speech API) — même écart constaté en usage
-     * réel. Les deux s'appuient historiquement sur le même moteur cloud de
-     * Google : demander explicitement le service Google plutôt que le
-     * service par défaut de l'appareil (parfois un moteur Samsung/OEM moins
-     * précis) rapproche la pièce de la qualité obtenue en appel. Repli sur
-     * le service par défaut si le paquet Google n'est pas disponible (device
-     * sans Play Services).
+     * Sur cette tablette Samsung, SpeechRecognizer.createSpeechRecognizer(this)
+     * traite une phrase à la fois : il faut le relancer après chaque silence,
+     * ce qui rejoue à chaque fois le bip système de début d'écoute et fait
+     * clignoter le voyant micro Android 12+, en plus d'un trou de latence
+     * entre deux phrases. Le mode appel n'a jamais ce problème : le
+     * navigateur y utilise webkitSpeechRecognition en continuous = true, une
+     * seule session longue sans redémarrage entre les phrases (voir
+     * webrtc-engine.js, _startCaptioning). On rejoue exactement le même
+     * moteur ici, dans une WebView invisible, plutôt que de patcher
+     * SpeechRecognizer.
      */
-    private fun resolveBestSpeechRecognizer(): SpeechRecognizer {
-        val googleService = ComponentName(
-            "com.google.android.googlequicksearchbox",
-            "com.google.android.voicesearch.serviceapi.GoogleRecognitionService"
-        )
-        val availablePackages = packageManager
-            .queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
-            .map { it.serviceInfo.packageName }
-        return if (googleService.packageName in availablePackages) {
-            SpeechRecognizer.createSpeechRecognizer(this, googleService)
-        } else {
-            SpeechRecognizer.createSpeechRecognizer(this)
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupRoomCaptionWebView() {
+        roomCaptionWebView = WebView(this).apply {
+            settings.javaScriptEnabled = true
+            settings.mediaPlaybackRequiresUserGesture = false
+            webChromeClient = object : WebChromeClient() {
+                override fun onPermissionRequest(request: PermissionRequest) {
+                    request.grant(request.resources.filter { it == PermissionRequest.RESOURCE_AUDIO_CAPTURE }.toTypedArray())
+                }
+            }
+            addJavascriptInterface(RoomCaptionJsBridge(), "AndroidRoomCaptions")
+        }
+        // Invisible (1x1) : seul le résultat affiché dans textRoomCaption
+        // compte pour Jean, cette WebView n'est qu'un moteur de reconnaissance.
+        (idleContent.parent as ViewGroup).addView(roomCaptionWebView, ViewGroup.LayoutParams(1, 1))
+    }
+
+    private inner class RoomCaptionJsBridge {
+        @JavascriptInterface
+        fun onResult(text: String) {
+            if (text.isNotBlank()) runOnUiThread { updateRoomCaptionText(text) }
+        }
+
+        @JavascriptInterface
+        fun onError(message: String) {
+            Log.w(TAG, "Sous-titres de la pièce : erreur reconnaissance vocale ($message)")
         }
     }
 
     private fun startRoomCaptions() {
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            Toast.makeText(this, "Reconnaissance vocale indisponible sur cette tablette", Toast.LENGTH_SHORT).show()
-            roomCaptionsUserEnabled = false
-            showIdleView()
-            return
-        }
-        if (speechRecognizer == null) {
-            speechRecognizer = resolveBestSpeechRecognizer().apply {
-                setRecognitionListener(roomCaptionListener)
-            }
-        }
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR")
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            // Le silence par défaut (courte pause naturelle entre deux phrases
-            // d'une conversation) fait sinon expirer la reconnaissance très
-            // vite (ERROR_SPEECH_TIMEOUT), relançant en boucle rapprochée —
-            // et chaque relance rejoue le bip de début d'écoute du service de
-            // reconnaissance d'Android, d'où des bips répétitifs sans jamais
-            // laisser le temps de capter une phrase entière.
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4000)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4000)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 15000)
-        }
-        // Coupe le bip système de début d'écoute joué par le service de
-        // reconnaissance à chaque startListening() : sans ça, Jean l'entend à
-        // chaque phrase puisque la reconnaissance redémarre après chacune
-        // (voir restartRoomCaptionsIfEnabled). Remis en place dès que le
-        // service confirme être prêt (onReadyForSpeech, voir roomCaptionListener) —
-        // pas de réglage officiel pour désactiver ce bip autrement, il est
-        // interne au service de reconnaissance (Google), pas à cette appli.
-        muteRoomCaptionListeningSound()
-        speechRecognizer?.startListening(intent)
+        roomCaptionWebView.loadDataWithBaseURL(
+            "https://localhost/", ROOM_CAPTION_RECOGNITION_HTML, "text/html", "utf-8", null
+        )
         roomCaptionsActive = true
     }
 
     private fun stopRoomCaptions() {
         roomCaptionsActive = false
-        unmuteRoomCaptionListeningSound()
-        speechRecognizer?.stopListening()
-        speechRecognizer?.cancel()
-    }
-
-    /**
-     * Le bip de fin d'écoute (distinct de celui de début) est joué par
-     * certains services de reconnaissance juste après la détection de fin de
-     * parole (onEndOfSpeech), avant que le résultat n'arrive — remis en
-     * place dans onResults/onError.
-     */
-    private fun muteRoomCaptionListeningSound() {
-        try {
-            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun unmuteRoomCaptionListeningSound() {
-        try {
-            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
-        } catch (_: Exception) {
-        }
-    }
-
-    /**
-     * L'API SpeechRecognizer traite une phrase à la fois : sans relance
-     * après chaque résultat/erreur, elle s'arrête au premier silence — même
-     * principe que côté PWA (voir webrtc-engine.js, recognition.onend).
-     */
-    private fun restartRoomCaptionsIfEnabled() {
-        if (!roomCaptionsUserEnabled) return
-        textRoomCaption.postDelayed({ if (roomCaptionsUserEnabled) startRoomCaptions() }, 300)
-    }
-
-    // Nombre d'échecs à la suite (aucun résultat entre-temps) avant
-    // d'abandonner : sans ce garde-fou, une erreur qui se reproduit à
-    // chaque relance (micro indisponible, service de reconnaissance non
-    // fonctionnel sur cet appareil...) bouclait indéfiniment, avec à chaque
-    // tentative le bip de début d'écoute du service Android — de vrais bips
-    // répétitifs sans jamais rien afficher, plutôt qu'un message clair.
-    private var consecutiveErrorCount = 0
-    private val maxConsecutiveErrors = 3
-
-    private val roomCaptionListener = object : RecognitionListener {
-        // Confirme que le service a bien démarré : le bip de début, joué à
-        // l'appel de startListening() (voir startRoomCaptions), est passé à
-        // ce stade, sans risque de couper aussi le tout début de la voix de
-        // Jean.
-        override fun onReadyForSpeech(params: Bundle?) {
-            unmuteRoomCaptionListeningSound()
-        }
-        override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rmsdB: Float) {}
-        override fun onBufferReceived(buffer: ByteArray?) {}
-        // Coupe à nouveau le son avant le bip de fin d'écoute que certains
-        // services jouent ici, juste avant le résultat (onResults/onError) —
-        // remis en place là-bas.
-        override fun onEndOfSpeech() {
-            muteRoomCaptionListeningSound()
-        }
-        override fun onEvent(eventType: Int, params: Bundle?) {}
-
-        override fun onError(error: Int) {
-            Log.w(TAG, "Sous-titres de la pièce : erreur reconnaissance vocale (code $error)")
-            unmuteRoomCaptionListeningSound()
-            consecutiveErrorCount++
-            if (consecutiveErrorCount >= maxConsecutiveErrors) {
-                consecutiveErrorCount = 0
-                roomCaptionsUserEnabled = false
-                Toast.makeText(
-                    this@MainActivity,
-                    "La reconnaissance vocale ne fonctionne pas pour l'instant sur cette tablette",
-                    Toast.LENGTH_LONG
-                ).show()
-                stopRoomCaptions()
-                showIdleView()
-                return
-            }
-            restartRoomCaptionsIfEnabled()
-        }
-
-        override fun onResults(results: Bundle?) {
-            unmuteRoomCaptionListeningSound()
-            consecutiveErrorCount = 0
-            val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-            if (!text.isNullOrEmpty()) updateRoomCaptionText(text)
-            restartRoomCaptionsIfEnabled()
-        }
-
-        override fun onPartialResults(partialResults: Bundle?) {
-            consecutiveErrorCount = 0
-            val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-            if (!text.isNullOrEmpty()) updateRoomCaptionText(text)
-        }
+        roomCaptionWebView.loadUrl("about:blank")
     }
 
     // Dernier texte affiché (aperçu ou phrase confirmée, sans distinction —
@@ -517,5 +406,34 @@ class MainActivity : AppCompatActivity() {
         // aux sous-titres d'appel, voir WebRtcCallEngine.listenForCaptionScrollSpeed) :
         // valeur fixe, identique à celle de départ côté appel.
         private const val ROOM_CAPTION_SCROLL_SPEED_DP_PER_SEC = 50f
+
+        // Reprend exactement le moteur de reconnaissance utilisé côté appel
+        // (voir web-caller/webrtc-engine.js, _startCaptioning) : une seule
+        // session continue (continuous = true) relancée uniquement si le
+        // navigateur l'arrête vraiment (onend), pas à chaque phrase.
+        private const val ROOM_CAPTION_RECOGNITION_HTML = """
+            <!DOCTYPE html><html><body><script>
+            var shouldRun = true;
+            function startRecognition() {
+              var Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+              if (!Ctor) { AndroidRoomCaptions.onError('non supporté'); return; }
+              var recognition = new Ctor();
+              recognition.continuous = true;
+              recognition.interimResults = true;
+              recognition.lang = 'fr-FR';
+              recognition.onresult = function(event) {
+                var text = '';
+                for (var i = event.resultIndex; i < event.results.length; i++) {
+                  text += event.results[i][0].transcript;
+                }
+                if (text) AndroidRoomCaptions.onResult(text);
+              };
+              recognition.onerror = function(e) { AndroidRoomCaptions.onError(e.error); };
+              recognition.onend = function() { if (shouldRun) { try { recognition.start(); } catch (e) {} } };
+              try { recognition.start(); } catch (e) { AndroidRoomCaptions.onError(String(e)); }
+            }
+            startRecognition();
+            </script></body></html>
+        """
     }
 }
