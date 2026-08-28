@@ -63,14 +63,6 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Réveil à distance pour activer les sous-titres de la pièce sans
-             appel vidéo (voir RoomCaptionActivationService.kt, bouton
-             "Réveiller & sous-titrer" du PWA). -->
-        <service
-            android:name=".service.RoomCaptionActivationService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
         <!-- Réveil par notification push (voir functions/index.js et
              SeniorVisioMessagingService.kt) : complète l'écoute Firestore
              permanente de CallListenerService, qu'Android peut suspendre une

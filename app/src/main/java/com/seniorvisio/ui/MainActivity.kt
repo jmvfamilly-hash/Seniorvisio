@@ -24,7 +24,6 @@ import android.text.style.StyleSpan
 import android.util.Log
 import android.util.TypedValue
 import android.view.View
-import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -141,46 +140,6 @@ class MainActivity : AppCompatActivity() {
         requestFullScreenIntentPermission()
         registerFcmToken()
         KioskManager.startIfDeviceOwner(this)
-        handleRemoteActivationIntent(intent)
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        handleRemoteActivationIntent(intent)
-    }
-
-    /**
-     * Le proche peut demander depuis le PWA (bouton "Réveiller & sous-titrer",
-     * voir RoomCaptionActivationService) d'activer les sous-titres de la
-     * pièce à distance, sans appel vidéo — utile s'il a de la visite et a du
-     * mal à suivre la conversation. La demande peut arriver tablette
-     * verrouillée/éteinte : mêmes indicateurs de fenêtre que
-     * IncomingCallActivity pour réveiller l'écran et s'afficher par-dessus
-     * le verrouillage.
-     */
-    private fun handleRemoteActivationIntent(intent: Intent?) {
-        if (intent?.getBooleanExtra(EXTRA_ACTIVATE_ROOM_CAPTIONS, false) != true) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true)
-            setTurnScreenOn(true)
-        } else {
-            @Suppress("DEPRECATION")
-            window.addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-            )
-        }
-        if (roomCaptionsUserEnabled) return
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            Toast.makeText(this, "Micro non autorisé : impossible d'activer les sous-titres à distance", Toast.LENGTH_LONG).show()
-            return
-        }
-        roomCaptionsUserEnabled = true
-        showRoomCaptionView()
-        startRoomCaptions()
     }
 
     private fun promptAdminPin() {
@@ -523,9 +482,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
-
-        /** Voir RoomCaptionActivationService / handleRemoteActivationIntent. */
-        const val EXTRA_ACTIVATE_ROOM_CAPTIONS = "extra_activate_room_captions"
 
         // Limite de sécurité (pas une troncature normale, voir appendRoomCaption).
         private const val MAX_ROOM_CAPTION_SENTENCES = 300
