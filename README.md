@@ -337,9 +337,18 @@ nouveau). Remplacé par un mécanisme intégré à l'appli, sans compte ni servi
 
 **Provisionnement (une seule fois, après reset d'usine de la tablette)** : le Device Owner ne peut être
 défini que sur un appareil sans aucun compte configuré. Au premier démarrage, avant l'assistant de
-configuration Android, tapoter 6 fois sur l'écran de bienvenue déclenche le scanner QR — reste à
-générer ce QR (charge utile de provisioning Android standard pointant vers `SeniorVisioDeviceAdminReceiver`
-et l'URL de téléchargement de l'APK) une fois la tablette prête à être réenrôlée.
+configuration Android, tapoter 6 fois sur l'écran de bienvenue déclenche le scanner QR. Ce QR (charge
+utile de provisioning Android standard pointant vers `SeniorVisioDeviceAdminReceiver` et l'URL de
+téléchargement de l'APK) se génère via le workflow GitHub Actions "Generate Device Owner provisioning QR
+code" (`scripts/generate_provisioning_qr.py`), à lancer une fois la tablette prête à être réenrôlée —
+l'image PNG produite (artifact du run) est à afficher sur un autre écran et à scanner avec la tablette.
+
+Le SSID Wi-Fi du workflow est optionnel : le lieu de déploiement final (ex. domicile de Jean, maison de
+retraite) n'est pas toujours connu à l'avance. Laissé vide, le QR ne contient aucune information Wi-Fi —
+Android affiche alors son propre écran de sélection de réseau pendant le provisioning, où le SSID et le
+mot de passe se saisissent directement sur la tablette, sur place. Une fois l'app installée et le Device
+Owner actif, le réseau peut aussi être changé à tout moment sans repasser par un reset d'usine, via
+l'écran de réglages admin intégré à l'app (voir point Wi-Fi ci-dessus).
 
 **Test réel sur Android 16 (One UI 8.5)** : l'écran d'appel ne s'affichait jamais si l'application
 n'était plus au premier plan, y compris avec le service actif (notification visible) et l'app déjà

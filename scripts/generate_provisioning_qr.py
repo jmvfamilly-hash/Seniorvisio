@@ -48,11 +48,23 @@ def main() -> None:
             os.environ["APK_URL"],
         "android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM":
             signature_checksum("target.apk"),
-        "android.app.extra.PROVISIONING_WIFI_SSID": os.environ["WIFI_SSID"],
-        "android.app.extra.PROVISIONING_WIFI_PASSWORD": os.environ["WIFI_PASSWORD"],
-        "android.app.extra.PROVISIONING_WIFI_SECURITY_TYPE": "WPA",
         "android.app.extra.PROVISIONING_LOCALE": "fr_FR",
     }
+
+    # Le SSID n'est connu qu'une fois sur place (lieu de déploiement pas
+    # toujours fixé à l'avance) : plutôt que de bloquer la génération du QR
+    # en attendant de le connaître, on l'omet du payload quand il n'est pas
+    # fourni. Sans ces extras et sans connexion réseau détectée, le
+    # provisioning Android affiche alors son propre écran de sélection Wi-Fi
+    # (avant de télécharger l'APK) — permet de saisir le réseau et son mot de
+    # passe directement sur l'écran de la tablette, sans repasser par ce
+    # script. Si le SSID est connu à l'avance, on peut toujours le fournir
+    # pour sauter cet écran.
+    wifi_ssid = os.environ.get("WIFI_SSID", "").strip()
+    if wifi_ssid:
+        payload["android.app.extra.PROVISIONING_WIFI_SSID"] = wifi_ssid
+        payload["android.app.extra.PROVISIONING_WIFI_PASSWORD"] = os.environ.get("WIFI_PASSWORD", "")
+        payload["android.app.extra.PROVISIONING_WIFI_SECURITY_TYPE"] = "WPA"
 
     img = qrcode.make(json.dumps(payload))
     img.save("provisioning-qr.png")
