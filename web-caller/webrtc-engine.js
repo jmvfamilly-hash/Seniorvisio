@@ -70,6 +70,24 @@ class RealCallEngine extends CallEngine {
    */
   onFullscreenCaption(callback) { this._fullscreenCaptionCb = callback; }
 
+  /**
+   * Réveille la tablette et active les sous-titres de la pièce, sans appel
+   * vidéo — utile si Jean a de la visite et a du mal à suivre la
+   * conversation. Passe par une notification push (voir functions/index.js,
+   * SeniorVisioMessagingService.kt côté Android) plutôt qu'un simple document
+   * Firestore : la tablette peut être verrouillée/éteinte au moment de la
+   * demande, et seul un message FCM en priorité haute est garanti de la
+   * réveiller (même mécanisme que pour un appel entrant).
+   */
+  async activateRoomCaptions() {
+    if (!this._available) {
+      throw new Error("Firebase non configuré (voir firebase-config.js).");
+    }
+    await this._db.collection("roomCaptionRequests").add({
+      requestedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
   async startCall(targetId, callerName, initialSettings = {}) {
     // Capturé au tout début : si cancelCall() est appelé pendant que cette
     // fonction attend encore (caméra, création de l'offre, écriture

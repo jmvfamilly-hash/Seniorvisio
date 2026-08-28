@@ -61,6 +61,7 @@ const els = {
   blocked: document.getElementById("stateBlocked"),
   connected: document.getElementById("stateConnected"),
   callButton: document.getElementById("callButton"),
+  wakeCaptionButton: document.getElementById("wakeCaptionButton"),
   cancelButton: document.getElementById("cancelButton"),
   forceConnectButton: document.getElementById("forceConnectButton"),
   retryButton: document.getElementById("retryButton"),
@@ -149,6 +150,21 @@ els.callButton.addEventListener("click", async () => {
     selfPreviewEnabled: settings.selfPreview,
   });
   els.forceConnectButton.disabled = false;
+});
+
+els.wakeCaptionButton.addEventListener("click", async () => {
+  els.wakeCaptionButton.disabled = true;
+  const original = els.wakeCaptionButton.textContent;
+  try {
+    await engine.activateRoomCaptions();
+    els.wakeCaptionButton.textContent = "✅ Tablette réveillée";
+  } catch (e) {
+    alert("Impossible d'activer les sous-titres à distance : " + e.message);
+  }
+  setTimeout(() => {
+    els.wakeCaptionButton.textContent = original;
+    els.wakeCaptionButton.disabled = false;
+  }, 2000);
 });
 
 els.rememberSettingsButton.addEventListener("click", () => {

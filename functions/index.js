@@ -44,3 +44,27 @@ exports.notifyIncomingCall = onDocumentCreated("calls/{callId}", async (event) =
     },
   });
 });
+
+/**
+ * Réveille la tablette et active les sous-titres de la pièce à la demande
+ * du proche depuis le PWA (voir web-caller/webrtc-engine.js,
+ * activateRoomCaptions), sans passer par un appel vidéo. Même mécanisme que
+ * notifyIncomingCall ci-dessus : un document Firestore seul ne réveillerait
+ * pas une tablette dont l'écran est éteint depuis un moment (Doze).
+ */
+exports.notifyRoomCaptionRequest = onDocumentCreated("roomCaptionRequests/{requestId}", async () => {
+  const deviceSnap = await getFirestore().doc(DEVICE_TOKEN_DOC).get();
+  const token = deviceSnap.get("fcmToken");
+  if (!token) {
+    console.warn("Aucun token FCM enregistré pour la tablette : activation à distance des sous-titres impossible.");
+    return;
+  }
+
+  await getMessaging().send({
+    token,
+    android: { priority: "high" },
+    data: {
+      type: "activate_room_captions",
+    },
+  });
+});

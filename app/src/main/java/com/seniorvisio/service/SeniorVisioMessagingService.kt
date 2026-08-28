@@ -28,17 +28,24 @@ class SeniorVisioMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
-        if (message.data["type"] != TYPE_INCOMING_CALL) return
-        val callId = message.data["callId"] ?: return
-        val callerName = message.data["callerName"] ?: "un proche"
-        val intent = Intent(this, IncomingCallService::class.java).apply {
-            putExtra(IncomingCallService.EXTRA_CALL_ID, callId)
-            putExtra(IncomingCallService.EXTRA_CALLER_NAME, callerName)
+        when (message.data["type"]) {
+            TYPE_INCOMING_CALL -> {
+                val callId = message.data["callId"] ?: return
+                val callerName = message.data["callerName"] ?: "un proche"
+                val intent = Intent(this, IncomingCallService::class.java).apply {
+                    putExtra(IncomingCallService.EXTRA_CALL_ID, callId)
+                    putExtra(IncomingCallService.EXTRA_CALLER_NAME, callerName)
+                }
+                startForegroundService(intent)
+            }
+            TYPE_ACTIVATE_ROOM_CAPTIONS -> {
+                startForegroundService(Intent(this, RoomCaptionActivationService::class.java))
+            }
         }
-        startForegroundService(intent)
     }
 
     companion object {
         private const val TYPE_INCOMING_CALL = "incoming_call"
+        private const val TYPE_ACTIVATE_ROOM_CAPTIONS = "activate_room_captions"
     }
 }
