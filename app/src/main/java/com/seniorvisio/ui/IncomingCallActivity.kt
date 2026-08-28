@@ -10,7 +10,6 @@ import android.os.Bundle
 import android.util.Base64
 import android.util.Log
 import android.util.TypedValue
-import android.view.Choreographer
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -32,7 +31,6 @@ import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.service.IncomingCallService
 import com.seniorvisio.service.TimedCallAlertController
 import org.webrtc.SurfaceViewRenderer
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -384,63 +382,42 @@ class IncomingCallActivity : AppCompatActivity() {
         // début. On ne revient en haut que lorsqu'une phrase réellement
         // nouvelle démarre (le texte ne prolonge plus le précédent).
         //
-        // Suivi continu par interpolation image par image (Choreographer),
-        // validé dans le labo de défilement (experiment/caption-scroll) sur
-        // un enregistrement vocal réel — 60 im/s en moyenne, quasi aucune
-        // image saccadée. Le pas par frame était initialement proportionnel
-        // à la distance restante (facteur de rattrapage 0,35) : plus le
-        // proche parlait vite (donc plus de texte en attente), plus le
-        // défilement accélérait — l'inverse de ce qu'il fallait pour laisser
-        // le temps à Jean de lire, constaté lors des tests réels. Le pas est
-        // maintenant plafonné à une vitesse constante et paramétrable (voir
-        // listenForCaptionScrollSpeed, réglée à distance par le proche) :
-        // le texte reçu peut s'accumuler en attente le temps que le
-        // défilement rattrape, plutôt que de défiler plus vite. Le retard de
-        // lecture qui en résulte est signalé en continu au proche (voir
-        // signalCaptionCatchUpLag) pour qu'il sache précisément où en est
-        // Jean, plutôt qu'un simple indicateur "ça déborde" ou non.
+        // Suivi continu par interpolation image par image (voir
+        // CaptionScrollAnimator, logique commune aux sous-titres d'appel et
+        // de la pièce), validé dans le labo de défilement
+        // (experiment/caption-scroll) sur un enregistrement vocal réel —
+        // 60 im/s en moyenne, quasi aucune image saccadée. Le pas par frame
+        // était initialement proportionnel à la distance restante (facteur
+        // de rattrapage 0,35) : plus le proche parlait vite (donc plus de
+        // texte en attente), plus le défilement accélérait — l'inverse de ce
+        // qu'il fallait pour laisser le temps à Jean de lire, constaté lors
+        // des tests réels. Le pas est maintenant plafonné à une vitesse
+        // constante et paramétrable (voir listenForCaptionScrollSpeed,
+        // réglée à distance par le proche) : le texte reçu peut s'accumuler
+        // en attente le temps que le défilement rattrape, plutôt que de
+        // défiler plus vite. Le retard de lecture qui en résulte est signalé
+        // en continu au proche (voir signalCaptionCatchUpLag) pour qu'il
+        // sache précisément où en est Jean, plutôt qu'un simple indicateur
+        // "ça déborde" ou non.
         var lastCaptionText = ""
-        var lerpTargetScroll = 0
-        var lerpFrameScheduled = false
-        var lastFrameTimeNanos = 0L
         var lastLagSentAtMs = 0L
         // Valeur de départ raisonnable en l'absence de mesure labo pour ce
         // réglage (contrairement au lissage ci-dessus) — ajustée en direct
         // par le proche via le curseur du PWA.
         var maxScrollSpeedPxPerSec = 50f * resources.displayMetrics.density
 
-        fun requestLerpFrame() {
-            if (lerpFrameScheduled) return
-            lerpFrameScheduled = true
-            Choreographer.getInstance().postFrameCallback { frameTimeNanos ->
-                lerpFrameScheduled = false
-                val dtSeconds = if (lastFrameTimeNanos == 0L) {
-                    0f
-                } else {
-                    ((frameTimeNanos - lastFrameTimeNanos) / 1_000_000_000f).coerceIn(0f, 0.1f)
-                }
-                lastFrameTimeNanos = frameTimeNanos
-                val current = captionScroll.scrollY
-                val diff = (lerpTargetScroll - current).toFloat()
-                if (abs(diff) < 1f) {
-                    captionScroll.scrollTo(0, lerpTargetScroll)
-                } else {
-                    val maxStep = (maxScrollSpeedPxPerSec * dtSeconds).coerceAtLeast(1f)
-                    val step = diff.coerceIn(-maxStep, maxStep)
-                    captionScroll.scrollTo(0, (current + step).roundToInt())
-                    requestLerpFrame()
-                }
-
-                val maxScrollNow = (textCaption.height - captionScroll.height).coerceAtLeast(0)
-                val remainingPx = (maxScrollNow - captionScroll.scrollY).coerceAtLeast(0)
+        val scrollAnimator = CaptionScrollAnimator(
+            scrollView = captionScroll,
+            maxSpeedPxPerSec = { maxScrollSpeedPxPerSec },
+            onFrame = { remainingPx ->
                 val lagSeconds = if (maxScrollSpeedPxPerSec > 0f) remainingPx / maxScrollSpeedPxPerSec else 0f
                 val now = System.currentTimeMillis()
                 if (now - lastLagSentAtMs > 300) {
                     lastLagSentAtMs = now
                     callEngine.signalCaptionCatchUpLag(lagSeconds)
                 }
-            }
-        }
+            },
+        )
 
         callEngine.listenForCaptionScrollSpeed { dpPerSec ->
             maxScrollSpeedPxPerSec = dpPerSec * resources.displayMetrics.density
@@ -459,15 +436,13 @@ class IncomingCallActivity : AppCompatActivity() {
                 textCaption.text = text
                 textCaption.post {
                     if (!isContinuation) {
-                        captionScroll.scrollTo(0, 0)
-                        lerpTargetScroll = 0
+                        scrollAnimator.jumpTo(0)
                         callEngine.signalCaptionCatchUpLag(0f)
                     }
                     val overflow = textCaption.height > captionScroll.height
                     val maxScroll = (textCaption.height - captionScroll.height).coerceAtLeast(0)
                     if (overflow) {
-                        lerpTargetScroll = maxScroll
-                        requestLerpFrame()
+                        scrollAnimator.scrollTo(maxScroll)
                     }
                 }
             }

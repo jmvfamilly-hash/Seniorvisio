@@ -44,15 +44,22 @@
     <!-- Sous-titres de la pièce : reconnaissance vocale locale de la tablette
          (pas de proche impliqué ici, donc pas d'autre choix que de faire
          tourner la reconnaissance directement sur l'appareil). Historique
-         continu (pas de retour en haut comme les sous-titres d'appel,
-         puisqu'il n'y a pas de notion de "nouvelle phrase" bien définie dans
-         une conversation de pièce). -->
+         complet conservé (voir MainActivity.roomCaptionSentences) : Jean
+         peut remonter à la main pour relire une phrase précédente, le
+         défilement automatique ne le ramène pas de force en bas s'il a
+         déplacé la vue (voir MainActivity.isRoomCaptionScrollNearBottom). La
+         dernière phrase est mise en valeur (gras, pleine opacité) pour la
+         repérer d'un coup d'œil parmi l'historique, plus discret. -->
     <ScrollView
         android:id="@+id/roomCaptionScroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:visibility="gone"
-        android:padding="32dp">
+        android:scrollbars="none"
+        android:paddingLeft="32dp"
+        android:paddingRight="32dp"
+        android:paddingTop="88dp"
+        android:paddingBottom="96dp">
 
         <TextView
             android:id="@+id/textRoomCaption"
@@ -60,10 +67,50 @@
             android:layout_height="wrap_content"
             android:gravity="center"
             android:textColor="#FFFFFF"
-            android:textStyle="bold"
             android:textSize="@dimen/caption_text_size_default"
             android:text="" />
     </ScrollView>
+
+    <!-- Taille du texte réglable directement par Jean (pas de proche à
+         distance pour le faire ici, contrairement aux sous-titres d'appel) —
+         voir AdminConfig.roomCaptionTextSizeSp. -->
+    <LinearLayout
+        android:id="@+id/roomCaptionTextSizeControls"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="16dp"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/buttonRoomTextSmaller"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetLeft="0dp"
+            android:insetRight="0dp"
+            android:padding="0dp"
+            android:text="A-"
+            android:textSize="16sp"
+            android:backgroundTint="#33FFFFFF" />
+
+        <Button
+            android:id="@+id/buttonRoomTextLarger"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginStart="12dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetLeft="0dp"
+            android:insetRight="0dp"
+            android:padding="0dp"
+            android:text="A+"
+            android:textSize="20sp"
+            android:backgroundTint="#33FFFFFF" />
+
+    </LinearLayout>
 
     <!-- Version affichée en permanence, discrètement, pour vérifier à distance
          quel APK tourne réellement sur la tablette (voir BuildConfig.BUILD_REV) —

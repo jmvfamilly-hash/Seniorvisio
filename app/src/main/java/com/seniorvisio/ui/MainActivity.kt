@@ -3,6 +3,7 @@ package com.seniorvisio.ui
 import android.Manifest
 import android.app.AlertDialog
 import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Intent
 import android.text.InputType
 import android.content.pm.PackageManager
@@ -12,11 +13,19 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.speech.RecognitionListener
+import android.speech.RecognitionService
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.graphics.Typeface
+import android.text.Spannable
+import android.text.SpannableStringBuilder
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.util.Log
+import android.util.TypedValue
 import android.view.View
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -31,6 +40,7 @@ import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.signaling.CallSignalingClient
+import kotlin.math.roundToInt
 
 /**
  * Écran affiché quand aucun appel n'est en cours. Volontairement épuré pour
@@ -52,6 +62,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textRoomCaption: TextView
     private lateinit var buttonRoomCaptions: Button
     private lateinit var buttonStopRoomCaptions: Button
+    private lateinit var roomCaptionTextSizeControls: LinearLayout
+    private lateinit var buttonRoomTextSmaller: Button
+    private lateinit var buttonRoomTextLarger: Button
+    private lateinit var roomCaptionScrollAnimator: CaptionScrollAnimator
+
+    private val adminConfig by lazy { AdminConfig(this) }
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var roomCaptionsActive = false
@@ -60,7 +76,16 @@ class MainActivity : AppCompatActivity() {
     // onResume) — permet de reprendre automatiquement les sous-titres de la
     // pièce au retour sur cet écran, sans que Jean ait à rappuyer dessus.
     private var roomCaptionsUserEnabled = false
-    private val roomCaptionHistory = StringBuilder()
+
+    // Historique complet des phrases confirmées (jamais tronqué en usage
+    // normal, voir MAX_ROOM_CAPTION_SENTENCES pour la seule limite de
+    // sécurité) : Jean peut remonter à la main dans roomCaptionScroll pour
+    // relire une phrase précédente.
+    private val roomCaptionSentences = mutableListOf<String>()
+    // Phrase en cours de reconnaissance (aperçu, pas encore confirmée) —
+    // affichée à la suite de l'historique, remplacée à chaque mise à jour.
+    private var roomCaptionInterimText = ""
+    private var roomCaptionTextSizeSp = AdminConfig.ROOM_CAPTION_TEXT_SIZE_DEFAULT_SP
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,8 +103,22 @@ class MainActivity : AppCompatActivity() {
         textRoomCaption = findViewById(R.id.textRoomCaption)
         buttonRoomCaptions = findViewById(R.id.buttonRoomCaptions)
         buttonStopRoomCaptions = findViewById(R.id.buttonStopRoomCaptions)
+        roomCaptionTextSizeControls = findViewById(R.id.roomCaptionTextSizeControls)
+        buttonRoomTextSmaller = findViewById(R.id.buttonRoomTextSmaller)
+        buttonRoomTextLarger = findViewById(R.id.buttonRoomTextLarger)
+        // Le défilement est piloté par le code ci-dessous quand Jean suit la
+        // conversation en direct, mais reste manuel par ailleurs : contraire-
+        // ment aux sous-titres d'appel, Jean doit pouvoir remonter à la main
+        // pour relire une phrase précédente (voir isRoomCaptionScrollNearBottom).
+        roomCaptionScrollAnimator = CaptionScrollAnimator(
+            scrollView = roomCaptionScroll,
+            maxSpeedPxPerSec = { ROOM_CAPTION_SCROLL_SPEED_DP_PER_SEC * resources.displayMetrics.density },
+        )
+        roomCaptionTextSizeSp = adminConfig.roomCaptionTextSizeSp
         buttonRoomCaptions.setOnClickListener { toggleRoomCaptions() }
         buttonStopRoomCaptions.setOnClickListener { toggleRoomCaptions() }
+        buttonRoomTextSmaller.setOnClickListener { adjustRoomCaptionTextSize(-AdminConfig.ROOM_CAPTION_TEXT_SIZE_STEP_SP) }
+        buttonRoomTextLarger.setOnClickListener { adjustRoomCaptionTextSize(AdminConfig.ROOM_CAPTION_TEXT_SIZE_STEP_SP) }
         // Appui long : labo d'étude comparant les moteurs de transcription
         // (voir TranscriptionLabActivity), sans toucher à l'usage normal du
         // bouton (appui simple, inchangé).
@@ -111,7 +150,7 @@ class MainActivity : AppCompatActivity() {
             .setTitle("PIN admin")
             .setView(input)
             .setPositiveButton("OK") { _, _ ->
-                if (input.text.toString() == AdminConfig(this).adminPin) {
+                if (input.text.toString() == adminConfig.adminPin) {
                     startActivity(Intent(this, AdminSettingsActivity::class.java))
                 } else {
                     Toast.makeText(this, "PIN incorrect", Toast.LENGTH_SHORT).show()
@@ -192,14 +231,44 @@ class MainActivity : AppCompatActivity() {
         idleContent.visibility = View.VISIBLE
         roomCaptionScroll.visibility = View.GONE
         buttonStopRoomCaptions.visibility = View.GONE
+        roomCaptionTextSizeControls.visibility = View.GONE
     }
 
     private fun showRoomCaptionView() {
         idleContent.visibility = View.GONE
         roomCaptionScroll.visibility = View.VISIBLE
         buttonStopRoomCaptions.visibility = View.VISIBLE
-        roomCaptionHistory.clear()
+        roomCaptionTextSizeControls.visibility = View.VISIBLE
+        roomCaptionSentences.clear()
+        roomCaptionInterimText = ""
         textRoomCaption.text = ""
+    }
+
+    /**
+     * Sur cette tablette Samsung, le service de reconnaissance vocale par
+     * défaut de SpeechRecognizer.createSpeechRecognizer(this) donne des
+     * résultats nettement moins bons que la reconnaissance vocale du
+     * navigateur côté appel (Web Speech API) — même écart constaté en usage
+     * réel. Les deux s'appuient historiquement sur le même moteur cloud de
+     * Google : demander explicitement le service Google plutôt que le
+     * service par défaut de l'appareil (parfois un moteur Samsung/OEM moins
+     * précis) rapproche la pièce de la qualité obtenue en appel. Repli sur
+     * le service par défaut si le paquet Google n'est pas disponible (device
+     * sans Play Services).
+     */
+    private fun resolveBestSpeechRecognizer(): SpeechRecognizer {
+        val googleService = ComponentName(
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.voicesearch.serviceapi.GoogleRecognitionService"
+        )
+        val availablePackages = packageManager
+            .queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
+            .map { it.serviceInfo.packageName }
+        return if (googleService.packageName in availablePackages) {
+            SpeechRecognizer.createSpeechRecognizer(this, googleService)
+        } else {
+            SpeechRecognizer.createSpeechRecognizer(this)
+        }
     }
 
     private fun startRoomCaptions() {
@@ -210,7 +279,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (speechRecognizer == null) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
+            speechRecognizer = resolveBestSpeechRecognizer().apply {
                 setRecognitionListener(roomCaptionListener)
             }
         }
@@ -294,26 +363,82 @@ class MainActivity : AppCompatActivity() {
             consecutiveErrorCount = 0
             val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
             if (!text.isNullOrEmpty()) {
-                val preview = if (roomCaptionHistory.isNotEmpty()) "$roomCaptionHistory\n$text" else text
-                showRoomCaptionText(preview)
+                roomCaptionInterimText = text
+                renderRoomCaptions()
             }
         }
     }
 
     private fun appendRoomCaption(text: String) {
-        if (roomCaptionHistory.isNotEmpty()) roomCaptionHistory.append("\n")
-        roomCaptionHistory.append(text)
-        // Historique borné : évite une zone de texte qui grossirait indéfiniment.
-        val maxChars = 2000
-        if (roomCaptionHistory.length > maxChars) {
-            roomCaptionHistory.delete(0, roomCaptionHistory.length - maxChars)
+        roomCaptionSentences.add(text)
+        // Limite de sécurité seulement (pas une troncature en usage normal,
+        // voir toggleRoomCaptions/showRoomCaptionView qui vide l'historique
+        // à chaque activation) : évite une croissance illimitée si Jean
+        // laisse les sous-titres tourner sans interruption pendant des heures.
+        if (roomCaptionSentences.size > MAX_ROOM_CAPTION_SENTENCES) {
+            roomCaptionSentences.removeAt(0)
         }
-        showRoomCaptionText(roomCaptionHistory.toString())
+        roomCaptionInterimText = ""
+        renderRoomCaptions()
     }
 
-    private fun showRoomCaptionText(text: String) {
-        textRoomCaption.text = text
-        textRoomCaption.post { roomCaptionScroll.smoothScrollTo(0, textRoomCaption.height) }
+    /**
+     * Reconstruit l'affichage à partir de l'historique complet des phrases
+     * confirmées (voir roomCaptionSentences) plus l'aperçu en cours, avec la
+     * dernière mise en valeur (gras, pleine opacité) pour la distinguer d'un
+     * coup d'œil de l'historique plus discret au-dessus. Ne force le
+     * défilement en bas que si Jean n'a pas remonté à la main pour relire
+     * une phrase précédente (voir isRoomCaptionScrollNearBottom) — même
+     * principe que le défilement des sous-titres d'appel (voir
+     * CaptionScrollAnimator), à ceci près qu'ici Jean peut consulter
+     * l'historique librement puisqu'il n'y a pas de proche à qui signaler un
+     * retard de lecture.
+     */
+    private fun renderRoomCaptions() {
+        val lines = roomCaptionSentences.toMutableList()
+        if (roomCaptionInterimText.isNotBlank()) lines.add(roomCaptionInterimText)
+        if (lines.isEmpty()) {
+            textRoomCaption.text = ""
+            return
+        }
+        val wasNearBottom = isRoomCaptionScrollNearBottom()
+        textRoomCaption.setTextSize(TypedValue.COMPLEX_UNIT_SP, roomCaptionTextSizeSp)
+        val builder = SpannableStringBuilder()
+        lines.forEachIndexed { index, line ->
+            if (index > 0) builder.append("\n")
+            val start = builder.length
+            builder.append(line)
+            val end = builder.length
+            val isLast = index == lines.lastIndex
+            builder.setSpan(
+                ForegroundColorSpan(if (isLast) LAST_SENTENCE_COLOR else HISTORY_SENTENCE_COLOR),
+                start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+            if (isLast) {
+                builder.setSpan(StyleSpan(Typeface.BOLD), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+        textRoomCaption.text = builder
+        textRoomCaption.post {
+            if (!wasNearBottom) return@post
+            val maxScroll = (textRoomCaption.height - roomCaptionScroll.height).coerceAtLeast(0)
+            roomCaptionScrollAnimator.scrollTo(maxScroll)
+        }
+    }
+
+    /** Jean est considéré "au fond" s'il en est à moins de 24dp du bas — au-delà, on suppose qu'il a remonté exprès pour relire. */
+    private fun isRoomCaptionScrollNearBottom(): Boolean {
+        val maxScroll = (textRoomCaption.height - roomCaptionScroll.height).coerceAtLeast(0)
+        if (maxScroll <= 0) return true
+        val thresholdPx = (24 * resources.displayMetrics.density).roundToInt()
+        return roomCaptionScroll.scrollY >= maxScroll - thresholdPx
+    }
+
+    private fun adjustRoomCaptionTextSize(deltaSp: Float) {
+        roomCaptionTextSizeSp = (roomCaptionTextSizeSp + deltaSp)
+            .coerceIn(AdminConfig.ROOM_CAPTION_TEXT_SIZE_MIN_SP, AdminConfig.ROOM_CAPTION_TEXT_SIZE_MAX_SP)
+        adminConfig.roomCaptionTextSizeSp = roomCaptionTextSizeSp
+        renderRoomCaptions()
     }
 
     /**
@@ -339,5 +464,16 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+
+        // Limite de sécurité (pas une troncature normale, voir appendRoomCaption).
+        private const val MAX_ROOM_CAPTION_SENTENCES = 300
+
+        // Pas de proche pour ajuster ce réglage à distance ici (contrairement
+        // aux sous-titres d'appel, voir WebRtcCallEngine.listenForCaptionScrollSpeed) :
+        // valeur fixe, identique à celle de départ côté appel.
+        private const val ROOM_CAPTION_SCROLL_SPEED_DP_PER_SEC = 50f
+
+        private val LAST_SENTENCE_COLOR = 0xFFFFFFFF.toInt()
+        private val HISTORY_SENTENCE_COLOR = 0x99FFFFFF.toInt()
     }
 }
