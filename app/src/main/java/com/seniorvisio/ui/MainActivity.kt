@@ -336,6 +336,13 @@ class MainActivity : AppCompatActivity() {
 
         override fun onError(error: Int) {
             Log.w(TAG, "Sous-titres de la pièce : erreur reconnaissance vocale (code $error)")
+            // Filet de secours : le service Google explicitement demandé
+            // (voir resolveBestSpeechRecognizer) livre de bons aperçus via
+            // onPartialResults mais n'appelle pas toujours onResults ensuite
+            // (constaté en usage réel : la phrase disparaissait à la suivante
+            // au lieu de rester dans l'historique). Sans ça, un aperçu
+            // pourtant correct était perdu à chaque erreur qui suit.
+            commitPendingInterimIfAny()
             consecutiveErrorCount++
             if (consecutiveErrorCount >= maxConsecutiveErrors) {
                 consecutiveErrorCount = 0
@@ -355,7 +362,13 @@ class MainActivity : AppCompatActivity() {
         override fun onResults(results: Bundle?) {
             consecutiveErrorCount = 0
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-            if (!text.isNullOrEmpty()) appendRoomCaption(text)
+            if (!text.isNullOrEmpty()) {
+                appendRoomCaption(text)
+            } else {
+                // Même filet de secours qu'onError : un résultat final vide
+                // ne doit pas faire perdre un aperçu déjà reconnu.
+                commitPendingInterimIfAny()
+            }
             restartRoomCaptionsIfEnabled()
         }
 
@@ -367,6 +380,11 @@ class MainActivity : AppCompatActivity() {
                 renderRoomCaptions()
             }
         }
+    }
+
+    /** Bascule le dernier aperçu (non encore confirmé) dans l'historique — voir onError/onResults. */
+    private fun commitPendingInterimIfAny() {
+        if (roomCaptionInterimText.isNotBlank()) appendRoomCaption(roomCaptionInterimText)
     }
 
     private fun appendRoomCaption(text: String) {
