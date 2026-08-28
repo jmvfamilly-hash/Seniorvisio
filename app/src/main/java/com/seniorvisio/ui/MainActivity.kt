@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.text.InputType
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -68,6 +69,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var roomCaptionScrollAnimator: CaptionScrollAnimator
 
     private val adminConfig by lazy { AdminConfig(this) }
+    private val audioManager by lazy { getSystemService(AUDIO_SERVICE) as AudioManager }
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var roomCaptionsActive = false
@@ -346,14 +348,43 @@ class MainActivity : AppCompatActivity() {
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4000)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 15000)
         }
+        // Coupe le bip système de début d'écoute joué par le service de
+        // reconnaissance à chaque startListening() : sans ça, Jean l'entend à
+        // chaque phrase puisque la reconnaissance redémarre après chacune
+        // (voir restartRoomCaptionsIfEnabled). Remis en place dès que le
+        // service confirme être prêt (onReadyForSpeech, voir roomCaptionListener) —
+        // pas de réglage officiel pour désactiver ce bip autrement, il est
+        // interne au service de reconnaissance (Google), pas à cette appli.
+        muteRoomCaptionListeningSound()
         speechRecognizer?.startListening(intent)
         roomCaptionsActive = true
     }
 
     private fun stopRoomCaptions() {
         roomCaptionsActive = false
+        unmuteRoomCaptionListeningSound()
         speechRecognizer?.stopListening()
         speechRecognizer?.cancel()
+    }
+
+    /**
+     * Le bip de fin d'écoute (distinct de celui de début) est joué par
+     * certains services de reconnaissance juste après la détection de fin de
+     * parole (onEndOfSpeech), avant que le résultat n'arrive — remis en
+     * place dans onResults/onError.
+     */
+    private fun muteRoomCaptionListeningSound() {
+        try {
+            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun unmuteRoomCaptionListeningSound() {
+        try {
+            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+        } catch (_: Exception) {
+        }
     }
 
     /**
@@ -376,15 +407,27 @@ class MainActivity : AppCompatActivity() {
     private val maxConsecutiveErrors = 3
 
     private val roomCaptionListener = object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) {}
+        // Confirme que le service a bien démarré : le bip de début, joué à
+        // l'appel de startListening() (voir startRoomCaptions), est passé à
+        // ce stade, sans risque de couper aussi le tout début de la voix de
+        // Jean.
+        override fun onReadyForSpeech(params: Bundle?) {
+            unmuteRoomCaptionListeningSound()
+        }
         override fun onBeginningOfSpeech() {}
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() {}
+        // Coupe à nouveau le son avant le bip de fin d'écoute que certains
+        // services jouent ici, juste avant le résultat (onResults/onError) —
+        // remis en place là-bas.
+        override fun onEndOfSpeech() {
+            muteRoomCaptionListeningSound()
+        }
         override fun onEvent(eventType: Int, params: Bundle?) {}
 
         override fun onError(error: Int) {
             Log.w(TAG, "Sous-titres de la pièce : erreur reconnaissance vocale (code $error)")
+            unmuteRoomCaptionListeningSound()
             consecutiveErrorCount++
             if (consecutiveErrorCount >= maxConsecutiveErrors) {
                 consecutiveErrorCount = 0
@@ -402,6 +445,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onResults(results: Bundle?) {
+            unmuteRoomCaptionListeningSound()
             consecutiveErrorCount = 0
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
             if (!text.isNullOrEmpty()) updateRoomCaptionText(text)
