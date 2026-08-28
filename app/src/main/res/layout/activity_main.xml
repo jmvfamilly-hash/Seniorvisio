@@ -43,13 +43,9 @@
 
     <!-- Sous-titres de la pièce : reconnaissance vocale locale de la tablette
          (pas de proche impliqué ici, donc pas d'autre choix que de faire
-         tourner la reconnaissance directement sur l'appareil). Historique
-         complet conservé (voir MainActivity.roomCaptionSentences) : Jean
-         peut remonter à la main pour relire une phrase précédente, le
-         défilement automatique ne le ramène pas de force en bas s'il a
-         déplacé la vue (voir MainActivity.isRoomCaptionScrollNearBottom). La
-         dernière phrase est mise en valeur (gras, pleine opacité) pour la
-         repérer d'un coup d'œil parmi l'historique, plus discret.
+         tourner la reconnaissance directement sur l'appareil). Pas
+         d'historique conservé : chaque phrase reconnue remplace la
+         précédente (voir MainActivity.updateRoomCaptionText).
 
          Bandeau centré à l'écran, géré exactement comme le bandeau des
          sous-titres d'appel (voir activity_incoming_call.xml et
