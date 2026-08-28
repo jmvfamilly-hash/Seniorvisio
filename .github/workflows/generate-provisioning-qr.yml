@@ -32,6 +32,9 @@ on:
         type: string
         default: "com.seniorvisio/.admin.SeniorVisioDeviceAdminReceiver"
 
+permissions:
+  contents: write
+
 jobs:
   generate-qr:
     runs-on: ubuntu-latest
@@ -70,9 +73,27 @@ jobs:
           ADMIN_COMPONENT: ${{ inputs.admin_component }}
         run: python3 scripts/generate_provisioning_qr.py
 
-      - name: Upload QR code
+      - name: Upload QR code (artifact)
         uses: actions/upload-artifact@v4
         with:
           name: provisioning-qr
           path: provisioning-qr.png
           retention-days: 1
+
+      # En plus de l'artifact ci-dessus (pratique depuis l'interface GitHub) :
+      # les artifacts de run sont servis depuis un stockage Azure Blob à URL
+      # signée temporaire, bloqué par la politique réseau de certains
+      # environnements (proxy sortant restreint aux domaines connus). Une
+      # release GitHub, elle, est servie directement par github.com/objects.
+      # githubusercontent.com — mêmes domaines déjà utilisés pour les APK de
+      # debug (voir build-debug-apk.yml), donc systématiquement accessible.
+      - name: Publish QR code as GitHub Release asset
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="provisioning-qr-${{ github.run_id }}"
+          gh release create "$tag" "provisioning-qr.png" \
+            --title "QR de provisioning Device Owner (run ${{ github.run_number }})" \
+            --notes "Généré pour l'APK ${{ inputs.apk_url }}, SSID Wi-Fi ${{ inputs.wifi_ssid != '' && 'pré-rempli' || 'à saisir sur la tablette' }}." \
+            --target "${{ github.sha }}"
