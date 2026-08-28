@@ -49,27 +49,42 @@
          défilement automatique ne le ramène pas de force en bas s'il a
          déplacé la vue (voir MainActivity.isRoomCaptionScrollNearBottom). La
          dernière phrase est mise en valeur (gras, pleine opacité) pour la
-         repérer d'un coup d'œil parmi l'historique, plus discret. -->
-    <ScrollView
-        android:id="@+id/roomCaptionScroll"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="gone"
-        android:scrollbars="none"
-        android:paddingLeft="32dp"
-        android:paddingRight="32dp"
-        android:paddingTop="88dp"
-        android:paddingBottom="96dp">
+         repérer d'un coup d'œil parmi l'historique, plus discret.
 
-        <TextView
-            android:id="@+id/textRoomCaption"
+         Bandeau centré à l'écran, géré exactement comme le bandeau des
+         sous-titres d'appel (voir activity_incoming_call.xml et
+         IncomingCallActivity.applyOrientationLayout) : même fond
+         (caption_banner_bg), mêmes marges latérales adaptées à
+         l'orientation — sauf que centré plutôt qu'en bas, faute de vidéo à
+         laisser plein écran ici. Voir MainActivity.applyRoomCaptionLayout
+         pour le calcul dynamique des marges/hauteur (plafond augmenté de
+         50% par rapport à l'équivalent en appel, plus de place ici que la
+         vidéo n'en laisse côté appel). -->
+    <LinearLayout
+        android:id="@+id/roomCaptionBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/caption_banner_bg"
+        android:padding="20dp"
+        android:visibility="gone">
+
+        <ScrollView
+            android:id="@+id/roomCaptionScroll"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:textColor="#FFFFFF"
-            android:textSize="@dimen/caption_text_size_default"
-            android:text="" />
-    </ScrollView>
+            android:layout_height="330dp"
+            android:scrollbars="none">
+
+            <TextView
+                android:id="@+id/textRoomCaption"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="#FFFFFF"
+                android:textSize="@dimen/caption_text_size_default"
+                android:text="" />
+        </ScrollView>
+    </LinearLayout>
 
     <!-- Taille du texte réglable directement par Jean (pas de proche à
          distance pour le faire ici, contrairement aux sous-titres d'appel) —

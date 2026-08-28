@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Intent
+import android.content.res.Configuration
 import android.text.InputType
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -23,8 +24,10 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.util.Log
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -58,6 +61,7 @@ class MainActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { /* no-op : voir startLocalMedia() pour le repli si refusé */ }
 
     private lateinit var idleContent: View
+    private lateinit var roomCaptionBanner: LinearLayout
     private lateinit var roomCaptionScroll: ScrollView
     private lateinit var textRoomCaption: TextView
     private lateinit var buttonRoomCaptions: Button
@@ -99,6 +103,7 @@ class MainActivity : AppCompatActivity() {
         textBuildRev.setOnLongClickListener { promptAdminPin(); true }
 
         idleContent = findViewById(R.id.idleContent)
+        roomCaptionBanner = findViewById(R.id.roomCaptionBanner)
         roomCaptionScroll = findViewById(R.id.roomCaptionScroll)
         textRoomCaption = findViewById(R.id.textRoomCaption)
         buttonRoomCaptions = findViewById(R.id.buttonRoomCaptions)
@@ -114,6 +119,7 @@ class MainActivity : AppCompatActivity() {
             scrollView = roomCaptionScroll,
             maxSpeedPxPerSec = { ROOM_CAPTION_SCROLL_SPEED_DP_PER_SEC * resources.displayMetrics.density },
         )
+        applyRoomCaptionLayout(resources.configuration.orientation)
         roomCaptionTextSizeSp = adminConfig.roomCaptionTextSizeSp
         buttonRoomCaptions.setOnClickListener { toggleRoomCaptions() }
         buttonStopRoomCaptions.setOnClickListener { toggleRoomCaptions() }
@@ -229,19 +235,69 @@ class MainActivity : AppCompatActivity() {
 
     private fun showIdleView() {
         idleContent.visibility = View.VISIBLE
-        roomCaptionScroll.visibility = View.GONE
+        roomCaptionBanner.visibility = View.GONE
         buttonStopRoomCaptions.visibility = View.GONE
         roomCaptionTextSizeControls.visibility = View.GONE
     }
 
     private fun showRoomCaptionView() {
         idleContent.visibility = View.GONE
-        roomCaptionScroll.visibility = View.VISIBLE
+        roomCaptionBanner.visibility = View.VISIBLE
         buttonStopRoomCaptions.visibility = View.VISIBLE
         roomCaptionTextSizeControls.visibility = View.VISIBLE
         roomCaptionSentences.clear()
         roomCaptionInterimText = ""
         textRoomCaption.text = ""
+    }
+
+    /**
+     * Rotation de la tablette pendant les sous-titres de la pièce :
+     * configChanges (voir AndroidManifest) empêche déjà la destruction de
+     * l'Activity, il ne reste qu'à réadapter la disposition — même principe
+     * qu'IncomingCallActivity.onConfigurationChanged pour l'appel.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyRoomCaptionLayout(newConfig.orientation)
+    }
+
+    /**
+     * Bandeau de sous-titres géré exactement comme celui des appels (voir
+     * IncomingCallActivity.applyOrientationLayout) : mêmes marges latérales
+     * adaptées à l'orientation, même fond, mais centré à l'écran plutôt
+     * qu'en bas (pas de vidéo ici à laisser plein écran). Plafond de hauteur
+     * augmenté de 50% par rapport à l'équivalent côté appel, puisque rien
+     * d'autre ne se dispute la place sur cet écran.
+     */
+    private fun applyRoomCaptionLayout(orientation: Int) {
+        val isLandscape = orientation == Configuration.ORIENTATION_LANDSCAPE
+        val density = resources.displayMetrics.density
+        val sideMargin = ((if (isLandscape) 12 else 24) * density).roundToInt()
+        // Rembourrage haut+bas du bandeau, fixé dans le layout XML (android:padding="20dp").
+        val bannerVerticalPadding = (20 * density * 2).roundToInt()
+
+        val captionScrollHeight = if (isLandscape) {
+            // Côté appel : plafonné à la moitié basse de l'écran. Ici, +50%.
+            val maxBannerAreaPx = (resources.displayMetrics.heightPixels * 0.75f).roundToInt()
+            (maxBannerAreaPx - bannerVerticalPadding).coerceAtLeast((80 * density).roundToInt())
+        } else {
+            // Côté appel : 220dp fixe en portrait. Ici, +50%.
+            (330 * density).roundToInt()
+        }
+
+        (roomCaptionBanner.layoutParams as FrameLayout.LayoutParams).apply {
+            width = FrameLayout.LayoutParams.MATCH_PARENT
+            height = FrameLayout.LayoutParams.WRAP_CONTENT
+            gravity = Gravity.CENTER
+            marginStart = sideMargin
+            marginEnd = sideMargin
+            roomCaptionBanner.layoutParams = this
+        }
+
+        (roomCaptionScroll.layoutParams as LinearLayout.LayoutParams).apply {
+            height = captionScrollHeight
+            roomCaptionScroll.layoutParams = this
+        }
     }
 
     /**
