@@ -350,6 +350,38 @@ mot de passe se saisissent directement sur la tablette, sur place. Une fois l'ap
 Owner actif, le réseau peut aussi être changé à tout moment sans repasser par un reset d'usine, via
 l'écran de réglages admin intégré à l'app (voir point Wi-Fi ci-dessus).
 
+**Provisionnement alternatif par adb (recommandé en cas d'échec du QR)** : le téléchargement de l'APK
+pendant le provisioning par QR passe par le gestionnaire de téléchargement système d'Android, exécuté
+depuis l'écran de provisioning lui-même — un simple souci réseau à cet instant précis (portail captif
+nécessitant une page web à valider, comme certains Wi-Fi d'hôtel/résidence ; SSID/mot de passe erronés ;
+coupure momentanée) suffit à le faire échouer, sans grand-chose à diagnostiquer une fois le tapotement/QR
+déjà passés. La méthode par adb évite entièrement cette étape réseau critique : l'app est installée à la
+main, la connexion Wi-Fi se fait ensuite normalement (depuis l'app une fois Device Owner, ou depuis les
+Réglages système si l'assistant de configuration le permet à ce stade), aucun téléchargement à faire
+réussir en plein milieu du provisioning.
+
+1. Réinitialiser la tablette d'usine, passer l'assistant de configuration **sans ajouter aucun compte**
+   (Google ou autre) — condition stricte : Device Owner ne peut être défini que sur un appareil sans
+   aucun compte configuré, adb ou QR pareil.
+2. Activer les options développeur (Réglages → À propos de la tablette → tapoter 7 fois sur le numéro de
+   build) puis le débogage USB (Réglages → Options pour les développeurs).
+3. Brancher la tablette en USB à un ordinateur avec adb installé, autoriser l'empreinte RSA affichée sur
+   la tablette.
+4. Installer l'APK et définir Senior Visio comme Device Owner :
+   ```
+   adb devices                                       # confirme que la tablette est bien détectée
+   adb install -r seniorvisio-revNN.apk               # APK récupéré depuis la release GitHub du build voulu
+   adb shell dpm set-device-owner com.seniorvisio/.admin.SeniorVisioDeviceAdminReceiver
+   ```
+   Si `dpm set-device-owner` refuse en signalant un compte existant, un profil géré préexistant, ou un
+   autre Device Policy Controller déjà actif, repartir d'un reset d'usine propre — aucune de ces
+   conditions ne se contourne autrement.
+5. Lancer l'app une fois — `KioskManager`/`DeviceStatusReporter` détectent `isDeviceOwnerApp()` à ce
+   moment-là (aucune étape de provisioning spécifique requise côté code, `SeniorVisioDeviceAdminReceiver`
+   ne fait rien de plus qu'un receiver minimal) : kiosque et mise à jour à distance s'activent
+   immédiatement, sans dépendre du chemin QR.
+6. Configurer le Wi-Fi définitif via l'écran de réglages admin intégré (voir point Wi-Fi ci-dessus).
+
 **Test réel sur Android 16 (One UI 8.5)** : l'écran d'appel ne s'affichait jamais si l'application
 n'était plus au premier plan, y compris avec le service actif (notification visible) et l'app déjà
 exclue des listes de mise en veille Samsung — donc indépendant du réglage constructeur ci-dessus.
