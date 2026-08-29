@@ -33,7 +33,31 @@ android {
         buildConfigField "String", "ASSEMBLYAI_API_KEY_DEFAULT", "\"${project.findProperty('assemblyAiApiKey') ?: ""}\""
     }
 
+    // Sans ça, chaque build CI (VM GitHub Actions neuve à chaque run) signe
+    // avec une clé debug aléatoire différente : Android Gradle Plugin génère
+    // par défaut un ~/.android/debug.keystore s'il n'en trouve pas, mais son
+    // emplacement exact s'est révélé peu fiable sur ce runner (constaté en
+    // test réel : le fichier n'existait tout simplement pas à l'endroit
+    // attendu une fois le build terminé, rendant impossible toute mise en
+    // cache). Un keystore explicite et versionné dans le dépôt (voir
+    // debug.keystore, mêmes alias/mot de passe que la clé debug standard
+    // d'Android, sans enjeu de confidentialité pour une signature de test)
+    // garantit la même signature à chaque build, quel que soit
+    // l'environnement CI — condition nécessaire pour un "adb install -r" en
+    // place sur une tablette déjà provisionnée en Device Owner.
+    signingConfigs {
+        debug {
+            storeFile file("debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
         }

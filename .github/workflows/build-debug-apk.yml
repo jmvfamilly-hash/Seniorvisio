@@ -30,21 +30,6 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      # Sans ça, chaque run GitHub Actions repart d'une VM neuve : Android
-      # Gradle Plugin génère alors une nouvelle clé de signature debug à
-      # chaque build (aucun ~/.android/debug.keystore préexistant), ce qui
-      # rend impossible une mise à jour "adb install -r" par-dessus une
-      # tablette déjà provisionnée sans redésenrôler/réenrôler en Device
-      # Owner (adb refuse une mise à jour avec une signature différente).
-      # Clé de cache fixe (pas basée sur un hash de fichier) : le fichier
-      # n'existe pas encore lors du tout premier run, et on veut justement la
-      # même clé pour tous les runs suivants, pas une par variation de code.
-      - name: Cache la clé de signature debug (mises à jour adb en place)
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: debug-keystore-v1
-
       - name: Vérifier la présence des secrets (sans jamais afficher leur valeur)
         env:
           ASSEMBLYAI_API_KEY: ${{ secrets.ASSEMBLYAI_API_KEY }}
