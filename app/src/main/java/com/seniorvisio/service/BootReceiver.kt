@@ -3,6 +3,7 @@ package com.seniorvisio.service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.seniorvisio.ui.MainActivity
 
@@ -25,10 +26,15 @@ import com.seniorvisio.ui.MainActivity
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED || intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            Log.i(TAG, "Relance après ${intent.action} (build ${com.seniorvisio.BuildConfig.BUILD_REV})")
             ContextCompat.startForegroundService(context, Intent(context, CallListenerService::class.java))
             context.startActivity(
                 Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
         }
+    }
+
+    companion object {
+        private const val TAG = "BootReceiver"
     }
 }
