@@ -327,6 +327,13 @@ nouveau). Remplacé par un mécanisme intégré à l'appli, sans compte ni servi
   champs Firestore sont désormais renseignés automatiquement par `build-debug-apk.yml` à la fin de
   chaque build réussi sur `AssemblyAI` (`scripts/request_remote_update.js`) : plus rien à faire à la
   main pour qu'une tablette déjà enrôlée récupère la dernière version en quelques minutes.
+
+  **Pause pendant une mise au point sur tablette de test** : ajouter le champ booléen
+  `devices/jean_tablet.autoUpdateEnabled` à `false` (console Firebase → Firestore Database) suspend
+  uniquement cette dernière étape — les builds continuent d'être générés et publiés en release GitHub
+  normalement, seule la demande poussée vers la tablette réelle de Jean est sautée (visible dans les logs
+  du build : "Mise à jour à distance automatique désactivée"). Remettre le champ à `true` (ou le
+  supprimer, absence traitée comme activé) reprend l'envoi automatique dès le prochain build.
 - **Statut** : le même service publie toutes les 5 minutes un signe de vie dans Firestore (niveau de
   batterie, version installée `BuildConfig.BUILD_REV`, horodatage) — reste à construire une petite page
   de suivi (sur le modèle de `web-caller/`) pour le consulter facilement ; en attendant, consultable
