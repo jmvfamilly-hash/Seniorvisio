@@ -4,6 +4,8 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.app.NotificationManager
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Intent
 import android.content.res.Configuration
 import android.text.InputType
@@ -36,6 +38,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.admin.AdminSettingsActivity
+import com.seniorvisio.admin.SeniorVisioDeviceAdminReceiver
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.service.CallListenerService
@@ -341,11 +344,36 @@ class MainActivity : AppCompatActivity() {
             "https://localhost/", ROOM_CAPTION_RECOGNITION_HTML, "text/html", "utf-8", null
         )
         roomCaptionsActive = true
+        setDeviceMuted(true)
     }
 
     private fun stopRoomCaptions() {
         roomCaptionsActive = false
         roomCaptionWebView.loadUrl("about:blank")
+        // Toujours remis en place ici, pas seulement quand Jean coupe les
+        // sous-titres à la main (voir toggleRoomCaptions) : stopRoomCaptions
+        // est aussi appelé par onPause quand un appel entrant interrompt ce
+        // mode (voir onPause plus bas) — sans ça, la tablette resterait
+        // muette pendant l'appel lui-même.
+        setDeviceMuted(false)
+    }
+
+    /**
+     * Coupe tout le son de la tablette (y compris les notifications) pendant
+     * les sous-titres de la pièce : Jean lit le texte à l'écran, un bip de
+     * notification ou une sonnerie quelconque pendant qu'il lit n'apporte
+     * rien et peut le déconcentrer. Mute général plutôt qu'un blocage ciblé
+     * (ex. Ne pas déranger) : agit immédiatement sans demander à Jean
+     * d'accorder une permission supplémentaire (Device Owner en dispense),
+     * et se lève tout seul dès la sortie du mode, sans rien à mémoriser côté
+     * app — c'est une coupure du volume principal, pas un changement des
+     * niveaux eux-mêmes.
+     */
+    private fun setDeviceMuted(muted: Boolean) {
+        val dpm = getSystemService(DEVICE_POLICY_SERVICE) as? DevicePolicyManager ?: return
+        if (!dpm.isDeviceOwnerApp(packageName)) return
+        val admin = ComponentName(this, SeniorVisioDeviceAdminReceiver::class.java)
+        dpm.setMasterVolumeMuted(admin, muted)
     }
 
     // Dernier texte affiché (aperçu ou phrase confirmée, sans distinction —
