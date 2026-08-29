@@ -1,10 +1,17 @@
 package com.seniorvisio.admin
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.WifiConfigurator
@@ -17,6 +24,26 @@ import com.seniorvisio.core.WifiConfigurator
 class AdminSettingsActivity : AppCompatActivity() {
 
     private lateinit var adminConfig: AdminConfig
+    private lateinit var inputWifiSsid: EditText
+    private lateinit var inputWifiPassword: EditText
+    private lateinit var textWifiStatus: TextView
+
+    private val qrScanLauncher = registerForActivityResult(ScanContract()) { result ->
+        val content = result.contents ?: return@registerForActivityResult
+        val parsed = WifiConfigurator.parseWifiQrPayload(content)
+        if (parsed == null) {
+            Toast.makeText(this, "Ce QR n'est pas un QR Wi-Fi reconnu", Toast.LENGTH_LONG).show()
+            return@registerForActivityResult
+        }
+        inputWifiSsid.setText(parsed.first)
+        inputWifiPassword.setText(parsed.second)
+        connectToWifi(parsed.first, parsed.second)
+    }
+
+    private val cameraPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) launchWifiQrScan()
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,9 +73,12 @@ class AdminSettingsActivity : AppCompatActivity() {
             finish()
         }
 
-        val inputWifiSsid = findViewById<EditText>(R.id.inputWifiSsid)
-        val inputWifiPassword = findViewById<EditText>(R.id.inputWifiPassword)
+        inputWifiSsid = findViewById(R.id.inputWifiSsid)
+        inputWifiPassword = findViewById(R.id.inputWifiPassword)
+        textWifiStatus = findViewById(R.id.textWifiStatus)
         val buttonConnectWifi = findViewById<Button>(R.id.buttonConnectWifi)
+        val buttonScanWifiQr = findViewById<Button>(R.id.buttonScanWifiQr)
+
         buttonConnectWifi.setOnClickListener {
             val ssid = inputWifiSsid.text.toString().trim()
             val password = inputWifiPassword.text.toString()
@@ -56,12 +86,43 @@ class AdminSettingsActivity : AppCompatActivity() {
                 Toast.makeText(this, "Nom du réseau manquant", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            val ok = WifiConfigurator.connect(this, ssid, password)
-            Toast.makeText(
-                this,
-                if (ok) "Connexion au Wi-Fi \"$ssid\" en cours…" else "Échec — fonction disponible uniquement sur la tablette déployée",
-                Toast.LENGTH_LONG
-            ).show()
+            connectToWifi(ssid, password)
+        }
+
+        buttonScanWifiQr.setOnClickListener {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED
+            ) {
+                launchWifiQrScan()
+            } else {
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+        }
+    }
+
+    private fun launchWifiQrScan() {
+        qrScanLauncher.launch(
+            ScanOptions().apply {
+                setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                setPrompt("Scannez le QR Wi-Fi")
+                setBeepEnabled(false)
+                setOrientationLocked(false)
+            }
+        )
+    }
+
+    private fun connectToWifi(ssid: String, password: String) {
+        textWifiStatus.setTextColor(0xFF555555.toInt())
+        textWifiStatus.text = "Connexion à \"$ssid\" en cours…"
+        WifiConfigurator.connect(this, ssid, password) { success ->
+            if (success) {
+                textWifiStatus.setTextColor(0xFF2ECC71.toInt())
+                textWifiStatus.text = "✓ Connecté à \"$ssid\""
+            } else {
+                textWifiStatus.setTextColor(0xFFE74C3C.toInt())
+                textWifiStatus.text = "✗ Échec de connexion à \"$ssid\" — vérifiez le mot de passe" +
+                    " (fonctionne uniquement sur la tablette déployée, en Device Owner)"
+            }
         }
     }
 }

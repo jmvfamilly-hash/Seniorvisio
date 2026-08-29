@@ -53,6 +53,21 @@
         android:textSize="16sp"
         android:textStyle="bold" />
 
+    <Button
+        android:id="@+id/buttonScanWifiQr"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="📷 Scanner un QR Wi-Fi"
+        android:backgroundTint="#2ECC71" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="Ou saisir manuellement :"
+        android:textSize="14sp" />
+
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -84,6 +99,14 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:text="Se connecter à ce Wi-Fi" />
+
+    <TextView
+        android:id="@+id/textWifiStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="14sp"
+        android:text="" />
 
     <!-- Utilisée uniquement par le labo de comparaison de transcription
          (voir TranscriptionLabActivity.kt), jamais par les sous-titres en
