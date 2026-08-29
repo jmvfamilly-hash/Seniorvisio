@@ -38,7 +38,7 @@ class DeviceStatusReporter(private val context: Context) {
                 FIELD_LAST_HEARTBEAT_AT to FieldValue.serverTimestamp(),
             ),
             SetOptions.merge()
-        )
+        ).addOnFailureListener { e -> Log.e(TAG, "Échec de l'envoi du signe de vie à Firestore", e) }
     }
 
     /**
@@ -48,10 +48,15 @@ class DeviceStatusReporter(private val context: Context) {
      * permanent.
      */
     fun listenForRemoteUpdate() {
-        deviceDoc.addSnapshotListener { snapshot, _ ->
+        deviceDoc.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.e(TAG, "Écoute Firestore de mise à jour à distance interrompue", error)
+                return@addSnapshotListener
+            }
             val requestedVersion = snapshot?.getString(FIELD_REQUESTED_VERSION) ?: return@addSnapshotListener
             val apkUrl = snapshot.getString(FIELD_REQUESTED_APK_URL) ?: return@addSnapshotListener
             if (requestedVersion == BuildConfig.BUILD_REV) return@addSnapshotListener
+            Log.i(TAG, "Mise à jour à distance détectée : $requestedVersion (version actuelle ${BuildConfig.BUILD_REV})")
             installUpdate(apkUrl)
         }
     }
