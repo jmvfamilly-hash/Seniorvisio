@@ -382,6 +382,18 @@ réussir en plein milieu du provisioning.
    immédiatement, sans dépendre du chemin QR.
 6. Configurer le Wi-Fi définitif via l'écran de réglages admin intégré (voir point Wi-Fi ci-dessus).
 
+**Cas des Wi-Fi de résidence à portail captif (ex. Wifirst)** : confirmé en déploiement réel — certains
+opérateurs de Wi-Fi de résidence senior (Wifirst notamment) laissent le réseau radio entièrement ouvert
+(pas de mot de passe WPA) mais bloquent tout accès Internet réel tant qu'un code personnel fourni au
+résident n'est pas saisi sur une page web (portail captif). C'est la cause la plus probable d'un blocage
+du téléchargement d'APK pendant un provisioning QR (voir ci-dessus) : aucun navigateur n'est disponible à
+cette étape pour valider le portail. L'écran Wi-Fi admin (`WifiConfigurator.kt`) gère ce cas directement :
+laisser le champ mot de passe vide pour un tel réseau, la connexion se fait en réseau ouvert, puis
+`checkInternetReachable()` détecte l'absence d'accès Internet réel malgré l'association Wi-Fi réussie et
+affiche un WebView intégré pour saisir le code et valider le portail sans quitter l'app (un navigateur
+système externe ou la notification "Se connecter au réseau" d'Android ne sont pas accessibles une fois en
+mode kiosque, voir `KioskManager`).
+
 **Test réel sur Android 16 (One UI 8.5)** : l'écran d'appel ne s'affichait jamais si l'application
 n'était plus au premier plan, y compris avec le service actif (notification visible) et l'app déjà
 exclue des listes de mise en veille Samsung — donc indépendant du réglage constructeur ci-dessus.

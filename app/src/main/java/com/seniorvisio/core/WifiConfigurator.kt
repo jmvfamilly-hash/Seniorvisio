@@ -9,6 +9,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Configure le Wi-Fi de la tablette depuis l'écran de réglages admin — utile
@@ -51,7 +53,16 @@ object WifiConfigurator {
         val networkId = try {
             val config = WifiConfiguration().apply {
                 SSID = "\"$ssid\""
-                preSharedKey = "\"$password\""
+                if (password.isBlank()) {
+                    // Réseau ouvert (typique des Wi-Fi de résidence type Wifirst : pas de
+                    // mot de passe à ce niveau, l'accès réel se débloque ensuite via un
+                    // portail captif avec un code personnel — voir checkInternetReachable/
+                    // portail dans AdminSettingsActivity). preSharedKey vide serait sinon
+                    // rejeté comme config WPA invalide.
+                    allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE)
+                } else {
+                    preSharedKey = "\"$password\""
+                }
             }
             val id = wifiManager.addNetwork(config)
             if (id == -1) {
@@ -93,6 +104,39 @@ object WifiConfigurator {
             }
         }
         handler.post(poll)
+    }
+
+    /**
+     * Certains lieux (résidences seniors notamment, via des opérateurs comme
+     * Wifirst) laissent le Wi-Fi radio ouvert mais bloquent tout le trafic
+     * derrière un portail captif : un code personnel à saisir sur une page
+     * web avant d'avoir un accès Internet réel. `connect()` réussit alors
+     * (association Wi-Fi effective) sans qu'Internet fonctionne pour autant —
+     * cette vérification distincte permet de le détecter et de proposer le
+     * portail seulement si nécessaire (voir AdminSettingsActivity).
+     *
+     * Un portail captif intercepte toute requête HTTP en clair pour rediriger
+     * vers sa page de connexion : `generate_204` (utilisé par Android
+     * lui-même pour cette détection) répond normalement 204 sans contenu ;
+     * toute autre réponse (redirection, page HTML) signale un portail actif.
+     */
+    fun checkInternetReachable(onResult: (Boolean) -> Unit) {
+        val handler = Handler(Looper.getMainLooper())
+        Thread {
+            val reachable = try {
+                val connection = URL("http://connectivitycheck.gstatic.com/generate_204")
+                    .openConnection() as HttpURLConnection
+                connection.instanceFollowRedirects = false
+                connection.connectTimeout = 8_000
+                connection.readTimeout = 8_000
+                val code = connection.responseCode
+                connection.disconnect()
+                code == 204
+            } catch (e: Exception) {
+                false
+            }
+            handler.post { onResult(reachable) }
+        }.start()
     }
 
     /**

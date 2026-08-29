@@ -1,8 +1,10 @@
 package com.seniorvisio.admin
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.webkit.WebView
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -27,6 +29,8 @@ class AdminSettingsActivity : AppCompatActivity() {
     private lateinit var inputWifiSsid: EditText
     private lateinit var inputWifiPassword: EditText
     private lateinit var textWifiStatus: TextView
+    private lateinit var webViewCaptivePortal: WebView
+    private lateinit var buttonValidateCaptivePortal: Button
 
     private val qrScanLauncher = registerForActivityResult(ScanContract()) { result ->
         val content = result.contents ?: return@registerForActivityResult
@@ -45,6 +49,7 @@ class AdminSettingsActivity : AppCompatActivity() {
             if (granted) launchWifiQrScan()
         }
 
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         adminConfig = AdminConfig(this)
@@ -76,8 +81,13 @@ class AdminSettingsActivity : AppCompatActivity() {
         inputWifiSsid = findViewById(R.id.inputWifiSsid)
         inputWifiPassword = findViewById(R.id.inputWifiPassword)
         textWifiStatus = findViewById(R.id.textWifiStatus)
+        webViewCaptivePortal = findViewById(R.id.webViewCaptivePortal)
+        webViewCaptivePortal.settings.javaScriptEnabled = true
+        buttonValidateCaptivePortal = findViewById(R.id.buttonValidateCaptivePortal)
         val buttonConnectWifi = findViewById<Button>(R.id.buttonConnectWifi)
         val buttonScanWifiQr = findViewById<Button>(R.id.buttonScanWifiQr)
+
+        buttonValidateCaptivePortal.setOnClickListener { checkCaptivePortalCleared() }
 
         buttonConnectWifi.setOnClickListener {
             val ssid = inputWifiSsid.text.toString().trim()
@@ -112,16 +122,58 @@ class AdminSettingsActivity : AppCompatActivity() {
     }
 
     private fun connectToWifi(ssid: String, password: String) {
+        webViewCaptivePortal.visibility = android.view.View.GONE
+        buttonValidateCaptivePortal.visibility = android.view.View.GONE
         textWifiStatus.setTextColor(0xFF555555.toInt())
         textWifiStatus.text = "Connexion à \"$ssid\" en cours…"
-        WifiConfigurator.connect(this, ssid, password) { success ->
-            if (success) {
-                textWifiStatus.setTextColor(0xFF2ECC71.toInt())
-                textWifiStatus.text = "✓ Connecté à \"$ssid\""
-            } else {
+        WifiConfigurator.connect(this, ssid, password) { associated ->
+            if (!associated) {
                 textWifiStatus.setTextColor(0xFFE74C3C.toInt())
                 textWifiStatus.text = "✗ Échec de connexion à \"$ssid\" — vérifiez le mot de passe" +
                     " (fonctionne uniquement sur la tablette déployée, en Device Owner)"
+                return@connect
+            }
+            textWifiStatus.setTextColor(0xFF555555.toInt())
+            textWifiStatus.text = "Réseau \"$ssid\" rejoint — vérification d'Internet…"
+            WifiConfigurator.checkInternetReachable { internetOk ->
+                if (internetOk) {
+                    textWifiStatus.setTextColor(0xFF2ECC71.toInt())
+                    textWifiStatus.text = "✓ Connecté à \"$ssid\" (Internet fonctionne)"
+                } else {
+                    showCaptivePortal(ssid)
+                }
+            }
+        }
+    }
+
+    /**
+     * Réseau associé mais sans accès Internet réel : cas des Wi-Fi de
+     * résidence senior type Wifirst, ouverts au niveau radio mais bloqués
+     * derrière un portail web tant qu'un code personnel n'est pas validé.
+     * Affiché directement dans l'app (pas de navigateur système accessible
+     * en mode kiosque, voir KioskManager) : n'importe quelle page http://
+     * suffit, le portail intercepte la requête et affiche sa propre page.
+     */
+    private fun showCaptivePortal(ssid: String) {
+        textWifiStatus.setTextColor(0xFFE67E22.toInt())
+        textWifiStatus.text = "\"$ssid\" rejoint, mais Internet nécessite un portail de connexion — " +
+            "saisissez votre code ci-dessous, puis validez"
+        webViewCaptivePortal.visibility = android.view.View.VISIBLE
+        buttonValidateCaptivePortal.visibility = android.view.View.VISIBLE
+        webViewCaptivePortal.loadUrl("http://connectivitycheck.gstatic.com/generate_204")
+    }
+
+    private fun checkCaptivePortalCleared() {
+        textWifiStatus.setTextColor(0xFF555555.toInt())
+        textWifiStatus.text = "Nouvelle vérification d'Internet…"
+        WifiConfigurator.checkInternetReachable { internetOk ->
+            if (internetOk) {
+                webViewCaptivePortal.visibility = android.view.View.GONE
+                buttonValidateCaptivePortal.visibility = android.view.View.GONE
+                textWifiStatus.setTextColor(0xFF2ECC71.toInt())
+                textWifiStatus.text = "✓ Connecté à Internet"
+            } else {
+                Toast.makeText(this, "Toujours pas d'accès Internet — terminez le portail ci-dessus", Toast.LENGTH_LONG).show()
             }
         }
     }

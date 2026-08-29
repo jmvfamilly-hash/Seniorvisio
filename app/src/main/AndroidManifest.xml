@@ -19,11 +19,17 @@
 
     <uses-feature android:name="android.hardware.camera.front" android:required="true" />
 
+    <!-- Nécessaire à la détection/validation d'un portail captif (voir
+         WifiConfigurator.checkInternetReachable, AdminSettingsActivity) : le
+         reste de l'app (Firestore, FCM, WebRTC) reste entièrement en HTTPS/WSS,
+         seule cette vérification opportuniste utilise du HTTP en clair, sans
+         quoi le trafic serait bloqué par défaut depuis Android 9. -->
     <application
         android:label="Senior Visio"
         android:icon="@drawable/ic_launcher"
         android:theme="@style/Theme.AppCompat.NoActionBar"
-        android:allowBackup="false">
+        android:allowBackup="false"
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".ui.IncomingCallActivity"

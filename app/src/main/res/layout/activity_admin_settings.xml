@@ -84,7 +84,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="Mot de passe"
+        android:text="Mot de passe (laisser vide si réseau ouvert avec portail de connexion)"
         android:textSize="14sp" />
 
     <EditText
@@ -107,6 +107,28 @@
         android:layout_marginTop="8dp"
         android:textSize="14sp"
         android:text="" />
+
+    <!-- Réseau ouvert type Wifirst (courant en résidence senior) : Wi-Fi
+         associé sans mot de passe, mais Internet bloqué tant qu'un code
+         personnel n'est pas validé sur une page web (portail captif) —
+         voir WifiConfigurator.checkInternetReachable. Ce WebView permet de
+         valider ce portail directement depuis l'app, sans sortir du mode
+         kiosque (un navigateur/notification système externe n'y est pas
+         accessible, voir KioskManager). -->
+    <WebView
+        android:id="@+id/webViewCaptivePortal"
+        android:layout_width="match_parent"
+        android:layout_height="400dp"
+        android:layout_marginTop="12dp"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/buttonValidateCaptivePortal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="J'ai validé le portail — revérifier"
+        android:visibility="gone" />
 
     <!-- Utilisée uniquement par le labo de comparaison de transcription
          (voir TranscriptionLabActivity.kt), jamais par les sous-titres en
