@@ -486,60 +486,83 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         volumeRampRunnable = null
         pendingVolume = 1.0
         currentVolume = 1.0
-        // Chaque étape est isolée dans son propre try/catch : une erreur sur
-        // l'une d'elles (état caméra inattendu, etc.) ne doit jamais empêcher
-        // les suivantes de s'exécuter. Avant ce garde-fou, un unique
-        // stopCapture() en échec (seule InterruptedException était
-        // attrapée) court-circuitait tout le reste — y compris la
-        // libération de la factory WebRTC et du contexte EGL juste en
-        // dessous, qui restaient alors en mémoire pour le reste de la vie
-        // du processus (CallListenerService étant un foreground service
-        // permanent, le processus ne redémarre jamais tout seul) : la
-        // caméra restait bloquée jusqu'à un redémarrage de la tablette.
-        videoCapturer?.let {
-            try {
-                it.stopCapture()
-            } catch (e: Exception) {
-            }
-            try {
-                it.dispose()
-            } catch (e: Exception) {
-            }
-        }
+
+        // La libération effective (caméra, GL, connexion WebRTC) se fait sur
+        // un thread à part, pas ici : videoCapturer.stopCapture() est un
+        // appel bloquant côté WebRTC (attend l'arrêt réel du thread de
+        // capture), explicitement documenté comme à ne jamais appeler depuis
+        // le thread principal — sous peine de geler l'interface. Repéré en
+        // test réel : l'écran restait figé côté Jean après un raccroché en
+        // pleine conversation (caméra activement en train de capturer),
+        // alors qu'un appel bloqué avant connexion (caméra jamais démarrée)
+        // ne posait aucun souci. cleanup() elle-même reste appelée depuis le
+        // thread UI (bouton Raccrocher, onDestroy...), donc les champs sont
+        // capturés puis remis à null immédiatement ici pour que l'état de
+        // l'engine soit cohérent dès le retour de cleanup(), sans attendre
+        // la fin de la libération en arrière-plan.
+        val capturerToRelease = videoCapturer
+        val textureHelperToRelease = surfaceTextureHelper
+        val localRendererToRelease = localRenderer
+        val remoteRendererToRelease = remoteRenderer
+        val peerConnectionToRelease = peerConnection
+        val factoryToRelease = peerConnectionFactory
         videoCapturer = null
-        try {
-            surfaceTextureHelper?.dispose()
-        } catch (e: Exception) {
-        }
         surfaceTextureHelper = null
-        try {
-            localRenderer?.release()
-        } catch (e: Exception) {
-        }
-        try {
-            remoteRenderer?.release()
-        } catch (e: Exception) {
-        }
         localRenderer = null
         remoteRenderer = null
-        try {
-            peerConnection?.close()
-        } catch (e: Exception) {
-        }
         peerConnection = null
         localVideoTrack = null
         remoteVideoTrack = null
         remoteAudioTrack = null
         pendingRemoteCandidates.clear()
-        try {
-            peerConnectionFactory?.dispose()
-        } catch (e: Exception) {
-        }
         peerConnectionFactory = null
-        try {
-            eglBase.release()
-        } catch (e: Exception) {
-        }
+
+        Thread {
+            // Chaque étape est isolée dans son propre try/catch : une erreur
+            // sur l'une d'elles (état caméra inattendu, etc.) ne doit jamais
+            // empêcher les suivantes de s'exécuter. Avant ce garde-fou, un
+            // unique stopCapture() en échec (seule InterruptedException était
+            // attrapée) court-circuitait tout le reste — y compris la
+            // libération de la factory WebRTC et du contexte EGL juste en
+            // dessous, qui restaient alors en mémoire pour le reste de la vie
+            // du processus (CallListenerService étant un foreground service
+            // permanent, le processus ne redémarre jamais tout seul) : la
+            // caméra restait bloquée jusqu'à un redémarrage de la tablette.
+            capturerToRelease?.let {
+                try {
+                    it.stopCapture()
+                } catch (e: Exception) {
+                }
+                try {
+                    it.dispose()
+                } catch (e: Exception) {
+                }
+            }
+            try {
+                textureHelperToRelease?.dispose()
+            } catch (e: Exception) {
+            }
+            try {
+                localRendererToRelease?.release()
+            } catch (e: Exception) {
+            }
+            try {
+                remoteRendererToRelease?.release()
+            } catch (e: Exception) {
+            }
+            try {
+                peerConnectionToRelease?.close()
+            } catch (e: Exception) {
+            }
+            try {
+                factoryToRelease?.dispose()
+            } catch (e: Exception) {
+            }
+            try {
+                eglBase.release()
+            } catch (e: Exception) {
+            }
+        }.start()
     }
 
     private class SimpleSdpObserver(
