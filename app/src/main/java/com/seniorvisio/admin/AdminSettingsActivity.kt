@@ -17,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.WifiConfigurator
@@ -57,6 +58,8 @@ class AdminSettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         adminConfig = AdminConfig(this)
         setContentView(R.layout.activity_admin_settings)
+
+        findViewById<TextView>(R.id.textInstalledVersion).text = "Version installée : ${BuildConfig.BUILD_REV}"
 
         val inputCountdown = findViewById<EditText>(R.id.inputCountdownSeconds)
         val inputPin = findViewById<EditText>(R.id.inputAdminPin)
