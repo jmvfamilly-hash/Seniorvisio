@@ -2,10 +2,13 @@ package com.seniorvisio.admin
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.text.InputType
 import android.webkit.WebView
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
@@ -107,6 +110,54 @@ class AdminSettingsActivity : AppCompatActivity() {
             } else {
                 cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
             }
+        }
+
+        findViewById<Button>(R.id.buttonPickWifiNetwork).setOnClickListener { pickWifiNetwork() }
+
+        // Case décochée par défaut à l'ouverture : Jean (ou un aidant) peut
+        // avoir cet écran ouvert avec quelqu'un d'autre présent — les mots de
+        // passe restent masqués tant que ce n'est pas explicitement demandé.
+        findViewById<CheckBox>(R.id.checkboxShowPasswords).setOnCheckedChangeListener { _, checked ->
+            val plainOrPassword = { plain: Int, masked: Int -> if (checked) plain else masked }
+            inputPin.inputType = plainOrPassword(
+                InputType.TYPE_CLASS_NUMBER,
+                InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            )
+            inputWifiPassword.inputType = plainOrPassword(
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            )
+            inputAssemblyAiKey.inputType = plainOrPassword(
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            )
+            // setInputType ramène sinon le curseur au tout début du champ.
+            inputPin.setSelection(inputPin.text.length)
+            inputWifiPassword.setSelection(inputWifiPassword.text.length)
+            inputAssemblyAiKey.setSelection(inputAssemblyAiKey.text.length)
+        }
+    }
+
+    /**
+     * Liste les réseaux Wi-Fi visibles à proximité plutôt que de faire
+     * retaper le SSID à la main (source d'erreurs de frappe/accents sur
+     * l'écran tactile) — voir WifiConfigurator.scanNetworks.
+     */
+    private fun pickWifiNetwork() {
+        Toast.makeText(this, "Recherche des réseaux à proximité…", Toast.LENGTH_SHORT).show()
+        WifiConfigurator.scanNetworks(this) { ssids ->
+            if (ssids.isEmpty()) {
+                Toast.makeText(this, "Aucun réseau détecté à proximité", Toast.LENGTH_LONG).show()
+                return@scanNetworks
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Choisir un réseau Wi-Fi")
+                .setItems(ssids.toTypedArray()) { _, index ->
+                    inputWifiSsid.setText(ssids[index])
+                    inputWifiPassword.text?.clear()
+                }
+                .setNegativeButton("Annuler", null)
+                .show()
         }
     }
 

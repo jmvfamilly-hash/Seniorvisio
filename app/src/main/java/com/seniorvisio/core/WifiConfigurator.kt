@@ -1,14 +1,19 @@
 package com.seniorvisio.core
 
 import android.app.admin.DevicePolicyManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.net.wifi.SupplicantState
 import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import androidx.core.content.ContextCompat
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -138,6 +143,65 @@ object WifiConfigurator {
             handler.post { onResult(reachable) }
         }.start()
     }
+
+    /**
+     * Liste les réseaux Wi-Fi visibles à proximité, pour les proposer dans un
+     * écran de sélection plutôt que de faire retaper le SSID à la main sur
+     * l'écran tactile (source d'erreurs, notamment avec des accents ou noms
+     * longs). Un Device Owner reste dispensé de la permission de
+     * localisation normalement exigée pour ce genre de scan depuis Android
+     * 8.1/10 (même exception que pour lire le SSID courant, voir
+     * `awaitConnection`) et n'est pas soumis aux limites de fréquence de scan
+     * imposées aux apps classiques.
+     *
+     * `onResult` arrive sur le thread principal avec les SSID uniques
+     * détectés (triés), ou une liste vide en cas d'échec/absence de réseau.
+     */
+    @Suppress("DEPRECATION")
+    fun scanNetworks(context: Context, onResult: (List<String>) -> Unit) {
+        val appContext = context.applicationContext
+        val wifiManager = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        if (wifiManager == null) {
+            onResult(emptyList())
+            return
+        }
+        val handler = Handler(Looper.getMainLooper())
+        var settled = false
+        lateinit var receiver: BroadcastReceiver
+        val finish: () -> Unit = {
+            if (!settled) {
+                settled = true
+                handler.removeCallbacksAndMessages(null)
+                try { appContext.unregisterReceiver(receiver) } catch (_: Exception) {}
+                val ssids = wifiManager.scanResults
+                    .map { it.SSID }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .sorted()
+                onResult(ssids)
+            }
+        }
+        receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                finish()
+            }
+        }
+        val filter = IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            appContext.registerReceiver(receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        } else {
+            appContext.registerReceiver(receiver, filter)
+        }
+        // Sécurité si jamais le scan ne se déclenche pas (startScan() refusé,
+        // pas de puce Wi-Fi...) : sans ça, le récepteur resterait enregistré
+        // indéfiniment et onResult ne serait jamais appelé.
+        handler.postDelayed(finish, SCAN_TIMEOUT_MS)
+        if (!wifiManager.startScan()) {
+            finish()
+        }
+    }
+
+    private const val SCAN_TIMEOUT_MS = 10_000L
 
     /**
      * Format standard des QR Wi-Fi (celui généré par le partage Wi-Fi natif

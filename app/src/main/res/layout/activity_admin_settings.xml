@@ -8,6 +8,13 @@
     android:orientation="vertical"
     android:padding="32dp">
 
+    <CheckBox
+        android:id="@+id/checkboxShowPasswords"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:text="Afficher les mots de passe et codes en clair" />
+
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -60,6 +67,14 @@
         android:layout_marginTop="12dp"
         android:text="📷 Scanner un QR Wi-Fi"
         android:backgroundTint="#2ECC71" />
+
+    <Button
+        android:id="@+id/buttonPickWifiNetwork"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="📶 Choisir un réseau à proximité"
+        android:backgroundTint="#3498DB" />
 
     <TextView
         android:layout_width="wrap_content"
