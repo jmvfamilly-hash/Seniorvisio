@@ -65,3 +65,26 @@ jobs:
             --title "Senior Visio debug APK (run ${{ github.run_number }})" \
             --notes "Build automatique du module app/ en mode debug, commit ${{ github.sha }}." \
             --target "${{ github.sha }}"
+          echo "APK_URL=https://github.com/${{ github.repository }}/releases/download/$tag/${{ env.APK_NAME }}" >> "$GITHUB_ENV"
+
+      # Ferme la boucle "mise à jour à distance" (voir DeviceStatusReporter.
+      # listenForRemoteUpdate, déjà actif en continu côté tablette dès qu'elle
+      # est Device Owner) : sans cette étape, rien ne renseignait jamais le
+      # champ Firestore qu'elle écoute, il fallait le faire à la main
+      # (console Firebase). Seulement sur AssemblyAI : les autres branches ne
+      # sont pas censées atteindre la tablette réelle de Jean sans revue.
+      - name: Set up Node.js
+        if: github.ref == 'refs/heads/AssemblyAI'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Demande la mise à jour à distance de la tablette
+        if: github.ref == 'refs/heads/AssemblyAI'
+        env:
+          BUILD_REV: rev${{ github.run_number }}
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
+          npm install firebase-admin --no-save --silent
+          node scripts/request_remote_update.js

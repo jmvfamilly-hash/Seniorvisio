@@ -321,7 +321,12 @@ nouveau). Remplacé par un mécanisme intégré à l'appli, sans compte ni servi
   `.requestedApkUrl`) ; dès qu'une version différente de celle installée est demandée, télécharge l'APK
   et l'installe silencieusement via `PackageInstaller` — seul un Device Owner peut le faire sans
   confirmation manuelle affichée sur l'écran de la tablette. Le résultat (succès/échec) est remonté
-  dans Firestore par `UpdateStatusReceiver.kt`.
+  dans Firestore par `UpdateStatusReceiver.kt`. **Attention** : "silencieux" dispense Jean de confirmer,
+  pas Android de vérifier la signature — une mise à jour vers un APK signé différemment échoue comme
+  n'importe quel `adb install -r` (voir la clé de signature versionnée, section CI ci-dessous). Ces
+  champs Firestore sont désormais renseignés automatiquement par `build-debug-apk.yml` à la fin de
+  chaque build réussi sur `AssemblyAI` (`scripts/request_remote_update.js`) : plus rien à faire à la
+  main pour qu'une tablette déjà enrôlée récupère la dernière version en quelques minutes.
 - **Statut** : le même service publie toutes les 5 minutes un signe de vie dans Firestore (niveau de
   batterie, version installée `BuildConfig.BUILD_REV`, horodatage) — reste à construire une petite page
   de suivi (sur le modèle de `web-caller/`) pour le consulter facilement ; en attendant, consultable
