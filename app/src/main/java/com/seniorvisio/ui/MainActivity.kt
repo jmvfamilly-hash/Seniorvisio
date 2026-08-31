@@ -136,7 +136,10 @@ class MainActivity : AppCompatActivity() {
         requestIgnoreBatteryOptimizations()
         requestFullScreenIntentPermission()
         registerFcmToken()
-        KioskManager.startIfDeviceOwner(this)
+        // Seul écran à se déclarer comme lanceur de la tablette : c'est lui
+        // que le bouton Accueil doit ramener, depuis n'importe quelle
+        // application compagne.
+        KioskManager.startIfDeviceOwner(this, MainActivity::class.java)
     }
 
     private fun promptAdminPin() {

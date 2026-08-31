@@ -37,13 +37,28 @@
             android:excludeFromRecents="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
 
+        <!-- launchMode singleTask : indispensable pour un écran d'accueil, sinon
+             chaque appui sur le bouton Accueil empilerait une nouvelle instance
+             au lieu de revenir à celle déjà ouverte. -->
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Senior Visio est le lanceur de la tablette (voir
+                 KioskManager.registerAsHomeApp, qui rend le choix définitif sans
+                 jamais le demander à Jean). Deux raisons : donner au bouton
+                 Accueil un point de chute maîtrisé quand une application
+                 compagne est lancée depuis ici, et empêcher la tablette de
+                 retomber sur le lanceur Samsung si le mode kiosque lâche. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 

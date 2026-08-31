@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -37,6 +38,16 @@ class CallListenerService : LifecycleService() {
     // plutôt qu'un composant séparé, pour ne pas dépendre d'un cycle de vie
     // supplémentaire à maintenir en vie.
     private val statusReporter = DeviceStatusReporter(this)
+
+    // Sans ce verrou, Android coupe l'économiseur d'énergie Wi-Fi une fois
+    // l'écran éteint : l'association tombe au bout de quelques heures, et la
+    // tablette devient injoignable (plus d'appel entrant, plus de mise à jour
+    // à distance, plus de signe de vie) jusqu'à ce que quelqu'un la réveille
+    // à la main. Le statut foreground du service ne protège que le processus,
+    // pas la liaison Wi-Fi elle-même. HIGH_PERF plutôt que FULL (sans effet
+    // depuis Android 10) : la tablette est sur secteur en permanence, le
+    // surcoût en énergie est sans importance ici.
+    private var wifiLock: WifiManager.WifiLock? = null
     private val heartbeatHandler = Handler(Looper.getMainLooper())
     private val heartbeatRunnable = object : Runnable {
         override fun run() {
@@ -48,9 +59,22 @@ class CallListenerService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         startForeground(FOREGROUND_ID, buildForegroundNotification())
+        acquireWifiLock()
         startListening()
         statusReporter.listenForRemoteUpdate()
         heartbeatHandler.post(heartbeatRunnable)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun acquireWifiLock() {
+        if (wifiLock != null) return
+        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return
+        wifiLock = wifiManager.createWifiLock(
+            WifiManager.WIFI_MODE_FULL_HIGH_PERF, "SeniorVisio:KeepWifiAlive"
+        ).apply {
+            setReferenceCounted(false)
+            acquire()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -75,6 +99,8 @@ class CallListenerService : LifecycleService() {
         callListener?.remove()
         callListener = null
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
+        wifiLock?.let { if (it.isHeld) it.release() }
+        wifiLock = null
         super.onDestroy()
     }
 
