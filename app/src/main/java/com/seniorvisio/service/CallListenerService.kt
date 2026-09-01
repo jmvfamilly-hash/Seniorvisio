@@ -61,7 +61,7 @@ class CallListenerService : LifecycleService() {
         startForeground(FOREGROUND_ID, buildForegroundNotification())
         acquireWifiLock()
         startListening()
-        statusReporter.listenForRemoteUpdate()
+        statusReporter.listenForRemoteCommands()
         heartbeatHandler.post(heartbeatRunnable)
     }
 

@@ -78,6 +78,8 @@ const els = {
   countdownText: document.getElementById("countdownText"),
   transcriptCurrent: document.getElementById("transcriptCurrent"),
   transcriptHistory: document.getElementById("transcriptHistory"),
+  resetTranscriptionButton: document.getElementById("resetTranscriptionButton"),
+  resetTranscriptionStatus: document.getElementById("resetTranscriptionStatus"),
   silenceIndicator: document.getElementById("silenceIndicator"),
   captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
   fullscreenCaptionBanner: document.getElementById("fullscreenCaptionBanner"),
@@ -254,6 +256,32 @@ els.cancelButton.addEventListener("click", async () => {
 });
 
 els.retryButton.addEventListener("click", () => showState("idle"));
+
+// Réinitialisation de l'application de transcription de Google sur la tablette
+// (voir DeviceStatusReporter.handleTranscriptionReset côté Android). Seul moyen
+// de réparer à distance un réglage déréglé dedans : son interface échappe
+// entièrement à Senior Visio. Confirmation obligatoire, l'action efface les
+// réglages et les transcriptions conservées.
+els.resetTranscriptionButton.addEventListener("click", async () => {
+  const confirmed = confirm(
+    "Remettre l'application de transcription de la tablette dans son état d'origine ?\n\n" +
+    "Ses réglages et les transcriptions qu'elle conserve seront effacés. " +
+    "Jean n'a rien à faire."
+  );
+  if (!confirmed) return;
+
+  els.resetTranscriptionButton.disabled = true;
+  els.resetTranscriptionStatus.textContent = "Envoi de la demande…";
+  try {
+    await engine.requestTranscriptionReset();
+    els.resetTranscriptionStatus.textContent =
+      "Demande envoyée. La tablette l'applique dès qu'elle est en ligne.";
+  } catch (e) {
+    els.resetTranscriptionStatus.textContent = `Échec de l'envoi : ${e.message}`;
+  } finally {
+    els.resetTranscriptionButton.disabled = false;
+  }
+});
 
 els.hangupButton.addEventListener("click", async () => {
   await engine.cancelCall();

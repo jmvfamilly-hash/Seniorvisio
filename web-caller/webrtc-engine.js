@@ -473,6 +473,28 @@ class RealCallEngine extends CallEngine {
     }
   }
 
+  /**
+   * Demande à la tablette de réinitialiser l'application de transcription de
+   * Google (voir DeviceStatusReporter.handleTranscriptionReset côté Android).
+   *
+   * Seul moyen de réparer à distance un réglage déréglé dedans : son interface
+   * échappe à Senior Visio, et rien ne permet d'y imposer une configuration
+   * depuis l'extérieur. L'application repart sur les valeurs par défaut de
+   * Google, et ses transcriptions conservées sont effacées au passage.
+   *
+   * S'écrit hors de tout appel, contrairement aux autres réglages à distance :
+   * c'est une action de maintenance, pas une commande d'appel. Un horodatage
+   * serveur plutôt qu'un booléen, pour que chaque demande soit distincte de la
+   * précédente sans avoir à remettre un champ à zéro ensuite.
+   */
+  async requestTranscriptionReset() {
+    if (!this._db) throw new Error("Firebase non configuré");
+    await this._db.collection("devices").doc("jean_tablet").set(
+      { resetTranscriptionRequestedAt: firebase.firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+  }
+
   _stopCaptioning() {
     if (this._recognition) {
       const recognition = this._recognition;
