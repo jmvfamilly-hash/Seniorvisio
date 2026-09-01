@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.AlertDialog
 import android.app.NotificationManager
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Intent
 import android.text.InputType
 import android.net.Uri
@@ -11,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -98,19 +100,45 @@ class MainActivity : AppCompatActivity() {
      * intervenant sur place qui le lira, pas Jean.
      */
     private fun launchRoomTranscription() {
-        val launchIntent = packageManager.getLaunchIntentForPackage(CompanionApps.TRANSCRIPTION)
+        val launchIntent = resolveTranscriptionIntent()
         if (launchIntent == null) {
+            Log.w(TAG, "Aucun écran lançable trouvé pour ${CompanionApps.TRANSCRIPTION}")
             Toast.makeText(
                 this,
-                "Transcription instantanée n'est pas installée sur cette tablette",
+                "Impossible d'ouvrir Transcription instantanée sur cette tablette",
                 Toast.LENGTH_LONG
             ).show()
             return
         }
         try {
             startActivity(launchIntent)
-        } catch (_: ActivityNotFoundException) {
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "Lancement de la transcription refusé", e)
             Toast.makeText(this, "Impossible d'ouvrir Transcription instantanée", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /**
+     * Cherche par quel écran ouvrir l'application de transcription.
+     *
+     * Le chemin normal (getLaunchIntentForPackage) suppose une activité
+     * déclarée en CATEGORY_LAUNCHER. Certaines applications d'accessibilité
+     * n'en ont pas — elles sont prévues pour être ouvertes depuis les
+     * Réglages ou le raccourci d'accessibilité — d'où le repli sur n'importe
+     * quelle activité ACTION_MAIN exportée du paquet.
+     *
+     * Les deux chemins échouent tant que le paquet n'est pas déclaré dans la
+     * section <queries> du manifeste : Android répond alors comme s'il
+     * n'était pas installé.
+     */
+    private fun resolveTranscriptionIntent(): Intent? {
+        packageManager.getLaunchIntentForPackage(CompanionApps.TRANSCRIPTION)?.let { return it }
+
+        val mainIntent = Intent(Intent.ACTION_MAIN).setPackage(CompanionApps.TRANSCRIPTION)
+        val activity = packageManager.queryIntentActivities(mainIntent, 0).firstOrNull() ?: return null
+        return Intent(Intent.ACTION_MAIN).apply {
+            component = ComponentName(activity.activityInfo.packageName, activity.activityInfo.name)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
     }
 
@@ -175,5 +203,9 @@ class MainActivity : AppCompatActivity() {
             data = Uri.parse("package:$packageName")
         }
         startActivity(intent)
+    }
+
+    companion object {
+        private const val TAG = "MainActivity"
     }
 }

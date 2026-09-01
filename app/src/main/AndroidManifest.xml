@@ -19,6 +19,18 @@
 
     <uses-feature android:name="android.hardware.camera.front" android:required="true" />
 
+    <!-- Depuis Android 11, une application ne voit plus les autres paquets
+         installés sans les déclarer ici : sans cette section,
+         getLaunchIntentForPackage et getPackageInfo échouent exactement comme
+         si l'application était absente, alors qu'elle est bien là (constaté en
+         test réel sur la tablette). Déclaration ciblée plutôt que la
+         permission QUERY_ALL_PACKAGES, disproportionnée et restreinte par
+         Google Play. À compléter pour chaque nouvelle application compagne
+         (voir CompanionApps.kt). -->
+    <queries>
+        <package android:name="com.google.audio.hearing.visualization.accessibility.scribe" />
+    </queries>
+
     <!-- Nécessaire à la détection/validation d'un portail captif (voir
          WifiConfigurator.checkInternetReachable, AdminSettingsActivity) : le
          reste de l'app (Firestore, FCM, WebRTC) reste entièrement en HTTPS/WSS,
