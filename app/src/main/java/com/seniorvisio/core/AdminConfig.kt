@@ -62,15 +62,6 @@ class AdminConfig(context: Context) {
             ?: BuildConfig.ASSEMBLYAI_API_KEY_DEFAULT
         set(value) = prefs.edit().putString(KEY_ASSEMBLYAI_API_KEY, value).apply()
 
-    // --- Taille du texte des sous-titres de la pièce (voir MainActivity),
-    // ajustable directement par Jean (boutons "A-"/"A+") faute de proche à
-    // distance pour le faire, contrairement aux sous-titres d'appel (voir
-    // WebRtcCallEngine.listenForCaptionTextSize). Mémorisée d'une session à
-    // l'autre. ---
-    var roomCaptionTextSizeSp: Float
-        get() = prefs.getFloat(KEY_ROOM_CAPTION_TEXT_SIZE, ROOM_CAPTION_TEXT_SIZE_DEFAULT_SP)
-        set(value) = prefs.edit().putFloat(KEY_ROOM_CAPTION_TEXT_SIZE, value).apply()
-
     fun isCurrentlyNightWindow(hourNow: Int): Boolean {
         return if (nightStartHour <= nightEndHour) {
             hourNow in nightStartHour until nightEndHour
@@ -99,11 +90,5 @@ class AdminConfig(context: Context) {
         private const val KEY_BLOCKING_ENABLED = "blocking_enabled"
         private const val KEY_ADMIN_PIN = "admin_pin"
         private const val KEY_ASSEMBLYAI_API_KEY = "assemblyai_api_key"
-        private const val KEY_ROOM_CAPTION_TEXT_SIZE = "room_caption_text_size_sp"
-
-        const val ROOM_CAPTION_TEXT_SIZE_DEFAULT_SP = 32f
-        const val ROOM_CAPTION_TEXT_SIZE_MIN_SP = 20f
-        const val ROOM_CAPTION_TEXT_SIZE_MAX_SP = 60f
-        const val ROOM_CAPTION_TEXT_SIZE_STEP_SP = 4f
     }
 }

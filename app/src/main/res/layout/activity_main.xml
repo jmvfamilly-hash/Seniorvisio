@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-     Écran d'accueil (hors appel). Deux vues exclusives : l'attente (titre +
-     bouton pour activer les sous-titres de la pièce) et l'affichage des
-     sous-titres eux-mêmes une fois activés (voir MainActivity.kt).
+     Écran d'attente (hors appel). Volontairement réduit à l'essentiel : un
+     titre et un gros bouton qui bascule vers la transcription des
+     conversations de la pièce (application Google, voir
+     MainActivity.launchRoomTranscription et CompanionApps).
+
+     Le bandeau de sous-titres qui vivait ici a disparu avec la
+     reconnaissance vocale maison : c'est désormais l'application de Google
+     qui affiche le texte, en plein écran, et le bouton Accueil ramène ici
+     (voir KioskManager).
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -10,7 +16,6 @@
     android:background="#1B2A4A">
 
     <LinearLayout
-        android:id="@+id/idleContent"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
@@ -41,92 +46,9 @@
 
     </LinearLayout>
 
-    <!-- Sous-titres de la pièce : reconnaissance vocale locale de la tablette
-         (pas de proche impliqué ici, donc pas d'autre choix que de faire
-         tourner la reconnaissance directement sur l'appareil). Pas
-         d'historique conservé : chaque phrase reconnue remplace la
-         précédente (voir MainActivity.updateRoomCaptionText).
-
-         Bandeau centré à l'écran, géré exactement comme le bandeau des
-         sous-titres d'appel (voir activity_incoming_call.xml et
-         IncomingCallActivity.applyOrientationLayout) : même fond
-         (caption_banner_bg), mêmes marges latérales adaptées à
-         l'orientation — sauf que centré plutôt qu'en bas, faute de vidéo à
-         laisser plein écran ici. Voir MainActivity.applyRoomCaptionLayout
-         pour le calcul dynamique des marges/hauteur (plafond augmenté de
-         50% par rapport à l'équivalent en appel, plus de place ici que la
-         vidéo n'en laisse côté appel). -->
-    <LinearLayout
-        android:id="@+id/roomCaptionBanner"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:background="@drawable/caption_banner_bg"
-        android:padding="20dp"
-        android:visibility="gone">
-
-        <ScrollView
-            android:id="@+id/roomCaptionScroll"
-            android:layout_width="match_parent"
-            android:layout_height="330dp"
-            android:scrollbars="none">
-
-            <TextView
-                android:id="@+id/textRoomCaption"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:textColor="#FFFFFF"
-                android:textSize="@dimen/caption_text_size_default"
-                android:text="" />
-        </ScrollView>
-    </LinearLayout>
-
-    <!-- Taille du texte réglable directement par Jean (pas de proche à
-         distance pour le faire ici, contrairement aux sous-titres d'appel) —
-         voir AdminConfig.roomCaptionTextSizeSp. -->
-    <LinearLayout
-        android:id="@+id/roomCaptionTextSizeControls"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_margin="16dp"
-        android:orientation="horizontal"
-        android:visibility="gone">
-
-        <Button
-            android:id="@+id/buttonRoomTextSmaller"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:insetLeft="0dp"
-            android:insetRight="0dp"
-            android:padding="0dp"
-            android:text="A-"
-            android:textSize="16sp"
-            android:backgroundTint="#33FFFFFF" />
-
-        <Button
-            android:id="@+id/buttonRoomTextLarger"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:layout_marginStart="12dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:insetLeft="0dp"
-            android:insetRight="0dp"
-            android:padding="0dp"
-            android:text="A+"
-            android:textSize="20sp"
-            android:backgroundTint="#33FFFFFF" />
-
-    </LinearLayout>
-
-    <!-- Version affichée en permanence, discrètement, pour vérifier à distance
-         quel APK tourne réellement sur la tablette (voir BuildConfig.BUILD_REV) —
-         sans ça, impossible de savoir si un déploiement Headwind a pris effet
-         sans brancher physiquement l'appareil. -->
+    <!-- Version affichée en permanence, discrètement, pour vérifier quel APK
+         tourne réellement sur la tablette sans la brancher (voir
+         BuildConfig.BUILD_REV). Appui long : accès aux réglages admin. -->
     <TextView
         android:id="@+id/textBuildRev"
         android:layout_width="wrap_content"
@@ -136,20 +58,5 @@
         android:textColor="#4DFFFFFF"
         android:textSize="11sp"
         android:text="" />
-
-    <Button
-        android:id="@+id/buttonStopRoomCaptions"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="32dp"
-        android:visibility="gone"
-        android:text="Arrêter les sous-titres"
-        android:textSize="20sp"
-        android:paddingLeft="32dp"
-        android:paddingRight="32dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="16dp"
-        android:backgroundTint="#C0392B" />
 
 </FrameLayout>

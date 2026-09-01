@@ -34,8 +34,12 @@ object KioskManager {
         if (!dpm.isDeviceOwnerApp(activity.packageName)) return
         val admin = ComponentName(activity, SeniorVisioDeviceAdminReceiver::class.java)
 
-        dpm.setLockTaskPackages(admin, arrayOf(activity.packageName))
+        // Senior Visio plus les applications compagnes : c'est cette liste qui
+        // autorise la bascule vers Transcription instantanée sans quitter le
+        // mode kiosque (voir CompanionApps, et MainActivity.launchRoomTranscription).
+        dpm.setLockTaskPackages(admin, arrayOf(activity.packageName) + CompanionApps.allowedPackages)
         allowHomeButton(dpm, admin)
+        protectCompanionApps(activity, dpm, admin)
         if (homeActivity != null) registerAsHomeApp(activity, dpm, admin, homeActivity)
 
         try {
@@ -66,6 +70,30 @@ object KioskManager {
             DevicePolicyManager.LOCK_TASK_FEATURE_HOME or
                 DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS
         )
+    }
+
+    /**
+     * Empêche la désinstallation des applications compagnes. Sans ça, une
+     * fausse manœuvre suffirait à faire disparaître la transcription de la
+     * tablette, avec pour seul symptôme un bouton qui ne fait plus rien —
+     * et aucun moyen de la réinstaller à distance, l'appareil n'ayant pas de
+     * compte Google.
+     *
+     * Silencieux si le paquet est absent : la tablette de Jean l'a
+     * préinstallée, mais un appareil de test n'y est pas tenu.
+     */
+    private fun protectCompanionApps(
+        activity: Activity,
+        dpm: DevicePolicyManager,
+        admin: ComponentName,
+    ) {
+        CompanionApps.allowedPackages.forEach { packageName ->
+            try {
+                dpm.setUninstallBlocked(admin, packageName, true)
+            } catch (_: IllegalArgumentException) {
+                // Paquet non installé sur cet appareil : rien à protéger.
+            }
+        }
     }
 
     /**

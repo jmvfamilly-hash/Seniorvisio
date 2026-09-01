@@ -5,6 +5,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.os.BatteryManager
 import android.util.Log
 import com.google.firebase.firestore.FieldValue
@@ -35,11 +36,31 @@ class DeviceStatusReporter(private val context: Context) {
             mapOf(
                 FIELD_APP_VERSION to BuildConfig.BUILD_REV,
                 FIELD_BATTERY_PERCENT to batteryPercent,
+                FIELD_COMPANION_APPS to companionAppVersions(),
                 FIELD_LAST_HEARTBEAT_AT to FieldValue.serverTimestamp(),
             ),
             SetOptions.merge()
         ).addOnFailureListener { e -> Log.e(TAG, "Échec de l'envoi du signe de vie à Firestore", e) }
     }
+
+    /**
+     * Version installée de chaque application compagne, remontée avec le signe
+     * de vie. Senior Visio ne maîtrise pas ces versions (c'est Google qui met
+     * à jour la transcription) : sans cette remontée, une régression due à une
+     * mise à jour tierce ne se découvrirait que par Jean, sur place.
+     *
+     * Valeur "absent" plutôt qu'omission quand le paquet n'est pas là : c'est
+     * une information en soi, et elle se distingue ainsi d'un heartbeat trop
+     * ancien pour contenir le champ.
+     */
+    private fun companionAppVersions(): Map<String, String> =
+        CompanionApps.allowedPackages.associateWith { packageName ->
+            try {
+                context.packageManager.getPackageInfo(packageName, 0).versionName ?: "inconnue"
+            } catch (_: PackageManager.NameNotFoundException) {
+                "absent"
+            }
+        }
 
     /**
      * Écoute une mise à jour demandée à distance (URL de l'APK + version
@@ -113,6 +134,7 @@ class DeviceStatusReporter(private val context: Context) {
         private const val DEVICE_DOC_PATH = "devices/jean_tablet"
         private const val FIELD_APP_VERSION = "appVersion"
         private const val FIELD_BATTERY_PERCENT = "batteryPercent"
+        private const val FIELD_COMPANION_APPS = "companionAppVersions"
         private const val FIELD_LAST_HEARTBEAT_AT = "lastHeartbeatAt"
         private const val FIELD_REQUESTED_VERSION = "requestedVersion"
         private const val FIELD_REQUESTED_APK_URL = "requestedApkUrl"
