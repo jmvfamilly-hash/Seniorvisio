@@ -18,6 +18,28 @@
         android:layout_margin="16dp"
         android:visibility="gone" />
 
+    <!-- Photo de l'appelant en plein écran, derrière le nom et le décompte :
+         un rond de 160dp était minuscule sur une dalle de dix pouces, alors
+         que reconnaître la personne est précisément le but de cet écran. Le
+         dégradé sombre par-dessus garde le nom et la barre lisibles quelle que
+         soit la photo. Masquée tant qu'aucune photo n'est reçue : le fond uni
+         du FrameLayout reprend alors le dessus (voir
+         IncomingCallActivity.showCallerPhoto). -->
+    <ImageView
+        android:id="@+id/imageCallerPhoto"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:contentDescription="Photo de l'appelant"
+        android:visibility="gone" />
+
+    <View
+        android:id="@+id/callerPhotoScrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/caller_photo_scrim"
+        android:visibility="gone" />
+
     <LinearLayout
         android:id="@+id/alertContent"
         android:layout_width="match_parent"
@@ -25,16 +47,6 @@
         android:orientation="vertical"
         android:gravity="center"
         android:padding="32dp">
-
-        <ImageView
-            android:id="@+id/imageCallerPhoto"
-            android:layout_width="160dp"
-            android:layout_height="160dp"
-            android:layout_marginBottom="24dp"
-            android:background="#2C3E5C"
-            android:scaleType="centerCrop"
-            android:contentDescription="Photo de l'appelant"
-            android:visibility="gone" />
 
         <TextView
             android:id="@+id/textCallerName"

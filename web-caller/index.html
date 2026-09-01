@@ -14,6 +14,36 @@
     <div id="stateIdle" class="state">
       <button id="callButton">📹 Démarrer l'appel</button>
 
+      <!-- Identité de l'appelant, mémorisée dans ce navigateur uniquement :
+           chaque proche renseigne la sienne depuis son propre téléphone, sans
+           compte à créer ni annuaire partagé à tenir (même principe que les
+           réglages d'appel, voir app.js). Sans ça, Jean voyait « Un proche »
+           quel que soit l'appelant, et une capture webcam minuscule. -->
+      <details class="side-panel">
+        <summary>Qui appelle&nbsp;?</summary>
+        <p class="hint">
+          Ce prénom et cette photo s'affichent en grand sur la tablette pendant
+          la sonnerie, pour que Jean reconnaisse immédiatement qui l'appelle.
+          Une photo nette et souriante, où l'on vous voit bien, marche beaucoup
+          mieux qu'une image sombre.
+        </p>
+
+        <label for="identityName">Votre prénom</label>
+        <input type="text" id="identityName" maxlength="30" placeholder="Marie" autocomplete="given-name">
+
+        <label for="identityPhotoInput">Votre photo</label>
+        <input type="file" id="identityPhotoInput" accept="image/*">
+        <img id="identityPhotoPreview" class="identity-preview hidden" alt="Aperçu de votre photo">
+
+        <label class="checkbox-label">
+          <input type="checkbox" id="identityRights">
+          Je certifie disposer du droit d'utiliser cette image.
+        </label>
+
+        <button id="saveIdentityButton" class="secondary">💾 Enregistrer</button>
+        <p class="hint" id="identityStatus"></p>
+      </details>
+
       <!-- Replié par défaut : action de maintenance, pas une commande d'appel.
            Les proches qui appellent simplement n'ont pas à la voir. -->
       <details class="side-panel">

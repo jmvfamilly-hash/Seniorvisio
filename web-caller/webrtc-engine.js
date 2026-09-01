@@ -161,7 +161,13 @@ class RealCallEngine extends CallEngine {
       if (event.candidate) callerCandidates.add(event.candidate.toJSON());
     };
 
-    const photoPromise = this._captureCallerPhoto();
+    // Photo choisie par le proche (voir app.js, panneau "Qui appelle ?") si
+    // elle existe : nettement plus reconnaissable qu'une capture webcam prise
+    // à la volée, souvent sombre et mal cadrée — et c'est elle que Jean voit
+    // en plein écran pendant la sonnerie.
+    const photoPromise = initialSettings.callerPhotoBase64
+      ? Promise.resolve(initialSettings.callerPhotoBase64)
+      : this._captureCallerPhoto();
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);

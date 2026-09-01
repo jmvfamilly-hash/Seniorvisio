@@ -277,3 +277,69 @@ body.video-mode #fullscreenCaptionBanner:not(.hidden) {
 .fullscreen-caption-lag.hidden {
   display: none;
 }
+
+/* Panneaux repliés de l'écran d'attente : identité de l'appelant et
+   dépannage de la tablette. Repliés par défaut — un proche qui veut juste
+   appeler ne doit pas avoir à les traverser. */
+.side-panel {
+  margin-top: 24px;
+  text-align: left;
+  border-top: 1px solid #2C3E5C;
+  padding-top: 12px;
+}
+
+.side-panel > summary {
+  cursor: pointer;
+  color: #AAB4C8;
+  font-size: 15px;
+  padding: 6px 0;
+}
+
+.side-panel label {
+  display: block;
+  margin-top: 14px;
+  color: #AAB4C8;
+  font-size: 14px;
+}
+
+.side-panel input[type="text"],
+.side-panel input[type="file"] {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #2C3E5C;
+  background: #16233D;
+  color: #FFFFFF;
+  font-size: 16px;
+}
+
+.side-panel .checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  line-height: 1.4;
+}
+
+.side-panel .checkbox-label input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.side-panel button {
+  margin-top: 16px;
+}
+
+.identity-preview {
+  display: block;
+  margin-top: 12px;
+  max-width: 160px;
+  border-radius: 8px;
+}
+
+.identity-preview.hidden {
+  display: none;
+}

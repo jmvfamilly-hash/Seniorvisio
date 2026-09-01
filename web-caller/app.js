@@ -24,6 +24,56 @@ const DEFAULT_SETTINGS = {
   scrollSpeed: 50,
 };
 
+// --- Identité de l'appelant, mémorisée dans ce navigateur uniquement ---
+// Volontairement séparée des réglages d'appel ci-dessus : elle se renseigne
+// sur l'écran d'attente, avant tout appel, alors que les réglages se règlent
+// pendant l'appel avec un autre bouton. Chaque proche a la sienne sur son
+// propre téléphone — pas de compte à créer, pas d'annuaire partagé à tenir.
+//
+// La photo est redimensionnée avant d'être mémorisée : une photo brute de
+// téléphone dépasserait à elle seule la limite de 1 Mio d'un document
+// Firestore une fois encodée en base64.
+const IDENTITY_STORAGE_KEY = "seniorvisio_caller_identity";
+const IDENTITY_PHOTO_MAX_SIDE = 800;
+const IDENTITY_PHOTO_QUALITY = 0.72;
+
+function loadIdentity() {
+  try {
+    const raw = localStorage.getItem(IDENTITY_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Redimensionne la photo choisie et renvoie du base64 brut (sans préfixe
+ * "data:"), format attendu tel quel par la tablette
+ * (IncomingCallActivity.showCallerPhoto décode directement en Base64).
+ * Proportions conservées : le cadrage final est fait côté tablette, en plein
+ * écran.
+ */
+function resizeToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Lecture du fichier impossible"));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error("Ce fichier n'est pas une image lisible"));
+      image.onload = () => {
+        const scale = Math.min(1, IDENTITY_PHOTO_MAX_SIDE / Math.max(image.width, image.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(image.width * scale);
+        canvas.height = Math.round(image.height * scale);
+        canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", IDENTITY_PHOTO_QUALITY).split(",")[1]);
+      };
+      image.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function loadSavedSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
@@ -80,6 +130,12 @@ const els = {
   transcriptHistory: document.getElementById("transcriptHistory"),
   resetTranscriptionButton: document.getElementById("resetTranscriptionButton"),
   resetTranscriptionStatus: document.getElementById("resetTranscriptionStatus"),
+  identityName: document.getElementById("identityName"),
+  identityPhotoInput: document.getElementById("identityPhotoInput"),
+  identityPhotoPreview: document.getElementById("identityPhotoPreview"),
+  identityRights: document.getElementById("identityRights"),
+  saveIdentityButton: document.getElementById("saveIdentityButton"),
+  identityStatus: document.getElementById("identityStatus"),
   silenceIndicator: document.getElementById("silenceIndicator"),
   captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
   fullscreenCaptionBanner: document.getElementById("fullscreenCaptionBanner"),
@@ -143,12 +199,16 @@ els.callButton.addEventListener("click", async () => {
   // le bouton, sans plus aucun moyen de relancer la connexion pour cet appel.
   els.forceConnectButton.disabled = true;
   showState("calling");
-  await engine.startCall(CONFIG.targetDeviceId, CONFIG.callerName, {
+  // Identité renseignée sur l'écran d'attente, sinon repli sur l'ancien
+  // comportement : nom générique et capture webcam prise à l'ouverture.
+  const identity = loadIdentity() || {};
+  await engine.startCall(CONFIG.targetDeviceId, identity.name || CONFIG.callerName, {
     remoteVolume: settings.volume / 100,
     captionModeEnabled: settings.captionEnabled,
     captionTextSize: settings.textSize,
     captionMaxScrollSpeedDpPerSec: settings.scrollSpeed,
     selfPreviewEnabled: settings.selfPreview,
+    callerPhotoBase64: identity.photoBase64 || null,
   });
   els.forceConnectButton.disabled = false;
 });
@@ -256,6 +316,58 @@ els.cancelButton.addEventListener("click", async () => {
 });
 
 els.retryButton.addEventListener("click", () => showState("idle"));
+
+// --- Identité de l'appelant ---
+// Photo retenue en mémoire tant qu'elle n'est pas enregistrée : le
+// redimensionnement est asynchrone, on ne peut pas le refaire au moment du clic.
+let pendingIdentityPhoto = null;
+
+(function restoreIdentity() {
+  const identity = loadIdentity();
+  if (!identity) return;
+  els.identityName.value = identity.name || "";
+  els.identityRights.checked = Boolean(identity.rightsAcceptedAt);
+  if (identity.photoBase64) {
+    els.identityPhotoPreview.src = `data:image/jpeg;base64,${identity.photoBase64}`;
+    els.identityPhotoPreview.classList.remove("hidden");
+  }
+})();
+
+els.identityPhotoInput.addEventListener("change", async () => {
+  const file = els.identityPhotoInput.files && els.identityPhotoInput.files[0];
+  if (!file) return;
+  els.identityStatus.textContent = "Préparation de la photo…";
+  try {
+    pendingIdentityPhoto = await resizeToBase64(file);
+    els.identityPhotoPreview.src = `data:image/jpeg;base64,${pendingIdentityPhoto}`;
+    els.identityPhotoPreview.classList.remove("hidden");
+    els.identityStatus.textContent = "Photo prête. Cochez l'attestation puis enregistrez.";
+  } catch (e) {
+    pendingIdentityPhoto = null;
+    els.identityStatus.textContent = e.message;
+  }
+});
+
+els.saveIdentityButton.addEventListener("click", () => {
+  const previous = loadIdentity() || {};
+  const photoBase64 = pendingIdentityPhoto || previous.photoBase64 || null;
+
+  // L'attestation n'est exigée que s'il y a effectivement une image : un proche
+  // qui ne renseigne que son prénom n'a rien à certifier.
+  if (photoBase64 && !els.identityRights.checked) {
+    els.identityStatus.textContent =
+      "Merci de cocher l'attestation de droit à l'image avant d'enregistrer.";
+    return;
+  }
+
+  localStorage.setItem(IDENTITY_STORAGE_KEY, JSON.stringify({
+    name: els.identityName.value.trim(),
+    photoBase64,
+    rightsAcceptedAt: photoBase64 ? (previous.rightsAcceptedAt || new Date().toISOString()) : null,
+  }));
+  pendingIdentityPhoto = null;
+  els.identityStatus.textContent = "✅ Enregistré. Jean vous verra ainsi au prochain appel.";
+});
 
 // Réinitialisation de l'application de transcription de Google sur la tablette
 // (voir DeviceStatusReporter.handleTranscriptionReset côté Android). Seul moyen

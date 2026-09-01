@@ -3,7 +3,6 @@ package com.seniorvisio.ui
 import android.app.NotificationManager
 import android.content.res.Configuration
 import android.graphics.BitmapFactory
-import android.graphics.Outline
 import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
@@ -13,7 +12,6 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
-import android.view.ViewOutlineProvider
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
@@ -189,29 +187,41 @@ class IncomingCallActivity : AppCompatActivity() {
         }
     }
 
-    /** Photo du proche (capturée sur son navigateur à l'ouverture de l'appel) pour une reconnaissance immédiate. */
+    /**
+     * Photo du proche affichée en plein écran pendant la sonnerie, derrière le
+     * nom et le décompte : c'est ce qui permet à Jean de reconnaître qui
+     * l'appelle avant même de lire. Remplace la vignette ronde de 160dp,
+     * minuscule sur une dalle de dix pouces.
+     *
+     * Photo choisie à l'avance par le proche depuis le PWA quand il en a
+     * déposé une (voir app.js, panneau "Qui appelle ?"), sinon capture webcam
+     * prise à l'ouverture de l'appel — d'où le voile, qui garantit la
+     * lisibilité du texte quelle que soit la luminosité de l'image reçue.
+     */
     private fun showCallerPhoto(photoBase64: String?) {
         if (photoBase64.isNullOrEmpty()) return
         val imagePhoto = findViewById<ImageView>(R.id.imageCallerPhoto)
+        val scrim = findViewById<View>(R.id.callerPhotoScrim)
         try {
             val bytes = Base64.decode(photoBase64, Base64.DEFAULT)
             val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return
             imagePhoto.setImageBitmap(bitmap)
-            imagePhoto.clipToOutline = true
-            imagePhoto.outlineProvider = object : ViewOutlineProvider() {
-                override fun getOutline(view: View, outline: Outline) {
-                    outline.setOval(0, 0, view.width, view.height)
-                }
-            }
             imagePhoto.visibility = View.VISIBLE
+            scrim.visibility = View.VISIBLE
         } catch (_: IllegalArgumentException) {
-            // Photo corrompue/mal encodée : on garde simplement le nom, pas bloquant.
+            // Photo corrompue/mal encodée : on garde simplement le nom sur le
+            // fond uni, pas bloquant.
         }
     }
 
     private fun connectVideoCall() {
         isConnected = true
         findViewById<View>(R.id.alertContent).visibility = View.GONE
+        // La photo et son voile sont des calques plein écran, frères de
+        // alertContent et non ses enfants : sans ça ils resteraient affichés
+        // par-dessus la vidéo une fois l'appel connecté.
+        findViewById<View>(R.id.imageCallerPhoto).visibility = View.GONE
+        findViewById<View>(R.id.callerPhotoScrim).visibility = View.GONE
         val localRenderer = findViewById<SurfaceViewRenderer>(R.id.localRenderer)
         val remoteRenderer = findViewById<SurfaceViewRenderer>(R.id.remoteRenderer)
         // Miniature de Jean masquée par défaut (retirée de l'écran) : ne

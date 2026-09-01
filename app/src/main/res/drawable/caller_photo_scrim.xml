@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Voile posé sur la photo de l'appelant affichée en plein écran (voir
+     activity_incoming_call.xml) : sans lui, le nom en blanc et la barre de
+     décompte deviennent illisibles dès que la photo est claire à cet endroit.
+
+     Assombri en haut et en bas, presque transparent au centre : c'est au
+     centre que se trouve le visage, et c'est justement ce que Jean doit
+     reconnaître.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:type="linear"
+        android:angle="90"
+        android:startColor="#CC000000"
+        android:centerColor="#33000000"
+        android:endColor="#B3000000" />
+</shape>
