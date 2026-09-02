@@ -52,25 +52,41 @@ function loadIdentity() {
  * (IncomingCallActivity.showCallerPhoto décode directement en Base64).
  * Proportions conservées : le cadrage final est fait côté tablette, en plein
  * écran.
+ *
+ * Constaté en usage réel : l'appel suivant échouait après le choix de
+ * certaines photos, systématiquement les plus lourdes (JPEG haute résolution
+ * tout droit sortis de l'appareil photo, plusieurs mégaoctets). L'ancienne
+ * version lisait le fichier en base64 (FileReader.readAsDataURL) AVANT de le
+ * décoder en image : pour une photo de 8 Mo, ça veut dire ~11 Mo de texte en
+ * mémoire en plus de l'image décodée, ce qui suffit à mettre certains
+ * navigateurs mobiles sous pression mémoire au point de couper l'accès
+ * caméra/micro du site. createObjectURL référence le fichier directement,
+ * sans jamais construire ce texte intermédiaire.
  */
 function resizeToBase64(file) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Lecture du fichier impossible"));
-    reader.onload = () => {
-      const image = new Image();
-      image.onerror = () => reject(new Error("Ce fichier n'est pas une image lisible"));
-      image.onload = () => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    const cleanup = () => URL.revokeObjectURL(objectUrl);
+    image.onerror = () => {
+      cleanup();
+      reject(new Error("Ce fichier n'est pas une image lisible"));
+    };
+    image.onload = () => {
+      try {
         const scale = Math.min(1, IDENTITY_PHOTO_MAX_SIDE / Math.max(image.width, image.height));
         const canvas = document.createElement("canvas");
         canvas.width = Math.round(image.width * scale);
         canvas.height = Math.round(image.height * scale);
         canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
         resolve(canvas.toDataURL("image/jpeg", IDENTITY_PHOTO_QUALITY).split(",")[1]);
-      };
-      image.src = reader.result;
+      } catch (e) {
+        reject(e);
+      } finally {
+        cleanup();
+      }
     };
-    reader.readAsDataURL(file);
+    image.src = objectUrl;
   });
 }
 
