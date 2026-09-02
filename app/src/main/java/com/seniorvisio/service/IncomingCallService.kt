@@ -45,10 +45,10 @@ class IncomingCallService : LifecycleService() {
         // crash avant le release() ci-dessous.
         acquireWakeLock()
         val callerName = intent?.getStringExtra(EXTRA_CALLER_NAME) ?: "un proche"
-        val callerPhoto = intent?.getStringExtra(EXTRA_CALLER_PHOTO)
+        val callerPhotoPath = intent?.getStringExtra(EXTRA_CALLER_PHOTO_PATH)
         val callId = intent?.getStringExtra(EXTRA_CALL_ID)
         if (callId != null) {
-            launchAlertScreen(callId, callerName, callerPhoto, signalReceivedAtMs)
+            launchAlertScreen(callId, callerName, callerPhotoPath, signalReceivedAtMs)
         }
         releaseWakeLock()
         // Le rôle de ce service s'arrête ici : IncomingCallActivity gère seule
@@ -86,11 +86,11 @@ class IncomingCallService : LifecycleService() {
      * déclarée dans le manifest. `startActivity` reste tenté en complément,
      * sans conséquence s'il échoue silencieusement.
      */
-    private fun launchAlertScreen(callId: String, callerName: String, callerPhotoBase64: String?, signalReceivedAtMs: Long) {
+    private fun launchAlertScreen(callId: String, callerName: String, callerPhotoPath: String?, signalReceivedAtMs: Long) {
         val alertIntent = Intent(this, IncomingCallActivity::class.java).apply {
             putExtra(IncomingCallActivity.EXTRA_CALL_ID, callId)
             putExtra("callerName", callerName)
-            putExtra(IncomingCallActivity.EXTRA_CALLER_PHOTO, callerPhotoBase64)
+            putExtra(IncomingCallActivity.EXTRA_CALLER_PHOTO_PATH, callerPhotoPath)
             putExtra(IncomingCallActivity.EXTRA_SIGNAL_RECEIVED_AT, signalReceivedAtMs)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -141,7 +141,7 @@ class IncomingCallService : LifecycleService() {
 
     companion object {
         const val EXTRA_CALLER_NAME = "extra_caller_name"
-        const val EXTRA_CALLER_PHOTO = "extra_caller_photo"
+        const val EXTRA_CALLER_PHOTO_PATH = "extra_caller_photo_path"
         const val EXTRA_CALL_ID = "extra_call_id"
         const val CALL_NOTIFICATION_ID = 44
         private const val FOREGROUND_ID = 42

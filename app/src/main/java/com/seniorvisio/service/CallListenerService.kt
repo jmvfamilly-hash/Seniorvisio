@@ -12,6 +12,7 @@ import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.google.firebase.firestore.ListenerRegistration
+import com.seniorvisio.core.CallerPhotoCache
 import com.seniorvisio.core.DeviceStatusReporter
 import com.seniorvisio.signaling.CallSignalingClient
 
@@ -86,10 +87,14 @@ class CallListenerService : LifecycleService() {
     private fun startListening() {
         if (!signaling.isAvailable()) return
         callListener = signaling.listenForRingingCalls { callId, callerName, callerPhotoBase64 ->
+            // La photo passe par un fichier, jamais par l'extra directement
+            // (voir CallerPhotoCache) : au-delà d'une certaine taille, elle
+            // fait planter ce démarrage de service avec
+            // TransactionTooLargeException, sans aucun écran d'appel affiché.
             val alertIntent = Intent(this, IncomingCallService::class.java).apply {
                 putExtra(IncomingCallService.EXTRA_CALL_ID, callId)
                 putExtra(IncomingCallService.EXTRA_CALLER_NAME, callerName)
-                putExtra(IncomingCallService.EXTRA_CALLER_PHOTO, callerPhotoBase64)
+                putExtra(IncomingCallService.EXTRA_CALLER_PHOTO_PATH, CallerPhotoCache.save(this@CallListenerService, callerPhotoBase64))
             }
             startForegroundService(alertIntent)
         }

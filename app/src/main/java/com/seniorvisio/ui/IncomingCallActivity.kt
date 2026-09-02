@@ -6,7 +6,6 @@ import android.graphics.BitmapFactory
 import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Base64
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
@@ -111,7 +110,7 @@ class IncomingCallActivity : AppCompatActivity() {
         buttonBlock = findViewById(R.id.buttonBlock)
 
         textCallerName.text = "On vous appelle"
-        showCallerPhoto(intent.getStringExtra(EXTRA_CALLER_PHOTO))
+        showCallerPhoto(intent.getStringExtra(EXTRA_CALLER_PHOTO_PATH))
 
         countdownFill.pivotX = 0f
         countdownFill.scaleX = 0f
@@ -197,21 +196,21 @@ class IncomingCallActivity : AppCompatActivity() {
      * déposé une (voir app.js, panneau "Qui appelle ?"), sinon capture webcam
      * prise à l'ouverture de l'appel — d'où le voile, qui garantit la
      * lisibilité du texte quelle que soit la luminosité de l'image reçue.
+     *
+     * Décodée depuis un fichier (voir CallerPhotoCache), jamais depuis les
+     * octets transportés directement dans l'Intent : au-delà d'une certaine
+     * taille, ça faisait planter le service qui affiche cet écran avant même
+     * qu'il n'apparaisse (TransactionTooLargeException), sans que la
+     * tablette ne sonne jamais.
      */
-    private fun showCallerPhoto(photoBase64: String?) {
-        if (photoBase64.isNullOrEmpty()) return
+    private fun showCallerPhoto(photoPath: String?) {
+        if (photoPath.isNullOrEmpty()) return
         val imagePhoto = findViewById<ImageView>(R.id.imageCallerPhoto)
         val scrim = findViewById<View>(R.id.callerPhotoScrim)
-        try {
-            val bytes = Base64.decode(photoBase64, Base64.DEFAULT)
-            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return
-            imagePhoto.setImageBitmap(bitmap)
-            imagePhoto.visibility = View.VISIBLE
-            scrim.visibility = View.VISIBLE
-        } catch (_: IllegalArgumentException) {
-            // Photo corrompue/mal encodée : on garde simplement le nom sur le
-            // fond uni, pas bloquant.
-        }
+        val bitmap = BitmapFactory.decodeFile(photoPath) ?: return
+        imagePhoto.setImageBitmap(bitmap)
+        imagePhoto.visibility = View.VISIBLE
+        scrim.visibility = View.VISIBLE
     }
 
     private fun connectVideoCall() {
@@ -533,7 +532,7 @@ class IncomingCallActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "IncomingCallActivity"
         const val EXTRA_CALL_ID = "extra_call_id"
-        const val EXTRA_CALLER_PHOTO = "extra_caller_photo"
+        const val EXTRA_CALLER_PHOTO_PATH = "extra_caller_photo_path"
         const val EXTRA_SIGNAL_RECEIVED_AT = "extra_signal_received_at"
     }
 }
