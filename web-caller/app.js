@@ -322,14 +322,27 @@ els.retryButton.addEventListener("click", () => showState("idle"));
 // redimensionnement est asynchrone, on ne peut pas le refaire au moment du clic.
 let pendingIdentityPhoto = null;
 
+const IDENTITY_JUST_SAVED_KEY = "seniorvisio_identity_just_saved";
+
 (function restoreIdentity() {
   const identity = loadIdentity();
-  if (!identity) return;
-  els.identityName.value = identity.name || "";
-  els.identityRights.checked = Boolean(identity.rightsAcceptedAt);
-  if (identity.photoBase64) {
-    els.identityPhotoPreview.src = `data:image/jpeg;base64,${identity.photoBase64}`;
-    els.identityPhotoPreview.classList.remove("hidden");
+  if (identity) {
+    els.identityName.value = identity.name || "";
+    els.identityRights.checked = Boolean(identity.rightsAcceptedAt);
+    if (identity.photoBase64) {
+      els.identityPhotoPreview.src = `data:image/jpeg;base64,${identity.photoBase64}`;
+      els.identityPhotoPreview.classList.remove("hidden");
+    }
+  }
+
+  // Confirmation après le rechargement automatique qui suit l'enregistrement
+  // d'une photo (voir plus bas) : sans ce message, la page se contente de se
+  // rouvrir sur l'écran d'attente, ce qui peut sembler être un bug plutôt
+  // qu'un comportement volontaire.
+  if (sessionStorage.getItem(IDENTITY_JUST_SAVED_KEY)) {
+    sessionStorage.removeItem(IDENTITY_JUST_SAVED_KEY);
+    document.getElementById("identityPanel").open = true;
+    els.identityStatus.textContent = "✅ Enregistré. Vous pouvez maintenant appeler Jean.";
   }
 })();
 
@@ -350,6 +363,7 @@ els.identityPhotoInput.addEventListener("change", async () => {
 
 els.saveIdentityButton.addEventListener("click", () => {
   const previous = loadIdentity() || {};
+  const photoJustCaptured = Boolean(pendingIdentityPhoto);
   const photoBase64 = pendingIdentityPhoto || previous.photoBase64 || null;
 
   // L'attestation n'est exigée que s'il y a effectivement une image : un proche
@@ -366,7 +380,25 @@ els.saveIdentityButton.addEventListener("click", () => {
     rightsAcceptedAt: photoBase64 ? (previous.rightsAcceptedAt || new Date().toISOString()) : null,
   }));
   pendingIdentityPhoto = null;
-  els.identityStatus.textContent = "✅ Enregistré. Jean vous verra ainsi au prochain appel.";
+
+  if (!photoJustCaptured) {
+    els.identityStatus.textContent = "✅ Enregistré. Jean vous verra ainsi au prochain appel.";
+    return;
+  }
+
+  // Recharge automatiquement après le choix d'une NOUVELLE photo (pas après
+  // un simple changement de prénom) : sur iOS Safari comme sur beaucoup de
+  // navigateurs Android, choisir une image via <input type=file> fait
+  // passer la page en arrière-plan un instant, et le système invalide
+  // ensuite l'accès caméra/micro du site — l'appel suivant échoue
+  // immédiatement (getUserMedia refusé) tant que la page n'a pas été
+  // rechargée. Constaté en usage réel sur deux appareils différents
+  // (Android puis iPad) avant ce correctif. L'identité vient d'être
+  // enregistrée dans localStorage, donc rien n'est perdu au rechargement —
+  // voir restoreIdentity() pour le message de confirmation qui suit.
+  els.identityStatus.textContent = "✅ Enregistré. Réouverture de la page pour que l'appel fonctionne…";
+  sessionStorage.setItem(IDENTITY_JUST_SAVED_KEY, "1");
+  setTimeout(() => location.reload(), 1200);
 });
 
 // Réinitialisation de l'application de transcription de Google sur la tablette
