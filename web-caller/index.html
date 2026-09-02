@@ -11,6 +11,14 @@
   <main id="app">
     <h1>Appeler Jean</h1>
 
+    <!-- Affichage discret du commit déployé (voir version.js, remplacé au
+         déploiement) : seul moyen simple de vérifier que la page a bien
+         rechargé la dernière version, et pas une copie mise en cache par le
+         navigateur — sans ça, un correctif "ne marche toujours pas" et une
+         page qui n'a en fait jamais rechargé le nouveau code se ressemblent
+         exactement du point de vue de l'utilisateur. -->
+    <p class="pwa-version" id="pwaVersion"></p>
+
     <div id="stateIdle" class="state">
       <button id="callButton">📹 Démarrer l'appel</button>
 
@@ -133,6 +141,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
+  <script src="version.js"></script>
   <script src="call-engine.js"></script>
   <script src="webrtc-engine.js"></script>
   <script src="app.js"></script>

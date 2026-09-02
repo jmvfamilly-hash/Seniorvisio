@@ -29,6 +29,16 @@ jobs:
         with:
           enablement: true
 
+      # Affiché discrètement en bas de l'écran d'attente (voir index.html,
+      # version.js) : seul moyen simple de vérifier qu'un navigateur a bien
+      # rechargé la dernière version plutôt qu'une copie mise en cache — sans
+      # ça, un correctif qui ne semble "toujours pas marcher" et une page qui
+      # n'a en fait jamais rechargé le nouveau code sont indiscernables pour
+      # qui teste depuis son téléphone.
+      - name: Écrit le commit déployé dans version.js
+        run: |
+          echo "window.PWA_VERSION = \"${GITHUB_SHA::7} · $(date -u +'%Y-%m-%d %H:%M UTC')\";" > web-caller/version.js
+
       - name: Upload web-caller as Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

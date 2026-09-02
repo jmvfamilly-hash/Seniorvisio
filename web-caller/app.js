@@ -4,6 +4,8 @@
  * webrtc-engine.js (voir ces fichiers, chargés avant celui-ci dans index.html).
  */
 
+document.getElementById("pwaVersion").textContent = `v. ${window.PWA_VERSION || "?"}`;
+
 // --- Paramètres, alignés avec AdminConfig côté Android ---
 const CONFIG = {
   targetDeviceId: "jean-tablette-01", // non utilisé par le signaling Firestore (un seul foyer), gardé pour usage futur multi-tablette
