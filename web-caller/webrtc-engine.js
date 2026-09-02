@@ -178,35 +178,58 @@ class RealCallEngine extends CallEngine {
       ? Promise.resolve(initialSettings.callerPhotoBase64)
       : this._captureCallerPhoto();
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    const callerPhotoBase64 = await photoPromise;
+    // Aucun de ces appels n'était protégé jusqu'ici : une offre WebRTC qui
+    // échoue à se créer, ou surtout une écriture Firestore rejetée (constaté
+    // en usage réel avec une photo d'appelant précise, cause encore incertaine
+    // — champ trop volumineux ? valeur inattendue ?) laissait l'exception
+    // partir dans le vide. Contrairement à l'échec caméra/micro juste
+    // au-dessus, rien ne prévenait le proche : l'écran restait bloqué sur
+    // "Appel en cours" indéfiniment, sans le moindre message. Ce filet
+    // remonte enfin l'erreur réelle (e.message) au lieu de la laisser muette
+    // — ce qui dira, la prochaine fois que ça se reproduit, ce qui a
+    // effectivement échoué.
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const callerPhotoBase64 = await photoPromise;
 
-    if (isStale()) {
-      // Annulé pendant la préparation de l'offre : le document d'appel n'a
-      // pas encore été écrit, Jean ne sonnera jamais.
+      if (isStale()) {
+        // Annulé pendant la préparation de l'offre : le document d'appel n'a
+        // pas encore été écrit, Jean ne sonnera jamais.
+        localStream.getTracks().forEach((track) => track.stop());
+        pc.close();
+        return;
+      }
+
+      this._callDocRef = callDocRef;
+      await callDocRef.set({
+        callerName: callerName || "Un proche",
+        status: "ringing",
+        offerSdp: offer.sdp,
+        callerPhotoBase64: callerPhotoBase64 || null,
+        // Réglages mémorisés d'un appel précédent (voir app.js, bouton
+        // "Mémoriser ces réglages") appliqués dès la sonnerie plutôt que
+        // seulement une fois connecté, pour que Jean retrouve directement le
+        // confort habituel sans que le proche ait à retoucher chaque curseur.
+        remoteVolume: initialSettings.remoteVolume ?? 1,
+        captionModeEnabled: initialSettings.captionModeEnabled ?? false,
+        captionTextSize: initialSettings.captionTextSize ?? 56,
+        captionMaxScrollSpeedDpPerSec: initialSettings.captionMaxScrollSpeedDpPerSec ?? 50,
+        selfPreviewEnabled: initialSettings.selfPreviewEnabled ?? false,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      console.error("[RealCallEngine] Échec pendant la préparation de l'appel :", e);
+      this._errorCb && this._errorCb(
+        `L'appel n'a pas pu démarrer (${e.code || e.name || "erreur"} : ${e.message || e}). ` +
+        "Réessaie ; si ça persiste juste après avoir choisi une photo, essaie sans elle pour confirmer."
+      );
       localStream.getTracks().forEach((track) => track.stop());
       pc.close();
+      if (this._pc === pc) this._pc = null;
+      if (this._callDocRef === callDocRef) this._callDocRef = null;
       return;
     }
-
-    this._callDocRef = callDocRef;
-    await callDocRef.set({
-      callerName: callerName || "Un proche",
-      status: "ringing",
-      offerSdp: offer.sdp,
-      callerPhotoBase64: callerPhotoBase64 || null,
-      // Réglages mémorisés d'un appel précédent (voir app.js, bouton
-      // "Mémoriser ces réglages") appliqués dès la sonnerie plutôt que
-      // seulement une fois connecté, pour que Jean retrouve directement le
-      // confort habituel sans que le proche ait à retoucher chaque curseur.
-      remoteVolume: initialSettings.remoteVolume ?? 1,
-      captionModeEnabled: initialSettings.captionModeEnabled ?? false,
-      captionTextSize: initialSettings.captionTextSize ?? 56,
-      captionMaxScrollSpeedDpPerSec: initialSettings.captionMaxScrollSpeedDpPerSec ?? 50,
-      selfPreviewEnabled: initialSettings.selfPreviewEnabled ?? false,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
 
     if (isStale()) {
       // Annulé pendant l'écriture Firestore : le document existe déjà côté
