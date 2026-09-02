@@ -157,6 +157,7 @@ class DeviceStatusReporter(private val context: Context) {
         val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
         if (dpm == null || !dpm.isDeviceOwnerApp(context.packageName)) {
             Log.w(TAG, "Mise à jour à distance demandée mais l'appli n'est pas Device Owner : impossible d'installer sans confirmation manuelle.")
+            reportUpdateFailure("Appli non Device Owner sur cet appareil")
             return
         }
         Thread {
@@ -164,19 +165,69 @@ class DeviceStatusReporter(private val context: Context) {
                 val apkFile = downloadApk(apkUrl)
                 silentInstall(apkFile)
             } catch (e: Exception) {
-                Log.e(TAG, "Échec du téléchargement/installation de la mise à jour", e)
+                // Sans ce compte rendu, un échec ici (réseau, redirection GitHub
+                // mal suivie, code HTTP inattendu...) restait invisible : rien
+                // dans Firestore ne changeait, donc rien à voir depuis la
+                // console — seul un adb logcat sur la tablette le révélait.
+                // silentInstall a son propre compte rendu (voir
+                // UpdateStatusReceiver) : celui-ci ne couvre que le
+                // téléchargement, qui échouait silencieusement avant lui.
+                Log.e(TAG, "Échec du téléchargement de la mise à jour", e)
+                reportUpdateFailure("Téléchargement échoué : ${e.message ?: e.javaClass.simpleName}")
             }
         }.start()
     }
 
+    private fun reportUpdateFailure(message: String) {
+        deviceDoc.set(
+            mapOf(
+                FIELD_LAST_UPDATE_SUCCEEDED to false,
+                FIELD_LAST_UPDATE_MESSAGE to message,
+                FIELD_LAST_UPDATE_AT to FieldValue.serverTimestamp(),
+            ),
+            SetOptions.merge()
+        ).addOnFailureListener { e -> Log.e(TAG, "Échec du compte rendu d'échec de mise à jour", e) }
+    }
+
+    /**
+     * Les liens de release GitHub redirigent (302) vers objects.githubusercontent.com :
+     * HttpURLConnection est censé suivre ça tout seul, mais silencieusement, sans
+     * jamais dire si ça a marché. Suivi manuel ici pour deux raisons : vérifier le
+     * code HTTP à chaque saut plutôt que d'écrire une page d'erreur dans le fichier
+     * .apk sans s'en apercevoir, et obtenir un message d'échec précis (code HTTP,
+     * en-tête manquant) au lieu d'une exception opaque en cas de problème.
+     */
     private fun downloadApk(apkUrl: String): File {
         val outFile = File(context.cacheDir, "update.apk")
-        val connection = URL(apkUrl).openConnection() as HttpURLConnection
-        connection.connect()
-        connection.inputStream.use { input ->
-            outFile.outputStream().use { output -> input.copyTo(output) }
+        var url = URL(apkUrl)
+        var redirects = 0
+        while (true) {
+            val connection = url.openConnection() as HttpURLConnection
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 30_000
+            connection.setRequestProperty("User-Agent", "SeniorVisio-Tablette")
+            connection.connect()
+            val code = connection.responseCode
+            if (code in 300..399) {
+                val location = connection.getHeaderField("Location")
+                connection.disconnect()
+                if (location == null) throw java.io.IOException("Redirection sans en-tête Location (code $code)")
+                redirects++
+                if (redirects > 5) throw java.io.IOException("Trop de redirections lors du téléchargement de l'APK")
+                url = URL(location)
+                continue
+            }
+            if (code !in 200..299) {
+                connection.disconnect()
+                throw java.io.IOException("Téléchargement de l'APK refusé par le serveur (code HTTP $code)")
+            }
+            connection.inputStream.use { input ->
+                outFile.outputStream().use { output -> input.copyTo(output) }
+            }
+            connection.disconnect()
+            return outFile
         }
-        return outFile
     }
 
     private fun silentInstall(apkFile: File) {
@@ -210,6 +261,9 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_REQUESTED_VERSION = "requestedVersion"
         private const val FIELD_REQUESTED_APK_URL = "requestedApkUrl"
         private const val FIELD_RESET_TRANSCRIPTION_AT = "resetTranscriptionRequestedAt"
+        private const val FIELD_LAST_UPDATE_SUCCEEDED = "lastUpdateSucceeded"
+        private const val FIELD_LAST_UPDATE_MESSAGE = "lastUpdateMessage"
+        private const val FIELD_LAST_UPDATE_AT = "lastUpdateAt"
         private const val FIELD_LAST_RESET_SUCCEEDED = "lastTranscriptionResetSucceeded"
         private const val FIELD_LAST_RESET_MESSAGE = "lastTranscriptionResetMessage"
         private const val FIELD_LAST_RESET_DONE_AT = "lastTranscriptionResetAt"
