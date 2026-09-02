@@ -3,7 +3,10 @@ package com.seniorvisio.admin
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlertDialog
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.webkit.WebView
@@ -20,6 +23,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.WifiConfigurator
 
 /**
@@ -116,6 +120,7 @@ class AdminSettingsActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.buttonPickWifiNetwork).setOnClickListener { pickWifiNetwork() }
+        findViewById<Button>(R.id.buttonOpenBrowser).setOnClickListener { openBrowserForNetworkLogin() }
 
         // Case décochée par défaut à l'ouverture : Jean (ou un aidant) peut
         // avoir cet écran ouvert avec quelqu'un d'autre présent — les mots de
@@ -231,4 +236,60 @@ class AdminSettingsActivity : AppCompatActivity() {
             }
         }
     }
+
+    /**
+     * Repli quand l'écran captif intégré (une simple WebView, voir
+     * showCaptivePortal) ne suffit pas pour se connecter au réseau de la
+     * résidence — certains portails exigent un vrai navigateur. Ouvre une
+     * fenêtre de maintenance temporaire (voir
+     * KioskManager.grantTemporaryBrowserAccess) plutôt qu'un accès permanent,
+     * qui viderait le mode kiosque de son sens : elle se referme d'elle-même
+     * après 10 minutes, ou dès le retour sur l'écran d'accueil.
+     */
+    private fun openBrowserForNetworkLogin() {
+        val browsers = resolveBrowsers()
+        when {
+            browsers.isEmpty() ->
+                Toast.makeText(this, "Aucun navigateur trouvé sur cette tablette", Toast.LENGTH_LONG).show()
+            browsers.size == 1 -> launchBrowser(browsers.values.first())
+            else -> AlertDialog.Builder(this)
+                .setTitle("Choisir un navigateur")
+                .setItems(browsers.keys.toTypedArray()) { _, index ->
+                    launchBrowser(browsers.values.toList()[index])
+                }
+                .setNegativeButton("Annuler", null)
+                .show()
+        }
+    }
+
+    /** Nom affiché à l'admin -> nom de paquet, pour les navigateurs capables d'ouvrir une page https. */
+    private fun resolveBrowsers(): Map<String, String> {
+        val probeIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://"))
+        return packageManager.queryIntentActivities(probeIntent, PackageManager.MATCH_DEFAULT_ONLY)
+            .filter { it.activityInfo.packageName != packageName }
+            .associate { resolveInfo ->
+                resolveInfo.loadLabel(packageManager).toString() to resolveInfo.activityInfo.packageName
+            }
+    }
+
+    private fun launchBrowser(browserPackage: String) {
+        KioskManager.grantTemporaryBrowserAccess(this, browserPackage)
+        textBrowserAccessStatus().text =
+            "Navigateur autorisé 10 minutes — revenez ici (bouton Accueil) une fois la connexion validée."
+        // Ouvre directement la page que le portail intercepte pour rediriger
+        // vers son propre formulaire (même URL que l'écran captif intégré) :
+        // évite à l'admin de devoir taper une adresse sur l'écran tactile.
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("http://connectivitycheck.gstatic.com/generate_204")).apply {
+            setPackage(browserPackage)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            KioskManager.revokeTemporaryBrowserAccess(this)
+            Toast.makeText(this, "Impossible d'ouvrir ce navigateur", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun textBrowserAccessStatus() = findViewById<TextView>(R.id.textBrowserAccessStatus)
 }

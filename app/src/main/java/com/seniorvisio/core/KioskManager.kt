@@ -3,9 +3,13 @@ package com.seniorvisio.core
 import android.app.Activity
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import com.seniorvisio.admin.SeniorVisioDeviceAdminReceiver
 
 /**
@@ -34,10 +38,12 @@ object KioskManager {
         if (!dpm.isDeviceOwnerApp(activity.packageName)) return
         val admin = ComponentName(activity, SeniorVisioDeviceAdminReceiver::class.java)
 
-        // Senior Visio plus les applications compagnes : c'est cette liste qui
-        // autorise la bascule vers Transcription instantanée sans quitter le
-        // mode kiosque (voir CompanionApps, et MainActivity.launchRoomTranscription).
-        dpm.setLockTaskPackages(admin, arrayOf(activity.packageName) + CompanionApps.allowedPackages)
+        // Annule toute session navigateur encore ouverte (voir
+        // grantTemporaryBrowserAccess) : revenir sur cet écran, par n'importe
+        // quel chemin, referme la fenêtre de maintenance plutôt que
+        // d'attendre son expiration.
+        cancelBrowserAccessTimeout()
+        dpm.setLockTaskPackages(admin, standardLockTaskPackages(activity))
         allowHomeButton(dpm, admin)
         protectCompanionApps(activity, dpm, admin)
         if (homeActivity != null) registerAsHomeApp(activity, dpm, admin, homeActivity)
@@ -121,4 +127,68 @@ object KioskManager {
             admin, homeFilter, ComponentName(activity, homeActivity)
         )
     }
+
+    private fun standardLockTaskPackages(context: Context): Array<String> =
+        arrayOf(context.packageName) + CompanionApps.allowedPackages
+
+    private val handler = Handler(Looper.getMainLooper())
+    private var browserAccessTimeout: Runnable? = null
+
+    /**
+     * Ouvre une fenêtre de maintenance temporaire autorisant un navigateur en
+     * mode kiosque, pour la connexion initiale (ou une reconnexion) au réseau
+     * de la résidence quand le portail ne se prête pas à l'écran captif
+     * intégré (voir AdminSettingsActivity.showCaptivePortal, limité à une
+     * simple WebView).
+     *
+     * Volontairement temporaire et jamais permanent : whitelister un
+     * navigateur en continu viderait le mode kiosque de son sens, Jean se
+     * retrouvant avec accès à tout le web depuis la liste des applications
+     * récentes. La fenêtre se referme d'elle-même après [timeoutMs] — au cas
+     * où l'admin reparte sans repasser par Senior Visio — et immédiatement
+     * dès le retour sur l'écran d'accueil (voir startIfDeviceOwner).
+     *
+     * Ne prend qu'un Context (pas une Activity) : setLockTaskPackages ne
+     * dépend d'aucun cycle de vie d'écran, ce qui permet à l'expiration de
+     * révoquer l'accès même si l'écran d'origine a entre-temps disparu.
+     */
+    fun grantTemporaryBrowserAccess(
+        context: Context,
+        browserPackage: String,
+        timeoutMs: Long = BROWSER_ACCESS_TIMEOUT_MS,
+    ) {
+        val appContext = context.applicationContext
+        val dpm = appContext.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager ?: return
+        if (!dpm.isDeviceOwnerApp(appContext.packageName)) return
+        val admin = ComponentName(appContext, SeniorVisioDeviceAdminReceiver::class.java)
+
+        dpm.setLockTaskPackages(admin, standardLockTaskPackages(appContext) + browserPackage)
+        Log.i(TAG, "Accès navigateur temporaire accordé à $browserPackage pour ${timeoutMs}ms")
+
+        cancelBrowserAccessTimeout()
+        val timeout = Runnable {
+            Log.i(TAG, "Fenêtre de maintenance expirée, accès navigateur révoqué")
+            revokeTemporaryBrowserAccess(appContext)
+        }
+        browserAccessTimeout = timeout
+        handler.postDelayed(timeout, timeoutMs)
+    }
+
+    /** À appeler quand l'admin a terminé, sans attendre l'expiration — voir AdminSettingsActivity. */
+    fun revokeTemporaryBrowserAccess(context: Context) {
+        cancelBrowserAccessTimeout()
+        val appContext = context.applicationContext
+        val dpm = appContext.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager ?: return
+        if (!dpm.isDeviceOwnerApp(appContext.packageName)) return
+        val admin = ComponentName(appContext, SeniorVisioDeviceAdminReceiver::class.java)
+        dpm.setLockTaskPackages(admin, standardLockTaskPackages(appContext))
+    }
+
+    private fun cancelBrowserAccessTimeout() {
+        browserAccessTimeout?.let { handler.removeCallbacks(it) }
+        browserAccessTimeout = null
+    }
+
+    private const val TAG = "KioskManager"
+    private const val BROWSER_ACCESS_TIMEOUT_MS = 10 * 60 * 1000L
 }

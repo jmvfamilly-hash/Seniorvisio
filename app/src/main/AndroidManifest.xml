@@ -29,6 +29,19 @@
          (voir CompanionApps.kt). -->
     <queries>
         <package android:name="com.google.audio.hearing.visualization.accessibility.scribe" />
+        <!-- Détecte le ou les navigateurs installés (voir
+             AdminSettingsActivity.resolveBrowsers, KioskManager.
+             grantTemporaryBrowserAccess) sans connaître leur paquet à l'avance
+             — utile pour la connexion initiale au réseau de la résidence
+             quand l'écran captif intégré (une simple WebView) ne suffit pas.
+             Une déclaration par <intent>, contrairement au navigateur Google
+             ci-dessus dont le paquet est connu, couvre n'importe quel
+             navigateur déjà présent sur la tablette. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
     </queries>
 
     <!-- Nécessaire à la détection/validation d'un portail captif (voir

@@ -91,6 +91,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Referme toute fenêtre de maintenance encore ouverte (voir
+     * KioskManager.grantTemporaryBrowserAccess, déclenchée depuis l'écran
+     * admin pour se connecter au réseau de la résidence) dès le retour ici
+     * par le bouton Accueil — sans attendre l'expiration au bout de 10
+     * minutes. startIfDeviceOwner réapplique simplement la liste standard
+     * des applications autorisées en mode kiosque, navigateur exclu.
+     */
+    override fun onResume() {
+        super.onResume()
+        KioskManager.startIfDeviceOwner(this, MainActivity::class.java)
+    }
+
+    /**
      * Bascule vers "Transcription instantanée" (Google), autorisée en mode
      * kiosque par CompanionApps. Jean en revient par le bouton Accueil, qui
      * ramène ici — c'est le seul chemin de retour, et il est fiable puisque

@@ -153,6 +153,29 @@
         android:text="J'ai validé le portail — revérifier"
         android:visibility="gone" />
 
+    <!-- Repli quand le portail de la résidence ne se prête pas à l'écran
+         captif intégré ci-dessus (une simple WebView) : certains portails
+         demandent un vrai navigateur (JavaScript avancé, session à plusieurs
+         pages...). Ouvre une fenêtre de maintenance temporaire autorisant un
+         navigateur en mode kiosque (voir KioskManager.
+         grantTemporaryBrowserAccess) — jamais un accès permanent, qui
+         viderait le mode kiosque de son sens. -->
+    <Button
+        android:id="@+id/buttonOpenBrowser"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="🌐 Ouvrir un navigateur (10 min)"
+        android:backgroundTint="#8E44AD" />
+
+    <TextView
+        android:id="@+id/textBrowserAccessStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="14sp"
+        android:text="" />
+
     <!-- Utilisée uniquement par le labo de comparaison de transcription
          (voir TranscriptionLabActivity.kt), jamais par les sous-titres en
          usage normal. -->
