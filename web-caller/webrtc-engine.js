@@ -129,9 +129,18 @@ class RealCallEngine extends CallEngine {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     } catch (e) {
       console.error("[RealCallEngine] Accès caméra/micro refusé ou impossible :", e);
+      // e.name distingue des causes très différentes (NotAllowedError :
+      // permission refusée : NotReadableError : caméra déjà tenue par autre
+      // chose, parfois après un aller-retour vers l'appareil photo du
+      // système via un <input type=file> ; NotFoundError : pas de caméra) —
+      // affiché explicitement plutôt qu'un seul message générique, pour
+      // pouvoir distinguer ces cas la prochaine fois sans avoir à
+      // rouvrir la console du téléphone.
       this._errorCb && this._errorCb(
-        "Impossible d'accéder à la caméra/au micro de ce navigateur. Vérifie l'autorisation " +
-        "accordée à ce site (icône 🔒 ou ⓘ à côté de l'adresse), puis réessaie."
+        `Impossible d'accéder à la caméra/au micro de ce navigateur (${e.name || e}). ` +
+        "Vérifie l'autorisation accordée à ce site (icône 🔒 ou ⓘ à côté de l'adresse). " +
+        "Si l'erreur persiste juste après avoir choisi une photo, recharge la page et réessaie : " +
+        "certains téléphones gardent la caméra occupée après être passés par l'appareil photo du système."
       );
       pc.close();
       if (this._pc === pc) this._pc = null;
