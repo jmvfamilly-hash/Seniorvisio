@@ -264,6 +264,7 @@ class IncomingCallActivity : AppCompatActivity() {
         localRendererRef = localRenderer
         setupCaptionMode()
         callEngine.listenForRemoteVolumeControl()
+        callEngine.listenForMicMute()
         callEngine.listenForSelfPreviewMode { enabled ->
             runOnUiThread { localRenderer.visibility = if (enabled) View.VISIBLE else View.INVISIBLE }
         }

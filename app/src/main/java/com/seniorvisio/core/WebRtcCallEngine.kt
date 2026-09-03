@@ -50,9 +50,11 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var videoCapturer: CameraVideoCapturer? = null
     private var surfaceTextureHelper: SurfaceTextureHelper? = null
     private var localVideoTrack: VideoTrack? = null
+    private var localAudioTrack: AudioTrack? = null
     private var remoteVideoTrack: VideoTrack? = null
     private var remoteAudioTrack: AudioTrack? = null
     private var speechListener: ListenerRegistration? = null
+    private var micMuteListener: ListenerRegistration? = null
 
     private var callerCandidatesListener: ListenerRegistration? = null
     private var callId: String? = null
@@ -220,6 +222,26 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         volumeListener = signaling.listenForRemoteVolume(id) { volume ->
             pendingVolume = volume
             rampVolumeTo(volume)
+        }
+    }
+
+    /**
+     * Coupe/rétablit à distance le micro de la tablette, sur demande du proche
+     * depuis le PWA.
+     *
+     * Ajouté d'abord comme test décisif pour localiser un écho : dans un appel
+     * à deux, si l'écho que le proche entend disparaît quand ce micro est
+     * coupé, il vient forcément de la tablette (son haut-parleur qui reboucle
+     * dedans) ; s'il persiste, il ne peut venir que du téléphone appelant.
+     * Aucune autre hypothèse à départager ensuite.
+     *
+     * Utile aussi en soi : le proche peut couper un bruit de fond gênant chez
+     * Jean (télévision, aspirateur...) sans rien lui demander.
+     */
+    fun listenForMicMute() {
+        val id = callId ?: return
+        micMuteListener = signaling.listenForMicMute(id) { muted ->
+            localAudioTrack?.setEnabled(!muted)
         }
     }
 
@@ -456,6 +478,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         localRenderer?.let { videoTrack.addSink(it) }
 
         val audioTrack = factory.createAudioTrack("SVIO_AUDIO", factory.createAudioSource(MediaConstraints()))
+        localAudioTrack = audioTrack
 
         pc.addTrack(videoTrack, listOf("SVIO_STREAM"))
         pc.addTrack(audioTrack, listOf("SVIO_STREAM"))
@@ -491,6 +514,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         restoreAudio()
         speechListener?.remove()
         speechListener = null
+        micMuteListener?.remove()
+        micMuteListener = null
         callerCandidatesListener?.remove()
         callerCandidatesListener = null
         volumeListener?.remove()
@@ -537,6 +562,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         remoteRenderer = null
         peerConnection = null
         localVideoTrack = null
+        localAudioTrack = null
         remoteVideoTrack = null
         remoteAudioTrack = null
         pendingRemoteCandidates.clear()

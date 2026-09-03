@@ -532,6 +532,21 @@ class RealCallEngine extends CallEngine {
   }
 
   /**
+   * Coupe/rétablit à distance le micro de la tablette (voir
+   * WebRtcCallEngine.listenForMicMute côté Android).
+   *
+   * Ajouté d'abord comme test décisif pour localiser un écho : s'il disparaît
+   * quand ce micro est coupé, il vient de la tablette ; s'il persiste, il ne
+   * peut venir que d'ici. Utile aussi pour couper un bruit de fond gênant
+   * chez Jean sans rien lui demander.
+   */
+  async setTabletMicMuted(muted) {
+    if (this._callDocRef) {
+      await this._callDocRef.update({ tabletMicMuted: muted }).catch(() => {});
+    }
+  }
+
+  /**
    * Active/désactive à distance l'aperçu de sa propre caméra affiché à Jean
    * (petite vignette en haut de son écran, masquée par défaut) — voir
    * core/WebRtcCallEngine.kt : listenForSelfPreviewMode.

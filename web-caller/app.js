@@ -138,6 +138,7 @@ const els = {
   callStats: document.getElementById("callStats"),
   volumeSlider: document.getElementById("volumeSlider"),
   captionToggle: document.getElementById("captionToggle"),
+  tabletMicMuteToggle: document.getElementById("tabletMicMuteToggle"),
   selfPreviewToggle: document.getElementById("selfPreviewToggle"),
   textSizeSlider: document.getElementById("textSizeSlider"),
   scrollSpeedSlider: document.getElementById("scrollSpeedSlider"),
@@ -210,6 +211,9 @@ els.callButton.addEventListener("click", async () => {
   els.transcriptHistory.innerHTML = "";
   els.silenceIndicator.classList.add("hidden");
   els.captionErrorIndicator.classList.add("hidden");
+  // Remis à zéro à chaque appel : un micro resté coupé d'un appel précédent
+  // rendrait Jean muet sans que personne ne comprenne pourquoi.
+  els.tabletMicMuteToggle.checked = false;
   els.captionOverflowIndicator.classList.add("hidden");
   els.fullscreenCaptionBanner.classList.add("hidden");
   // Désactivé tant que l'appel n'est pas prêt (voir plus bas) : un appui
@@ -265,6 +269,15 @@ engine.onFullscreenCaption(({ text, lagSeconds }) => {
 
 els.selfPreviewToggle.addEventListener("change", () => {
   engine.setSelfPreviewMode(els.selfPreviewToggle.checked);
+});
+
+// Coupe le micro de la tablette (voir WebRtcCallEngine.listenForMicMute côté
+// Android). Sert de test décisif pour localiser un écho : s'il disparaît en
+// cochant cette case, il vient de la tablette ; s'il persiste, il vient de ce
+// téléphone-ci. Volontairement non mémorisé d'un appel à l'autre : Jean se
+// retrouverait muet sans que personne ne comprenne pourquoi.
+els.tabletMicMuteToggle.addEventListener("change", () => {
+  engine.setTabletMicMuted(els.tabletMicMuteToggle.checked);
 });
 
 /** Classe CSS selon la confiance de reconnaissance (repère visuel des passages mal transcrits). */

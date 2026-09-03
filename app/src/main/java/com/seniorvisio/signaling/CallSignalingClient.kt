@@ -168,6 +168,18 @@ class CallSignalingClient {
         }
     }
 
+    /**
+     * Micro de la tablette coupé à distance par le proche (voir
+     * WebRtcCallEngine.listenForMicMute) : sert à localiser un écho sans
+     * ambiguïté, et à couper un bruit de fond gênant chez Jean.
+     */
+    fun listenForMicMute(callId: String, onMuted: (Boolean) -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            val muted = snapshot?.getBoolean(FIELD_MIC_MUTED)
+            if (muted != null) onMuted(muted)
+        }
+    }
+
     /** Vitesse maximale (dp/s) à laquelle le texte défile chez Jean, choisie à distance par l'appelant. */
     fun listenForCaptionScrollSpeed(callId: String, onDpPerSec: (Double) -> Unit): ListenerRegistration {
         return callDoc(callId).addSnapshotListener { snapshot, _ ->
@@ -264,6 +276,7 @@ class CallSignalingClient {
         private const val FIELD_CAPTION_SCROLL_SPEED = "captionMaxScrollSpeedDpPerSec"
         private const val FIELD_CAPTION_CATCHUP_LAG = "captionCatchUpLagSeconds"
         private const val FIELD_CALLEE_ERROR = "calleeErrorMessage"
+        private const val FIELD_MIC_MUTED = "tabletMicMuted"
 
         private const val DEVICE_TOKEN_DOC = "devices/jean_tablet"
         private const val FIELD_FCM_TOKEN = "fcmToken"
