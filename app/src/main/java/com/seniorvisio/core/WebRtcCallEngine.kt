@@ -28,6 +28,7 @@ import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
+import org.webrtc.audio.JavaAudioDeviceModule
 
 /**
  * Implémentation WebRTC de [CallEngine]. Le signaling (échange de l'offre,
@@ -357,12 +358,29 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         savedCallVolume = null
     }
 
+    /**
+     * Module audio explicite plutôt que le comportement implicite par défaut
+     * de PeerConnectionFactory.builder() : signalé en usage réel, un écho
+     * important côté appelant (persistant même au casque Bluetooth, donc pas
+     * une boucle acoustique chez lui — la voix qu'il entend revenir vient
+     * forcément d'ici). setUseHardwareAcousticEchoCanceler/NoiseSuppressor à
+     * true est déjà la valeur par défaut du builder, mais l'expliciter suit
+     * la pratique recommandée par WebRTC lui-même (voir son appli exemple
+     * AppRTCMobile, qui ne s'appuie jamais sur un module implicite) plutôt
+     * que de dépendre d'un comportement non garanti selon la version de la
+     * bibliothèque.
+     */
     private fun ensureFactory() {
         if (peerConnectionFactory != null) return
         PeerConnectionFactory.initialize(
             PeerConnectionFactory.InitializationOptions.builder(context).createInitializationOptions()
         )
+        val audioDeviceModule = JavaAudioDeviceModule.builder(context)
+            .setUseHardwareAcousticEchoCanceler(true)
+            .setUseHardwareNoiseSuppressor(true)
+            .createAudioDeviceModule()
         peerConnectionFactory = PeerConnectionFactory.builder()
+            .setAudioDeviceModule(audioDeviceModule)
             .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
             .createPeerConnectionFactory()
