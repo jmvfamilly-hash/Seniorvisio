@@ -28,7 +28,6 @@ import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
-import org.webrtc.audio.JavaAudioDeviceModule
 
 /**
  * Implémentation WebRTC de [CallEngine]. Le signaling (échange de l'offre,
@@ -359,28 +358,23 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     /**
-     * Module audio explicite plutôt que le comportement implicite par défaut
-     * de PeerConnectionFactory.builder() : signalé en usage réel, un écho
-     * important côté appelant (persistant même au casque Bluetooth, donc pas
-     * une boucle acoustique chez lui — la voix qu'il entend revenir vient
-     * forcément d'ici). setUseHardwareAcousticEchoCanceler/NoiseSuppressor à
-     * true est déjà la valeur par défaut du builder, mais l'expliciter suit
-     * la pratique recommandée par WebRTC lui-même (voir son appli exemple
-     * AppRTCMobile, qui ne s'appuie jamais sur un module implicite) plutôt
-     * que de dépendre d'un comportement non garanti selon la version de la
-     * bibliothèque.
+     * Volontairement sans module audio explicite : forcer un
+     * JavaAudioDeviceModule avec setUseHardwareAcousticEchoCanceler(true) a
+     * fait APPARAÎTRE un écho là où il n'y en avait pas (constaté en test
+     * réel côté appelant, correctif retiré aussitôt). Le piège est la
+     * sémantique de ce réglage : demander l'annulation d'écho MATÉRIELLE
+     * désactive du même coup celle, logicielle, de WebRTC (AEC3) — pour
+     * éviter un double traitement. Sur un appareil dont l'annulation
+     * matérielle est mal calibrée pour le haut-parleur (fréquent), c'est
+     * remplacer un bon filtre par un mauvais. Laisser la bibliothèque
+     * choisir donne ici un bien meilleur résultat.
      */
     private fun ensureFactory() {
         if (peerConnectionFactory != null) return
         PeerConnectionFactory.initialize(
             PeerConnectionFactory.InitializationOptions.builder(context).createInitializationOptions()
         )
-        val audioDeviceModule = JavaAudioDeviceModule.builder(context)
-            .setUseHardwareAcousticEchoCanceler(true)
-            .setUseHardwareNoiseSuppressor(true)
-            .createAudioDeviceModule()
         peerConnectionFactory = PeerConnectionFactory.builder()
-            .setAudioDeviceModule(audioDeviceModule)
             .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
             .createPeerConnectionFactory()
