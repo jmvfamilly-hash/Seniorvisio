@@ -55,6 +55,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var remoteAudioTrack: AudioTrack? = null
     private var speechListener: ListenerRegistration? = null
     private var micMuteListener: ListenerRegistration? = null
+    private var slideshowListener: ListenerRegistration? = null
 
     private var callerCandidatesListener: ListenerRegistration? = null
     private var callId: String? = null
@@ -223,6 +224,20 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             pendingVolume = volume
             rampVolumeTo(volume)
         }
+    }
+
+    /**
+     * Écoute les photos d'un diaporama commenté à distance par le proche : il
+     * les fait défiler depuis le PWA, Jean n'a rien à manipuler et regarde
+     * simplement, pendant que la voix du proche est retranscrite en dessous
+     * (voir listenForCaptions).
+     *
+     * Reçoit null (ou une chaîne vide) quand le diaporama se termine : l'écran
+     * doit alors revenir à la vidéo.
+     */
+    fun listenForSlideshowPhoto(onPhoto: (String?) -> Unit) {
+        val id = callId ?: return
+        slideshowListener = signaling.listenForSlideshowPhoto(id, onPhoto)
     }
 
     /**
@@ -536,6 +551,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         speechListener = null
         micMuteListener?.remove()
         micMuteListener = null
+        slideshowListener?.remove()
+        slideshowListener = null
         callerCandidatesListener?.remove()
         callerCandidatesListener = null
         volumeListener?.remove()

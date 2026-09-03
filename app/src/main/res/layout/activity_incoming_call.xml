@@ -40,6 +40,28 @@
         android:background="@drawable/caller_photo_scrim"
         android:visibility="gone" />
 
+    <!-- Photo du diaporama commenté à distance par le proche (voir
+         WebRtcCallEngine.listenForSlideshowPhoto) : c'est lui qui fait défiler
+         les photos depuis le PWA, Jean n'a rien à manipuler.
+
+         Placée après la vidéo (qu'elle recouvre pendant le diaporama) mais
+         avant le bandeau de sous-titres, qui doit rester lisible par-dessus —
+         c'est justement la combinaison des deux qui fait l'intérêt de la
+         fonction : la photo en grand, et ce que raconte le proche écrit
+         dessous.
+
+         fitCenter et non centerCrop, contrairement à la photo d'appelant :
+         une photo de famille recadrée arbitrairement couperait des visages,
+         alors qu'ici le but est de regarder l'image en entier. -->
+    <ImageView
+        android:id="@+id/imageSlideshow"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitCenter"
+        android:background="#000000"
+        android:contentDescription="Photo partagée par le proche"
+        android:visibility="gone" />
+
     <LinearLayout
         android:id="@+id/alertContent"
         android:layout_width="match_parent"

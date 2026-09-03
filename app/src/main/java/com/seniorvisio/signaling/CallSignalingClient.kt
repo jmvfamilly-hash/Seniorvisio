@@ -169,6 +169,30 @@ class CallSignalingClient {
     }
 
     /**
+     * Photo actuellement affichée en grand chez Jean pendant un diaporama
+     * commenté à distance (voir WebRtcCallEngine.listenForSlideshowPhoto).
+     *
+     * Une seule photo à la fois dans le document d'appel, remplacée à chaque
+     * fois que le proche fait défiler : envoyer toute la série d'un coup
+     * dépasserait la limite de taille d'un document Firestore dès quelques
+     * images. Valeur nulle ou vide = fin du diaporama, retour à la vidéo.
+     */
+    fun listenForSlideshowPhoto(callId: String, onPhoto: (String?) -> Unit): ListenerRegistration {
+        var lastPhoto: String? = null
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            if (snapshot == null) return@addSnapshotListener
+            // Ce listener écoute tout le document, donc il se redéclenche à
+            // chaque écriture (sous-titres, volume...) : sans cette
+            // comparaison, on redécoderait la même photo des dizaines de fois
+            // par minute pendant que le proche parle.
+            val photo = snapshot.getString(FIELD_SLIDESHOW_PHOTO)
+            if (photo == lastPhoto) return@addSnapshotListener
+            lastPhoto = photo
+            onPhoto(photo)
+        }
+    }
+
+    /**
      * Micro de la tablette coupé à distance par le proche (voir
      * WebRtcCallEngine.listenForMicMute) : sert à localiser un écho sans
      * ambiguïté, et à couper un bruit de fond gênant chez Jean.
@@ -277,6 +301,7 @@ class CallSignalingClient {
         private const val FIELD_CAPTION_CATCHUP_LAG = "captionCatchUpLagSeconds"
         private const val FIELD_CALLEE_ERROR = "calleeErrorMessage"
         private const val FIELD_MIC_MUTED = "tabletMicMuted"
+        private const val FIELD_SLIDESHOW_PHOTO = "slideshowPhotoBase64"
 
         private const val DEVICE_TOKEN_DOC = "devices/jean_tablet"
         private const val FIELD_FCM_TOKEN = "fcmToken"

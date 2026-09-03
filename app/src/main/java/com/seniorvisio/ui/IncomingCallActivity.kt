@@ -7,6 +7,9 @@ import android.graphics.BitmapFactory
 import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Base64
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
@@ -236,6 +239,37 @@ class IncomingCallActivity : AppCompatActivity() {
         scrim.visibility = View.VISIBLE
     }
 
+    /**
+     * Affiche (ou retire) la photo que le proche commente en direct depuis le
+     * PWA. Le décodage se fait hors du thread principal : une photo de
+     * plusieurs centaines de kilo-octets décodée à chaque changement ferait
+     * saccader la vidéo et le défilement des sous-titres, très visible sur une
+     * tablette d'entrée de gamme.
+     *
+     * La vidéo du proche continue de tourner derrière : c'est volontaire, elle
+     * réapparaît instantanément à la fin du diaporama sans rien à relancer.
+     */
+    private fun showSlideshowPhoto(photoBase64: String?) {
+        val imageSlideshow = findViewById<ImageView>(R.id.imageSlideshow)
+        if (photoBase64.isNullOrEmpty()) {
+            runOnUiThread { imageSlideshow.visibility = View.GONE }
+            return
+        }
+        Thread {
+            val bitmap = try {
+                val bytes = Base64.decode(photoBase64, Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            } catch (e: Exception) {
+                Log.e(TAG, "Photo de diaporama illisible", e)
+                null
+            } ?: return@Thread
+            runOnUiThread {
+                imageSlideshow.setImageBitmap(bitmap)
+                imageSlideshow.visibility = View.VISIBLE
+            }
+        }.start()
+    }
+
     private fun connectVideoCall() {
         isConnected = true
         findViewById<View>(R.id.alertContent).visibility = View.GONE
@@ -265,6 +299,7 @@ class IncomingCallActivity : AppCompatActivity() {
         setupCaptionMode()
         callEngine.listenForRemoteVolumeControl()
         callEngine.listenForMicMute()
+        callEngine.listenForSlideshowPhoto { photoBase64 -> showSlideshowPhoto(photoBase64) }
         callEngine.listenForSelfPreviewMode { enabled ->
             runOnUiThread { localRenderer.visibility = if (enabled) View.VISIBLE else View.INVISIBLE }
         }
@@ -462,11 +497,30 @@ class IncomingCallActivity : AppCompatActivity() {
         // navigateurs qui la supportent (Chrome desktop essentiellement, pas
         // Safari/iOS), limitation acceptée pour rester gratuit et sans
         // dépendance à un service tiers.
+        // Efface le texte quand le proche cesse de parler, plutôt que de laisser
+        // sa dernière phrase figée à l'écran indéfiniment. Indispensable pendant
+        // un diaporama : le bandeau recouvre une partie de la photo, et une
+        // phrase qui reste plantée dessus alors que plus personne ne parle gêne
+        // sans rien apporter. Le fondu évite une disparition brutale.
+        val captionClearHandler = Handler(Looper.getMainLooper())
+        val clearCaption = Runnable {
+            textCaption.animate().alpha(0f).setDuration(400).withEndAction {
+                textCaption.text = ""
+                textCaption.alpha = 1f
+                lastCaptionText = ""
+                scrollAnimator.jumpTo(0)
+                callEngine.signalCaptionCatchUpLag(0f)
+            }.start()
+        }
+
         callEngine.listenForCaptions { text ->
             runOnUiThread {
                 val isContinuation = lastCaptionText.isNotEmpty() && text.startsWith(lastCaptionText)
                 lastCaptionText = text
+                textCaption.alpha = 1f
                 textCaption.text = text
+                captionClearHandler.removeCallbacks(clearCaption)
+                captionClearHandler.postDelayed(clearCaption, CAPTION_CLEAR_DELAY_MS)
                 textCaption.post {
                     if (!isContinuation) {
                         scrollAnimator.jumpTo(0)
@@ -555,6 +609,14 @@ class IncomingCallActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "IncomingCallActivity"
+
+        /**
+         * Délai sans nouvelle parole du proche au bout duquel le sous-titre
+         * s'efface (voir setupCaptionMode). Assez long pour ne pas effacer
+         * entre deux phrases d'une même explication, assez court pour ne pas
+         * laisser une phrase orpheline sur une photo de diaporama.
+         */
+        private const val CAPTION_CLEAR_DELAY_MS = 6000L
         const val EXTRA_CALL_ID = "extra_call_id"
         const val EXTRA_CALLER_PHOTO_PATH = "extra_caller_photo_path"
         const val EXTRA_SIGNAL_RECEIVED_AT = "extra_signal_received_at"

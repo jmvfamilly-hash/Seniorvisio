@@ -532,6 +532,20 @@ class RealCallEngine extends CallEngine {
   }
 
   /**
+   * Affiche une photo en grand chez Jean, ou termine le diaporama si on
+   * passe null (voir WebRtcCallEngine.listenForSlideshowPhoto côté Android).
+   *
+   * Une seule photo à la fois dans le document d'appel, remplacée à chaque
+   * changement : envoyer toute la série d'un coup dépasserait la limite de
+   * taille d'un document Firestore dès quelques images.
+   */
+  async setSlideshowPhoto(photoBase64) {
+    if (this._callDocRef) {
+      await this._callDocRef.update({ slideshowPhotoBase64: photoBase64 || null }).catch(() => {});
+    }
+  }
+
+  /**
    * Coupe/rétablit à distance le micro de la tablette (voir
    * WebRtcCallEngine.listenForMicMute côté Android).
    *

@@ -351,3 +351,77 @@ body.video-mode #fullscreenCaptionBanner:not(.hidden) {
   text-align: center;
   margin: -12px 0 20px;
 }
+
+/* Diaporama commenté : le proche choisit des photos et les fait défiler chez
+   Jean (voir app.js). Même vocabulaire visuel que les autres réglages d'appel
+   (.caption-control), avec un encadré pour le distinguer d'une simple case à
+   cocher — c'est une fonction à part entière, pas un réglage. */
+.slideshow-control {
+  margin-top: 24px;
+  padding: 16px;
+  text-align: left;
+  font-size: 14px;
+  color: #AAB4C8;
+  border: 1px solid #2C3E5C;
+  border-radius: 10px;
+}
+
+.slideshow-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: bold;
+  color: #E8EDF5;
+}
+
+.slideshow-control label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  cursor: pointer;
+}
+
+.slideshow-control input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+}
+
+/* Le sélecteur de fichiers natif est laid et illisible selon les navigateurs :
+   on l'habille comme un bouton, sans changer son comportement. */
+.slideshow-pick {
+  display: inline-flex;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: #2C3E5C;
+  color: #E8EDF5;
+}
+
+.slideshow-pick input[type="file"] {
+  display: none;
+}
+
+.slideshow-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.slideshow-counter {
+  font-variant-numeric: tabular-nums;
+  color: #E8EDF5;
+}
+
+.slideshow-preview {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  border-radius: 8px;
+}
+
+.slideshow-status {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #8FA0BC;
+}
