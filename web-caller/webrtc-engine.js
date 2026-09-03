@@ -138,7 +138,18 @@ class RealCallEngine extends CallEngine {
     // etc.) : les deux peuvent diverger sur un même appareil.
     let localStream;
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      // echoCancellation/noiseSuppression/autoGainControl explicites plutôt
+      // que la valeur par défaut (audio: true) : signalé en usage réel, un
+      // écho important côté téléphone de l'appelant, non résolu en coupant
+      // le son de la tablette (donc sans lien avec elle — un bouclage
+      // acoustique haut-parleur/micro propre au téléphone appelant).
+      // L'activation par défaut de l'annulation d'écho varie selon les
+      // versions de Chrome pour Android ; la demander explicitement est sans
+      // risque et lève le doute.
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
     } catch (e) {
       console.error("[RealCallEngine] Accès caméra/micro refusé ou impossible :", e);
       // e.name distingue des causes très différentes (NotAllowedError :
