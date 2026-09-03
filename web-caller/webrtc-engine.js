@@ -368,18 +368,15 @@ class RealCallEngine extends CallEngine {
    */
   _startCaptioning() {
     const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    // Désactivé temporairement à la demande, pour vérifier si ce test lui-même
-    // jouait un rôle dans l'échec des sous-titres sur Android/Chrome (Samsung
-    // A54) — analyse du code indique que non (SpeechRecognitionCtor existe
-    // bien sur cet appareil, la reconnaissance démarre, elle ne reçoit juste
-    // jamais de son). À réactiver si retirer ce test ne change rien : sans
-    // lui, un navigateur qui n'a VRAIMENT pas cette fonction (ex. Firefox
-    // desktop) plante au lieu de désactiver proprement les sous-titres,
-    // puisque `new SpeechRecognitionCtor()` échoue sur `undefined`.
-    // if (!SpeechRecognitionCtor) {
-    //   console.warn("[RealCallEngine] Reconnaissance vocale non supportée par ce navigateur (sous-titres désactivés).");
-    //   return;
-    // }
+    // Confirmé en test réel : ce retirer ce test ne change rien sur Android/
+    // Chrome (Samsung A54) — comme attendu, l'API y existe déjà, elle ne
+    // reçoit juste jamais de son (micro accaparé par l'appel WebRTC).
+    // Réactivé, sinon un navigateur qui n'a VRAIMENT pas cette fonction (ex.
+    // Firefox desktop) plante au lieu de désactiver proprement les sous-titres.
+    if (!SpeechRecognitionCtor) {
+      console.warn("[RealCallEngine] Reconnaissance vocale non supportée par ce navigateur (sous-titres désactivés).");
+      return;
+    }
 
     const recognition = new SpeechRecognitionCtor();
     this._recognition = recognition;
