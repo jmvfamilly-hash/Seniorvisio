@@ -1,6 +1,7 @@
 package com.seniorvisio.ui
 
 import android.app.NotificationManager
+import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import android.media.RingtoneManager
@@ -181,6 +182,20 @@ class IncomingCallActivity : AppCompatActivity() {
             onTimeoutConnect = { connectVideoCall() },
             onBlocked = { /* déclenché via le bouton, voir ci-dessus */ }
         )
+    }
+
+    /**
+     * Avec singleTask (voir AndroidManifest), un second déclenchement pour le
+     * même appel (notification plein écran + startActivity explicite, voir
+     * IncomingCallService.launchAlertScreen) est désormais livré ici plutôt
+     * que de créer une seconde instance concurrente avec son propre moteur
+     * WebRTC — cause du raccroché immédiat observé en test réel. Rien à faire
+     * de plus : l'instance déjà affichée continue normalement son décompte ou
+     * son appel en cours.
+     */
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        Log.i(TAG, "Second déclenchement ignoré pour un appel déjà affiché")
     }
 
     /** Petit son discret au tout début du décompte, pour signaler l'appel sans réveiller toute la maison. */

@@ -56,10 +56,22 @@
         android:allowBackup="false"
         android:usesCleartextTraffic="true">
 
+        <!-- launchMode singleTask : IncomingCallService.launchAlertScreen déclenche
+             cet écran par deux chemins à la fois (notification plein écran +
+             startActivity explicite, voir son commentaire) pour rester fiable sur
+             Android récent — sans singleTask, rien n'empêchait les deux chemins de
+             créer chacun leur propre instance, donc leur propre moteur WebRTC,
+             pour le même appel. Constaté en test réel (logcat) : deux
+             PeerConnectionFactory initialisés à quelques centaines de ms
+             d'intervalle, l'un des deux échouant alors à créer sa connexion
+             WebRTC (ressources caméra/GPU en conflit) — l'appel raccrochait
+             aussitôt, avec la photo affichée un instant par l'instance qui
+             s'apprêtait à échouer. -->
         <activity
             android:name=".ui.IncomingCallActivity"
             android:exported="false"
             android:excludeFromRecents="true"
+            android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
 
         <!-- launchMode singleTask : indispensable pour un écran d'accueil, sinon
