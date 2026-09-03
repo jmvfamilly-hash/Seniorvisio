@@ -347,11 +347,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * sans ça, Android route par défaut l'audio d'appel vers le petit
      * écouteur destiné à être collé à l'oreille, quasi inaudible ici.
      *
-     * Fixe aussi le volume système de l'appel au maximum : c'est ce volume
-     * qui multiplie en dernier le gain réglé à distance ([listenForRemoteVolumeControl])
-     * — s'il reste au choix de Jean (boutons physiques), il peut annuler l'effet
-     * du curseur du proche. Pendant l'appel, seul ce curseur doit faire foi
-     * (voir aussi IncomingCallActivity, qui bloque les boutons physiques).
+     * Fixe aussi le volume système de l'appel à un niveau déterminé (voir
+     * [pinSystemVolume]) : c'est ce volume qui multiplie en dernier le gain réglé
+     * à distance ([listenForRemoteVolumeControl]) — s'il reste au choix de Jean
+     * (boutons physiques), il peut annuler l'effet du curseur du proche. Pendant
+     * l'appel, seul ce curseur doit faire foi (voir aussi IncomingCallActivity,
+     * qui bloque les boutons physiques).
      */
     private fun configureAudioForCall() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
@@ -360,14 +361,33 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         savedCallVolume = audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         audioManager.isSpeakerphoneOn = true
-        pinSystemVolumeToMax()
+        pinSystemVolume()
     }
 
-    /** Remet le volume système de l'appel au maximum (voir configureAudioForCall). */
-    fun pinSystemVolumeToMax() {
+    /**
+     * Fixe le volume système de l'appel à un niveau confortable — volontairement
+     * PAS au maximum, contrairement à la première version.
+     *
+     * Constaté en test réel : à fond, le haut-parleur de la tablette rejouait la
+     * voix du proche assez fort pour que le micro de la tablette la recapte et la
+     * lui renvoie — un écho franc de sa propre voix, indépendant de son appareil
+     * (iPad comme Android, avec ou sans casque). Confirmé sans ambiguïté en
+     * coupant le micro de la tablette à distance : l'écho disparaissait.
+     *
+     * Un haut-parleur poussé au maximum sature et déforme le son ; l'annulation
+     * d'écho, qui compare ce qui est capté à ce qui a été joué, ne reconnaît plus
+     * ce qu'elle doit soustraire et laisse passer l'écho. Garder de la marge lui
+     * redonne une chance de faire son travail.
+     *
+     * Jean entend toujours largement assez fort : le proche dispose en plus du
+     * curseur de volume à distance, qui monte jusqu'à 200 % — soit nettement
+     * au-delà de ce que donnait l'ancien réglage à fond.
+     */
+    fun pinSystemVolume() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
-        audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, max, 0)
+        val level = Math.round(max * SYSTEM_VOLUME_RATIO).coerceIn(1, max)
+        audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, level, 0)
     }
 
     private fun restoreAudio() {
@@ -634,5 +654,13 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
          * reprendre avant de considérer l'appel définitivement perdu.
          */
         private const val ICE_FAILURE_GRACE_MS = 8000L
+
+        /**
+         * Fraction du volume système maximal utilisée pendant un appel (voir
+         * pinSystemVolume). Compromis entre "Jean entend bien" et "le micro de
+         * la tablette ne recapte pas le haut-parleur" — c'est le second point
+         * qui a causé un écho franc côté proche tant que ce réglage était à 1.0.
+         */
+        private const val SYSTEM_VOLUME_RATIO = 0.7f
     }
 }

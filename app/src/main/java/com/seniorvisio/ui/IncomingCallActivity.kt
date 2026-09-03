@@ -525,7 +525,7 @@ class IncomingCallActivity : AppCompatActivity() {
      */
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (isConnected && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
-            callEngine.pinSystemVolumeToMax()
+            callEngine.pinSystemVolume()
             return true
         }
         return super.onKeyDown(keyCode, event)
