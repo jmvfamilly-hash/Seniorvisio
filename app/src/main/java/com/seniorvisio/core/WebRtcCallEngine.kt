@@ -131,6 +131,19 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         }), MediaConstraints())
     }
 
+    /**
+     * Relaie la cause exacte d'un échec de préparation d'appel (voir
+     * IncomingCallActivity) dans le document Firestore de l'appel, pour
+     * qu'elle soit visible depuis la console Firebase et depuis l'écran du
+     * proche (voir web-caller/webrtc-engine.js) — sans ça, seul un accès
+     * physique à la tablette (adb logcat) pouvait révéler pourquoi l'appel
+     * raccrochait aussitôt.
+     */
+    fun reportPreparationError(message: String) {
+        val id = callId ?: return
+        signaling.reportCalleeError(id, message)
+    }
+
     override fun hangUp() {
         callId?.let { signaling.updateStatus(it, CallSignalingClient.STATUS_ENDED) }
         cleanup()

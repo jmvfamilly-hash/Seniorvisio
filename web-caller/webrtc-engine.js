@@ -30,6 +30,7 @@ class RealCallEngine extends CallEngine {
     this._silenceTimer = null;
     this._silenceActive = false;
     this._hasNotifiedConnected = false;
+    this._hasReportedCalleeError = false;
     // Incrémenté à chaque nouvel appel et à chaque annulation (voir
     // cancelCall) : permet à startCall() de détecter, à chaque point
     // d'attente, qu'il a été annulé entre-temps et d'arrêter proprement
@@ -253,6 +254,17 @@ class RealCallEngine extends CallEngine {
       if (typeof data.captionCatchUpLagSeconds === "number") {
         this._lastLagSeconds = data.captionCatchUpLagSeconds;
         this._captionCatchUpLagCb && this._captionCatchUpLagCb(data.captionCatchUpLagSeconds);
+      }
+      // Cause exacte d'un échec de préparation d'appel côté tablette (voir
+      // WebRtcCallEngine.reportPreparationError, core/WebRtcCallEngine.kt) :
+      // jusqu'ici, la tablette raccrochait aussitôt (status "ended") sans la
+      // moindre explication — l'écran ici se contentait de repasser en
+      // veille, comme un raccroché normal. Affiché une seule fois par appel.
+      if (data.calleeErrorMessage && !this._hasReportedCalleeError) {
+        this._hasReportedCalleeError = true;
+        this._errorCb && this._errorCb(
+          `La tablette n'a pas pu préparer l'appel : ${data.calleeErrorMessage}`
+        );
       }
       // Ce listener se redéclenche à chaque écriture sur le document d'appel
       // (curseurs, sous-titres, retard de lecture…), pas seulement au
@@ -609,6 +621,7 @@ class RealCallEngine extends CallEngine {
     this._transcriptBuffer = [];
     this._lastLagSeconds = 0;
     this._hasNotifiedConnected = false;
+    this._hasReportedCalleeError = false;
     if (this._unsubscribeCallDoc) this._unsubscribeCallDoc();
     this._unsubscribeCallDoc = null;
     if (this._unsubscribeCalleeCandidates) this._unsubscribeCalleeCandidates();

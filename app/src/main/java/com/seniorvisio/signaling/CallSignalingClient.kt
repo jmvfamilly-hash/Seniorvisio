@@ -73,6 +73,16 @@ class CallSignalingClient {
         callDoc(callId).update(FIELD_STATUS, status)
     }
 
+    /**
+     * Cause exacte d'un échec de préparation d'appel côté tablette (voir
+     * WebRtcCallEngine.reportPreparationError) — jusqu'ici entièrement
+     * silencieuse, un raccroché sans la moindre explication ni pour le
+     * proche, ni depuis la console Firebase.
+     */
+    fun reportCalleeError(callId: String, message: String) {
+        callDoc(callId).update(FIELD_CALLEE_ERROR, message)
+    }
+
     fun addCandidate(callId: String, candidate: RemoteIceCandidate) {
         callDoc(callId).collection(CALLEE_CANDIDATES).add(
             mapOf(
@@ -253,6 +263,7 @@ class CallSignalingClient {
         private const val FIELD_SELF_PREVIEW = "selfPreviewEnabled"
         private const val FIELD_CAPTION_SCROLL_SPEED = "captionMaxScrollSpeedDpPerSec"
         private const val FIELD_CAPTION_CATCHUP_LAG = "captionCatchUpLagSeconds"
+        private const val FIELD_CALLEE_ERROR = "calleeErrorMessage"
 
         private const val DEVICE_TOKEN_DOC = "devices/jean_tablet"
         private const val FIELD_FCM_TOKEN = "fcmToken"

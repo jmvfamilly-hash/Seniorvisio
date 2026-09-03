@@ -129,7 +129,15 @@ class IncomingCallActivity : AppCompatActivity() {
         callEngine.prepareIncomingCall(
             callId = callId,
             onReady = { /* offre reçue, prête à être acceptée à la fin du décompte */ },
-            onError = {
+            onError = { error ->
+                // La cause réelle (offre introuvable, échec WebRTC...) était
+                // jusqu'ici entièrement ignorée : ni journalisée, ni remontée
+                // nulle part — impossible de savoir pourquoi un appel raccrochait
+                // aussitôt sans brancher la tablette. Remontée maintenant dans le
+                // document Firestore de l'appel (visible depuis la console, sans
+                // accès physique) et relayée au proche côté PWA.
+                Log.e(TAG, "Échec de préparation de l'appel entrant", error)
+                callEngine.reportPreparationError(error.message ?: error.javaClass.simpleName)
                 runOnUiThread {
                     Toast.makeText(this, "Appel indisponible", Toast.LENGTH_SHORT).show()
                     finish()
