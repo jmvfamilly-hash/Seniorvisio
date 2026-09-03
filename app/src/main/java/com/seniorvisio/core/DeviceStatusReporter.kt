@@ -9,6 +9,8 @@ import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
@@ -31,6 +33,7 @@ class DeviceStatusReporter(private val context: Context) {
 
     private val db get() = FirebaseFirestore.getInstance()
     private val deviceDoc get() = db.document(DEVICE_DOC_PATH)
+    private val retryHandler = Handler(Looper.getMainLooper())
 
     /** À appeler périodiquement (voir CallListenerService, déjà un foreground service permanent). */
     fun reportHeartbeat() {
@@ -70,7 +73,8 @@ class DeviceStatusReporter(private val context: Context) {
      * Écoute une mise à jour demandée à distance (URL de l'APK + version
      * cible, écrites dans Firestore) et l'installe dès qu'elle diffère de la
      * version en cours. À appeler une seule fois au démarrage du service
-     * permanent.
+     * permanent — mais se réabonne ensuite elle-même en cas d'erreur (voir
+     * ci-dessous), donc pas besoin de la rappeler à la main.
      */
     fun listenForRemoteCommands() {
         // Un seul listener pour toutes les commandes à distance : chaque
@@ -78,7 +82,17 @@ class DeviceStatusReporter(private val context: Context) {
         // écriture, y compris celles que la tablette fait elle-même.
         deviceDoc.addSnapshotListener { snapshot, error ->
             if (error != null) {
-                Log.e(TAG, "Écoute Firestore des commandes à distance interrompue", error)
+                // Une erreur ici (ex. règles Firestore refusant la lecture à ce
+                // moment précis) termine définitivement CE listener côté SDK —
+                // il ne se réabonne jamais tout seul, même si la cause de
+                // l'erreur disparaît ensuite (ex. correction des règles). Constaté
+                // en usage réel : le signe de vie (écriture simple, rejouée à
+                // chaque cycle) s'était remis à fonctionner après une correction
+                // des règles, mais cette écoute était restée muette indéfiniment,
+                // faute de nouvelle tentative. Sans ce réabonnement différé, seul
+                // un redémarrage physique de la tablette y remédierait.
+                Log.e(TAG, "Écoute Firestore des commandes à distance interrompue, nouvelle tentative dans ${LISTENER_RETRY_DELAY_MS / 1000}s", error)
+                retryHandler.postDelayed({ listenForRemoteCommands() }, LISTENER_RETRY_DELAY_MS)
                 return@addSnapshotListener
             }
             if (snapshot == null) return@addSnapshotListener
@@ -270,5 +284,6 @@ class DeviceStatusReporter(private val context: Context) {
 
         private const val PREFS_NAME = "device_status_reporter"
         private const val KEY_LAST_RESET_HANDLED_AT = "last_reset_handled_at"
+        private const val LISTENER_RETRY_DELAY_MS = 60_000L
     }
 }
