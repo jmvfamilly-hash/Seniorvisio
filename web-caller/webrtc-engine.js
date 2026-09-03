@@ -21,6 +21,7 @@ class RealCallEngine extends CallEngine {
     this._countdownInterval = null;
     this._transcriptCb = null;
     this._silenceCb = null;
+    this._captionErrorCb = null;
     this._captionCatchUpLagCb = null;
     this._fullscreenCaptionCb = null;
     this._transcriptHistory = [];
@@ -59,6 +60,16 @@ class RealCallEngine extends CallEngine {
   onTranscript(callback) { this._transcriptCb = callback; }
   /** callback(silent: boolean) — aucun son détecté depuis quelques secondes pendant que le micro écoute. */
   onSilenceDetected(callback) { this._silenceCb = callback; }
+  /**
+   * callback(errorCode: string) — la reconnaissance vocale (sous-titres)
+   * a signalé une erreur (voir recognition.onerror dans _startCaptioning).
+   * Jusqu'ici cette erreur n'était journalisée que dans la console du
+   * navigateur, jamais montrée : impossible de savoir pourquoi les
+   * sous-titres restaient vides sur certains appareils (Android/Chrome
+   * notamment, où le micro est peut-être déjà occupé par l'appel lui-même)
+   * sans brancher un débogueur.
+   */
+  onCaptionError(callback) { this._captionErrorCb = callback; }
   /** callback(lagSeconds: number) — retard de lecture de Jean par rapport au texte reçu (0 = à jour) : ralentir le débit si ça grimpe. */
   onCaptionCatchUpLag(callback) { this._captionCatchUpLagCb = callback; }
   /**
@@ -421,7 +432,14 @@ class RealCallEngine extends CallEngine {
         history: [...this._transcriptHistory],
       });
     };
-    recognition.onerror = (e) => console.warn("[RealCallEngine] Reconnaissance vocale :", e.error);
+    recognition.onerror = (e) => {
+      console.warn("[RealCallEngine] Reconnaissance vocale :", e.error);
+      // "no-speech" est un événement normal (personne ne parle en ce moment,
+      // déjà couvert par l'indicateur de silence) — seules les erreurs
+      // réelles (micro déjà occupé par l'appel WebRTC, réseau, permission)
+      // méritent d'être montrées.
+      if (e.error !== "no-speech") this._captionErrorCb && this._captionErrorCb(e.error);
+    };
     recognition.onend = () => {
       // L'API s'arrête parfois seule après un silence : on la relance tant que l'appel est actif.
       if (this._pc && this._recognition === recognition) {

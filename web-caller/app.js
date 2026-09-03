@@ -155,6 +155,7 @@ const els = {
   saveIdentityButton: document.getElementById("saveIdentityButton"),
   identityStatus: document.getElementById("identityStatus"),
   silenceIndicator: document.getElementById("silenceIndicator"),
+  captionErrorIndicator: document.getElementById("captionErrorIndicator"),
   captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
   fullscreenCaptionBanner: document.getElementById("fullscreenCaptionBanner"),
   fullscreenCaption: document.getElementById("fullscreenCaption"),
@@ -208,6 +209,7 @@ els.callButton.addEventListener("click", async () => {
   els.transcriptCurrent.textContent = "";
   els.transcriptHistory.innerHTML = "";
   els.silenceIndicator.classList.add("hidden");
+  els.captionErrorIndicator.classList.add("hidden");
   els.captionOverflowIndicator.classList.add("hidden");
   els.fullscreenCaptionBanner.classList.add("hidden");
   // Désactivé tant que l'appel n'est pas prêt (voir plus bas) : un appui
@@ -288,6 +290,16 @@ engine.onTranscript(({ liveText, isFinal, confidence, history }) => {
 
 engine.onSilenceDetected((silent) => {
   els.silenceIndicator.classList.toggle("hidden", !silent);
+});
+
+// Cause réelle d'un échec de la reconnaissance vocale (voir
+// RealCallEngine.onCaptionError) : sur Android/Chrome notamment, le micro
+// déjà utilisé par l'appel WebRTC lui-même peut empêcher la reconnaissance
+// vocale d'y accéder en parallèle — jusqu'ici, seul l'indicateur générique
+// "aucun son détecté" apparaissait, sans dire pourquoi.
+engine.onCaptionError((errorCode) => {
+  els.captionErrorIndicator.textContent = `⚠️ Sous-titres indisponibles (${errorCode})`;
+  els.captionErrorIndicator.classList.remove("hidden");
 });
 
 engine.onCaptionCatchUpLag((lagSeconds) => {
