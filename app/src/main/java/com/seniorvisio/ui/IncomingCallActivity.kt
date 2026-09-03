@@ -193,7 +193,7 @@ class IncomingCallActivity : AppCompatActivity() {
      * de plus : l'instance déjà affichée continue normalement son décompte ou
      * son appel en cours.
      */
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         Log.i(TAG, "Second déclenchement ignoré pour un appel déjà affiché")
     }
