@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.firebase.firestore.ListenerRegistration
 import com.seniorvisio.signaling.CallSignalingClient
@@ -126,7 +127,20 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     override fun answer() {
-        val pc = peerConnection ?: return
+        // Abandonner en silence ici a coûté cher : appelée avant que l'offre du
+        // proche ne soit reçue (connexion immédiate du mode soignant), cette
+        // méthode ne faisait rien du tout, sans le moindre message. Résultat, la
+        // tablette se croyait en communication, le proche restait devant un
+        // décompte sans fin, et la transcription — qui passe par Firestore et
+        // non par WebRTC — continuait de fonctionner, masquant complètement le
+        // problème. L'appelant doit attendre onReady (voir
+        // IncomingCallActivity), mais si le cas se represente, il laisse
+        // désormais une trace.
+        val pc = peerConnection
+        if (pc == null) {
+            Log.e(TAG, "answer() appelée avant que la connexion WebRTC ne soit prête : appel ignoré")
+            return
+        }
         val id = callId ?: return
         state = CallState.CONNECTING
         startLocalMedia(pc)
@@ -681,6 +695,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     companion object {
+        private const val TAG = "WebRtcCallEngine"
+
         /**
          * Une brève déconnexion ICE se résout souvent seule (quelques
          * secondes de coupure Wi-Fi...) : ce délai laisse une chance de
