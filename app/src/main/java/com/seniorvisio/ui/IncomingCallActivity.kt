@@ -46,6 +46,12 @@ class IncomingCallActivity : AppCompatActivity() {
     private var isConnected = false
     private var callHandled = false
 
+    /** Vrai dès que l'offre WebRTC du proche est reçue et acceptée (voir prepareIncomingCall). */
+    private var isPrepared = false
+
+    /** Connexion immédiate demandée avant que l'offre ne soit prête (mode soignant). */
+    private var pendingForceConnect = false
+
     // Références gardées pour adapter la disposition à chaque rotation (voir
     // onConfigurationChanged / applyOrientationLayout) sans jamais recréer
     // l'Activity ni rattacher les renderers WebRTC — l'appel en cours n'est
@@ -129,7 +135,18 @@ class IncomingCallActivity : AppCompatActivity() {
 
         callEngine.prepareIncomingCall(
             callId = callId,
-            onReady = { /* offre reçue, prête à être acceptée à la fin du décompte */ },
+            onReady = {
+                runOnUiThread {
+                    isPrepared = true
+                    // Demande de connexion immédiate arrivée avant l'offre (voir
+                    // listenForForceConnect ci-dessous) : c'est maintenant qu'on
+                    // peut y répondre.
+                    if (pendingForceConnect && !isConnected) {
+                        pendingForceConnect = false
+                        connectVideoCall()
+                    }
+                }
+            },
             onError = { error ->
                 // La cause réelle (offre introuvable, échec WebRTC...) était
                 // jusqu'ici entièrement ignorée : ni journalisée, ni remontée
@@ -153,13 +170,21 @@ class IncomingCallActivity : AppCompatActivity() {
         // le téléphone du soignant posé à côté.
         callEngine.listenForMicMute()
 
+        // Le mode soignant écrit cette demande dès la création de l'appel (voir
+        // web-caller/app.js) : elle arrive donc souvent AVANT que l'offre WebRTC
+        // n'ait été récupérée. Connecter à ce moment-là échouait en silence —
+        // answer() abandonne sans rien dire tant que la connexion n'existe pas —
+        // laissant le proche devant un décompte qui ne se termine jamais, alors
+        // que la transcription, elle, fonctionnait (elle passe par Firestore, pas
+        // par WebRTC) et donnait l'illusion d'un appel établi. La demande est
+        // donc mise en attente jusqu'à onReady si l'offre n'est pas encore là.
         var forceConnectHandled = false
         callEngine.listenForForceConnect {
             runOnUiThread {
                 if (forceConnectHandled || isConnected) return@runOnUiThread
                 forceConnectHandled = true
                 alertController.cancel()
-                connectVideoCall()
+                if (isPrepared) connectVideoCall() else pendingForceConnect = true
             }
         }
 
@@ -244,6 +269,12 @@ class IncomingCallActivity : AppCompatActivity() {
     }
 
     private fun connectVideoCall() {
+        // Deux chemins mènent ici (fin du décompte et demande de connexion
+        // immédiate) : sans ce garde-fou, ils pouvaient se déclencher tous les
+        // deux et réinitialiser des surfaces vidéo déjà initialisées, ce qui
+        // faisait planter l'écran d'appel en pleine conversation — et
+        // raccrochait donc côté proche, sans explication.
+        if (isConnected) return
         isConnected = true
         findViewById<View>(R.id.alertContent).visibility = View.GONE
         // La photo et son voile sont des calques plein écran, frères de
