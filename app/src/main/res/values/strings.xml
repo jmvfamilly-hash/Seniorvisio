@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+         Libellé sous la carte "Voir ce qui se dit" de l'écran d'accueil.
+         Déclaré ici plutôt qu'en dur dans le layout parce que le code le
+         remplace temporairement ("Ouverture…", puis un message d'échec le cas
+         échéant) et doit pouvoir le remettre à l'identique au retour sur
+         l'écran — voir MainActivity.onResume.
+    -->
+    <string name="room_captions_hint">Les paroles s\'écrivent à l\'écran</string>
+</resources>

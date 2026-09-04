@@ -6,6 +6,20 @@
 
 document.getElementById("pwaVersion").textContent = `v. ${window.PWA_VERSION || "?"}`;
 
+// --- Mode soignant -------------------------------------------------------
+// Ouvert en scannant le QR code affiché sur l'écran d'accueil de la tablette
+// (voir MainActivity.showCaregiverQrCode). Destiné à quelqu'un qui est DANS la
+// pièce avec Jean — soignant, visiteur — et veut lui parler sans hausser la
+// voix : sa parole s'écrit en grand sur la tablette.
+//
+// Tout ce qui a du sens pour un appel venu de l'extérieur est retiré ici :
+// pas de décompte (la personne est déjà là), pas de photo d'appelant (Jean la
+// voit en vrai), pas de vidéo, pas de réglages — et surtout aucun son côté
+// tablette, sans quoi le téléphone du soignant, à quelques centimètres,
+// provoquerait un larsen immédiat.
+const CAREGIVER_MODE = new URLSearchParams(location.search).has("soignant");
+if (CAREGIVER_MODE) document.body.classList.add("caregiver-mode");
+
 // --- Paramètres, alignés avec AdminConfig côté Android ---
 const CONFIG = {
   targetDeviceId: "jean-tablette-01", // non utilisé par le signaling Firestore (un seul foyer), gardé pour usage futur multi-tablette
@@ -234,17 +248,37 @@ els.callButton.addEventListener("click", async () => {
   // le bouton, sans plus aucun moyen de relancer la connexion pour cet appel.
   els.forceConnectButton.disabled = true;
   showState("calling");
-  // Identité renseignée sur l'écran d'attente, sinon repli sur l'ancien
-  // comportement : nom générique et capture webcam prise à l'ouverture.
-  const identity = loadIdentity() || {};
-  await engine.startCall(CONFIG.targetDeviceId, identity.name || CONFIG.callerName, {
-    remoteVolume: settings.volume / 100,
-    captionModeEnabled: settings.captionEnabled,
-    captionTextSize: settings.textSize,
-    captionMaxScrollSpeedDpPerSec: settings.scrollSpeed,
-    selfPreviewEnabled: settings.selfPreview,
-    callerPhotoBase64: identity.photoBase64 || null,
-  });
+  if (CAREGIVER_MODE) {
+    els.callingHint.textContent = "Connexion immédiate…";
+    await engine.startCall(CONFIG.targetDeviceId, "Un soignant", {
+      // Aucun son chez Jean : le soignant parle de vive voix dans la pièce,
+      // la tablette ne fait qu'écrire. Sans ça, larsen immédiat.
+      remoteVolume: 0,
+      tabletMicMuted: true,
+      // Les sous-titres sont toute la raison d'être de ce mode : activés
+      // d'office, jamais à cocher.
+      captionModeEnabled: true,
+      captionTextSize: DEFAULT_SETTINGS.textSize,
+      captionMaxScrollSpeedDpPerSec: DEFAULT_SETTINGS.scrollSpeed,
+      selfPreviewEnabled: false,
+      // Ni décompte, ni photo, ni caméra : voir le commentaire de CAREGIVER_MODE.
+      forceConnect: true,
+      skipPhoto: true,
+      audioOnly: true,
+    });
+  } else {
+    // Identité renseignée sur l'écran d'attente, sinon repli sur l'ancien
+    // comportement : nom générique et capture webcam prise à l'ouverture.
+    const identity = loadIdentity() || {};
+    await engine.startCall(CONFIG.targetDeviceId, identity.name || CONFIG.callerName, {
+      remoteVolume: settings.volume / 100,
+      captionModeEnabled: settings.captionEnabled,
+      captionTextSize: settings.textSize,
+      captionMaxScrollSpeedDpPerSec: settings.scrollSpeed,
+      selfPreviewEnabled: settings.selfPreview,
+      callerPhotoBase64: identity.photoBase64 || null,
+    });
+  }
   els.forceConnectButton.disabled = false;
 });
 
@@ -624,6 +658,19 @@ els.hangupButton.addEventListener("click", async () => {
   await engine.cancelCall();
   showState("idle");
 });
+
+// Le mode soignant réduit l'écran à sa plus simple expression : un bouton pour
+// parler, un pour terminer, et le miroir de ce que Jean lit. Le reste (photo,
+// réglages, vidéo, dépannage) est masqué par la feuille de style — ici on ne
+// change que ce qui doit être formulé autrement.
+if (CAREGIVER_MODE) {
+  document.querySelector("h1").textContent = "Parler à Jean";
+  els.callButton.textContent = "🗣️ Commencer à parler";
+  els.hangupButton.textContent = "Terminer";
+  // "Ce que Jean va voir" devient sa vraie fonction ici : le seul retour qui
+  // dit au soignant que sa voix est bien captée et transcrite.
+  document.querySelector(".transcript-hint").textContent = "Ce que Jean lit :";
+}
 
 engine.onBlocked(() => showState("blocked"));
 engine.onConnected(() => showState("connected"));

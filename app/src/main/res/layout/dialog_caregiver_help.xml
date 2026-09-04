@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Explication de la fonction "soignant", affichée quand on touche le QR code
+     de l'écran d'accueil (voir MainActivity.showCaregiverHelp).
+
+     Trois étapes illustrées plutôt qu'un paragraphe : la personne qui découvre
+     ce code est debout dans une chambre, pressée, et ne lira pas un mode
+     d'emploi. Un pictogramme par étape, une phrase courte, dans l'ordre où les
+     choses se passent.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="32dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Parler à Jean sans élever la voix"
+            android:textColor="#FFFFFF"
+            android:textSize="30sp"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Pour un soignant, un visiteur, un proche présent dans la pièce."
+            android:textColor="#AEBBD0"
+            android:textSize="19sp"
+            android:gravity="center" />
+
+        <!-- Étape 1 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📱"
+                android:textSize="52sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:text="Scannez ce code avec l'appareil photo de votre téléphone."
+                android:textColor="#FFFFFF"
+                android:textSize="22sp" />
+        </LinearLayout>
+
+        <!-- Étape 2 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🗣️"
+                android:textSize="52sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:text="Parlez normalement, à voix normale, sans crier."
+                android:textColor="#FFFFFF"
+                android:textSize="22sp" />
+        </LinearLayout>
+
+        <!-- Étape 3 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📺"
+                android:textSize="52sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:text="Vos paroles s'écrivent en grand sur cette tablette. Jean les lit."
+                android:textColor="#FFFFFF"
+                android:textSize="22sp" />
+        </LinearLayout>
+
+        <!-- Point qui évite le contresens le plus probable : croire que la
+             tablette va diffuser du son et créer un larsen dans la pièce. -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:padding="16dp"
+            android:background="@drawable/home_card_bg"
+            android:text="🔇 La tablette ne fait aucun bruit : vous êtes dans la même pièce, elle se contente d'écrire."
+            android:textColor="#D6DEEA"
+            android:textSize="19sp" />
+
+    </LinearLayout>
+</ScrollView>
