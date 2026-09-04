@@ -22,33 +22,50 @@
         android:gravity="center"
         android:padding="32dp">
 
-        <!-- Horloge : seule information réellement utile à Jean sur cet écran,
-             à la place du nom de l'application et du "en attente d'appel" qui
-             s'y trouvaient — ni l'un ni l'autre ne lui servaient à quoi que ce
-             soit, et "en attente" pouvait même laisser croire qu'il avait
-             quelque chose à faire.
+        <!-- Repère temporel : seule information réellement utile à Jean sur cet
+             écran, à la place du nom de l'application et du "en attente
+             d'appel" qui s'y trouvaient — ni l'un ni l'autre ne lui servaient à
+             quoi que ce soit, et "en attente" pouvait même laisser croire qu'il
+             avait quelque chose à faire.
 
-             Heure très grande et lisible de loin, date écrite en toutes lettres
-             plutôt qu'en chiffres (03/09 se déchiffre, "mercredi 3 septembre"
-             se lit) : se repérer dans le temps est un besoin quotidien concret
-             quand les journées se ressemblent. -->
-        <TextView
-            android:id="@+id/textClockTime"
+             Volontairement discret et sans l'heure exacte : un gros "14:35"
+             demande de déchiffrer deux nombres, alors qu'un pictogramme et un
+             mot ("Après-midi") se reconnaissent d'un coup d'œil — ce qui compte
+             au quotidien, c'est de savoir où on en est dans la journée, pas
+             l'heure à la minute près (voir MainActivity.updateClock). Date en
+             toutes lettres en dessous, plus discrète (03/09 se déchiffre,
+             "mercredi 3 septembre" se lit). -->
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:textSize="120sp"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:text="" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/textMomentIcon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="56sp"
+                android:text="" />
+
+            <TextView
+                android:id="@+id/textMomentLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:textColor="#FFFFFF"
+                android:textSize="34sp"
+                android:textStyle="bold"
+                android:text="" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/textClockDate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textColor="#D6DEEA"
-            android:textSize="36sp"
+            android:layout_marginTop="6dp"
+            android:textColor="#AEBBD0"
+            android:textSize="22sp"
             android:gravity="center"
             android:text="" />
 
