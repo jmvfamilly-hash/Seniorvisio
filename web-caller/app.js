@@ -517,6 +517,12 @@ if (CAREGIVER_MODE) {
   document.querySelector("h1").textContent = "Parler à Jean";
   els.callButton.textContent = "🗣️ Commencer à parler";
   els.hangupButton.textContent = "Terminer";
+  // Répété avant ET pendant : c'est le contresens le plus probable, et le
+  // réflexe de baisser le téléphone pour s'adresser à la personne revient vite.
+  document.getElementById("caregiverIdleHint").textContent =
+    "🎤 Parlez dans votre téléphone, comme au téléphone : c'est lui qui vous écoute. La tablette de Jean ne fait qu'écrire, sans aucun son.";
+  document.getElementById("caregiverCallHint").textContent =
+    "🎤 Gardez le téléphone près de vous et parlez dedans, à voix normale.";
   // "Ce que Jean va voir" devient sa vraie fonction ici : le seul retour qui
   // dit au soignant que sa voix est bien captée et transcrite.
   document.querySelector(".transcript-hint").textContent = "Ce que Jean lit :";

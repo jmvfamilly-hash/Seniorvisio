@@ -70,14 +70,18 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🗣️"
+                android:text="🎤"
                 android:textSize="52sp" />
 
+            <!-- Point le plus important, et le moins intuitif : c'est le micro
+                 du téléphone qui capte, pas la tablette. Quelqu'un qui parle en
+                 direction de Jean, téléphone baissé le long du corps, n'obtient
+                 rien — et croit que l'outil ne marche pas. -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="20dp"
-                android:text="Parlez normalement, à voix normale, sans crier."
+                android:text="Parlez dans votre téléphone, comme au téléphone : c'est lui qui vous écoute. Voix normale, sans crier."
                 android:textColor="#FFFFFF"
                 android:textSize="22sp" />
         </LinearLayout>

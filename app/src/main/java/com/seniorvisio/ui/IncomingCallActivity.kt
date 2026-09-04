@@ -146,6 +146,13 @@ class IncomingCallActivity : AppCompatActivity() {
             }
         )
 
+        // Écoutée dès maintenant, et non à la connexion : la consigne doit être
+        // connue AVANT que answer() ne crée la piste micro (voir
+        // WebRtcCallEngine.pendingMicMuted), sans quoi le micro de la tablette
+        // émet le temps d'un aller-retour Firestore — assez pour un larsen avec
+        // le téléphone du soignant posé à côté.
+        callEngine.listenForMicMute()
+
         var forceConnectHandled = false
         callEngine.listenForForceConnect {
             runOnUiThread {
@@ -264,7 +271,6 @@ class IncomingCallActivity : AppCompatActivity() {
         localRendererRef = localRenderer
         setupCaptionMode()
         callEngine.listenForRemoteVolumeControl()
-        callEngine.listenForMicMute()
         callEngine.listenForSelfPreviewMode { enabled ->
             runOnUiThread { localRenderer.visibility = if (enabled) View.VISIBLE else View.INVISIBLE }
         }
