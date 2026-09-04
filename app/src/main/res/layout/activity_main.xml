@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-     Écran d'attente (hors appel). Volontairement réduit à l'essentiel : un
-     titre et un gros bouton qui bascule vers la transcription des
-     conversations de la pièce (application Google, voir
+     Écran d'attente (hors appel). Volontairement réduit à l'essentiel : une
+     horloge (voir MainActivity.updateClock) et un gros bouton qui bascule vers
+     la transcription des conversations de la pièce (application Google, voir
      MainActivity.launchRoomTranscription et CompanionApps).
 
      Le bandeau de sous-titres qui vivait ici a disparu avec la
@@ -22,14 +22,35 @@
         android:gravity="center"
         android:padding="32dp">
 
+        <!-- Horloge : seule information réellement utile à Jean sur cet écran,
+             à la place du nom de l'application et du "en attente d'appel" qui
+             s'y trouvaient — ni l'un ni l'autre ne lui servaient à quoi que ce
+             soit, et "en attente" pouvait même laisser croire qu'il avait
+             quelque chose à faire.
+
+             Heure très grande et lisible de loin, date écrite en toutes lettres
+             plutôt qu'en chiffres (03/09 se déchiffre, "mercredi 3 septembre"
+             se lit) : se repérer dans le temps est un besoin quotidien concret
+             quand les journées se ressemblent. -->
         <TextView
-            android:id="@+id/textIdleTitle"
+            android:id="@+id/textClockTime"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Senior Visio\n(en attente d'appel)"
             android:textColor="#FFFFFF"
-            android:textSize="28sp"
-            android:gravity="center" />
+            android:textSize="120sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:text="" />
+
+        <TextView
+            android:id="@+id/textClockDate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="#D6DEEA"
+            android:textSize="36sp"
+            android:gravity="center"
+            android:text="" />
 
         <Button
             android:id="@+id/buttonRoomCaptions"

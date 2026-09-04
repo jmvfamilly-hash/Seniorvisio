@@ -10,6 +10,8 @@ import android.text.InputType
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
@@ -28,6 +30,9 @@ import com.seniorvisio.core.CompanionApps
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.signaling.CallSignalingClient
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * Écran affiché quand aucun appel n'est en cours. Volontairement épuré pour
@@ -51,9 +56,30 @@ class MainActivity : AppCompatActivity() {
 
     private val adminConfig by lazy { AdminConfig(this) }
 
+    private lateinit var textClockTime: TextView
+    private lateinit var textClockDate: TextView
+    private val clockHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Recalé sur la minute suivante à chaque tour plutôt qu'un rafraîchissement
+     * toutes les secondes : l'affichage change pile à l'heure, sans réveiller
+     * inutilement le processeur 59 fois par minute sur une tablette allumée en
+     * permanence.
+     */
+    private val clockTicker = object : Runnable {
+        override fun run() {
+            updateClock()
+            clockHandler.postDelayed(this, 60_000L - (System.currentTimeMillis() % 60_000L))
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        textClockTime = findViewById(R.id.textClockTime)
+        textClockDate = findViewById(R.id.textClockDate)
+        updateClock()
 
         val textBuildRev = findViewById<TextView>(R.id.textBuildRev)
         textBuildRev.text = BuildConfig.BUILD_REV
@@ -101,6 +127,29 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         KioskManager.startIfDeviceOwner(this, MainActivity::class.java)
+        // Relancée ici plutôt qu'une seule fois au démarrage : la tablette peut
+        // rester des heures écran éteint, l'heure doit être juste dès qu'elle
+        // se rallume, pas à la minute suivante.
+        clockHandler.removeCallbacks(clockTicker)
+        clockHandler.post(clockTicker)
+    }
+
+    /** Inutile de faire tourner l'horloge quand l'écran ne l'affiche pas. */
+    override fun onPause() {
+        super.onPause()
+        clockHandler.removeCallbacks(clockTicker)
+    }
+
+    /**
+     * Heure en grand, date en toutes lettres ("Mercredi 3 septembre 2026")
+     * plutôt qu'en chiffres : plus long à écrire, mais immédiatement lisible
+     * sans avoir à déchiffrer un format.
+     */
+    private fun updateClock() {
+        val now = LocalDateTime.now()
+        textClockTime.text = now.format(TIME_FORMAT)
+        textClockDate.text = now.format(DATE_FORMAT)
+            .replaceFirstChar { it.titlecase(Locale.FRENCH) }
     }
 
     /**
@@ -220,5 +269,8 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+
+        private val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm", Locale.FRENCH)
+        private val DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.FRENCH)
     }
 }
