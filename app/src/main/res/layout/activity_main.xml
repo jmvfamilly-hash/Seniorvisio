@@ -52,18 +52,105 @@
             android:gravity="center"
             android:text="" />
 
-        <Button
-            android:id="@+id/buttonRoomCaptions"
+        <!-- Zone réservée aux deux services accessibles depuis l'accueil. Deux
+             cartes de même taille, côte à côte : à gauche ce que Jean déclenche
+             lui-même (les sous-titres de la pièce), à droite ce qu'un visiteur
+             déclenche pour lui (le QR code du soignant). Volontairement
+             surdimensionnées — une cible tactile large et contrastée est ce qui
+             distingue un écran utilisable d'un écran théoriquement utilisable. -->
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="40dp"
-            android:text="🔤 Sous-titres"
-            android:textSize="24sp"
-            android:paddingLeft="40dp"
-            android:paddingRight="40dp"
-            android:paddingTop="20dp"
-            android:paddingBottom="20dp"
-            android:backgroundTint="#2ECC71" />
+            android:layout_marginTop="48dp"
+            android:orientation="horizontal">
+
+            <!-- Sous-titres de la pièce : bascule vers l'application Google
+                 (voir MainActivity.launchRoomTranscription). Le libellé dit ce
+                 que ça fait, pas comment ça s'appelle : "Transcription
+                 instantanée" ne veut rien dire pour Jean, "voir ce qui se dit"
+                 si. Le retour d'appui est explicite (voir onClick). -->
+            <LinearLayout
+                android:id="@+id/cardRoomCaptions"
+                android:layout_width="340dp"
+                android:layout_height="300dp"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="@drawable/home_card_bg"
+                android:padding="24dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="👂"
+                    android:textSize="86sp" />
+
+                <TextView
+                    android:id="@+id/textRoomCaptionsLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Voir ce qui se dit"
+                    android:textColor="#FFFFFF"
+                    android:textSize="30sp"
+                    android:textStyle="bold"
+                    android:gravity="center" />
+
+                <TextView
+                    android:id="@+id/textRoomCaptionsHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/room_captions_hint"
+                    android:textColor="#AEBBD0"
+                    android:textSize="18sp"
+                    android:gravity="center" />
+            </LinearLayout>
+
+            <!-- QR code à faire scanner par un soignant/visiteur présent dans
+                 la pièce : son téléphone devient un micro qui écrit en grand
+                 sur cette tablette (voir MainActivity.buildCaregiverQrCode).
+                 Appuyer dessus explique la fonction à celui qui la découvre. -->
+            <LinearLayout
+                android:id="@+id/cardCaregiverQr"
+                android:layout_width="340dp"
+                android:layout_height="300dp"
+                android:layout_marginStart="32dp"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="@drawable/home_card_bg"
+                android:padding="24dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/imageCaregiverQr"
+                    android:layout_width="150dp"
+                    android:layout_height="150dp"
+                    android:contentDescription="QR code à scanner pour parler à Jean" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Vous êtes avec Jean&#160;?"
+                    android:textColor="#FFFFFF"
+                    android:textSize="26sp"
+                    android:textStyle="bold"
+                    android:gravity="center" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Scannez : il lira vos paroles"
+                    android:textColor="#AEBBD0"
+                    android:textSize="18sp"
+                    android:gravity="center" />
+            </LinearLayout>
+
+        </LinearLayout>
 
     </LinearLayout>
 

@@ -351,3 +351,43 @@ body.video-mode #fullscreenCaptionBanner:not(.hidden) {
   text-align: center;
   margin: -12px 0 20px;
 }
+
+/* ---- Mode soignant (?soignant=1, ouvert en scannant le QR code de la
+   tablette) --------------------------------------------------------------
+   Quelqu'un qui est debout dans une chambre, souvent pressé, et qui découvre
+   l'outil : tout ce qui n'est pas "parler" et "terminer" est du bruit. On
+   masque donc par la feuille de style tout ce que le mode normal propose —
+   identité, dépannage, réglages, vidéo — sans dupliquer de page ni de code. */
+.caregiver-mode #identityPanel,
+.caregiver-mode .side-panel,
+.caregiver-mode #toggleViewButton,
+.caregiver-mode #callStats,
+.caregiver-mode #remoteVideo,
+.caregiver-mode #localVideo,
+.caregiver-mode #fullscreenCaptionBanner,
+.caregiver-mode #forceConnectButton {
+  display: none !important;
+}
+
+/* Ne laisse que le miroir de transcription parmi les réglages d'appel : c'est
+   le seul retour qui confirme au soignant que sa voix est bien captée. */
+.caregiver-mode #connectedControls > *:not(.transcript-mirror) {
+  display: none !important;
+}
+
+.caregiver-mode .transcript-mirror {
+  margin-top: 0;
+}
+
+/* Texte transcrit nettement plus gros qu'en mode normal : il est lu en
+   diagonale, à bout de bras, pendant qu'on parle. */
+.caregiver-mode .transcript-current {
+  font-size: 22px;
+  line-height: 1.4;
+}
+
+.caregiver-mode #callButton,
+.caregiver-mode #hangupButton {
+  font-size: 22px;
+  padding: 22px;
+}

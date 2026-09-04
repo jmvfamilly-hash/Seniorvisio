@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.text.InputType
 import android.net.Uri
 import android.os.Build
@@ -15,13 +17,16 @@ import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
-import android.widget.Button
+import android.view.View
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
 import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.admin.AdminSettingsActivity
@@ -88,15 +93,20 @@ class MainActivity : AppCompatActivity() {
         // accéder (Réglages système bloqués), voir KioskManager.
         textBuildRev.setOnLongClickListener { promptAdminPin(); true }
 
-        val buttonRoomCaptions = findViewById<Button>(R.id.buttonRoomCaptions)
-        buttonRoomCaptions.setOnClickListener { launchRoomTranscription() }
+        val cardRoomCaptions = findViewById<View>(R.id.cardRoomCaptions)
+        cardRoomCaptions.setOnClickListener { launchRoomTranscription() }
         // Appui long : labo d'étude comparant les moteurs de transcription
         // (voir TranscriptionLabActivity), sans toucher à l'usage normal du
         // bouton (appui simple, inchangé).
-        buttonRoomCaptions.setOnLongClickListener {
+        cardRoomCaptions.setOnLongClickListener {
             startActivity(Intent(this, TranscriptionLabActivity::class.java))
             true
         }
+
+        // Touché plutôt que scanné : c'est le geste naturel de quelqu'un qui
+        // découvre un code sans savoir à quoi il sert. On lui explique.
+        findViewById<View>(R.id.cardCaregiverQr).setOnClickListener { showCaregiverHelp() }
+        showCaregiverQrCode()
 
         permissionLauncher.launch(
             arrayOf(
@@ -132,6 +142,10 @@ class MainActivity : AppCompatActivity() {
         // se rallume, pas à la minute suivante.
         clockHandler.removeCallbacks(clockTicker)
         clockHandler.post(clockTicker)
+        // Remet le libellé d'origine après un "Ouverture…" ou un échec : au
+        // retour de la transcription, la carte doit réinviter à l'utiliser.
+        findViewById<TextView>(R.id.textRoomCaptionsHint).text =
+            getString(R.string.room_captions_hint)
     }
 
     /** Inutile de faire tourner l'horloge quand l'écran ne l'affiche pas. */
@@ -161,23 +175,81 @@ class MainActivity : AppCompatActivity() {
      * Le message d'erreur nomme l'application plutôt que le paquet : c'est un
      * intervenant sur place qui le lira, pas Jean.
      */
+    /**
+     * Génère et affiche le QR code que scanne un soignant présent dans la
+     * pièce. Généré à la volée plutôt que stocké en image : l'adresse peut
+     * changer (déploiement du PWA ailleurs) sans avoir à refabriquer un
+     * fichier, et rien ne peut se désynchroniser entre l'image et l'adresse
+     * réelle.
+     *
+     * Dessiné en noir sur blanc et non aux couleurs de l'écran : les
+     * applications d'appareil photo reconnaissent nettement mieux un QR code
+     * franchement contrasté, surtout photographié de biais dans une chambre
+     * mal éclairée.
+     */
+    private fun showCaregiverQrCode() {
+        val imageQr = findViewById<ImageView>(R.id.imageCaregiverQr)
+        try {
+            val size = 480
+            val matrix = QRCodeWriter().encode(CAREGIVER_URL, BarcodeFormat.QR_CODE, size, size)
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
+            for (x in 0 until size) {
+                for (y in 0 until size) {
+                    bitmap.setPixel(x, y, if (matrix.get(x, y)) Color.BLACK else Color.WHITE)
+                }
+            }
+            imageQr.setImageBitmap(bitmap)
+        } catch (e: Exception) {
+            // Un QR code illisible vaut mieux qu'un écran d'accueil qui plante :
+            // le reste (horloge, sous-titres) doit rester utilisable.
+            Log.e(TAG, "Génération du QR code soignant impossible", e)
+        }
+    }
+
+    /**
+     * Explique la fonction à qui touche le QR code sans savoir ce que c'est —
+     * cas le plus probable pour un soignant qui entre dans la chambre. Trois
+     * étapes imagées (voir dialog_caregiver_help.xml) plutôt qu'un texte à
+     * lire debout.
+     */
+    private fun showCaregiverHelp() {
+        val content = layoutInflater.inflate(R.layout.dialog_caregiver_help, null)
+        AlertDialog.Builder(this)
+            .setView(content)
+            .setPositiveButton("J'ai compris", null)
+            .show()
+    }
+
     private fun launchRoomTranscription() {
+        // Retour d'appui explicite : basculer vers une autre application prend
+        // un instant pendant lequel il ne se passe visiblement rien. Sans ce
+        // message, Jean appuie une deuxième fois en croyant avoir raté le
+        // bouton — constaté comme réflexe courant sur ce type d'écran.
+        findViewById<TextView>(R.id.textRoomCaptionsHint).text = "Ouverture…"
+
         val launchIntent = resolveTranscriptionIntent()
         if (launchIntent == null) {
             Log.w(TAG, "Aucun écran lançable trouvé pour ${CompanionApps.TRANSCRIPTION}")
-            Toast.makeText(
-                this,
-                "Impossible d'ouvrir Transcription instantanée sur cette tablette",
-                Toast.LENGTH_LONG
-            ).show()
+            showRoomCaptionsFailure()
             return
         }
         try {
             startActivity(launchIntent)
         } catch (e: ActivityNotFoundException) {
             Log.w(TAG, "Lancement de la transcription refusé", e)
-            Toast.makeText(this, "Impossible d'ouvrir Transcription instantanée", Toast.LENGTH_LONG).show()
+            showRoomCaptionsFailure()
         }
+    }
+
+    /**
+     * Échec du lancement affiché sur la carte elle-même, en plus du message
+     * fugace : un toast disparaît en trois secondes et laisse Jean devant un
+     * bouton qui a l'air de ne rien faire. Le texte revient à la normale au
+     * retour sur cet écran (voir onResume).
+     */
+    private fun showRoomCaptionsFailure() {
+        findViewById<TextView>(R.id.textRoomCaptionsHint).text = "Indisponible pour l'instant"
+        Toast.makeText(this, "Impossible d'ouvrir la transcription sur cette tablette", Toast.LENGTH_LONG).show()
     }
 
     /**
@@ -269,6 +341,14 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+
+        /**
+         * Adresse encodée dans le QR code de l'écran d'accueil. Le paramètre
+         * `soignant` fait ouvrir le PWA dans son mode simplifié : connexion
+         * immédiate sans décompte ni photo, son de la tablette coupé,
+         * sous-titres activés d'office (voir web-caller/app.js).
+         */
+        private const val CAREGIVER_URL = "https://jmvfamilly-hash.github.io/Seniorvisio/?soignant=1"
 
         private val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm", Locale.FRENCH)
         private val DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.FRENCH)

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Fond des deux grandes cartes de l'écran d'accueil (sous-titres et QR code
+     soignant). Bord clair volontairement visible : sur une dalle sombre, une
+     zone tactile sans contour ne se distingue pas du fond, et Jean ne devine
+     pas qu'il peut appuyer dessus.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#263A5F" />
+    <corners android:radius="24dp" />
+    <stroke android:width="2dp" android:color="#3E5680" />
+</shape>
