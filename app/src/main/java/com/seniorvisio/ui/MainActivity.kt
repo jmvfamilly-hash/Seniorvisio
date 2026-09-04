@@ -61,20 +61,22 @@ class MainActivity : AppCompatActivity() {
 
     private val adminConfig by lazy { AdminConfig(this) }
 
-    private lateinit var textClockTime: TextView
+    private lateinit var textMomentIcon: TextView
+    private lateinit var textMomentLabel: TextView
     private lateinit var textClockDate: TextView
     private val clockHandler = Handler(Looper.getMainLooper())
 
     /**
-     * Recalé sur la minute suivante à chaque tour plutôt qu'un rafraîchissement
-     * toutes les secondes : l'affichage change pile à l'heure, sans réveiller
-     * inutilement le processeur 59 fois par minute sur une tablette allumée en
-     * permanence.
+     * Recalé sur le quart d'heure suivant à chaque tour, pas chaque minute :
+     * le moment de la journée (matin/après-midi/soir/nuit) ne change que
+     * quelques fois par jour, inutile de réveiller le processeur plus souvent
+     * sur une tablette allumée en permanence.
      */
     private val clockTicker = object : Runnable {
         override fun run() {
             updateClock()
-            clockHandler.postDelayed(this, 60_000L - (System.currentTimeMillis() % 60_000L))
+            val quarterHourMs = 15 * 60_000L
+            clockHandler.postDelayed(this, quarterHourMs - (System.currentTimeMillis() % quarterHourMs))
         }
     }
 
@@ -82,7 +84,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        textClockTime = findViewById(R.id.textClockTime)
+        textMomentIcon = findViewById(R.id.textMomentIcon)
+        textMomentLabel = findViewById(R.id.textMomentLabel)
         textClockDate = findViewById(R.id.textClockDate)
         updateClock()
 
@@ -138,8 +141,8 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         KioskManager.startIfDeviceOwner(this, MainActivity::class.java)
         // Relancée ici plutôt qu'une seule fois au démarrage : la tablette peut
-        // rester des heures écran éteint, l'heure doit être juste dès qu'elle
-        // se rallume, pas à la minute suivante.
+        // rester des heures écran éteint, le repère temporel doit être juste
+        // dès qu'elle se rallume, pas au prochain quart d'heure.
         clockHandler.removeCallbacks(clockTicker)
         clockHandler.post(clockTicker)
         // Remet le libellé d'origine après un "Ouverture…" ou un échec : au
@@ -155,15 +158,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Heure en grand, date en toutes lettres ("Mercredi 3 septembre 2026")
-     * plutôt qu'en chiffres : plus long à écrire, mais immédiatement lisible
-     * sans avoir à déchiffrer un format.
+     * Pictogramme + mot ("🌤️ Après-midi") à la place d'une heure exacte : se
+     * reconnaît d'un coup d'œil, là où "14:35" demande de déchiffrer deux
+     * nombres. Ce qui compte au quotidien, c'est de savoir où on en est dans
+     * la journée, pas l'heure à la minute près. Date en toutes lettres
+     * ("Mercredi 3 septembre 2026") plutôt qu'en chiffres, pour la même
+     * raison : plus long à écrire, immédiatement lisible.
      */
     private fun updateClock() {
         val now = LocalDateTime.now()
-        textClockTime.text = now.format(TIME_FORMAT)
+        val moment = momentOfDay(now.hour)
+        textMomentIcon.text = moment.icon
+        textMomentLabel.text = moment.label
         textClockDate.text = now.format(DATE_FORMAT)
             .replaceFirstChar { it.titlecase(Locale.FRENCH) }
+    }
+
+    private enum class MomentOfDay(val icon: String, val label: String) {
+        MATIN("🌅", "Matin"),
+        APRES_MIDI("🌤️", "Après-midi"),
+        SOIR("🌇", "Soir"),
+        NUIT("🌙", "Nuit"),
+    }
+
+    /**
+     * Bornes rondes plutôt que calées sur le lever/coucher du soleil réel : pas
+     * de dépendance à la position géographique ni à la saison pour un repère
+     * qui doit rester simple et prévisible d'un jour à l'autre.
+     */
+    private fun momentOfDay(hour: Int): MomentOfDay = when (hour) {
+        in 5..11 -> MomentOfDay.MATIN
+        in 12..17 -> MomentOfDay.APRES_MIDI
+        in 18..21 -> MomentOfDay.SOIR
+        else -> MomentOfDay.NUIT
     }
 
     /**
@@ -350,7 +377,6 @@ class MainActivity : AppCompatActivity() {
          */
         private const val CAREGIVER_URL = "https://jmvfamilly-hash.github.io/Seniorvisio/?soignant=1"
 
-        private val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm", Locale.FRENCH)
         private val DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.FRENCH)
     }
 }
