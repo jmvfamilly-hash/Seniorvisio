@@ -33,6 +33,8 @@ import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.CompanionApps
 import com.seniorvisio.core.KioskManager
+import com.seniorvisio.core.TimeContext
+import com.seniorvisio.core.WeatherClient
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.signaling.CallSignalingClient
 import java.time.LocalDateTime
@@ -63,8 +65,12 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var textMomentIcon: TextView
     private lateinit var textMomentLabel: TextView
+    private lateinit var textMomentWeatherSeparator: TextView
+    private lateinit var textWeatherIcon: TextView
+    private lateinit var textWeatherLabel: TextView
     private lateinit var textClockDate: TextView
     private val clockHandler = Handler(Looper.getMainLooper())
+    private val weatherClient by lazy { WeatherClient(this) }
 
     /**
      * Recalé sur le quart d'heure suivant à chaque tour, pas chaque minute :
@@ -86,6 +92,9 @@ class MainActivity : AppCompatActivity() {
 
         textMomentIcon = findViewById(R.id.textMomentIcon)
         textMomentLabel = findViewById(R.id.textMomentLabel)
+        textMomentWeatherSeparator = findViewById(R.id.textMomentWeatherSeparator)
+        textWeatherIcon = findViewById(R.id.textWeatherIcon)
+        textWeatherLabel = findViewById(R.id.textWeatherLabel)
         textClockDate = findViewById(R.id.textClockDate)
         updateClock()
 
@@ -164,33 +173,29 @@ class MainActivity : AppCompatActivity() {
      * la journée, pas l'heure à la minute près. Date en toutes lettres
      * ("Mercredi 3 septembre 2026") plutôt qu'en chiffres, pour la même
      * raison : plus long à écrire, immédiatement lisible.
+     *
+     * La météo (voir WeatherClient) est demandée à chaque tour mais ne fait
+     * un vrai appel réseau qu'une fois par heure (cache interne) : rien à
+     * gérer de spécial ici, juste rappeler la fonction régulièrement.
      */
     private fun updateClock() {
         val now = LocalDateTime.now()
-        val moment = momentOfDay(now.hour)
+        val moment = TimeContext.momentOfDay(now.hour)
         textMomentIcon.text = moment.icon
         textMomentLabel.text = moment.label
         textClockDate.text = now.format(DATE_FORMAT)
             .replaceFirstChar { it.titlecase(Locale.FRENCH) }
-    }
 
-    private enum class MomentOfDay(val icon: String, val label: String) {
-        MATIN("🌅", "Matin"),
-        APRES_MIDI("🌤️", "Après-midi"),
-        SOIR("🌇", "Soir"),
-        NUIT("🌙", "Nuit"),
-    }
-
-    /**
-     * Bornes rondes plutôt que calées sur le lever/coucher du soleil réel : pas
-     * de dépendance à la position géographique ni à la saison pour un repère
-     * qui doit rester simple et prévisible d'un jour à l'autre.
-     */
-    private fun momentOfDay(hour: Int): MomentOfDay = when (hour) {
-        in 5..11 -> MomentOfDay.MATIN
-        in 12..17 -> MomentOfDay.APRES_MIDI
-        in 18..21 -> MomentOfDay.SOIR
-        else -> MomentOfDay.NUIT
+        weatherClient.fetchWeather { weather ->
+            val visibility = if (weather == null) View.GONE else View.VISIBLE
+            textMomentWeatherSeparator.visibility = visibility
+            textWeatherIcon.visibility = visibility
+            textWeatherLabel.visibility = visibility
+            if (weather != null) {
+                textWeatherIcon.text = weather.icon
+                textWeatherLabel.text = weather.label
+            }
+        }
     }
 
     /**

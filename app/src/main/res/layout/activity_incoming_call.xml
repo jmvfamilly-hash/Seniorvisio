@@ -85,6 +85,72 @@
             android:textSize="18sp"
             android:gravity="center" />
 
+        <!-- Même repère temporel que l'écran d'accueil (voir MainActivity et
+             TimeContext/WeatherClient), en plus discret ici : le nom de
+             l'appelant et le décompte restent l'essentiel de cet écran. -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/textCallMomentIcon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="28sp"
+                android:text="" />
+
+            <TextView
+                android:id="@+id/textCallMomentLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="#CCCCCC"
+                android:textSize="16sp"
+                android:text="" />
+
+            <TextView
+                android:id="@+id/textCallMomentWeatherSeparator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:textColor="#666666"
+                android:textSize="16sp"
+                android:visibility="gone"
+                android:text="·" />
+
+            <TextView
+                android:id="@+id/textCallWeatherIcon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:textSize="28sp"
+                android:visibility="gone"
+                android:text="" />
+
+            <TextView
+                android:id="@+id/textCallWeatherLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="#CCCCCC"
+                android:textSize="16sp"
+                android:visibility="gone"
+                android:text="" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/textCallDate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="#888888"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:text="" />
+
     </LinearLayout>
 
     <!-- Sous-titres en surimpression (style sous-titrage TV) : la vidéo reste

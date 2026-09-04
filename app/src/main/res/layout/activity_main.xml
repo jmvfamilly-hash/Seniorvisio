@@ -34,7 +34,12 @@
              au quotidien, c'est de savoir où on en est dans la journée, pas
              l'heure à la minute près (voir MainActivity.updateClock). Date en
              toutes lettres en dessous, plus discrète (03/09 se déchiffre,
-             "mercredi 3 septembre" se lit). -->
+             "mercredi 3 septembre" se lit).
+
+             Météo dans la même ligne, séparée par un point : un second
+             pictogramme+mot sans température ni détail (voir WeatherClient) —
+             masqué tant qu'aucune clé API n'est configurée côté admin, pas
+             d'erreur affichée à Jean dans ce cas. -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -56,6 +61,36 @@
                 android:textColor="#FFFFFF"
                 android:textSize="34sp"
                 android:textStyle="bold"
+                android:text="" />
+
+            <TextView
+                android:id="@+id/textMomentWeatherSeparator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:textColor="#5A6C8A"
+                android:textSize="34sp"
+                android:visibility="gone"
+                android:text="·" />
+
+            <TextView
+                android:id="@+id/textWeatherIcon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:textSize="56sp"
+                android:visibility="gone"
+                android:text="" />
+
+            <TextView
+                android:id="@+id/textWeatherLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:textColor="#FFFFFF"
+                android:textSize="34sp"
+                android:textStyle="bold"
+                android:visibility="gone"
                 android:text="" />
         </LinearLayout>
 

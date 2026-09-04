@@ -70,10 +70,14 @@ class AdminSettingsActivity : AppCompatActivity() {
         val buttonSave = findViewById<Button>(R.id.buttonSaveAdminSettings)
 
         val inputAssemblyAiKey = findViewById<EditText>(R.id.inputAssemblyAiKey)
+        val inputWeatherApiKey = findViewById<EditText>(R.id.inputWeatherApiKey)
+        val inputWeatherLocation = findViewById<EditText>(R.id.inputWeatherLocation)
 
         inputCountdown.setText(adminConfig.countdownSeconds.toString())
         inputPin.setText(adminConfig.adminPin)
         inputAssemblyAiKey.setText(adminConfig.assemblyAiApiKey)
+        inputWeatherApiKey.setText(adminConfig.weatherApiKey)
+        inputWeatherLocation.setText(adminConfig.weatherLocation)
 
         buttonSave.setOnClickListener {
             val seconds = inputCountdown.text.toString().toIntOrNull()
@@ -84,6 +88,8 @@ class AdminSettingsActivity : AppCompatActivity() {
             adminConfig.countdownSeconds = seconds
             adminConfig.adminPin = inputPin.text.toString().ifBlank { adminConfig.adminPin }
             adminConfig.assemblyAiApiKey = inputAssemblyAiKey.text.toString().trim()
+            adminConfig.weatherApiKey = inputWeatherApiKey.text.toString().trim()
+            adminConfig.weatherLocation = inputWeatherLocation.text.toString().trim()
             Toast.makeText(this, "Réglages enregistrés", Toast.LENGTH_SHORT).show()
             finish()
         }
@@ -139,10 +145,15 @@ class AdminSettingsActivity : AppCompatActivity() {
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             )
+            inputWeatherApiKey.inputType = plainOrPassword(
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            )
             // setInputType ramène sinon le curseur au tout début du champ.
             inputPin.setSelection(inputPin.text.length)
             inputWifiPassword.setSelection(inputWifiPassword.text.length)
             inputAssemblyAiKey.setSelection(inputAssemblyAiKey.text.length)
+            inputWeatherApiKey.setSelection(inputWeatherApiKey.text.length)
         }
     }
 
