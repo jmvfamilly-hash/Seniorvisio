@@ -463,3 +463,28 @@ body.video-mode #fullscreenCaptionBanner:not(.hidden) {
   font-size: 22px;
   padding: 22px;
 }
+
+/* Consignes réservées au mode soignant : masquées partout ailleurs, sans avoir
+   à dupliquer une page dédiée. */
+.caregiver-only {
+  display: none;
+}
+
+.caregiver-mode .caregiver-only {
+  display: block;
+}
+
+/* Encadré franc : c'est la consigne qui décide du succès ou de l'échec de la
+   fonction (parler dans le téléphone, pas vers la personne). Elle doit sauter
+   aux yeux avant le bouton, pas se fondre dans le reste. */
+.caregiver-hint {
+  margin: 0 0 20px;
+  padding: 16px;
+  border-radius: 10px;
+  background: #23344F;
+  border: 1px solid #3E5680;
+  color: #E8EDF5;
+  font-size: 17px;
+  line-height: 1.45;
+  text-align: left;
+}

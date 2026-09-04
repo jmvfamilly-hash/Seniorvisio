@@ -72,6 +72,15 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var connectionLostCb: (() -> Unit)? = null
     private val autoHangupHandler = Handler(Looper.getMainLooper())
     private var autoHangupRunnable: Runnable? = null
+    /**
+     * Consigne de coupure du micro reçue avant même que la piste audio existe
+     * (le mode soignant l'écrit dès la création de l'appel, voir
+     * web-caller/app.js). Sans ce report, la piste était créée active dans
+     * answer() puis coupée quelques centaines de millisecondes plus tard, à
+     * l'arrivée de l'instantané Firestore : assez pour un bref larsen quand le
+     * téléphone du soignant est à quelques centimètres de la tablette.
+     */
+    private var pendingMicMuted: Boolean = false
     private var pendingVolume: Double = 1.0
     private var currentVolume: Double = 1.0
     private var volumeRampRunnable: Runnable? = null
@@ -256,6 +265,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     fun listenForMicMute() {
         val id = callId ?: return
         micMuteListener = signaling.listenForMicMute(id) { muted ->
+            pendingMicMuted = muted
+            // Mémorisé même quand la piste n'existe pas encore : startLocalMedia
+            // l'appliquera à sa création (voir pendingMicMuted).
             localAudioTrack?.setEnabled(!muted)
         }
     }
@@ -514,6 +526,10 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
         val audioTrack = factory.createAudioTrack("SVIO_AUDIO", factory.createAudioSource(MediaConstraints()))
         localAudioTrack = audioTrack
+        // Coupé avant même d'être ajouté à la connexion si la consigne est déjà
+        // arrivée (mode soignant) : rien ne doit sortir du micro de la tablette,
+        // pas même le temps d'un instantané Firestore.
+        audioTrack.setEnabled(!pendingMicMuted)
 
         pc.addTrack(videoTrack, listOf("SVIO_STREAM"))
         pc.addTrack(audioTrack, listOf("SVIO_STREAM"))

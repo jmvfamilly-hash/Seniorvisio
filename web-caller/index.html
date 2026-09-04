@@ -20,6 +20,12 @@
     <p class="pwa-version" id="pwaVersion"></p>
 
     <div id="stateIdle" class="state">
+      <!-- Mode soignant uniquement (voir app.js) : le point le moins intuitif
+           de la fonction, à dire avant même de commencer. Quelqu'un qui parle
+           en direction de Jean, téléphone baissé, n'obtient rien et croit que
+           l'outil ne marche pas. -->
+      <p class="caregiver-only caregiver-hint" id="caregiverIdleHint"></p>
+
       <button id="callButton">📹 Démarrer l'appel</button>
 
       <!-- Identité de l'appelant, mémorisée dans ce navigateur uniquement :
@@ -169,6 +175,10 @@
         </div>
 
         <button id="rememberSettingsButton" class="secondary">💾 Mémoriser ces réglages pour la prochaine fois</button>
+
+        <!-- Rappelée pendant l'appel, pas seulement avant : le réflexe de
+             baisser le téléphone pour parler à la personne revient vite. -->
+        <p class="caregiver-only caregiver-hint" id="caregiverCallHint"></p>
 
         <div class="transcript-mirror">
           <p class="transcript-hint">Ce que Jean va voir :</p>
