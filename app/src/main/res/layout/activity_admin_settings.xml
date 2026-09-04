@@ -193,5 +193,42 @@
         android:layout_height="wrap_content"
         android:inputType="textPassword" />
 
+    <!-- Pictogramme météo de l'écran d'accueil et de l'écran d'appel (voir
+         WeatherClient) : une clé et une ville suffisent, gratuit jusqu'à
+         1000 appels/jour sur OpenWeatherMap. Laisser vide désactive
+         simplement le pictogramme, sans erreur affichée à Jean. -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="40dp"
+        android:text="Météo (écran d'accueil)"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Clé API OpenWeatherMap (openweathermap.org, gratuit)"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/inputWeatherApiKey"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textPassword" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Ville (ex : Pau,FR)"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/inputWeatherLocation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
 </LinearLayout>
 </ScrollView>

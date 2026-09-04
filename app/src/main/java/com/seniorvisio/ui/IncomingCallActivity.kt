@@ -28,10 +28,15 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.KioskManager
+import com.seniorvisio.core.TimeContext
+import com.seniorvisio.core.WeatherClient
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.service.IncomingCallService
 import com.seniorvisio.service.TimedCallAlertController
 import org.webrtc.SurfaceViewRenderer
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
@@ -119,8 +124,18 @@ class IncomingCallActivity : AppCompatActivity() {
         val countdownFill = findViewById<View>(R.id.countdownProgressFill)
         buttonBlock = findViewById(R.id.buttonBlock)
 
-        textCallerName.text = "On vous appelle"
+        // Prénom renseigné côté PWA (panneau "Qui appelle ?") affiché quand il
+        // existe, plutôt qu'un générique systématique : "Marie vous appelle"
+        // aide Jean à savoir qui va apparaître avant même la connexion. "Un
+        // proche" est la valeur de repli du PWA quand rien n'est renseigné —
+        // seul cas où le message reste générique.
+        textCallerName.text = if (callerName.equals("un proche", ignoreCase = true)) {
+            "On vous appelle"
+        } else {
+            "$callerName vous appelle"
+        }
         showCallerPhoto(intent.getStringExtra(EXTRA_CALLER_PHOTO_PATH))
+        updateTimeContext()
 
         countdownFill.pivotX = 0f
         countdownFill.scaleX = 0f
@@ -300,6 +315,34 @@ class IncomingCallActivity : AppCompatActivity() {
                 imageSlideshow.visibility = View.VISIBLE
             }
         }.start()
+    }
+
+    /**
+     * Même repère temporel que l'écran d'accueil (voir MainActivity,
+     * TimeContext, WeatherClient), demandé pour rester visible aussi pendant
+     * les 30 secondes qui précèdent la connexion — pas seulement en veille.
+     * Une seule fois suffit : contrairement à l'écran d'accueil, cet écran ne
+     * reste jamais affiché assez longtemps pour qu'un rafraîchissement
+     * périodique ait un intérêt.
+     */
+    private fun updateTimeContext() {
+        val now = LocalDateTime.now()
+        val moment = TimeContext.momentOfDay(now.hour)
+        findViewById<TextView>(R.id.textCallMomentIcon).text = moment.icon
+        findViewById<TextView>(R.id.textCallMomentLabel).text = moment.label
+        findViewById<TextView>(R.id.textCallDate).text = now.format(DATE_FORMAT)
+            .replaceFirstChar { it.titlecase(Locale.FRENCH) }
+
+        WeatherClient(this).fetchWeather { weather ->
+            val visibility = if (weather == null) View.GONE else View.VISIBLE
+            findViewById<View>(R.id.textCallMomentWeatherSeparator).visibility = visibility
+            findViewById<View>(R.id.textCallWeatherIcon).visibility = visibility
+            findViewById<View>(R.id.textCallWeatherLabel).visibility = visibility
+            if (weather != null) {
+                findViewById<TextView>(R.id.textCallWeatherIcon).text = weather.icon
+                findViewById<TextView>(R.id.textCallWeatherLabel).text = weather.label
+            }
+        }
     }
 
     private fun connectVideoCall() {
@@ -657,5 +700,7 @@ class IncomingCallActivity : AppCompatActivity() {
         const val EXTRA_CALL_ID = "extra_call_id"
         const val EXTRA_CALLER_PHOTO_PATH = "extra_caller_photo_path"
         const val EXTRA_SIGNAL_RECEIVED_AT = "extra_signal_received_at"
+
+        private val DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.FRENCH)
     }
 }

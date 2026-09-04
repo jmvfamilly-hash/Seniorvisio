@@ -31,6 +31,12 @@ android {
         // devoir la saisir à la main dans le panneau admin sur la tablette.
         // Reste modifiable là-bas pour une clé différente (voir AdminConfig).
         buildConfigField "String", "ASSEMBLYAI_API_KEY_DEFAULT", "\"${project.findProperty('assemblyAiApiKey') ?: ""}\""
+
+        // Même repli pour la météo (voir WeatherClient, AdminConfig) : clé
+        // OpenWeatherMap injectée depuis le secret GitHub WEATHER_API_KEY,
+        // absente par défaut (chaîne vide) tant qu'aucun secret n'est
+        // configuré — le pictogramme météo reste alors simplement invisible.
+        buildConfigField "String", "WEATHER_API_KEY_DEFAULT", "\"${project.findProperty('weatherApiKey') ?: ""}\""
     }
 
     // Sans ça, chaque build CI (VM GitHub Actions neuve à chaque run) signe
