@@ -194,8 +194,9 @@
         android:inputType="textPassword" />
 
     <!-- Pictogramme météo de l'écran d'accueil et de l'écran d'appel (voir
-         WeatherClient) : une clé et une ville suffisent, gratuit jusqu'à
-         1000 appels/jour sur OpenWeatherMap. Laisser vide désactive
+         WeatherClient) : une clé suffit, gratuit jusqu'à 1000 appels/jour sur
+         OpenWeatherMap. La position est obtenue par géolocalisation de la
+         tablette, rien d'autre à saisir. Laisser la clé vide désactive
          simplement le pictogramme, sans erreur affichée à Jean. -->
     <TextView
         android:layout_width="wrap_content"
@@ -217,18 +218,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:inputType="textPassword" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="Ville (ex : Pau,FR)"
-        android:textSize="14sp" />
-
-    <EditText
-        android:id="@+id/inputWeatherLocation"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
 
 </LinearLayout>
 </ScrollView>

@@ -19,7 +19,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:gravity="center"
+        android:gravity="center_horizontal"
         android:padding="32dp">
 
         <!-- Repère temporel : seule information réellement utile à Jean sur cet
@@ -100,21 +100,25 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
             android:textColor="#AEBBD0"
-            android:textSize="22sp"
+            android:textSize="44sp"
             android:gravity="center"
             android:text="" />
 
-        <!-- Zone réservée aux deux services accessibles depuis l'accueil. Deux
-             cartes de même taille, côte à côte : à gauche ce que Jean déclenche
-             lui-même (les sous-titres de la pièce), à droite ce qu'un visiteur
-             déclenche pour lui (le QR code du soignant). Volontairement
-             surdimensionnées — une cible tactile large et contrastée est ce qui
-             distingue un écran utilisable d'un écran théoriquement utilisable. -->
+        <!-- Zone réservée aux deux services accessibles depuis l'accueil,
+             empilés (pas côte à côte) et étirés sur tout l'espace vertical
+             restant (layout_weight) : en portrait, deux cartes fixes de
+             340dp laissaient un grand vide en haut et en bas de l'écran — la
+             tablette est plus haute que large dans cette orientation, autant
+             s'en servir plutôt que de reproduire une disposition pensée pour
+             le paysage. En haut ce que Jean déclenche lui-même (les
+             sous-titres de la pièce), en bas ce qu'un visiteur déclenche
+             pour lui (le QR code du soignant). -->
         <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="48dp"
-            android:orientation="horizontal">
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="32dp"
+            android:orientation="vertical">
 
             <!-- Sous-titres de la pièce : bascule vers l'application Google
                  (voir MainActivity.launchRoomTranscription). Le libellé dit ce
@@ -123,8 +127,9 @@
                  si. Le retour d'appui est explicite (voir onClick). -->
             <LinearLayout
                 android:id="@+id/cardRoomCaptions"
-                android:layout_width="340dp"
-                android:layout_height="300dp"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
                 android:orientation="vertical"
                 android:gravity="center"
                 android:background="@drawable/home_card_bg"
@@ -136,7 +141,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="👂"
-                    android:textSize="86sp" />
+                    android:textSize="100sp" />
 
                 <TextView
                     android:id="@+id/textRoomCaptionsLabel"
@@ -145,7 +150,7 @@
                     android:layout_marginTop="12dp"
                     android:text="Voir ce qui se dit"
                     android:textColor="#FFFFFF"
-                    android:textSize="30sp"
+                    android:textSize="34sp"
                     android:textStyle="bold"
                     android:gravity="center" />
 
@@ -156,7 +161,7 @@
                     android:layout_marginTop="6dp"
                     android:text="@string/room_captions_hint"
                     android:textColor="#AEBBD0"
-                    android:textSize="18sp"
+                    android:textSize="20sp"
                     android:gravity="center" />
             </LinearLayout>
 
@@ -166,9 +171,10 @@
                  Appuyer dessus explique la fonction à celui qui la découvre. -->
             <LinearLayout
                 android:id="@+id/cardCaregiverQr"
-                android:layout_width="340dp"
-                android:layout_height="300dp"
-                android:layout_marginStart="32dp"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:layout_marginTop="24dp"
                 android:orientation="vertical"
                 android:gravity="center"
                 android:background="@drawable/home_card_bg"
@@ -178,8 +184,8 @@
 
                 <ImageView
                     android:id="@+id/imageCaregiverQr"
-                    android:layout_width="150dp"
-                    android:layout_height="150dp"
+                    android:layout_width="180dp"
+                    android:layout_height="180dp"
                     android:contentDescription="QR code à scanner pour parler à Jean" />
 
                 <TextView
@@ -188,7 +194,7 @@
                     android:layout_marginTop="12dp"
                     android:text="Vous êtes avec Jean&#160;?"
                     android:textColor="#FFFFFF"
-                    android:textSize="26sp"
+                    android:textSize="30sp"
                     android:textStyle="bold"
                     android:gravity="center" />
 
@@ -198,7 +204,7 @@
                     android:layout_marginTop="6dp"
                     android:text="Scannez : il lira vos paroles"
                     android:textColor="#AEBBD0"
-                    android:textSize="18sp"
+                    android:textSize="20sp"
                     android:gravity="center" />
             </LinearLayout>
 
