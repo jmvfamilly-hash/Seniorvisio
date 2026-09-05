@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit
 class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
 
     private var webSocket: WebSocket? = null
+    private val pendingAudio = java.io.ByteArrayOutputStream()
     private val client = OkHttpClient.Builder()
         // Connexion longue durée (toute la durée de l'appel) : pas de délai
         // de lecture, sans quoi OkHttp couperait la connexion au premier
@@ -106,20 +107,36 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
      * filtre anti-repliement) : suffisant pour de la parole, à améliorer
      * seulement si la qualité de transcription s'avère insuffisante en usage
      * réel.
+     *
+     * Les blocs reçus de WebRTC sont bien plus courts (souvent ~10ms) que ce
+     * qu'AssemblyAI attend par message (50 à 1000ms, documentation officielle) :
+     * envoyer chaque bloc tel quel produisait une connexion établie mais
+     * aucune transcription en retour côté appel — constaté en test réel, alors
+     * que la pièce (blocs déjà assez grands côté AudioRecord) fonctionnait.
+     * Les blocs sont donc accumulés ici jusqu'à un seuil raisonnable avant
+     * d'être envoyés en un seul message.
      */
     fun sendAudio(pcm16: ByteArray, sourceSampleRate: Int, sourceChannels: Int) {
         val socket = webSocket ?: return
         val converted = resampleToMono16k(pcm16, sourceSampleRate, sourceChannels.coerceAtLeast(1))
+        val chunk = synchronized(pendingAudio) {
+            pendingAudio.write(converted)
+            if (pendingAudio.size() < MIN_CHUNK_BYTES) return
+            val bytes = pendingAudio.toByteArray()
+            pendingAudio.reset()
+            bytes
+        }
         // Trames binaires brutes, pas du JSON/base64 (protocole v3) : l'API
         // v2 précédente encodait l'audio en base64 dans un message texte,
         // ce que v3 n'accepte plus.
-        socket.send(Buffer().write(converted).readByteString())
+        socket.send(Buffer().write(chunk).readByteString())
     }
 
     fun stop() {
         webSocket?.send(JSONObject().put("type", "Terminate").toString())
         webSocket?.close(1000, null)
         webSocket = null
+        synchronized(pendingAudio) { pendingAudio.reset() }
     }
 
     private fun resampleToMono16k(pcm: ByteArray, sourceSampleRate: Int, sourceChannels: Int): ByteArray {
@@ -156,5 +173,10 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
         private const val TAG = "AssemblyAiRealtime"
         private const val REALTIME_URL = "wss://streaming.assemblyai.com/v3/ws"
         private const val TARGET_SAMPLE_RATE_HZ = 16_000
+
+        // 100ms à 16 kHz mono 16 bits (16000 × 2 octets × 0,1s) : dans la
+        // plage 50-1000ms par message documentée par AssemblyAI, et bien
+        // au-dessus des blocs ~10ms typiquement livrés par WebRTC.
+        private const val MIN_CHUNK_BYTES = 3_200
     }
 }
