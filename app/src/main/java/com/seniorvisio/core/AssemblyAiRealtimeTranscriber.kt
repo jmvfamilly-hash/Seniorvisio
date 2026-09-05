@@ -6,7 +6,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import okio.toByteString
+import okio.Buffer
 import org.json.JSONObject
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -113,7 +113,7 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
         // Trames binaires brutes, pas du JSON/base64 (protocole v3) : l'API
         // v2 précédente encodait l'audio en base64 dans un message texte,
         // ce que v3 n'accepte plus.
-        socket.send(converted.toByteString())
+        socket.send(Buffer().write(converted).readByteString())
     }
 
     fun stop() {
