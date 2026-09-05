@@ -250,13 +250,18 @@ video {
   background: var(--jean-zone-bg);
 }
 
+/* Les tailles ci-dessous sont proportionnelles à la largeur de la réplique
+   (cqw), pas en pixels : la vignette fait 300 px de large sur un téléphone et
+   le double sur une tablette, alors qu'elle représente toujours le même
+   écran. Chacune est précédée d'une valeur fixe en pixels, qui reste seule
+   appliquée sur un navigateur trop ancien pour les conteneurs de requête —
+   approximative mais lisible, là où une déclaration ignorée laisserait le
+   texte à la taille par défaut du navigateur. */
 .jean-zone-text p {
   margin: 0;
   color: var(--jean-text);
   font-weight: bold;
-  /* Proportionnel à la largeur de la réplique, pas en pixels : la vignette
-     fait 300 px de large sur un téléphone et le double sur une tablette,
-     alors qu'elle représente toujours le même écran. */
+  font-size: 16px;
   font-size: 4.5cqw;
   line-height: 1.3;
   max-height: 100%;
@@ -267,12 +272,14 @@ video {
   margin: 0;
   color: var(--jean-text);
   font-weight: bold;
+  font-size: 18px;
   font-size: 5cqw;
 }
 
 .jean-info-date {
   margin: 1% 0 0;
   color: var(--jean-text);
+  font-size: 15px;
   font-size: 4cqw;
 }
 
@@ -472,6 +479,7 @@ body.video-mode #localVideo {
    ici, contrairement au mode normal où le proche veut justement juger de la
    place que ça prend chez Jean. */
 .caregiver-mode .jean-zone-text p {
+  font-size: 22px;
   font-size: 6.5cqw;
 }
 
