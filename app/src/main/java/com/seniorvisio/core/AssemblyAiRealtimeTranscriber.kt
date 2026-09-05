@@ -1,12 +1,12 @@
 package com.seniorvisio.core
 
-import android.util.Base64
 import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okio.ByteString
 import org.json.JSONObject
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -26,10 +26,12 @@ import java.util.concurrent.TimeUnit
  * sous-titres sont effectivement activés (voir WebRtcCallEngine.
  * setCaptionsActive), pas en permanence pendant l'appel.
  *
- * Protocole temps réel v2 d'AssemblyAI (stable de longue date) : à vérifier
- * en priorité lors du premier test réel si la connexion échoue, la
- * documentation ayant pu évoluer sans que ce code ait pu être testé contre
- * le service réel avant déploiement.
+ * Protocole "Universal-Streaming" (v3), qui a remplacé l'ancienne API temps
+ * réel v2 (endpoint différent, messages différents — voir le guide de
+ * migration d'AssemblyAI) : la v2 utilisée dans une première version de ce
+ * fichier ne recevait jamais aucune transcription (rien ne s'affichait ni
+ * pour les appels, ni pour la pièce), confirmé en cherchant la documentation
+ * à jour au lieu de deviner davantage.
  */
 class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
 
@@ -52,7 +54,7 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
      */
     fun start(onText: (String, Boolean) -> Unit, onError: (String) -> Unit = {}) {
         val request = Request.Builder()
-            .url("$REALTIME_URL?sample_rate=$TARGET_SAMPLE_RATE_HZ")
+            .url("$REALTIME_URL?sample_rate=$TARGET_SAMPLE_RATE_HZ&encoding=pcm_s16le")
             .addHeader("Authorization", apiKey)
             .build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -63,16 +65,17 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
             override fun onMessage(webSocket: WebSocket, text: String) {
                 try {
                     val json = JSONObject(text)
-                    when (json.optString("message_type")) {
-                        "PartialTranscript" -> {
-                            val transcript = json.optString("text")
-                            if (transcript.isNotBlank()) onText(transcript, false)
+                    when (json.optString("type")) {
+                        // "transcript" ne contient que les mots déjà
+                        // confirmés par le modèle — end_of_turn distingue un
+                        // tour de parole encore en cours (peut être révisé)
+                        // d'un tour définitivement clos.
+                        "Turn" -> {
+                            val transcript = json.optString("transcript")
+                            if (transcript.isNotBlank()) onText(transcript, json.optBoolean("end_of_turn", false))
                         }
-                        "FinalTranscript" -> {
-                            val transcript = json.optString("text")
-                            if (transcript.isNotBlank()) onText(transcript, true)
-                        }
-                        "SessionTerminated" -> Log.i(TAG, "Session AssemblyAI terminée")
+                        "Begin" -> Log.i(TAG, "Session AssemblyAI démarrée : ${json.optString("id")}")
+                        "Termination" -> Log.i(TAG, "Session AssemblyAI terminée")
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Message AssemblyAI illisible : $text", e)
@@ -80,8 +83,9 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.w(TAG, "Connexion AssemblyAI temps réel perdue", t)
-                onError("connexion perdue : ${t.message}")
+                val detail = response?.let { " (HTTP ${it.code})" } ?: ""
+                Log.w(TAG, "Connexion AssemblyAI temps réel perdue$detail", t)
+                onError("connexion perdue$detail : ${t.message}")
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -106,12 +110,14 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
     fun sendAudio(pcm16: ByteArray, sourceSampleRate: Int, sourceChannels: Int) {
         val socket = webSocket ?: return
         val converted = resampleToMono16k(pcm16, sourceSampleRate, sourceChannels.coerceAtLeast(1))
-        val base64Audio = Base64.encodeToString(converted, Base64.NO_WRAP)
-        socket.send(JSONObject().put("audio_data", base64Audio).toString())
+        // Trames binaires brutes, pas du JSON/base64 (protocole v3) : l'API
+        // v2 précédente encodait l'audio en base64 dans un message texte,
+        // ce que v3 n'accepte plus.
+        socket.send(ByteString.of(converted, 0, converted.size))
     }
 
     fun stop() {
-        webSocket?.send(JSONObject().put("terminate_session", true).toString())
+        webSocket?.send(JSONObject().put("type", "Terminate").toString())
         webSocket?.close(1000, null)
         webSocket = null
     }
@@ -148,7 +154,7 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
 
     companion object {
         private const val TAG = "AssemblyAiRealtime"
-        private const val REALTIME_URL = "wss://api.assemblyai.com/v2/realtime/ws"
+        private const val REALTIME_URL = "wss://streaming.assemblyai.com/v3/ws"
         private const val TARGET_SAMPLE_RATE_HZ = 16_000
     }
 }

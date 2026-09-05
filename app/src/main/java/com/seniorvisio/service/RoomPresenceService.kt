@@ -65,6 +65,7 @@ class RoomPresenceService : Service() {
     private var roomTranscriber: AssemblyAiRealtimeTranscriber? = null
     @Volatile private var roomTranscriptionActive = false
     private var roomTranscriptionOnText: ((text: String, isFinal: Boolean) -> Unit)? = null
+    private var roomTranscriptionOnError: ((String) -> Unit)? = null
 
     inner class LocalBinder : Binder() {
         fun getService(): RoomPresenceService = this@RoomPresenceService
@@ -168,10 +169,13 @@ class RoomPresenceService : Service() {
     /**
      * Démarre les sous-titres de la pièce (voir RoomTranscriptionActivity),
      * en réutilisant la capture micro déjà en cours ou en la démarrant si
-     * besoin (ex. réveil au son désactivé, voir startCapture).
+     * besoin (ex. réveil au son désactivé, voir startCapture). onError
+     * remonte un échec de connexion AssemblyAI directement à l'écran, sans
+     * quoi seul le journal système (inaccessible ici) le révélerait.
      */
-    fun startRoomTranscription(onText: (text: String, isFinal: Boolean) -> Unit) {
+    fun startRoomTranscription(onText: (text: String, isFinal: Boolean) -> Unit, onError: (String) -> Unit = {}) {
         roomTranscriptionOnText = onText
+        roomTranscriptionOnError = onError
         roomTranscriptionActive = true
         startCapture()
     }
@@ -180,6 +184,7 @@ class RoomPresenceService : Service() {
     fun stopRoomTranscription() {
         roomTranscriptionActive = false
         roomTranscriptionOnText = null
+        roomTranscriptionOnError = null
         roomTranscriber?.stop()
         roomTranscriber = null
     }
@@ -191,7 +196,10 @@ class RoomPresenceService : Service() {
         if (apiKey.isBlank()) return
         val instance = roomTranscriber ?: AssemblyAiRealtimeTranscriber(apiKey).also {
             roomTranscriber = it
-            it.start(onText) { message -> Log.w(TAG, "AssemblyAI temps réel (pièce) : $message") }
+            it.start(onText) { message ->
+                Log.w(TAG, "AssemblyAI temps réel (pièce) : $message")
+                roomTranscriptionOnError?.invoke(message)
+            }
         }
         val bytes = ByteArray(length * 2)
         val byteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)

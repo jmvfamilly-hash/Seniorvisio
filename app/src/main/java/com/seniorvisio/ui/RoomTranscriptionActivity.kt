@@ -48,7 +48,10 @@ class RoomTranscriptionActivity : AppCompatActivity() {
                 return
             }
             textStatus.text = "En écoute…"
-            bound.startRoomTranscription { text, isFinal -> runOnUiThread { updateTranscript(text, isFinal) } }
+            bound.startRoomTranscription(
+                onText = { text, isFinal -> runOnUiThread { updateTranscript(text, isFinal) } },
+                onError = { message -> runOnUiThread { textStatus.text = "⚠️ $message" } },
+            )
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
