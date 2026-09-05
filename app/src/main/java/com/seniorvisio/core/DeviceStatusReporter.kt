@@ -2,13 +2,11 @@ package com.seniorvisio.core
 
 import android.app.PendingIntent
 import android.app.admin.DevicePolicyManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.BatteryManager
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -17,7 +15,6 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.seniorvisio.BuildConfig
-import com.seniorvisio.admin.SeniorVisioDeviceAdminReceiver
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -97,7 +94,6 @@ class DeviceStatusReporter(private val context: Context) {
             }
             if (snapshot == null) return@addSnapshotListener
             handleRemoteUpdate(snapshot)
-            handleTranscriptionReset(snapshot)
         }
     }
 
@@ -107,64 +103,6 @@ class DeviceStatusReporter(private val context: Context) {
         if (requestedVersion == BuildConfig.BUILD_REV) return
         Log.i(TAG, "Mise à jour à distance détectée : $requestedVersion (version actuelle ${BuildConfig.BUILD_REV})")
         installUpdate(apkUrl)
-    }
-
-    /**
-     * Réinitialise l'application de transcription sur demande d'un proche
-     * depuis le PWA. Seul moyen de réparer à distance un réglage déréglé dans
-     * une application tierce : son interface échappe à Senior Visio, et rien
-     * ne permet d'y imposer une configuration depuis l'extérieur. L'appareil
-     * repart donc sur les valeurs par défaut de Google — ce qui efface au
-     * passage les transcriptions qu'elle conserve.
-     *
-     * La demande porte un horodatage plutôt qu'un booléen : sans ça, il
-     * faudrait remettre le champ à false après chaque exécution, et un échec
-     * d'écriture laisserait la tablette en boucle de réinitialisation.
-     * L'horodatage traité est mémorisé localement, donc chaque demande n'agit
-     * qu'une fois, même après un redémarrage.
-     */
-    private fun handleTranscriptionReset(snapshot: DocumentSnapshot) {
-        val requestedAtMs = snapshot.getTimestamp(FIELD_RESET_TRANSCRIPTION_AT)?.toDate()?.time ?: return
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (requestedAtMs <= prefs.getLong(KEY_LAST_RESET_HANDLED_AT, 0L)) return
-        // Mémorisé avant d'agir, pas après : un échec doit rester visible dans
-        // le compte rendu, pas relancer indéfiniment la réinitialisation.
-        prefs.edit().putLong(KEY_LAST_RESET_HANDLED_AT, requestedAtMs).apply()
-        Log.i(TAG, "Réinitialisation demandée pour ${CompanionApps.TRANSCRIPTION}")
-        clearCompanionAppData(CompanionApps.TRANSCRIPTION)
-    }
-
-    private fun clearCompanionAppData(packageName: String) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-            reportResetResult(false, "Android trop ancien pour la réinitialisation à distance")
-            return
-        }
-        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
-        if (dpm == null || !dpm.isDeviceOwnerApp(context.packageName)) {
-            reportResetResult(false, "L'appli n'est pas Device Owner")
-            return
-        }
-        val admin = ComponentName(context, SeniorVisioDeviceAdminReceiver::class.java)
-        try {
-            dpm.clearApplicationUserData(admin, packageName, context.mainExecutor) { pkg, succeeded ->
-                Log.i(TAG, "Réinitialisation de $pkg : ${if (succeeded) "réussie" else "échouée"}")
-                reportResetResult(succeeded, if (succeeded) "" else "Refusée par le système")
-            }
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Réinitialisation refusée", e)
-            reportResetResult(false, e.message ?: "SecurityException")
-        }
-    }
-
-    private fun reportResetResult(succeeded: Boolean, message: String) {
-        deviceDoc.set(
-            mapOf(
-                FIELD_LAST_RESET_SUCCEEDED to succeeded,
-                FIELD_LAST_RESET_MESSAGE to message,
-                FIELD_LAST_RESET_DONE_AT to FieldValue.serverTimestamp(),
-            ),
-            SetOptions.merge()
-        ).addOnFailureListener { e -> Log.e(TAG, "Échec du compte rendu de réinitialisation", e) }
     }
 
     private fun installUpdate(apkUrl: String) {
@@ -274,16 +212,10 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_LAST_HEARTBEAT_AT = "lastHeartbeatAt"
         private const val FIELD_REQUESTED_VERSION = "requestedVersion"
         private const val FIELD_REQUESTED_APK_URL = "requestedApkUrl"
-        private const val FIELD_RESET_TRANSCRIPTION_AT = "resetTranscriptionRequestedAt"
         private const val FIELD_LAST_UPDATE_SUCCEEDED = "lastUpdateSucceeded"
         private const val FIELD_LAST_UPDATE_MESSAGE = "lastUpdateMessage"
         private const val FIELD_LAST_UPDATE_AT = "lastUpdateAt"
-        private const val FIELD_LAST_RESET_SUCCEEDED = "lastTranscriptionResetSucceeded"
-        private const val FIELD_LAST_RESET_MESSAGE = "lastTranscriptionResetMessage"
-        private const val FIELD_LAST_RESET_DONE_AT = "lastTranscriptionResetAt"
 
-        private const val PREFS_NAME = "device_status_reporter"
-        private const val KEY_LAST_RESET_HANDLED_AT = "last_reset_handled_at"
         private const val LISTENER_RETRY_DELAY_MS = 60_000L
     }
 }

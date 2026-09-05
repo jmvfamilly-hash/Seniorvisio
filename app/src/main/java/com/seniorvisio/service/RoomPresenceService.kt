@@ -9,12 +9,16 @@ import android.content.Intent
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.AssemblyAiRealtimeTranscriber
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.time.LocalDateTime
 import kotlin.math.sqrt
 
@@ -40,6 +44,14 @@ import kotlin.math.sqrt
  * une fois pour toutes sans avoir la tablette en main — à ajuster sur place
  * si le réveil est trop capricieux (déclenche pour rien) ou trop mou (ne
  * déclenche pas assez).
+ *
+ * Sert aussi de source unique du micro pour la transcription de la pièce
+ * (voir RoomTranscriptionActivity, startRoomTranscription) : la même
+ * capture déjà en cours pour le réveil au son est réutilisée, jamais une
+ * deuxième capture concurrente — exactement le problème qui rendait les
+ * sous-titres d'appel peu fiables (deux consommateurs du même micro),
+ * résolu ici par construction plutôt qu'en espérant que le système tolère
+ * les deux captures à la fois.
  */
 class RoomPresenceService : Service() {
 
@@ -50,13 +62,28 @@ class RoomPresenceService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var lastLoudAtMs = 0L
 
+    private var roomTranscriber: AssemblyAiRealtimeTranscriber? = null
+    @Volatile private var roomTranscriptionActive = false
+    private var roomTranscriptionOnText: ((text: String, isFinal: Boolean) -> Unit)? = null
+
+    inner class LocalBinder : Binder() {
+        fun getService(): RoomPresenceService = this@RoomPresenceService
+    }
+    private val binder = LocalBinder()
+
     override fun onCreate() {
         super.onCreate()
         adminConfig = AdminConfig(this)
         startForeground(FOREGROUND_ID, buildForegroundNotification())
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    /**
+     * Lié par RoomTranscriptionActivity (voir startRoomTranscription) — reste
+     * par ailleurs un service démarré classique (startForegroundService) pour
+     * le réveil au son, les deux modes de communication Android coexistant
+     * sans conflit sur un même service.
+     */
+    override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -72,9 +99,14 @@ class RoomPresenceService : Service() {
         super.onDestroy()
     }
 
+    /**
+     * Volontairement pas de garde-fou sur roomWakeEnabled ici : la capture
+     * sert aussi à la transcription de la pièce (voir startRoomTranscription),
+     * qui doit rester disponible même quand le réveil au son est désactivé.
+     * Ce réglage ne fait que dispenser ensureAwake() d'agir, plus bas.
+     */
     private fun startCapture() {
         if (isCapturing) return
-        if (!adminConfig.roomWakeEnabled) return
 
         val minBufferSize = AudioRecord.getMinBufferSize(
             SAMPLE_RATE_HZ, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
@@ -107,7 +139,10 @@ class RoomPresenceService : Service() {
             val buffer = ShortArray(minBufferSize)
             while (isCapturing) {
                 val read = record.read(buffer, 0, buffer.size)
-                if (read > 0) handleLevel(computeRms(buffer, read))
+                if (read > 0) {
+                    handleLevel(computeRms(buffer, read))
+                    feedRoomTranscription(buffer, read)
+                }
             }
         }.apply { start() }
     }
@@ -126,6 +161,42 @@ class RoomPresenceService : Service() {
         }
         audioRecord = null
         releaseWakeLockIfHeld()
+        roomTranscriber?.stop()
+        roomTranscriber = null
+    }
+
+    /**
+     * Démarre les sous-titres de la pièce (voir RoomTranscriptionActivity),
+     * en réutilisant la capture micro déjà en cours ou en la démarrant si
+     * besoin (ex. réveil au son désactivé, voir startCapture).
+     */
+    fun startRoomTranscription(onText: (text: String, isFinal: Boolean) -> Unit) {
+        roomTranscriptionOnText = onText
+        roomTranscriptionActive = true
+        startCapture()
+    }
+
+    /** À appeler quand l'écran de transcription de la pièce se ferme. */
+    fun stopRoomTranscription() {
+        roomTranscriptionActive = false
+        roomTranscriptionOnText = null
+        roomTranscriber?.stop()
+        roomTranscriber = null
+    }
+
+    private fun feedRoomTranscription(buffer: ShortArray, length: Int) {
+        if (!roomTranscriptionActive) return
+        val onText = roomTranscriptionOnText ?: return
+        val apiKey = adminConfig.assemblyAiApiKey
+        if (apiKey.isBlank()) return
+        val instance = roomTranscriber ?: AssemblyAiRealtimeTranscriber(apiKey).also {
+            roomTranscriber = it
+            it.start(onText) { message -> Log.w(TAG, "AssemblyAI temps réel (pièce) : $message") }
+        }
+        val bytes = ByteArray(length * 2)
+        val byteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        for (i in 0 until length) byteBuffer.putShort(buffer[i])
+        instance.sendAudio(bytes, SAMPLE_RATE_HZ, 1)
     }
 
     private fun computeRms(buffer: ShortArray, length: Int): Double {

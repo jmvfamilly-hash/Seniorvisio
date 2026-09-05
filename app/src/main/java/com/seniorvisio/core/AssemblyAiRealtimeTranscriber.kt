@@ -41,7 +41,16 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
-    fun start(onText: (String) -> Unit, onError: (String) -> Unit = {}) {
+    /**
+     * onText(text, isFinal) : isFinal distingue un texte encore provisoire
+     * (revu au mot près pendant que la phrase continue) d'un texte
+     * définitivement figé — utile pour accumuler un historique (voir
+     * RoomTranscriptionActivity) sans y empiler chaque révision
+     * intermédiaire de la même phrase. Les sous-titres d'appel (voir
+     * WebRtcCallEngine), eux, ignorent cette distinction : ils affichent
+     * simplement le dernier texte reçu, quel qu'il soit.
+     */
+    fun start(onText: (String, Boolean) -> Unit, onError: (String) -> Unit = {}) {
         val request = Request.Builder()
             .url("$REALTIME_URL?sample_rate=$TARGET_SAMPLE_RATE_HZ")
             .addHeader("Authorization", apiKey)
@@ -55,9 +64,13 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
                 try {
                     val json = JSONObject(text)
                     when (json.optString("message_type")) {
-                        "PartialTranscript", "FinalTranscript" -> {
+                        "PartialTranscript" -> {
                             val transcript = json.optString("text")
-                            if (transcript.isNotBlank()) onText(transcript)
+                            if (transcript.isNotBlank()) onText(transcript, false)
+                        }
+                        "FinalTranscript" -> {
+                            val transcript = json.optString("text")
+                            if (transcript.isNotBlank()) onText(transcript, true)
                         }
                         "SessionTerminated" -> Log.i(TAG, "Session AssemblyAI terminée")
                     }

@@ -258,7 +258,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                 if (apiKey.isBlank()) return
                 val instance = transcriber ?: AssemblyAiRealtimeTranscriber(apiKey).also {
                     transcriber = it
-                    it.start(onText) { message -> Log.w(TAG, "AssemblyAI temps réel : $message") }
+                    it.start(onText = { text, _ -> onText(text) }) { message ->
+                        Log.w(TAG, "AssemblyAI temps réel : $message")
+                    }
                 }
                 // AudioTrackSink fournit un ByteBuffer (potentiellement direct,
                 // en lecture seule) — on en extrait une copie en ByteArray, le

@@ -3,8 +3,6 @@ package com.seniorvisio.ui
 import android.Manifest
 import android.app.AlertDialog
 import android.app.NotificationManager
-import android.content.ActivityNotFoundException
-import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -31,7 +29,6 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
-import com.seniorvisio.core.CompanionApps
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.TimeContext
 import com.seniorvisio.core.WeatherClient
@@ -47,9 +44,9 @@ import java.util.Locale
  * l'usage senior : un message d'accueil et un unique bouton, qui bascule vers
  * la transcription des conversations de la pièce — rien d'autre à comprendre.
  *
- * La transcription elle-même n'est plus assurée par cette application (voir
- * CompanionApps) : Jean part dans celle de Google et revient ici par le
- * bouton Accueil, Senior Visio étant le lanceur de la tablette (voir
+ * La transcription (voir RoomTranscriptionActivity, AssemblyAI) est un
+ * écran à part de Senior Visio, pas une application tierce : Jean en revient
+ * par le bouton Accueil, Senior Visio étant le lanceur de la tablette (voir
  * KioskManager). Aucun démarrage automatique : la tablette reste sur cet
  * écran au repos, donc pas de micro ni de coupure du son en permanence.
  *
@@ -202,15 +199,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Bascule vers "Transcription instantanée" (Google), autorisée en mode
-     * kiosque par CompanionApps. Jean en revient par le bouton Accueil, qui
-     * ramène ici — c'est le seul chemin de retour, et il est fiable puisque
-     * cette activité est l'écran d'accueil de la tablette.
-     *
-     * Le message d'erreur nomme l'application plutôt que le paquet : c'est un
-     * intervenant sur place qui le lira, pas Jean.
-     */
-    /**
      * Génère et affiche le QR code que scanne un soignant présent dans la
      * pièce. Généré à la volée plutôt que stocké en image : l'adresse peut
      * changer (déploiement du PWA ailleurs) sans avoir à refabriquer un
@@ -255,60 +243,14 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Ouvre les sous-titres de la pièce (voir RoomTranscriptionActivity,
+     * AssemblyAI) — plus d'application tierce à résoudre ni de risque
+     * d'échec de lancement, cet écran fait partie de Senior Visio.
+     */
     private fun launchRoomTranscription() {
-        // Retour d'appui explicite : basculer vers une autre application prend
-        // un instant pendant lequel il ne se passe visiblement rien. Sans ce
-        // message, Jean appuie une deuxième fois en croyant avoir raté le
-        // bouton — constaté comme réflexe courant sur ce type d'écran.
         findViewById<TextView>(R.id.textRoomCaptionsHint).text = "Ouverture…"
-
-        val launchIntent = resolveTranscriptionIntent()
-        if (launchIntent == null) {
-            Log.w(TAG, "Aucun écran lançable trouvé pour ${CompanionApps.TRANSCRIPTION}")
-            showRoomCaptionsFailure()
-            return
-        }
-        try {
-            startActivity(launchIntent)
-        } catch (e: ActivityNotFoundException) {
-            Log.w(TAG, "Lancement de la transcription refusé", e)
-            showRoomCaptionsFailure()
-        }
-    }
-
-    /**
-     * Échec du lancement affiché sur la carte elle-même, en plus du message
-     * fugace : un toast disparaît en trois secondes et laisse Jean devant un
-     * bouton qui a l'air de ne rien faire. Le texte revient à la normale au
-     * retour sur cet écran (voir onResume).
-     */
-    private fun showRoomCaptionsFailure() {
-        findViewById<TextView>(R.id.textRoomCaptionsHint).text = "Indisponible pour l'instant"
-        Toast.makeText(this, "Impossible d'ouvrir la transcription sur cette tablette", Toast.LENGTH_LONG).show()
-    }
-
-    /**
-     * Cherche par quel écran ouvrir l'application de transcription.
-     *
-     * Le chemin normal (getLaunchIntentForPackage) suppose une activité
-     * déclarée en CATEGORY_LAUNCHER. Certaines applications d'accessibilité
-     * n'en ont pas — elles sont prévues pour être ouvertes depuis les
-     * Réglages ou le raccourci d'accessibilité — d'où le repli sur n'importe
-     * quelle activité ACTION_MAIN exportée du paquet.
-     *
-     * Les deux chemins échouent tant que le paquet n'est pas déclaré dans la
-     * section <queries> du manifeste : Android répond alors comme s'il
-     * n'était pas installé.
-     */
-    private fun resolveTranscriptionIntent(): Intent? {
-        packageManager.getLaunchIntentForPackage(CompanionApps.TRANSCRIPTION)?.let { return it }
-
-        val mainIntent = Intent(Intent.ACTION_MAIN).setPackage(CompanionApps.TRANSCRIPTION)
-        val activity = packageManager.queryIntentActivities(mainIntent, 0).firstOrNull() ?: return null
-        return Intent(Intent.ACTION_MAIN).apply {
-            component = ComponentName(activity.activityInfo.packageName, activity.activityInfo.name)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        startActivity(Intent(this, RoomTranscriptionActivity::class.java))
     }
 
     private fun promptAdminPin() {

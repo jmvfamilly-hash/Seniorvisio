@@ -36,17 +36,15 @@
          test réel sur la tablette). Déclaration ciblée plutôt que la
          permission QUERY_ALL_PACKAGES, disproportionnée et restreinte par
          Google Play. À compléter pour chaque nouvelle application compagne
-         (voir CompanionApps.kt). -->
+         (voir CompanionApps.kt, actuellement vide). -->
     <queries>
-        <package android:name="com.google.audio.hearing.visualization.accessibility.scribe" />
         <!-- Détecte le ou les navigateurs installés (voir
              AdminSettingsActivity.resolveBrowsers, KioskManager.
              grantTemporaryBrowserAccess) sans connaître leur paquet à l'avance
              — utile pour la connexion initiale au réseau de la résidence
              quand l'écran captif intégré (une simple WebView) ne suffit pas.
-             Une déclaration par <intent>, contrairement au navigateur Google
-             ci-dessus dont le paquet est connu, couvre n'importe quel
-             navigateur déjà présent sur la tablette. -->
+             Une déclaration par <intent> couvre n'importe quel navigateur déjà
+             présent sur la tablette. -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />
@@ -113,6 +111,14 @@
             android:name=".admin.AdminSettingsActivity"
             android:exported="false"
             android:label="Réglages (admin)" />
+
+        <!-- Sous-titres de la pièce (voir RoomTranscriptionActivity,
+             AssemblyAI) : remplace l'application tierce "Transcription
+             instantanée" de Google, voir CompanionApps.kt. -->
+        <activity
+            android:name=".ui.RoomTranscriptionActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
 
         <!-- Labo d'étude, sans lien avec l'usage normal (voir
              TranscriptionLabActivity.kt) : compare les moteurs de

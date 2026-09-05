@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Sous-titres de la pièce, en continu tant que cet écran est ouvert (voir
+     RoomTranscriptionActivity). Remplace l'application "Transcription
+     instantanée" de Google (voir CompanionApps, historique de cette
+     décision) : transcrit désormais le son du micro de la tablette via
+     AssemblyAI, à travers RoomPresenceService qui capte déjà ce micro en
+     continu pour le réveil au son — jamais une deuxième capture concurrente.
+
+     Historique conservé à l'écran (contrairement aux sous-titres d'appel,
+     qui s'effacent après un silence) : c'était justement ce qui manquait à
+     la première tentative maison, et ce que l'app Google apportait de mieux.
+
+     Jean revient à l'écran d'accueil par le bouton Accueil (mode kiosque).
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#1B2A4A">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="👂 Ce qui se dit dans la pièce"
+            android:textColor="#AEBBD0"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <ScrollView
+            android:id="@+id/roomTranscriptScroll"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="16dp"
+            android:scrollbars="none">
+
+            <TextView
+                android:id="@+id/textRoomTranscript"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                android:textSize="@dimen/caption_text_size_default"
+                android:text="" />
+        </ScrollView>
+
+        <TextView
+            android:id="@+id/textRoomTranscriptStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textColor="#AEBBD0"
+            android:textSize="16sp"
+            android:gravity="center"
+            android:text="" />
+    </LinearLayout>
+
+    <!-- Version affichée en permanence, discrètement (voir BuildConfig.BUILD_REV). -->
+    <TextView
+        android:id="@+id/textBuildRev"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="8dp"
+        android:textColor="#4DFFFFFF"
+        android:textSize="11sp"
+        android:text="" />
+
+</FrameLayout>
