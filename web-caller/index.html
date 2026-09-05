@@ -136,6 +136,44 @@
           <input type="range" id="scrollSpeedSlider" min="20" max="100" value="50" step="10">
         </div>
 
+        <!-- Diaporama commenté : le proche fait défiler ses photos, Jean les
+             voit en grand sans rien manipuler, et entend/lit ses commentaires
+             (sous-titres, qui s'effacent d'eux-mêmes entre deux phrases). -->
+        <div class="slideshow-control">
+          <p class="slideshow-title">🖼️ Regarder des photos avec Jean</p>
+
+          <label class="slideshow-pick">
+            Choisir des photos
+            <input type="file" id="slideshowInput" accept="image/*" multiple>
+          </label>
+
+          <div class="slideshow-nav hidden" id="slideshowNav">
+            <button id="slideshowPrevButton" class="secondary">◀ Précédente</button>
+            <span class="slideshow-counter" id="slideshowCounter"></span>
+            <button id="slideshowNextButton" class="secondary">Suivante ▶</button>
+          </div>
+
+          <img id="slideshowPreview" class="slideshow-preview hidden" alt="Photo en cours chez Jean">
+
+          <button id="slideshowStopButton" class="secondary hidden">Arrêter le diaporama (revenir à la vidéo)</button>
+
+          <label>
+            <input type="checkbox" id="slideshowRememberToggle">
+            💾 Garder ces photos sur cet appareil pour la prochaine fois
+          </label>
+
+          <!-- Cas où le proche est physiquement à côté de Jean : il commente de
+               vive voix, la tablette ne doit alors ni capter (larsen) ni
+               rejouer sa voix. Les sous-titres, eux, continuent de venir du
+               micro de son téléphone. -->
+          <label>
+            <input type="checkbox" id="sameRoomToggle">
+            📍 Nous sommes dans la même pièce (coupe le micro et le son de la tablette)
+          </label>
+
+          <p class="slideshow-status" id="slideshowStatus"></p>
+        </div>
+
         <button id="rememberSettingsButton" class="secondary">💾 Mémoriser ces réglages pour la prochaine fois</button>
 
         <!-- Rappelée pendant l'appel, pas seulement avant : le réflexe de

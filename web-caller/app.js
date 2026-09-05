@@ -79,7 +79,7 @@ function loadIdentity() {
  * caméra/micro du site. createObjectURL référence le fichier directement,
  * sans jamais construire ce texte intermédiaire.
  */
-function resizeToBase64(file) {
+function resizeToBase64(file, maxSide = IDENTITY_PHOTO_MAX_SIDE, quality = IDENTITY_PHOTO_QUALITY) {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const image = new Image();
@@ -90,12 +90,12 @@ function resizeToBase64(file) {
     };
     image.onload = () => {
       try {
-        const scale = Math.min(1, IDENTITY_PHOTO_MAX_SIDE / Math.max(image.width, image.height));
+        const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
         const canvas = document.createElement("canvas");
         canvas.width = Math.round(image.width * scale);
         canvas.height = Math.round(image.height * scale);
         canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", IDENTITY_PHOTO_QUALITY).split(",")[1]);
+        resolve(canvas.toDataURL("image/jpeg", quality).split(",")[1]);
       } catch (e) {
         reject(e);
       } finally {
@@ -153,6 +153,16 @@ const els = {
   volumeSlider: document.getElementById("volumeSlider"),
   captionToggle: document.getElementById("captionToggle"),
   tabletMicMuteToggle: document.getElementById("tabletMicMuteToggle"),
+  slideshowInput: document.getElementById("slideshowInput"),
+  slideshowNav: document.getElementById("slideshowNav"),
+  slideshowPrevButton: document.getElementById("slideshowPrevButton"),
+  slideshowNextButton: document.getElementById("slideshowNextButton"),
+  slideshowCounter: document.getElementById("slideshowCounter"),
+  slideshowPreview: document.getElementById("slideshowPreview"),
+  slideshowStopButton: document.getElementById("slideshowStopButton"),
+  slideshowRememberToggle: document.getElementById("slideshowRememberToggle"),
+  sameRoomToggle: document.getElementById("sameRoomToggle"),
+  slideshowStatus: document.getElementById("slideshowStatus"),
   selfPreviewToggle: document.getElementById("selfPreviewToggle"),
   textSizeSlider: document.getElementById("textSizeSlider"),
   scrollSpeedSlider: document.getElementById("scrollSpeedSlider"),
@@ -228,6 +238,7 @@ els.callButton.addEventListener("click", async () => {
   // Remis à zéro à chaque appel : un micro resté coupé d'un appel précédent
   // rendrait Jean muet sans que personne ne comprenne pourquoi.
   els.tabletMicMuteToggle.checked = false;
+  els.sameRoomToggle.checked = false;
   els.captionOverflowIndicator.classList.add("hidden");
   els.fullscreenCaptionBanner.classList.add("hidden");
   // Désactivé tant que l'appel n'est pas prêt (voir plus bas) : un appui
@@ -502,6 +513,145 @@ els.resetTranscriptionButton.addEventListener("click", async () => {
   } finally {
     els.resetTranscriptionButton.disabled = false;
   }
+});
+
+// --- Diaporama commenté ---------------------------------------------------
+// Le proche choisit des photos dans son téléphone et les fait défiler ; Jean
+// les voit en grand sans rien manipuler, avec les commentaires du proche en
+// sous-titres (voir WebRtcCallEngine.listenForSlideshowPhoto côté Android).
+//
+// Photos redimensionnées plus grand que la photo d'identité (elles sont
+// regardées en plein écran sur une dalle de dix pouces, pas en vignette), mais
+// assez compressées pour tenir largement dans un document Firestore, qui n'en
+// transporte de toute façon qu'une à la fois.
+const SLIDESHOW_STORAGE_KEY = "seniorvisio_slideshow_photos";
+const SLIDESHOW_PHOTO_MAX_SIDE = 1280;
+const SLIDESHOW_PHOTO_QUALITY = 0.72;
+// Le stockage local d'un navigateur est limité (quelques mégaoctets) : au-delà,
+// l'enregistrement échoue d'un coup. Mieux vaut une limite claire et annoncée
+// qu'un échec incompréhensible au moment de mémoriser.
+const SLIDESHOW_MAX_PHOTOS = 15;
+
+let slideshowPhotos = [];
+let slideshowIndex = 0;
+
+function renderSlideshowState() {
+  const hasPhotos = slideshowPhotos.length > 0;
+  els.slideshowNav.classList.toggle("hidden", !hasPhotos);
+  els.slideshowPreview.classList.toggle("hidden", !hasPhotos);
+  els.slideshowStopButton.classList.toggle("hidden", !hasPhotos);
+  if (!hasPhotos) return;
+
+  els.slideshowCounter.textContent = `${slideshowIndex + 1} / ${slideshowPhotos.length}`;
+  els.slideshowPreview.src = `data:image/jpeg;base64,${slideshowPhotos[slideshowIndex]}`;
+  els.slideshowPrevButton.disabled = slideshowIndex === 0;
+  els.slideshowNextButton.disabled = slideshowIndex === slideshowPhotos.length - 1;
+}
+
+/** Envoie la photo courante chez Jean (rien si aucun appel n'est en cours). */
+function pushCurrentSlide() {
+  if (!slideshowPhotos.length) return;
+  engine.setSlideshowPhoto(slideshowPhotos[slideshowIndex]);
+}
+
+function showSlide(index) {
+  slideshowIndex = Math.max(0, Math.min(index, slideshowPhotos.length - 1));
+  renderSlideshowState();
+  pushCurrentSlide();
+}
+
+(function restoreSlideshow() {
+  try {
+    const raw = localStorage.getItem(SLIDESHOW_STORAGE_KEY);
+    if (!raw) return;
+    slideshowPhotos = JSON.parse(raw);
+    els.slideshowRememberToggle.checked = true;
+    renderSlideshowState();
+    els.slideshowStatus.textContent =
+      `${slideshowPhotos.length} photo(s) gardée(s) de la dernière fois.`;
+  } catch (e) {
+    slideshowPhotos = [];
+  }
+})();
+
+els.slideshowInput.addEventListener("change", async () => {
+  const files = Array.from(els.slideshowInput.files || []);
+  if (!files.length) return;
+  els.slideshowStatus.textContent = `Préparation de ${files.length} photo(s)…`;
+
+  const prepared = [];
+  for (const file of files) {
+    try {
+      prepared.push(await resizeToBase64(file, SLIDESHOW_PHOTO_MAX_SIDE, SLIDESHOW_PHOTO_QUALITY));
+    } catch (e) {
+      // Une photo illisible (format exotique, fichier corrompu) ne doit pas
+      // faire échouer toute la sélection.
+      console.warn("[Diaporama] Photo ignorée :", e);
+    }
+  }
+
+  if (!prepared.length) {
+    els.slideshowStatus.textContent = "Aucune de ces photos n'a pu être lue.";
+    return;
+  }
+
+  const tooMany = prepared.length > SLIDESHOW_MAX_PHOTOS;
+  slideshowPhotos = prepared.slice(0, SLIDESHOW_MAX_PHOTOS);
+  slideshowIndex = 0;
+  renderSlideshowState();
+  pushCurrentSlide();
+  els.slideshowStatus.textContent = tooMany
+    ? `${SLIDESHOW_MAX_PHOTOS} premières photos retenues (limite de cet appareil).`
+    : `${slideshowPhotos.length} photo(s) prête(s).`;
+
+  if (els.slideshowRememberToggle.checked) saveSlideshow();
+});
+
+els.slideshowPrevButton.addEventListener("click", () => showSlide(slideshowIndex - 1));
+els.slideshowNextButton.addEventListener("click", () => showSlide(slideshowIndex + 1));
+
+// Termine le diaporama : la vidéo du proche réapparaît chez Jean, la sélection
+// de photos reste en place pour pouvoir relancer sans tout re-choisir.
+els.slideshowStopButton.addEventListener("click", () => {
+  engine.setSlideshowPhoto(null);
+  els.slideshowStatus.textContent = "Diaporama arrêté, Jean revoit la vidéo.";
+});
+
+function saveSlideshow() {
+  try {
+    localStorage.setItem(SLIDESHOW_STORAGE_KEY, JSON.stringify(slideshowPhotos));
+    els.slideshowStatus.textContent = `${slideshowPhotos.length} photo(s) gardée(s) sur cet appareil.`;
+  } catch (e) {
+    // Quota dépassé : le dire franchement plutôt que de laisser croire que
+    // c'est enregistré.
+    els.slideshowRememberToggle.checked = false;
+    els.slideshowStatus.textContent =
+      "Trop de photos pour la mémoire de ce navigateur : elles marchent pour cet appel, mais ne seront pas gardées.";
+  }
+}
+
+els.slideshowRememberToggle.addEventListener("change", () => {
+  if (els.slideshowRememberToggle.checked) {
+    saveSlideshow();
+  } else {
+    localStorage.removeItem(SLIDESHOW_STORAGE_KEY);
+    els.slideshowStatus.textContent = "Photos non gardées après cet appel.";
+  }
+});
+
+// Mode "même pièce" : le proche est à côté de Jean et commente de vive voix.
+// La tablette ne doit alors ni capter sa voix (elle reviendrait en écho dans le
+// téléphone) ni la rejouer. Les sous-titres continuent d'arriver, puisqu'ils
+// viennent du micro du téléphone, pas de celui de la tablette.
+els.sameRoomToggle.addEventListener("change", () => {
+  const sameRoom = els.sameRoomToggle.checked;
+  els.tabletMicMuteToggle.checked = sameRoom;
+  engine.setTabletMicMuted(sameRoom);
+  els.volumeSlider.value = sameRoom ? 0 : 100;
+  engine.setRemoteVolume(Number(els.volumeSlider.value) / 100);
+  els.slideshowStatus.textContent = sameRoom
+    ? "Mode même pièce : micro et son de la tablette coupés."
+    : "Mode à distance rétabli : micro et son de la tablette réactivés.";
 });
 
 els.hangupButton.addEventListener("click", async () => {
