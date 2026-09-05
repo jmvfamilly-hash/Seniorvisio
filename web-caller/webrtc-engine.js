@@ -24,6 +24,9 @@ class RealCallEngine extends CallEngine {
     this._lastScreenLayoutKey = null;
     this._captionDebugCb = null;
     this._lastCaptionDebugMessage = null;
+    this._sameRoomDetectedCb = null;
+    this._hasReportedSameRoom = false;
+    this._beacon = null;
     this._hasNotifiedConnected = false;
     this._hasReportedCalleeError = false;
     // Incrémenté à chaque nouvel appel et à chaque annulation (voir
@@ -71,6 +74,60 @@ class RealCallEngine extends CallEngine {
    * jour/nuit, et au rafraîchissement du quart d'heure.
    */
   onScreenLayout(callback) { this._screenLayoutCb = callback; }
+
+  /** callback() — la tablette a reconnu la balise : les deux appareils sont dans la même pièce. */
+  onSameRoomDetected(callback) { this._sameRoomDetectedCb = callback; }
+
+  /**
+   * Émet une tonalité inaudible que la tablette écoute pendant la sonnerie
+   * pour savoir si ce téléphone est dans la même pièce qu'elle (voir
+   * SameRoomDetector côté Android).
+   *
+   * 17,8 kHz : au-delà de ce que Jean peut entendre — l'audition au-dessus de
+   * 15 kHz disparaît pratiquement toujours après cinquante ans — mais dans ce
+   * que le haut-parleur d'un téléphone sait encore produire. Une oreille
+   * jeune peut la percevoir faiblement ; c'est le prix à payer, et ça ne dure
+   * que le temps de la sonnerie.
+   *
+   * Volume délibérément bas : la détection repose sur le contraste avec les
+   * fréquences voisines, pas sur la puissance (voir isBeaconPresent). Monter
+   * le volume ne rendrait pas la balise plus reconnaissable, seulement plus
+   * audible pour ceux qui l'entendent.
+   *
+   * Le son passe par le haut-parleur, pas par l'appel : la tablette n'a pas
+   * encore décroché, aucun audio ne circule entre les deux.
+   */
+  _startSameRoomBeacon() {
+    this._stopSameRoomBeacon();
+    try {
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const context = new AudioContextCtor();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.frequency.value = 17800;
+      gain.gain.value = 0.12;
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start();
+      this._beacon = { context, oscillator };
+    } catch (e) {
+      // Contexte audio refusé (page sans interaction préalable, navigateur
+      // restrictif) : la détection automatique ne marchera pas, la case
+      // "même pièce" reste cochable à la main. Rien de bloquant.
+      console.warn("[RealCallEngine] Balise de proximité impossible :", e);
+    }
+  }
+
+  _stopSameRoomBeacon() {
+    if (!this._beacon) return;
+    try {
+      this._beacon.oscillator.stop();
+      this._beacon.context.close();
+    } catch (e) {
+      // Déjà arrêtée : sans conséquence.
+    }
+    this._beacon = null;
+  }
   /** callback(message: string) — diagnostic de la transcription temps réel AssemblyAI côté tablette (voir attachTranscriptionSink). */
   onCaptionDebug(callback) { this._captionDebugCb = callback; }
 
@@ -246,6 +303,7 @@ class RealCallEngine extends CallEngine {
         // appel précédent laisserait Jean sans aucun son, sans que personne ne
         // comprenne pourquoi.
         sameRoomMode: false,
+        sameRoomDetected: false,
         // Mode soignant : la tablette se connecte sans attendre son décompte de
         // 30 s (celui-ci a du sens pour un appel venu de l'extérieur, aucun
         // quand la personne est déjà debout à côté de Jean), et son micro est
@@ -278,6 +336,13 @@ class RealCallEngine extends CallEngine {
       pc.close();
       return;
     }
+
+    // Balise de proximité émise pendant toute la sonnerie : c'est la seule
+    // fenêtre où le micro de la tablette est libre pour l'écouter (voir
+    // SameRoomDetector). Inutile en mode soignant, qui est "même pièce" par
+    // définition et coupe déjà tout — et qui saute le décompte, donc la
+    // fenêtre d'écoute.
+    if (!initialSettings.skipSameRoomBeacon) this._startSameRoomBeacon();
 
     this._unsubscribeCallDoc = callDocRef.onSnapshot((snapshot) => {
       const data = snapshot.data();
@@ -344,8 +409,18 @@ class RealCallEngine extends CallEngine {
       // passage à "connected" — sans ce garde-fou, onConnected repartait à
       // chaque mise à jour et ramenait le proche sur l'onglet visio même
       // s'il venait de passer sur l'onglet réglages.
+      // La tablette a reconnu la balise sonore : les deux appareils sont dans
+      // la même pièce (voir SameRoomDetector). Signalé une seule fois par
+      // appel — le proche reste libre de décocher ensuite.
+      if (data.sameRoomDetected && !this._hasReportedSameRoom) {
+        this._hasReportedSameRoom = true;
+        this._sameRoomDetectedCb && this._sameRoomDetectedCb();
+      }
       if (data.status === "connected" && !this._hasNotifiedConnected) {
         this._hasNotifiedConnected = true;
+        // La balise n'a plus lieu d'être une fois l'appel décroché : la
+        // tablette a rendu son micro à WebRTC et n'écoute plus.
+        this._stopSameRoomBeacon();
         this._connectedCb && this._connectedCb();
       }
       if (data.status === "blocked") {
@@ -566,6 +641,8 @@ class RealCallEngine extends CallEngine {
     }
     this._hasNotifiedConnected = false;
     this._hasReportedCalleeError = false;
+    this._hasReportedSameRoom = false;
+    this._stopSameRoomBeacon();
     if (this._unsubscribeCallDoc) this._unsubscribeCallDoc();
     this._unsubscribeCallDoc = null;
     if (this._unsubscribeCalleeCandidates) this._unsubscribeCalleeCandidates();

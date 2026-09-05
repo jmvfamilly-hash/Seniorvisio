@@ -392,6 +392,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         }
     }
 
+    /** Signale au PWA que la balise sonore du téléphone a été reconnue (voir SameRoomDetector). */
+    fun reportSameRoomDetected() {
+        val id = callId ?: return
+        signaling.reportSameRoomDetected(id)
+    }
+
     /** Écoute l'activation à distance de l'aperçu de sa propre caméra affiché à Jean (masqué par défaut). */
     fun listenForSelfPreviewMode(onEnabled: (Boolean) -> Unit) {
         val id = callId ?: return

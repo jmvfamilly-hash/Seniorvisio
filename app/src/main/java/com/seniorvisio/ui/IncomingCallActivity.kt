@@ -24,6 +24,7 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.KioskManager
+import com.seniorvisio.core.SameRoomDetector
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.service.IncomingCallService
 import com.seniorvisio.service.RoomPresenceService
@@ -79,6 +80,9 @@ class IncomingCallActivity : AppCompatActivity() {
     // temps — la palette et la zone d'information n'arrivent pas ensemble.
     private var screenIsDark = true
     private var lastInfo: HomeZonesController.InfoSnapshot? = null
+
+    /** Actif pendant la sonnerie uniquement (voir SameRoomDetector). */
+    private var sameRoomDetector: SameRoomDetector? = null
 
     private val screenStateHandler = Handler(Looper.getMainLooper())
     private val screenStatePublisher = object : Runnable {
@@ -265,6 +269,17 @@ class IncomingCallActivity : AppCompatActivity() {
             }
         }
 
+        // Écoute la balise sonore inaudible émise par le téléphone de
+        // l'appelant (voir SameRoomDetector) pendant toute la sonnerie —
+        // seule fenêtre de l'appel où le microphone est libre : WebRTC ne le
+        // prendra qu'à l'acceptation, et RoomPresenceService est déjà
+        // suspendu (voir plus haut). Arrêté dans connectVideoCall, avant que
+        // WebRTC ne réclame le micro.
+        sameRoomDetector = SameRoomDetector {
+            Log.i(TAG, "Balise de proximité reconnue : le proche est dans la pièce")
+            callEngine.reportSameRoomDetected()
+        }.apply { start() }
+
         val durationSeconds = adminConfig.countdownSeconds
         callEngine.signalAlertStarted(durationSeconds)
         playDiscreetAlertSound()
@@ -384,6 +399,10 @@ class IncomingCallActivity : AppCompatActivity() {
         // raccrochait donc côté proche, sans explication.
         if (isConnected) return
         isConnected = true
+        // Rend le micro avant qu'answer() ne le réclame pour WebRTC : un seul
+        // composant à la fois peut le tenir.
+        sameRoomDetector?.stop()
+        sameRoomDetector = null
         findViewById<View>(R.id.alertContent).visibility = View.GONE
         // La photo et son voile sont des calques plein écran, frères de
         // alertContent et non ses enfants : sans ça ils resteraient affichés
@@ -623,6 +642,8 @@ class IncomingCallActivity : AppCompatActivity() {
         // chauffe/marquage d'écran sinon.
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         screenStateHandler.removeCallbacks(screenStatePublisher)
+        sameRoomDetector?.stop()
+        sameRoomDetector = null
         zones.release()
         RoomPresenceService.resumeAfterCall(this)
         alertController.cancel()
