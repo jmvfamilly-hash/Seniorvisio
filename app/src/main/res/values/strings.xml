@@ -7,5 +7,5 @@
          échéant) et doit pouvoir le remettre à l'identique au retour sur
          l'écran — voir MainActivity.onResume.
     -->
-    <string name="room_captions_hint">Les paroles s\'écrivent à l\'écran</string>
+    <string name="room_captions_hint">Ce que dit la personne en face de vous s\'écrit en grand à l\'écran — pratique si Jean entend mal ou est loin de son appareil auditif</string>
 </resources>

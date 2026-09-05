@@ -121,5 +121,19 @@
             android:textColor="#D6DEEA"
             android:textSize="19sp" />
 
+        <!-- Second point qui évite le contresens symétrique : croire qu'il faut
+             prévenir la tablette, raccrocher un appel, ou attendre quelque
+             chose avant de partir. Rien à faire côté tablette, dans un sens
+             comme dans l'autre. -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:padding="16dp"
+            android:background="@drawable/home_card_bg"
+            android:text="✅ Pour terminer, fermez simplement la page sur votre téléphone. Rien à faire sur la tablette, ni pour commencer, ni pour arrêter."
+            android:textColor="#D6DEEA"
+            android:textSize="19sp" />
+
     </LinearLayout>
 </ScrollView>

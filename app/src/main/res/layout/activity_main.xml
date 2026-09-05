@@ -202,7 +202,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="Scannez : il lira vos paroles"
+                    android:text="Scannez avec l'appareil photo de votre téléphone : vos paroles s'écrivent aussitôt en grand sur cette tablette, sans que Jean n'ait rien à faire de son côté"
                     android:textColor="#AEBBD0"
                     android:textSize="20sp"
                     android:gravity="center" />
