@@ -212,6 +212,22 @@ class CallSignalingClient {
         }
     }
 
+    /** Nombre de lignes visibles dans le bandeau de sous-titres, choisi à distance par l'appelant. */
+    fun listenForCaptionVisibleLines(callId: String, onLines: (Double) -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            val lines = snapshot?.getDouble(FIELD_CAPTION_VISIBLE_LINES)
+            if (lines != null) onLines(lines)
+        }
+    }
+
+    /** Délai (en secondes) sans nouvelle parole avant effacement des sous-titres, choisi à distance par l'appelant. */
+    fun listenForCaptionClearDelay(callId: String, onSeconds: (Double) -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            val seconds = snapshot?.getDouble(FIELD_CAPTION_CLEAR_DELAY)
+            if (seconds != null) onSeconds(seconds)
+        }
+    }
+
     /**
      * Signale en continu au proche le retard de lecture de Jean par rapport
      * au texte reçu (voir IncomingCallActivity.setupCaptionMode) : 0 quand
@@ -298,6 +314,8 @@ class CallSignalingClient {
         private const val FIELD_FORCE_CONNECT = "forceConnectRequested"
         private const val FIELD_SELF_PREVIEW = "selfPreviewEnabled"
         private const val FIELD_CAPTION_SCROLL_SPEED = "captionMaxScrollSpeedDpPerSec"
+        private const val FIELD_CAPTION_VISIBLE_LINES = "captionVisibleLines"
+        private const val FIELD_CAPTION_CLEAR_DELAY = "captionClearDelaySeconds"
         private const val FIELD_CAPTION_CATCHUP_LAG = "captionCatchUpLagSeconds"
         private const val FIELD_CALLEE_ERROR = "calleeErrorMessage"
         private const val FIELD_MIC_MUTED = "tabletMicMuted"

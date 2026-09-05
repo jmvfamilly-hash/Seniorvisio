@@ -38,6 +38,8 @@ const DEFAULT_SETTINGS = {
   selfPreview: false,
   textSize: 56,
   scrollSpeed: 50,
+  captionVisibleLines: 2,
+  captionClearDelaySeconds: 30,
 };
 
 // --- Identité de l'appelant, mémorisée dans ce navigateur uniquement ---
@@ -123,6 +125,8 @@ function currentSettingsFromUi() {
     selfPreview: els.selfPreviewToggle.checked,
     textSize: Number(els.textSizeSlider.value),
     scrollSpeed: Number(els.scrollSpeedSlider.value),
+    captionVisibleLines: Number(els.captionLinesSlider.value),
+    captionClearDelaySeconds: Number(els.captionClearDelaySlider.value),
   };
 }
 
@@ -132,6 +136,8 @@ function applySettingsToUi(settings) {
   els.selfPreviewToggle.checked = settings.selfPreview;
   els.textSizeSlider.value = settings.textSize;
   els.scrollSpeedSlider.value = settings.scrollSpeed;
+  els.captionLinesSlider.value = settings.captionVisibleLines;
+  els.captionClearDelaySlider.value = settings.captionClearDelaySeconds;
 }
 
 // --- Câblage UI ---
@@ -166,6 +172,8 @@ const els = {
   selfPreviewToggle: document.getElementById("selfPreviewToggle"),
   textSizeSlider: document.getElementById("textSizeSlider"),
   scrollSpeedSlider: document.getElementById("scrollSpeedSlider"),
+  captionLinesSlider: document.getElementById("captionLinesSlider"),
+  captionClearDelaySlider: document.getElementById("captionClearDelaySlider"),
   callingHint: document.getElementById("callingHint"),
   countdownFill: document.getElementById("countdownFill"),
   countdownText: document.getElementById("countdownText"),
@@ -260,6 +268,8 @@ els.callButton.addEventListener("click", async () => {
       captionModeEnabled: true,
       captionTextSize: DEFAULT_SETTINGS.textSize,
       captionMaxScrollSpeedDpPerSec: DEFAULT_SETTINGS.scrollSpeed,
+      captionVisibleLines: DEFAULT_SETTINGS.captionVisibleLines,
+      captionClearDelaySeconds: DEFAULT_SETTINGS.captionClearDelaySeconds,
       selfPreviewEnabled: false,
       // Ni décompte, ni photo, ni caméra : voir le commentaire de CAREGIVER_MODE.
       forceConnect: true,
@@ -275,6 +285,8 @@ els.callButton.addEventListener("click", async () => {
       captionModeEnabled: settings.captionEnabled,
       captionTextSize: settings.textSize,
       captionMaxScrollSpeedDpPerSec: settings.scrollSpeed,
+      captionVisibleLines: settings.captionVisibleLines,
+      captionClearDelaySeconds: settings.captionClearDelaySeconds,
       selfPreviewEnabled: settings.selfPreview,
       callerPhotoBase64: identity.photoBase64 || null,
     });
@@ -382,6 +394,22 @@ els.scrollSpeedSlider.addEventListener("input", () => {
   clearTimeout(scrollSpeedDebounce);
   scrollSpeedDebounce = setTimeout(() => {
     engine.setCaptionScrollSpeed(Number(els.scrollSpeedSlider.value));
+  }, 150);
+});
+
+let captionLinesDebounce = null;
+els.captionLinesSlider.addEventListener("input", () => {
+  clearTimeout(captionLinesDebounce);
+  captionLinesDebounce = setTimeout(() => {
+    engine.setCaptionVisibleLines(Number(els.captionLinesSlider.value));
+  }, 150);
+});
+
+let captionClearDelayDebounce = null;
+els.captionClearDelaySlider.addEventListener("input", () => {
+  clearTimeout(captionClearDelayDebounce);
+  captionClearDelayDebounce = setTimeout(() => {
+    engine.setCaptionClearDelay(Number(els.captionClearDelaySlider.value));
   }, 150);
 });
 

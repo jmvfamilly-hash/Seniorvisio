@@ -29,6 +29,7 @@ import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
+import kotlin.math.roundToInt
 
 /**
  * Implémentation WebRTC de [CallEngine]. Le signaling (échange de l'offre,
@@ -67,6 +68,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var captionModeListener: ListenerRegistration? = null
     private var captionTextSizeListener: ListenerRegistration? = null
     private var captionScrollSpeedListener: ListenerRegistration? = null
+    private var captionVisibleLinesListener: ListenerRegistration? = null
+    private var captionClearDelayListener: ListenerRegistration? = null
     private var selfPreviewListener: ListenerRegistration? = null
     private var forceConnectListener: ListenerRegistration? = null
     private var remoteEndedListener: ListenerRegistration? = null
@@ -296,6 +299,18 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     fun listenForCaptionScrollSpeed(onDpPerSec: (Float) -> Unit) {
         val id = callId ?: return
         captionScrollSpeedListener = signaling.listenForCaptionScrollSpeed(id) { speed -> onDpPerSec(speed.toFloat()) }
+    }
+
+    /** Écoute le nombre de lignes visibles du bandeau de sous-titres, choisi à distance par le proche. */
+    fun listenForCaptionVisibleLines(onLines: (Int) -> Unit) {
+        val id = callId ?: return
+        captionVisibleLinesListener = signaling.listenForCaptionVisibleLines(id) { lines -> onLines(lines.roundToInt()) }
+    }
+
+    /** Écoute le délai (en secondes) sans parole du proche avant effacement des sous-titres. */
+    fun listenForCaptionClearDelay(onSeconds: (Int) -> Unit) {
+        val id = callId ?: return
+        captionClearDelayListener = signaling.listenForCaptionClearDelay(id) { seconds -> onSeconds(seconds.roundToInt()) }
     }
 
     /**
@@ -593,6 +608,10 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         captionTextSizeListener = null
         captionScrollSpeedListener?.remove()
         captionScrollSpeedListener = null
+        captionVisibleLinesListener?.remove()
+        captionVisibleLinesListener = null
+        captionClearDelayListener?.remove()
+        captionClearDelayListener = null
         selfPreviewListener?.remove()
         selfPreviewListener = null
         forceConnectListener?.remove()

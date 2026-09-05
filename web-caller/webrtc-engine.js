@@ -249,6 +249,8 @@ class RealCallEngine extends CallEngine {
         captionModeEnabled: initialSettings.captionModeEnabled ?? false,
         captionTextSize: initialSettings.captionTextSize ?? 56,
         captionMaxScrollSpeedDpPerSec: initialSettings.captionMaxScrollSpeedDpPerSec ?? 50,
+        captionVisibleLines: initialSettings.captionVisibleLines ?? 2,
+        captionClearDelaySeconds: initialSettings.captionClearDelaySeconds ?? 30,
         selfPreviewEnabled: initialSettings.selfPreviewEnabled ?? false,
         // Mode soignant : la tablette se connecte sans attendre son décompte de
         // 30 s (celui-ci a du sens pour un appel venu de l'extérieur, aucun
@@ -602,6 +604,24 @@ class RealCallEngine extends CallEngine {
   async setCaptionScrollSpeed(dpPerSec) {
     if (this._callDocRef) {
       await this._callDocRef.update({ captionMaxScrollSpeedDpPerSec: dpPerSec }).catch(() => {});
+    }
+  }
+
+  /** Règle à distance le nombre de lignes visibles dans le bandeau de sous-titres côté tablette. */
+  async setCaptionVisibleLines(lines) {
+    if (this._callDocRef) {
+      await this._callDocRef.update({ captionVisibleLines: lines }).catch(() => {});
+    }
+  }
+
+  /**
+   * Règle à distance le délai (en secondes) sans nouvelle parole au bout
+   * duquel le sous-titre s'efface côté tablette (voir
+   * IncomingCallActivity.setupCaptionMode).
+   */
+  async setCaptionClearDelay(seconds) {
+    if (this._callDocRef) {
+      await this._callDocRef.update({ captionClearDelaySeconds: seconds }).catch(() => {});
     }
   }
 

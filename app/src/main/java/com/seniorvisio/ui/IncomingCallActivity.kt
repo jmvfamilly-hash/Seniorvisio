@@ -68,6 +68,13 @@ class IncomingCallActivity : AppCompatActivity() {
     private var localRendererRef: SurfaceViewRenderer? = null
     private var captionBannerRef: View? = null
     private var captionScrollRef: ScrollView? = null
+    private var textCaptionRef: TextView? = null
+
+    /** Nombre de lignes visibles dans le bandeau de sous-titres, réglable à distance (voir setupCaptionMode). */
+    private var captionVisibleLines: Int = DEFAULT_CAPTION_VISIBLE_LINES
+
+    /** Délai sans nouvelle parole avant effacement des sous-titres, réglable à distance (voir setupCaptionMode). */
+    private var captionClearDelayMs: Long = DEFAULT_CAPTION_CLEAR_DELAY_MS
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -435,16 +442,30 @@ class IncomingCallActivity : AppCompatActivity() {
         // Rembourrage haut+bas du bandeau, fixé dans le layout XML (android:padding="20dp").
         val bannerVerticalPadding = (20 * density * 2).roundToInt()
 
+        // Hauteur calée sur le nombre de lignes voulu (captionVisibleLines,
+        // réglable à distance, voir setupCaptionMode) plutôt qu'une valeur
+        // fixe : sans ça, changer la taille du texte ou le nombre de lignes
+        // depuis le PWA laissait un bandeau soit trop grand (vide en bas),
+        // soit trop court (texte coupé). lineHeight se base sur la taille de
+        // texte actuelle de textCaption, déjà à jour à cet instant (le
+        // réglage à distance de la taille l'applique avant tout recalcul de
+        // disposition, voir listenForCaptionTextSize ci-dessous).
+        val minLineHeightPx = (24 * density).roundToInt()
+        val lineHeightPx = (textCaptionRef?.lineHeight ?: 0).takeIf { it > 0 } ?: minLineHeightPx
+        val desiredHeightPx = lineHeightPx * captionVisibleLines
+
         val bottomMargin: Int
         val captionScrollHeight: Int
         if (isLandscape) {
             bottomMargin = (16 * density).roundToInt()
             val maxBannerAreaPx = resources.displayMetrics.heightPixels / 2
-            captionScrollHeight = (maxBannerAreaPx - bottomMargin - bannerVerticalPadding)
-                .coerceAtLeast((80 * density).roundToInt())
+            val maxHeightPx = (maxBannerAreaPx - bottomMargin - bannerVerticalPadding)
+                .coerceAtLeast(minLineHeightPx)
+            captionScrollHeight = desiredHeightPx.coerceIn(minLineHeightPx, maxHeightPx)
         } else {
             bottomMargin = (140 * density).roundToInt()
-            captionScrollHeight = (220 * density).roundToInt()
+            val maxPortraitAreaPx = (resources.displayMetrics.heightPixels * 0.5f).roundToInt()
+            captionScrollHeight = desiredHeightPx.coerceIn(minLineHeightPx, maxPortraitAreaPx)
         }
 
         (remoteRenderer.layoutParams as FrameLayout.LayoutParams).apply {
@@ -512,6 +533,7 @@ class IncomingCallActivity : AppCompatActivity() {
         val textCaption = findViewById<TextView>(R.id.textCaption)
         captionBannerRef = captionBanner
         captionScrollRef = captionScroll
+        textCaptionRef = textCaption
         // Le défilement est piloté par le code (voir plus bas), pas par Jean.
         captionScroll.setOnTouchListener { _, _ -> true }
 
@@ -600,7 +622,7 @@ class IncomingCallActivity : AppCompatActivity() {
                 textCaption.alpha = 1f
                 textCaption.text = text
                 captionClearHandler.removeCallbacks(clearCaption)
-                captionClearHandler.postDelayed(clearCaption, CAPTION_CLEAR_DELAY_MS)
+                captionClearHandler.postDelayed(clearCaption, captionClearDelayMs)
                 textCaption.post {
                     if (!isContinuation) {
                         scrollAnimator.jumpTo(0)
@@ -645,8 +667,35 @@ class IncomingCallActivity : AppCompatActivity() {
                 textCaption.animate().alpha(0f).setDuration(150).withEndAction {
                     textCaption.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
                     textCaption.animate().alpha(1f).setDuration(150).start()
+                    // La hauteur du bandeau (captionVisibleLines × hauteur de
+                    // ligne) dépend de cette taille de texte : la recalculer
+                    // ici, sans quoi grossir le texte depuis le PWA finissait
+                    // par tronquer les deux lignes dans un bandeau resté à
+                    // l'ancienne hauteur.
+                    if (isConnected) applyOrientationLayout(resources.configuration.orientation)
                 }.start()
             }
+        }
+
+        // Nombre de lignes visibles avant défilement, réglable à distance par
+        // le proche (voir CallSignalingClient.listenForCaptionVisibleLines) —
+        // demande initiale : deux lignes, contre un bandeau à taille fixe
+        // auparavant, tantôt trop grand, tantôt trop court selon la taille de
+        // texte choisie.
+        callEngine.listenForCaptionVisibleLines { lines ->
+            runOnUiThread {
+                if (captionVisibleLines == lines) return@runOnUiThread
+                captionVisibleLines = lines
+                if (isConnected) applyOrientationLayout(resources.configuration.orientation)
+            }
+        }
+
+        // Délai sans nouvelle parole avant effacement des sous-titres,
+        // réglable à distance par le proche — pas besoin de runOnUiThread,
+        // une simple lecture/écriture de variable (même choix que
+        // listenForCaptionScrollSpeed ci-dessus).
+        callEngine.listenForCaptionClearDelay { seconds ->
+            captionClearDelayMs = (seconds * 1000L).coerceAtLeast(1000L)
         }
     }
 
@@ -691,12 +740,16 @@ class IncomingCallActivity : AppCompatActivity() {
         private const val TAG = "IncomingCallActivity"
 
         /**
-         * Délai sans nouvelle parole du proche au bout duquel le sous-titre
-         * s'efface (voir setupCaptionMode). Assez long pour ne pas effacer
-         * entre deux phrases d'une même explication, assez court pour ne pas
-         * laisser une phrase orpheline sur une photo de diaporama.
+         * Valeurs de départ tant que le proche n'a rien réglé depuis le PWA
+         * (voir CallSignalingClient.listenForCaptionVisibleLines/
+         * listenForCaptionClearDelay) : deux lignes visibles avant
+         * défilement, et 30 secondes sans nouvelle parole avant effacement du
+         * sous-titre — assez long pour ne pas effacer entre deux phrases
+         * d'une même explication, assez court pour ne pas laisser une phrase
+         * orpheline indéfiniment sur une photo de diaporama.
          */
-        private const val CAPTION_CLEAR_DELAY_MS = 6000L
+        private const val DEFAULT_CAPTION_VISIBLE_LINES = 2
+        private const val DEFAULT_CAPTION_CLEAR_DELAY_MS = 30_000L
         const val EXTRA_CALL_ID = "extra_call_id"
         const val EXTRA_CALLER_PHOTO_PATH = "extra_caller_photo_path"
         const val EXTRA_SIGNAL_RECEIVED_AT = "extra_signal_received_at"
