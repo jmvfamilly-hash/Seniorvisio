@@ -62,19 +62,16 @@ class AdminConfig(context: Context) {
             ?: BuildConfig.ASSEMBLYAI_API_KEY_DEFAULT
         set(value) = prefs.edit().putString(KEY_ASSEMBLYAI_API_KEY, value).apply()
 
-    // --- Clé API OpenWeatherMap et ville, pour le pictogramme météo de
-    // l'écran d'accueil et de l'écran d'appel (voir WeatherClient). Même
-    // repli que la clé AssemblyAI : celle saisie sur la tablette prime, sinon
-    // celle injectée par la CI depuis le secret GitHub WEATHER_API_KEY. ---
+    // --- Clé API OpenWeatherMap, pour le pictogramme météo de l'écran
+    // d'accueil et de l'écran d'appel (voir WeatherClient, qui obtient la
+    // position par géolocalisation — aucune ville à saisir). Même repli que
+    // la clé AssemblyAI : celle saisie sur la tablette prime, sinon celle
+    // injectée par la CI depuis le secret GitHub WEATHER_API_KEY. ---
     var weatherApiKey: String
         get() = prefs.getString(KEY_WEATHER_API_KEY, "")
             ?.takeIf { it.isNotBlank() }
             ?: BuildConfig.WEATHER_API_KEY_DEFAULT
         set(value) = prefs.edit().putString(KEY_WEATHER_API_KEY, value).apply()
-
-    var weatherLocation: String
-        get() = prefs.getString(KEY_WEATHER_LOCATION, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_WEATHER_LOCATION, value).apply()
 
     fun isCurrentlyNightWindow(hourNow: Int): Boolean {
         return if (nightStartHour <= nightEndHour) {
@@ -105,6 +102,5 @@ class AdminConfig(context: Context) {
         private const val KEY_ADMIN_PIN = "admin_pin"
         private const val KEY_ASSEMBLYAI_API_KEY = "assemblyai_api_key"
         private const val KEY_WEATHER_API_KEY = "weather_api_key"
-        private const val KEY_WEATHER_LOCATION = "weather_location"
     }
 }

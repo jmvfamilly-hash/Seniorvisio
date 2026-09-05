@@ -16,6 +16,11 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <!-- Position approximative (réseau Wi-Fi, pas de GPS nécessaire) pour la
+         météo de l'écran d'accueil (voir WeatherClient) : évite de faire
+         saisir une ville à la main, qui resterait fausse si la tablette
+         change de logement. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <uses-feature android:name="android.hardware.camera.front" android:required="true" />
 
