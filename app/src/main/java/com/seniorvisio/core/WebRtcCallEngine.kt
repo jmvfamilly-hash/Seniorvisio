@@ -30,6 +30,7 @@ import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
+import java.nio.ByteBuffer
 import kotlin.math.roundToInt
 
 /**
@@ -244,7 +245,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         remoteAudioSinkAttached = true
         track.addSink(object : AudioTrackSink {
             override fun onData(
-                audioData: ByteArray,
+                audioData: ByteBuffer,
                 bitsPerSample: Int,
                 sampleRate: Int,
                 numberOfChannels: Int,
@@ -259,7 +260,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                     transcriber = it
                     it.start(onText) { message -> Log.w(TAG, "AssemblyAI temps réel : $message") }
                 }
-                instance.sendAudio(audioData, sampleRate, numberOfChannels)
+                // AudioTrackSink fournit un ByteBuffer (potentiellement direct,
+                // en lecture seule) — on en extrait une copie en ByteArray, le
+                // format attendu par le transcripteur.
+                val bytes = ByteArray(audioData.remaining())
+                audioData.duplicate().get(bytes)
+                instance.sendAudio(bytes, sampleRate, numberOfChannels)
             }
         })
     }
