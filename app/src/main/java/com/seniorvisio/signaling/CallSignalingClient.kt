@@ -194,6 +194,18 @@ class CallSignalingClient {
         }
     }
 
+    /**
+     * L'appelant signale qu'il est dans la même pièce que Jean (voir
+     * WebRtcCallEngine.listenForSameRoomMode) : le son de la tablette est
+     * alors entièrement coupé, le texte continue de s'afficher.
+     */
+    fun listenForSameRoomMode(callId: String, onEnabled: (Boolean) -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            val enabled = snapshot?.getBoolean(FIELD_SAME_ROOM_MODE)
+            if (enabled != null) onEnabled(enabled)
+        }
+    }
+
     /** Vitesse maximale (dp/s) à laquelle le texte défile chez Jean, choisie à distance par l'appelant. */
     fun listenForCaptionScrollSpeed(callId: String, onDpPerSec: (Double) -> Unit): ListenerRegistration {
         return callDoc(callId).addSnapshotListener { snapshot, _ ->
@@ -218,6 +230,43 @@ class CallSignalingClient {
      * d'autant les écritures Firestore et les réveils du listener d'en face,
      * qui écoute le document entier.
      */
+    /**
+     * Décrit l'écran de Jean au PWA pour qu'il puisse en dessiner une réplique
+     * fidèle : proportions réelles de la dalle, ordre des zones tel que réglé
+     * par l'admin, palette claire ou sombre en cours, et contenu de la zone
+     * d'information.
+     *
+     * Ces valeurs sont publiées plutôt que recalculées côté PWA : le proche
+     * peut être dans une autre ville (météo différente), sur une tablette aux
+     * proportions différentes, et l'ordre des zones n'existe que côté
+     * tablette. Tout recalcul divergerait, ce qui viderait de son sens l'idée
+     * même de montrer au proche ce que Jean voit.
+     *
+     * Écrit rarement (à la connexion, puis au changement de palette ou au
+     * rafraîchissement du quart d'heure), contrairement à publishScreenState
+     * qui suit le rythme de la parole — d'où deux méthodes séparées.
+     */
+    fun publishScreenLayout(
+        callId: String,
+        aspectRatio: Double,
+        zoneOrder: String,
+        isDark: Boolean,
+        infoMoment: String?,
+        infoWeather: String?,
+        infoDate: String?,
+    ) {
+        callDoc(callId).update(
+            mapOf(
+                FIELD_SCREEN_ASPECT_RATIO to aspectRatio,
+                FIELD_SCREEN_ZONE_ORDER to zoneOrder,
+                FIELD_SCREEN_IS_DARK to isDark,
+                FIELD_SCREEN_INFO_MOMENT to infoMoment,
+                FIELD_SCREEN_INFO_WEATHER to infoWeather,
+                FIELD_SCREEN_INFO_DATE to infoDate,
+            )
+        )
+    }
+
     fun publishScreenState(callId: String, roomText: String?, callText: String?, lagSeconds: Float) {
         callDoc(callId).update(
             mapOf(
@@ -304,9 +353,16 @@ class CallSignalingClient {
         private const val FIELD_CAPTION_CATCHUP_LAG = "captionCatchUpLagSeconds"
         private const val FIELD_DISPLAYED_ROOM_TEXT = "displayedRoomText"
         private const val FIELD_DISPLAYED_CALL_TEXT = "displayedCallText"
+        private const val FIELD_SCREEN_ASPECT_RATIO = "screenAspectRatio"
+        private const val FIELD_SCREEN_ZONE_ORDER = "screenZoneOrder"
+        private const val FIELD_SCREEN_IS_DARK = "screenIsDark"
+        private const val FIELD_SCREEN_INFO_MOMENT = "screenInfoMoment"
+        private const val FIELD_SCREEN_INFO_WEATHER = "screenInfoWeather"
+        private const val FIELD_SCREEN_INFO_DATE = "screenInfoDate"
         private const val FIELD_CALLEE_ERROR = "calleeErrorMessage"
         private const val FIELD_CAPTION_DEBUG = "captionDebugMessage"
         private const val FIELD_MIC_MUTED = "tabletMicMuted"
+        private const val FIELD_SAME_ROOM_MODE = "sameRoomMode"
         private const val FIELD_SLIDESHOW_PHOTO = "slideshowPhotoBase64"
 
         private const val DEVICE_TOKEN_DOC = "devices/jean_tablet"

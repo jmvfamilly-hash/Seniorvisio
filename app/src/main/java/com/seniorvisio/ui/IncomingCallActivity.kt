@@ -74,6 +74,12 @@ class IncomingCallActivity : AppCompatActivity() {
     private var lastPublishedCallText: String? = null
     private var lastPublishedLagSeconds = -1f
 
+    // Description de l'écran pour la réplique côté PWA (voir
+    // publishScreenLayout). Conservée ici parce qu'elle se construit en deux
+    // temps — la palette et la zone d'information n'arrivent pas ensemble.
+    private var screenIsDark = true
+    private var lastInfo: HomeZonesController.InfoSnapshot? = null
+
     private val screenStateHandler = Handler(Looper.getMainLooper())
     private val screenStatePublisher = object : Runnable {
         override fun run() {
@@ -141,8 +147,14 @@ class IncomingCallActivity : AppCompatActivity() {
                 // vidéo ne le recouvrent — d'où une palette qui sert surtout
                 // aux premières secondes de la sonnerie.
                 findViewById<View>(R.id.callRoot).setBackgroundColor(palette.background)
+                screenIsDark = palette.isDark
+                publishScreenLayout()
             },
         )
+        zones.onInfoChanged = { snapshot ->
+            lastInfo = snapshot
+            publishScreenLayout()
+        }
 
         val callId = intent.getStringExtra(EXTRA_CALL_ID)
         if (callId == null) {
@@ -217,6 +229,13 @@ class IncomingCallActivity : AppCompatActivity() {
         // émet le temps d'un aller-retour Firestore — assez pour un larsen avec
         // le téléphone du soignant posé à côté.
         callEngine.listenForMicMute()
+
+        // Écouté dès maintenant pour la même raison que la coupure micro : la
+        // consigne doit être connue AVANT qu'answer() ne crée la piste micro
+        // et que la piste audio distante n'arrive, sans quoi la tablette
+        // émet et diffuse le temps d'un aller-retour Firestore — assez pour
+        // un larsen franc quand le téléphone du proche est dans la pièce.
+        callEngine.listenForSameRoomMode()
 
         // Le mode soignant écrit cette demande dès la création de l'appel (voir
         // web-caller/app.js) : elle arrive donc souvent AVANT que l'offre WebRTC
@@ -459,7 +478,12 @@ class IncomingCallActivity : AppCompatActivity() {
      */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (isConnected) applyOrientationLayout(newConfig.orientation)
+        if (!isConnected) return
+        applyOrientationLayout(newConfig.orientation)
+        // Les proportions de l'écran viennent de changer : la réplique côté
+        // PWA doit tourner avec, sans quoi le proche verrait des zones aux
+        // mauvaises places jusqu'au prochain rafraîchissement horaire.
+        publishScreenLayout()
     }
 
     /**
@@ -529,6 +553,32 @@ class IncomingCallActivity : AppCompatActivity() {
      * mais elle est publiée quand même : le jour où la tablette saura faire
      * les deux, le PWA n'aura rien à changer.
      */
+    /**
+     * Décrit l'écran de Jean au PWA, pour qu'il en dessine une réplique
+     * fidèle (voir CallSignalingClient.publishScreenLayout). Appelée à chaque
+     * changement de palette et à chaque rafraîchissement de la zone
+     * d'information, soit quelques fois par heure — sans garde-fou, donc,
+     * contrairement à l'état du texte affiché qui suit le rythme de la parole.
+     *
+     * Les proportions viennent des dimensions réelles de la dalle et non
+     * d'une valeur codée en dur : la même application tourne sur des
+     * tablettes différentes, et une réplique aux mauvaises proportions
+     * donnerait au proche une idée fausse de la place qu'occupe chaque zone.
+     */
+    private fun publishScreenLayout() {
+        val metrics = resources.displayMetrics
+        if (metrics.heightPixels <= 0) return
+        val info = lastInfo
+        callEngine.publishScreenLayout(
+            aspectRatio = metrics.widthPixels.toDouble() / metrics.heightPixels.toDouble(),
+            zoneOrder = zones.zoneOrderNames(),
+            isDark = screenIsDark,
+            infoMoment = info?.moment,
+            infoWeather = info?.weather,
+            infoDate = info?.date,
+        )
+    }
+
     private fun publishScreenStateIfChanged() {
         val callText = zones.callZone.displayedText()
         val lag = zones.callZone.pendingSeconds()

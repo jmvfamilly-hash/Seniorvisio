@@ -38,8 +38,6 @@ const DEFAULT_SETTINGS = {
   selfPreview: false,
   textSize: 56,
   scrollSpeed: 50,
-  captionVisibleLines: 2,
-  captionClearDelaySeconds: 30,
 };
 
 // --- Identité de l'appelant, mémorisée dans ce navigateur uniquement ---
@@ -125,8 +123,6 @@ function currentSettingsFromUi() {
     selfPreview: els.selfPreviewToggle.checked,
     textSize: Number(els.textSizeSlider.value),
     scrollSpeed: Number(els.scrollSpeedSlider.value),
-    captionVisibleLines: Number(els.captionLinesSlider.value),
-    captionClearDelaySeconds: Number(els.captionClearDelaySlider.value),
   };
 }
 
@@ -136,8 +132,6 @@ function applySettingsToUi(settings) {
   els.selfPreviewToggle.checked = settings.selfPreview;
   els.textSizeSlider.value = settings.textSize;
   els.scrollSpeedSlider.value = settings.scrollSpeed;
-  els.captionLinesSlider.value = settings.captionVisibleLines;
-  els.captionClearDelaySlider.value = settings.captionClearDelaySeconds;
 }
 
 // --- Câblage UI ---
@@ -153,7 +147,11 @@ const els = {
   forceConnectButton: document.getElementById("forceConnectButton"),
   retryButton: document.getElementById("retryButton"),
   hangupButton: document.getElementById("hangupButton"),
-  toggleViewButton: document.getElementById("toggleViewButton"),
+  paneVideo: document.getElementById("paneVideo"),
+  paneSettings: document.getElementById("paneSettings"),
+  paneSlideshow: document.getElementById("paneSlideshow"),
+  openSettingsButton: document.getElementById("openSettingsButton"),
+  openSlideshowButton: document.getElementById("openSlideshowButton"),
   rememberSettingsButton: document.getElementById("rememberSettingsButton"),
   callStats: document.getElementById("callStats"),
   volumeSlider: document.getElementById("volumeSlider"),
@@ -168,12 +166,11 @@ const els = {
   slideshowStopButton: document.getElementById("slideshowStopButton"),
   slideshowRememberToggle: document.getElementById("slideshowRememberToggle"),
   sameRoomToggle: document.getElementById("sameRoomToggle"),
+  sameRoomStatus: document.getElementById("sameRoomStatus"),
   slideshowStatus: document.getElementById("slideshowStatus"),
   selfPreviewToggle: document.getElementById("selfPreviewToggle"),
   textSizeSlider: document.getElementById("textSizeSlider"),
   scrollSpeedSlider: document.getElementById("scrollSpeedSlider"),
-  captionLinesSlider: document.getElementById("captionLinesSlider"),
-  captionClearDelaySlider: document.getElementById("captionClearDelaySlider"),
   callingHint: document.getElementById("callingHint"),
   countdownFill: document.getElementById("countdownFill"),
   countdownText: document.getElementById("countdownText"),
@@ -185,21 +182,35 @@ const els = {
   identityStatus: document.getElementById("identityStatus"),
   captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
   captionDebugIndicator: document.getElementById("captionDebugIndicator"),
+  // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
+  jeanScreen: document.getElementById("jeanScreen"),
+  jeanZones: document.getElementById("jeanZones"),
+  jeanSlideshow: document.getElementById("jeanSlideshow"),
+  jeanMoment: document.getElementById("jeanMoment"),
+  jeanWeather: document.getElementById("jeanWeather"),
+  jeanDate: document.getElementById("jeanDate"),
+  jeanRoomText: document.getElementById("jeanRoomText"),
+  jeanCallText: document.getElementById("jeanCallText"),
 };
 
 let statsInterval = null;
 
 /**
- * Onglet "visio" (vidéo quasi plein écran, juste Raccrocher + le bouton pour
- * naviguer vers l'écran de réglages) vs onglet "réglages" (l'écran complet
- * construit jusqu'ici : volume, sous-titres, miroir de transcription…).
- * Basculé via une classe sur <body> (voir style.css), actif par défaut dès
- * la connexion — pendant la conversation elle-même, pas besoin des réglages
- * sous les yeux en permanence.
+ * Trois fenêtres pendant l'appel, une seule visible à la fois : la vidéo (ce
+ * que Jean voit), les réglages, et les photos. La vidéo est celle qui
+ * s'ouvre à la connexion — pendant la conversation elle-même, ni les
+ * réglages ni le choix des photos n'ont à occuper l'écran.
+ *
+ * Trois vues plein écran plutôt que trois fenêtres de navigateur : le proche
+ * appelle depuis son téléphone, où une seconde fenêtre est au mieux un
+ * onglet qu'on ne retrouve pas, au pire un popup bloqué — et surtout, quitter
+ * la fenêtre qui porte la vidéo mettrait l'appel WebRTC en arrière-plan.
  */
-function setVideoMode(active) {
-  document.body.classList.toggle("video-mode", active);
-  els.toggleViewButton.textContent = active ? "⚙️ Réglages" : "📹 Vidéo";
+const PANES = ["paneVideo", "paneSettings", "paneSlideshow"];
+
+function showPane(name) {
+  PANES.forEach((pane) => els[pane].classList.toggle("hidden", pane !== name));
+  document.body.classList.toggle("video-mode", name === "paneVideo");
 }
 
 function showState(name) {
@@ -215,15 +226,71 @@ function showState(name) {
     statsInterval = setInterval(async () => {
       els.callStats.textContent = await engine.getStatsSummary();
     }, 2000);
-    setVideoMode(true);
+    showPane("paneVideo");
   } else {
-    setVideoMode(false);
+    document.body.classList.remove("video-mode");
   }
 }
 
-els.toggleViewButton.addEventListener("click", () => {
-  setVideoMode(!document.body.classList.contains("video-mode"));
+els.openSettingsButton.addEventListener("click", () => showPane("paneSettings"));
+els.openSlideshowButton.addEventListener("click", () => showPane("paneSlideshow"));
+document.querySelectorAll("[data-back-to-video]").forEach((button) => {
+  button.addEventListener("click", () => showPane("paneVideo"));
 });
+
+/**
+ * Dessine la réplique de l'écran de Jean d'après ce que la tablette en dit :
+ * proportions réelles de sa dalle, ordre des zones tel que réglé par l'admin,
+ * palette claire ou sombre en cours, contenu de la zone d'information.
+ *
+ * Tout vient de la tablette (voir CallSignalingClient.publishScreenLayout)
+ * plutôt que d'être recalculé ici : le proche peut être dans une autre ville
+ * (météo différente) et l'ordre des zones n'existe que côté tablette. Le
+ * recalculer donnerait une réplique qui diverge, ce qui viderait de son sens
+ * l'idée même de lui montrer ce que Jean voit.
+ */
+function applyScreenLayout(layout) {
+  if (layout.aspectRatio) {
+    els.jeanScreen.style.aspectRatio = String(layout.aspectRatio);
+  }
+  els.jeanScreen.classList.toggle("jean-dark", layout.isDark);
+  els.jeanScreen.classList.toggle("jean-light", !layout.isDark);
+  els.jeanMoment.textContent = layout.infoMoment;
+  els.jeanWeather.textContent = layout.infoWeather;
+  els.jeanDate.textContent = layout.infoDate;
+
+  // Réordonne les zones sans les recréer : leur contenu et leur état
+  // d'affichage survivent au changement.
+  layout.zoneOrder.split(",").forEach((zoneName) => {
+    const zone = els.jeanZones.querySelector(`[data-zone="${zoneName}"]`);
+    if (zone) els.jeanZones.appendChild(zone);
+  });
+}
+
+/**
+ * Affiche dans la réplique exactement le texte que Jean a sous les yeux, au
+ * moment où il l'a — pas ce que le proche vient de dire, qui a toujours de
+ * l'avance (voir PacedCaptionZone côté tablette).
+ */
+function applyScreenState(state) {
+  const setZone = (zoneName, textElement, text) => {
+    const zone = els.jeanZones.querySelector(`[data-zone="${zoneName}"]`);
+    textElement.textContent = text || "";
+    if (zone) zone.classList.toggle("hidden", !text);
+  };
+  setZone("ROOM", els.jeanRoomText, state.roomText);
+  setZone("CALL", els.jeanCallText, state.callText);
+
+  // En dessous d'une demi-seconde, l'écart ne se voit pas : le signaler
+  // ferait clignoter un avertissement en permanence pendant une conversation
+  // parfaitement normale.
+  const lagging = state.lagSeconds > 0.5;
+  if (lagging) {
+    els.captionOverflowIndicator.textContent =
+      `⏳ Jean a encore ${state.lagSeconds.toFixed(0)}s de lecture devant lui, laisse-lui le temps`;
+  }
+  els.captionOverflowIndicator.classList.toggle("hidden", !lagging);
+}
 
 els.callButton.addEventListener("click", async () => {
   const settings = loadSavedSettings() || DEFAULT_SETTINGS;
@@ -235,8 +302,14 @@ els.callButton.addEventListener("click", async () => {
   // rendrait Jean muet sans que personne ne comprenne pourquoi.
   els.tabletMicMuteToggle.checked = false;
   els.sameRoomToggle.checked = false;
+  els.sameRoomStatus.textContent = "";
+  els.volumeSlider.disabled = false;
   els.captionOverflowIndicator.classList.add("hidden");
   els.captionDebugIndicator.classList.add("hidden");
+  // La réplique de l'écran de Jean repart vide : les textes du dernier appel
+  // ne doivent pas réapparaître le temps que la tablette publie les siens.
+  applyScreenState({ roomText: null, callText: null, lagSeconds: 0 });
+  els.jeanSlideshow.classList.add("hidden");
   // Désactivé tant que l'appel n'est pas prêt (voir plus bas) : un appui
   // pendant la mise en place (caméra, création de l'offre...) tombait dans
   // le vide côté PWA — le document d'appel n'existait pas encore, la
@@ -256,8 +329,6 @@ els.callButton.addEventListener("click", async () => {
       captionModeEnabled: true,
       captionTextSize: DEFAULT_SETTINGS.textSize,
       captionMaxScrollSpeedDpPerSec: DEFAULT_SETTINGS.scrollSpeed,
-      captionVisibleLines: DEFAULT_SETTINGS.captionVisibleLines,
-      captionClearDelaySeconds: DEFAULT_SETTINGS.captionClearDelaySeconds,
       selfPreviewEnabled: false,
       // Ni décompte, ni photo, ni caméra : voir le commentaire de CAREGIVER_MODE.
       forceConnect: true,
@@ -273,8 +344,6 @@ els.callButton.addEventListener("click", async () => {
       captionModeEnabled: settings.captionEnabled,
       captionTextSize: settings.textSize,
       captionMaxScrollSpeedDpPerSec: settings.scrollSpeed,
-      captionVisibleLines: settings.captionVisibleLines,
-      captionClearDelaySeconds: settings.captionClearDelaySeconds,
       selfPreviewEnabled: settings.selfPreview,
       callerPhotoBase64: identity.photoBase64 || null,
     });
@@ -315,14 +384,8 @@ els.tabletMicMuteToggle.addEventListener("change", () => {
   engine.setTabletMicMuted(els.tabletMicMuteToggle.checked);
 });
 
-engine.onCaptionCatchUpLag((lagSeconds) => {
-  const lagging = lagSeconds > 0.3; // en dessous, pas perceptible pour Jean
-  if (lagging) {
-    els.captionOverflowIndicator.textContent =
-      `⏳ Jean a environ ${lagSeconds.toFixed(1)}s de retard sur ta voix, ralentis un peu`;
-  }
-  els.captionOverflowIndicator.classList.toggle("hidden", !lagging);
-});
+engine.onScreenState(applyScreenState);
+engine.onScreenLayout(applyScreenLayout);
 
 engine.onCaptionDebug((message) => {
   els.captionDebugIndicator.textContent = `🔧 ${message}`;
@@ -342,22 +405,6 @@ els.scrollSpeedSlider.addEventListener("input", () => {
   clearTimeout(scrollSpeedDebounce);
   scrollSpeedDebounce = setTimeout(() => {
     engine.setCaptionScrollSpeed(Number(els.scrollSpeedSlider.value));
-  }, 150);
-});
-
-let captionLinesDebounce = null;
-els.captionLinesSlider.addEventListener("input", () => {
-  clearTimeout(captionLinesDebounce);
-  captionLinesDebounce = setTimeout(() => {
-    engine.setCaptionVisibleLines(Number(els.captionLinesSlider.value));
-  }, 150);
-});
-
-let captionClearDelayDebounce = null;
-els.captionClearDelaySlider.addEventListener("input", () => {
-  clearTimeout(captionClearDelayDebounce);
-  captionClearDelayDebounce = setTimeout(() => {
-    engine.setCaptionClearDelay(Number(els.captionClearDelaySlider.value));
   }, 150);
 });
 
@@ -498,10 +545,17 @@ function renderSlideshowState() {
   els.slideshowNextButton.disabled = slideshowIndex === slideshowPhotos.length - 1;
 }
 
-/** Envoie la photo courante chez Jean (rien si aucun appel n'est en cours). */
+/**
+ * Envoie la photo courante chez Jean (rien si aucun appel n'est en cours), et
+ * la pose dans la réplique de son écran : c'est bien ce qu'il a sous les yeux
+ * à la place de la vidéo tant que le diaporama tourne.
+ */
 function pushCurrentSlide() {
   if (!slideshowPhotos.length) return;
-  engine.setSlideshowPhoto(slideshowPhotos[slideshowIndex]);
+  const photo = slideshowPhotos[slideshowIndex];
+  engine.setSlideshowPhoto(photo);
+  els.jeanSlideshow.src = `data:image/jpeg;base64,${photo}`;
+  els.jeanSlideshow.classList.remove("hidden");
 }
 
 function showSlide(index) {
@@ -564,6 +618,7 @@ els.slideshowNextButton.addEventListener("click", () => showSlide(slideshowIndex
 // de photos reste en place pour pouvoir relancer sans tout re-choisir.
 els.slideshowStopButton.addEventListener("click", () => {
   engine.setSlideshowPhoto(null);
+  els.jeanSlideshow.classList.add("hidden");
   els.slideshowStatus.textContent = "Diaporama arrêté, Jean revoit la vidéo.";
 });
 
@@ -589,19 +644,25 @@ els.slideshowRememberToggle.addEventListener("change", () => {
   }
 });
 
-// Mode "même pièce" : le proche est à côté de Jean et commente de vive voix.
-// La tablette ne doit alors ni capter sa voix (elle reviendrait en écho dans le
-// téléphone) ni la rejouer. Les sous-titres continuent d'arriver, puisqu'ils
-// viennent du micro du téléphone, pas de celui de la tablette.
+// Mode "même pièce" : le proche est à côté de Jean et lui parle de vive voix.
+// La tablette ne doit alors ni capter sa voix (elle reviendrait en écho dans
+// le téléphone) ni la rejouer avec une seconde de décalage. Le texte, lui,
+// continue de s'afficher — c'est même toute la raison d'appeler depuis le
+// fauteuil d'à côté.
+//
+// La tablette applique elle-même la coupure (voir
+// WebRtcCallEngine.listenForSameRoomMode) plutôt que de la déduire d'un
+// volume à zéro : un curseur remonté par inadvertance ramènerait sinon
+// l'écho, sans que rien n'indique pourquoi.
 els.sameRoomToggle.addEventListener("change", () => {
   const sameRoom = els.sameRoomToggle.checked;
+  engine.setSameRoomMode(sameRoom);
   els.tabletMicMuteToggle.checked = sameRoom;
   engine.setTabletMicMuted(sameRoom);
-  els.volumeSlider.value = sameRoom ? 0 : 100;
-  engine.setRemoteVolume(Number(els.volumeSlider.value) / 100);
-  els.slideshowStatus.textContent = sameRoom
-    ? "Mode même pièce : micro et son de la tablette coupés."
-    : "Mode à distance rétabli : micro et son de la tablette réactivés.";
+  els.volumeSlider.disabled = sameRoom;
+  els.sameRoomStatus.textContent = sameRoom
+    ? "Son de la tablette entièrement coupé. Vos paroles continuent de s'écrire chez Jean."
+    : "";
 });
 
 els.hangupButton.addEventListener("click", async () => {
@@ -610,8 +671,9 @@ els.hangupButton.addEventListener("click", async () => {
 });
 
 // Le mode soignant réduit l'écran à sa plus simple expression : un bouton pour
-// parler, un pour terminer, et le miroir de ce que Jean lit. Le reste (photo,
-// réglages, vidéo, dépannage) est masqué par la feuille de style — ici on ne
+// parler, un pour terminer, et la réplique de l'écran de Jean — le seul retour
+// qui dit au soignant que sa voix est bien captée et transcrite. Le reste
+// (photo, réglages, vidéo) est masqué par la feuille de style ; ici on ne
 // change que ce qui doit être formulé autrement.
 if (CAREGIVER_MODE) {
   document.querySelector("h1").textContent = "Parler à Jean";
@@ -623,9 +685,7 @@ if (CAREGIVER_MODE) {
     "🎤 Parlez dans votre téléphone, comme au téléphone : c'est lui qui vous écoute. La tablette de Jean ne fait qu'écrire, sans aucun son.";
   document.getElementById("caregiverCallHint").textContent =
     "🎤 Gardez le téléphone près de vous et parlez dedans, à voix normale.";
-  // "Ce que Jean va voir" devient sa vraie fonction ici : le seul retour qui
-  // dit au soignant que sa voix est bien captée et transcrite.
-  document.querySelector(".transcript-hint").textContent = "Ce que Jean lit :";
+  document.getElementById("mirrorHint").textContent = "👆 Ce que Jean lit en ce moment";
 }
 
 engine.onBlocked(() => showState("blocked"));

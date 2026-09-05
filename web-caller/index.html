@@ -75,10 +75,65 @@
     </div>
 
     <div id="stateConnected" class="state hidden">
-      <video id="remoteVideo" autoplay playsinline></video>
+
+      <!-- La caméra du proche : hors de toute fenêtre, parce qu'elle sert
+           aussi à la capture de la photo d'appelant avant même la connexion
+           (voir webrtc-engine.js, _captureCallerPhoto). -->
       <video id="localVideo" autoplay playsinline muted></video>
 
-      <div id="connectedControls">
+      <!-- ================= FENÊTRE VIDÉO (initiale) =================
+           Ce que voit Jean, à l'identique : mêmes proportions que sa dalle,
+           mêmes zones dans le même ordre, mêmes textes au même moment (voir
+           app.js, applyScreenState / applyScreenLayout). C'est la tablette
+           qui publie tout ça, plutôt que le PWA qui le reconstitue : le
+           proche peut être dans une autre ville (météo différente), et
+           surtout le texte affiché chez Jean est volontairement en retard sur
+           la parole, le temps qu'il puisse le lire. Reconstituer ce décalage
+           de ce côté-ci ne donnerait qu'une approximation. -->
+      <section id="paneVideo" class="pane">
+        <div id="jeanScreen" class="jean-screen">
+          <video id="remoteVideo" autoplay playsinline></video>
+          <img id="jeanSlideshow" class="jean-slideshow hidden" alt="Photo affichée chez Jean">
+
+          <div id="jeanZones" class="jean-zones">
+            <div class="jean-zone jean-zone-info" data-zone="INFO">
+              <p class="jean-info-top">
+                <span id="jeanMoment"></span>
+                <span id="jeanWeather"></span>
+              </p>
+              <p class="jean-info-date" id="jeanDate"></p>
+            </div>
+
+            <div class="jean-zone jean-zone-text hidden" data-zone="ROOM">
+              <p id="jeanRoomText"></p>
+            </div>
+
+            <div class="jean-zone jean-zone-text hidden" data-zone="CALL">
+              <p id="jeanCallText"></p>
+            </div>
+          </div>
+        </div>
+
+        <p class="hint" id="mirrorHint">👆 Exactement ce que Jean a sous les yeux en ce moment</p>
+        <p class="caption-overflow-indicator hidden" id="captionOverflowIndicator"></p>
+        <!-- Diagnostic temporaire de la transcription temps réel AssemblyAI
+             côté tablette (voir WebRtcCallEngine.attachTranscriptionSink),
+             tant qu'elle n'est pas confirmée fiable en usage réel — seul
+             moyen de savoir où ça bloque sans accès au journal système. -->
+        <p class="hint hidden" id="captionDebugIndicator"></p>
+
+        <div class="pane-actions">
+          <button id="openSettingsButton" class="secondary">⚙️ Réglages</button>
+          <button id="openSlideshowButton" class="secondary">🖼️ Photos</button>
+          <button id="hangupButton" class="danger">Raccrocher</button>
+        </div>
+      </section>
+
+      <!-- ================= FENÊTRE RÉGLAGES ================= -->
+      <section id="paneSettings" class="pane hidden">
+        <button class="secondary pane-back" data-back-to-video>◀ Revenir à la vidéo</button>
+        <h2 class="pane-title">Réglages de l'appel</h2>
+
         <pre id="callStats" class="stats"></pre>
 
         <div class="volume-control">
@@ -93,17 +148,25 @@
           </label>
         </div>
 
+        <!-- Cas où le proche est physiquement à côté de Jean : la tablette ne
+             doit alors ni capter sa voix (elle reviendrait en écho dans le
+             téléphone) ni la rejouer. Les sous-titres, eux, continuent
+             d'arriver — ils viennent du son de l'appel, pas du micro de la
+             tablette. Réglage d'appel et non de diaporama : il vaut aussi
+             quand on ne montre aucune photo. -->
+        <div class="caption-control">
+          <label>
+            <input type="checkbox" id="sameRoomToggle">
+            📍 Nous sommes dans la même pièce (coupe complètement le son de la tablette)
+          </label>
+          <p class="hint" id="sameRoomStatus"></p>
+        </div>
+
         <div class="caption-control">
           <label>
             <input type="checkbox" id="captionToggle">
             🔤 Afficher mes paroles en grand chez Jean
           </label>
-          <p class="caption-overflow-indicator hidden" id="captionOverflowIndicator"></p>
-          <!-- Diagnostic temporaire de la transcription temps réel AssemblyAI
-               côté tablette (voir WebRtcCallEngine.attachTranscriptionSink),
-               tant qu'elle n'est pas confirmée fiable en usage réel — seul
-               moyen de savoir où ça bloque sans accès au journal système. -->
-          <p class="hint hidden" id="captionDebugIndicator"></p>
         </div>
 
         <div class="caption-control">
@@ -123,63 +186,44 @@
           <input type="range" id="scrollSpeedSlider" min="20" max="100" value="50" step="10">
         </div>
 
-        <div class="volume-control">
-          <label for="captionLinesSlider">📏 Nombre de lignes affichées chez Jean</label>
-          <input type="range" id="captionLinesSlider" min="1" max="4" value="2" step="1">
-        </div>
-
-        <div class="volume-control">
-          <label for="captionClearDelaySlider">⏱️ Efface après ce temps sans parole (secondes)</label>
-          <input type="range" id="captionClearDelaySlider" min="1" max="60" value="30" step="1">
-        </div>
-
-        <!-- Diaporama commenté : le proche fait défiler ses photos, Jean les
-             voit en grand sans rien manipuler, et entend/lit ses commentaires
-             (sous-titres, qui s'effacent d'eux-mêmes entre deux phrases). -->
-        <div class="slideshow-control">
-          <p class="slideshow-title">🖼️ Regarder des photos avec Jean</p>
-
-          <label class="slideshow-pick">
-            Choisir des photos
-            <input type="file" id="slideshowInput" accept="image/*" multiple>
-          </label>
-
-          <div class="slideshow-nav hidden" id="slideshowNav">
-            <button id="slideshowPrevButton" class="secondary">◀ Précédente</button>
-            <span class="slideshow-counter" id="slideshowCounter"></span>
-            <button id="slideshowNextButton" class="secondary">Suivante ▶</button>
-          </div>
-
-          <img id="slideshowPreview" class="slideshow-preview hidden" alt="Photo en cours chez Jean">
-
-          <button id="slideshowStopButton" class="secondary hidden">Arrêter le diaporama (revenir à la vidéo)</button>
-
-          <label>
-            <input type="checkbox" id="slideshowRememberToggle">
-            💾 Garder ces photos sur cet appareil pour la prochaine fois
-          </label>
-
-          <!-- Cas où le proche est physiquement à côté de Jean : il commente de
-               vive voix, la tablette ne doit alors ni capter (larsen) ni
-               rejouer sa voix. Les sous-titres, eux, continuent de venir du
-               micro de son téléphone. -->
-          <label>
-            <input type="checkbox" id="sameRoomToggle">
-            📍 Nous sommes dans la même pièce (coupe le micro et le son de la tablette)
-          </label>
-
-          <p class="slideshow-status" id="slideshowStatus"></p>
-        </div>
-
         <button id="rememberSettingsButton" class="secondary">💾 Mémoriser ces réglages pour la prochaine fois</button>
 
         <!-- Rappelée pendant l'appel, pas seulement avant : le réflexe de
              baisser le téléphone pour parler à la personne revient vite. -->
         <p class="caregiver-only caregiver-hint" id="caregiverCallHint"></p>
-      </div>
+      </section>
 
-      <button id="toggleViewButton" class="secondary">⚙️ Réglages</button>
-      <button id="hangupButton" class="danger">Raccrocher</button>
+      <!-- ================= FENÊTRE PHOTOS =================
+           Diaporama commenté : le proche fait défiler ses photos, Jean les
+           voit en grand sans rien manipuler, et lit ses commentaires dans la
+           zone prévue pour ça. -->
+      <section id="paneSlideshow" class="pane hidden">
+        <button class="secondary pane-back" data-back-to-video>◀ Revenir à la vidéo</button>
+        <h2 class="pane-title">🖼️ Regarder des photos avec Jean</h2>
+
+        <label class="slideshow-pick">
+          Choisir des photos
+          <input type="file" id="slideshowInput" accept="image/*" multiple>
+        </label>
+
+        <div class="slideshow-nav hidden" id="slideshowNav">
+          <button id="slideshowPrevButton" class="secondary">◀ Précédente</button>
+          <span class="slideshow-counter" id="slideshowCounter"></span>
+          <button id="slideshowNextButton" class="secondary">Suivante ▶</button>
+        </div>
+
+        <img id="slideshowPreview" class="slideshow-preview hidden" alt="Photo en cours chez Jean">
+
+        <button id="slideshowStopButton" class="secondary hidden">Arrêter le diaporama (revenir à la vidéo)</button>
+
+        <label class="slideshow-remember">
+          <input type="checkbox" id="slideshowRememberToggle">
+          💾 Garder ces photos sur cet appareil pour la prochaine fois
+        </label>
+
+        <p class="slideshow-status" id="slideshowStatus"></p>
+      </section>
+
     </div>
   </main>
 

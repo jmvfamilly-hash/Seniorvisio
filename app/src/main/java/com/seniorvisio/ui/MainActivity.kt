@@ -72,9 +72,11 @@ class MainActivity : AppCompatActivity() {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             val service = (binder as? RoomPresenceService.LocalBinder)?.getService() ?: return
             roomService = service
-            service.startRoomTranscription { text, isFinal ->
-                runOnUiThread { zones.roomZone.submit(text, isFinal) }
-            }
+            // Argument nommé, pas un lambda en fin d'appel : celui-ci se
+            // rattacherait au DERNIER paramètre (onError), pas à onText.
+            service.startRoomTranscription(
+                onText = { text, isFinal -> runOnUiThread { zones.roomZone.submit(text, isFinal) } },
+            )
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {

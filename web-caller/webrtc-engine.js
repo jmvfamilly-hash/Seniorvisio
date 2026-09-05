@@ -18,7 +18,10 @@ class RealCallEngine extends CallEngine {
     this._unsubscribeCalleeCandidates = null;
     this._countdownCb = null;
     this._countdownInterval = null;
-    this._captionCatchUpLagCb = null;
+    this._screenStateCb = null;
+    this._screenLayoutCb = null;
+    this._lastScreenStateKey = null;
+    this._lastScreenLayoutKey = null;
     this._captionDebugCb = null;
     this._lastCaptionDebugMessage = null;
     this._hasNotifiedConnected = false;
@@ -47,8 +50,27 @@ class RealCallEngine extends CallEngine {
   onError(callback) { this._errorCb = callback; }
   /** callback(remainingSeconds, totalSeconds) — progression du décompte vu côté tablette. */
   onCountdown(callback) { this._countdownCb = callback; }
-  /** callback(lagSeconds: number) — retard de lecture de Jean par rapport au texte reçu (0 = à jour) : ralentir le débit si ça grimpe. */
-  onCaptionCatchUpLag(callback) { this._captionCatchUpLagCb = callback; }
+  /**
+   * callback({ roomText, callText, lagSeconds }) — ce que Jean a réellement
+   * sous les yeux à cet instant, et l'avance prise par le proche sur sa
+   * lecture (0 = Jean est à jour).
+   *
+   * Ces textes sont publiés par la tablette (voir CallSignalingClient.
+   * publishScreenState) et non reconstitués ici : l'affichage chez Jean est
+   * volontairement en retard sur la parole, le temps qu'il puisse lire, et
+   * ce décalage dépend de la longueur de chaque phrase et de la file
+   * d'attente. Le rejouer de ce côté-ci ne donnerait qu'une approximation.
+   */
+  onScreenState(callback) { this._screenStateCb = callback; }
+
+  /**
+   * callback({ aspectRatio, zoneOrder, isDark, infoMoment, infoWeather,
+   * infoDate }) — description de l'écran de Jean, pour en dessiner une
+   * réplique fidèle (voir CallSignalingClient.publishScreenLayout). Change
+   * rarement : à la connexion, à la rotation de la tablette, au passage
+   * jour/nuit, et au rafraîchissement du quart d'heure.
+   */
+  onScreenLayout(callback) { this._screenLayoutCb = callback; }
   /** callback(message: string) — diagnostic de la transcription temps réel AssemblyAI côté tablette (voir attachTranscriptionSink). */
   onCaptionDebug(callback) { this._captionDebugCb = callback; }
 
@@ -219,9 +241,11 @@ class RealCallEngine extends CallEngine {
         captionModeEnabled: initialSettings.captionModeEnabled ?? false,
         captionTextSize: initialSettings.captionTextSize ?? 56,
         captionMaxScrollSpeedDpPerSec: initialSettings.captionMaxScrollSpeedDpPerSec ?? 50,
-        captionVisibleLines: initialSettings.captionVisibleLines ?? 2,
-        captionClearDelaySeconds: initialSettings.captionClearDelaySeconds ?? 30,
         selfPreviewEnabled: initialSettings.selfPreviewEnabled ?? false,
+        // Remis à faux à chaque appel : un mode "même pièce" resté actif d'un
+        // appel précédent laisserait Jean sans aucun son, sans que personne ne
+        // comprenne pourquoi.
+        sameRoomMode: false,
         // Mode soignant : la tablette se connecte sans attendre son décompte de
         // 30 s (celui-ci a du sens pour un appel venu de l'extérieur, aucun
         // quand la personne est déjà debout à côté de Jean), et son micro est
@@ -264,8 +288,35 @@ class RealCallEngine extends CallEngine {
       if (data.alertStartedAt && data.alertDurationSeconds) {
         this._startCountdownDisplay(data.alertStartedAt.toMillis(), data.alertDurationSeconds);
       }
-      if (typeof data.captionCatchUpLagSeconds === "number") {
-        this._captionCatchUpLagCb && this._captionCatchUpLagCb(data.captionCatchUpLagSeconds);
+      // Ce listener se redéclenche à chaque écriture sur le document, quelle
+      // qu'elle soit : sans ces comparaisons, la réplique de l'écran de Jean
+      // serait entièrement reconstruite à chaque candidat ICE, chaque
+      // changement de volume, chaque mouvement du curseur — plusieurs fois
+      // par seconde pour rien.
+      const screenStateKey = `${data.displayedRoomText || ""}|${data.displayedCallText || ""}|${data.captionCatchUpLagSeconds || 0}`;
+      if (screenStateKey !== this._lastScreenStateKey) {
+        this._lastScreenStateKey = screenStateKey;
+        this._screenStateCb && this._screenStateCb({
+          roomText: data.displayedRoomText || null,
+          callText: data.displayedCallText || null,
+          lagSeconds: typeof data.captionCatchUpLagSeconds === "number" ? data.captionCatchUpLagSeconds : 0,
+        });
+      }
+
+      const screenLayoutKey = [
+        data.screenAspectRatio, data.screenZoneOrder, data.screenIsDark,
+        data.screenInfoMoment, data.screenInfoWeather, data.screenInfoDate,
+      ].join("|");
+      if (data.screenZoneOrder && screenLayoutKey !== this._lastScreenLayoutKey) {
+        this._lastScreenLayoutKey = screenLayoutKey;
+        this._screenLayoutCb && this._screenLayoutCb({
+          aspectRatio: data.screenAspectRatio || null,
+          zoneOrder: data.screenZoneOrder,
+          isDark: data.screenIsDark !== false,
+          infoMoment: data.screenInfoMoment || "",
+          infoWeather: data.screenInfoWeather || "",
+          infoDate: data.screenInfoDate || "",
+        });
       }
       // Diagnostic de la transcription temps réel AssemblyAI côté tablette
       // (voir WebRtcCallEngine.attachTranscriptionSink) : confirme si le son
@@ -434,7 +485,7 @@ class RealCallEngine extends CallEngine {
    * Règle à distance la vitesse maximale (en dp/s) à laquelle le texte des
    * sous-titres défile chez Jean (voir IncomingCallActivity.setupCaptionMode
    * côté Android) — plus c'est bas, plus Jean a le temps de lire, au prix
-   * d'un retard qui s'accumule si le proche parle vite (voir onCaptionCatchUpLag).
+   * d'un retard qui s'accumule si le proche parle vite (voir onScreenState).
    */
   async setCaptionScrollSpeed(dpPerSec) {
     if (this._callDocRef) {
@@ -442,21 +493,20 @@ class RealCallEngine extends CallEngine {
     }
   }
 
-  /** Règle à distance le nombre de lignes visibles dans le bandeau de sous-titres côté tablette. */
-  async setCaptionVisibleLines(lines) {
-    if (this._callDocRef) {
-      await this._callDocRef.update({ captionVisibleLines: lines }).catch(() => {});
-    }
-  }
-
   /**
-   * Règle à distance le délai (en secondes) sans nouvelle parole au bout
-   * duquel le sous-titre s'efface côté tablette (voir
-   * IncomingCallActivity.setupCaptionMode).
+   * Signale à la tablette que le proche est dans la même pièce que Jean :
+   * son de la tablette entièrement coupé (sans quoi la voix du proche lui
+   * revient en écho avec une seconde de décalage) et micro coupé aussi. Le
+   * texte, lui, continue d'être affiché — c'est même souvent la seule raison
+   * d'appeler depuis la pièce d'à côté ou depuis le fauteuil voisin.
+   *
+   * Champ dédié plutôt qu'un simple volume à zéro : la tablette a besoin de
+   * savoir qu'elle est dans ce mode, pas seulement de recevoir un réglage
+   * qu'un curseur pourrait défaire par accident à l'écran suivant.
    */
-  async setCaptionClearDelay(seconds) {
+  async setSameRoomMode(enabled) {
     if (this._callDocRef) {
-      await this._callDocRef.update({ captionClearDelaySeconds: seconds }).catch(() => {});
+      await this._callDocRef.update({ sameRoomMode: enabled }).catch(() => {});
     }
   }
 

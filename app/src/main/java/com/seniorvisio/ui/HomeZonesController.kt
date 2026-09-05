@@ -44,6 +44,24 @@ class HomeZonesController(
     private val onPalette: (ScreenTheme.Palette) -> Unit,
 ) {
 
+    /**
+     * Contenu de la zone 1 à un instant donné, tel qu'affiché — publié vers le
+     * PWA pour qu'il montre au proche la même chose que Jean plutôt que de le
+     * recalculer de son côté, ce qui divergerait immanquablement (météo de la
+     * ville du proche, fuseau horaire différent, formats de date...).
+     */
+    data class InfoSnapshot(
+        val moment: String,
+        val weather: String?,
+        val date: String,
+    )
+
+    /** Prévenu à chaque rafraîchissement de la zone 1 (voir updateInfoZone). */
+    var onInfoChanged: ((InfoSnapshot) -> Unit)? = null
+
+    /** Ordre courant des zones, sous la forme attendue par le PWA ("INFO,ROOM,CALL"). */
+    fun zoneOrderNames(): String = adminConfig.zoneOrder.joinToString(",") { it.name }
+
     private val context: Context = root.context
     private val adminConfig = AdminConfig(context)
     private val weatherClient = WeatherClient(context)
@@ -157,9 +175,10 @@ class HomeZonesController(
     private fun updateInfoZone() {
         val now = LocalDateTime.now()
         val moment = TimeContext.momentOfDay(now.hour)
+        val date = now.format(DATE_FORMAT).replaceFirstChar { it.titlecase(Locale.FRENCH) }
         textMomentIcon.text = moment.icon
         textMomentLabel.text = moment.label
-        textClockDate.text = now.format(DATE_FORMAT).replaceFirstChar { it.titlecase(Locale.FRENCH) }
+        textClockDate.text = date
 
         weatherClient.fetchWeather { weather ->
             val visibility = if (weather == null) View.GONE else View.VISIBLE
@@ -170,6 +189,13 @@ class HomeZonesController(
                 textWeatherIcon.text = weather.icon
                 textWeatherLabel.text = weather.label
             }
+            onInfoChanged?.invoke(
+                InfoSnapshot(
+                    moment = "${moment.icon} ${moment.label}",
+                    weather = weather?.let { "${it.icon} ${it.label}" },
+                    date = date,
+                )
+            )
         }
     }
 

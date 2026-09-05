@@ -57,7 +57,11 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var remoteVideoTrack: VideoTrack? = null
     private var remoteAudioTrack: AudioTrack? = null
     private var micMuteListener: ListenerRegistration? = null
+    private var sameRoomListener: ListenerRegistration? = null
     private var slideshowListener: ListenerRegistration? = null
+
+    /** Voir listenForSameRoomMode : coupe entièrement le son, quel que soit le curseur de volume. */
+    private var sameRoomMode = false
 
     private var callerCandidatesListener: ListenerRegistration? = null
     private var callId: String? = null
@@ -363,6 +367,31 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         }
     }
 
+    /**
+     * Écoute le signalement, par le proche, qu'il se trouve dans la même
+     * pièce que Jean (voir web-caller/app.js).
+     *
+     * Le son de la tablette est alors coupé entièrement : à deux mètres,
+     * entendre la voix du proche à la fois de vive voix et par le
+     * haut-parleur, avec une seconde de décalage, est bien plus gênant que de
+     * ne pas l'entendre du tout — et le micro de la tablette renverrait en
+     * prime cette voix au téléphone du proche, en écho.
+     *
+     * La coupure est appliquée ici, et elle prime sur le curseur de volume
+     * (voir rampVolumeTo) : sans ça, un curseur remonté par inadvertance
+     * ramènerait l'écho sans que rien n'indique pourquoi. Le texte, lui,
+     * continue d'être affiché : c'est même souvent la seule raison d'appeler
+     * depuis le fauteuil d'à côté.
+     */
+    fun listenForSameRoomMode() {
+        val id = callId ?: return
+        sameRoomListener = signaling.listenForSameRoomMode(id) { enabled ->
+            sameRoomMode = enabled
+            localAudioTrack?.setEnabled(!enabled && !pendingMicMuted)
+            rampVolumeTo(pendingVolume)
+        }
+    }
+
     /** Écoute l'activation à distance de l'aperçu de sa propre caméra affiché à Jean (masqué par défaut). */
     fun listenForSelfPreviewMode(onEnabled: (Boolean) -> Unit) {
         val id = callId ?: return
@@ -384,6 +413,23 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     fun publishScreenState(roomText: String?, callText: String?, lagSeconds: Float) {
         val id = callId ?: return
         signaling.publishScreenState(id, roomText, callText, lagSeconds)
+    }
+
+    /**
+     * Décrit l'écran de Jean au PWA (proportions, ordre des zones, palette,
+     * contenu de la zone d'information) pour qu'il en dessine une réplique
+     * fidèle — voir CallSignalingClient.publishScreenLayout.
+     */
+    fun publishScreenLayout(
+        aspectRatio: Double,
+        zoneOrder: String,
+        isDark: Boolean,
+        infoMoment: String?,
+        infoWeather: String?,
+        infoDate: String?,
+    ) {
+        val id = callId ?: return
+        signaling.publishScreenLayout(id, aspectRatio, zoneOrder, isDark, infoMoment, infoWeather, infoDate)
     }
 
     /**
@@ -437,7 +483,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
     // ---- internals ----
 
-    private fun rampVolumeTo(target: Double) {
+    private fun rampVolumeTo(requested: Double) {
+        // Le mode "même pièce" prime sur le curseur : voir listenForSameRoomMode.
+        val target = if (sameRoomMode) 0.0 else requested
         val track = remoteAudioTrack
         volumeRampRunnable?.let { volumeHandler.removeCallbacks(it) }
         if (track == null) {
@@ -567,8 +615,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                     remoteRenderer?.let { track.addSink(it) }
                 } else if (track is AudioTrack) {
                     remoteAudioTrack = track
-                    track.setVolume(pendingVolume)
-                    currentVolume = pendingVolume
+                    val initialVolume = if (sameRoomMode) 0.0 else pendingVolume
+                    track.setVolume(initialVolume)
+                    currentVolume = initialVolume
                     attachTranscriptionSink(track)
                 }
             }
@@ -664,6 +713,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         hasReportedFirstAudio = false
         micMuteListener?.remove()
         micMuteListener = null
+        sameRoomListener?.remove()
+        sameRoomListener = null
+        sameRoomMode = false
         slideshowListener?.remove()
         slideshowListener = null
         callerCandidatesListener?.remove()
