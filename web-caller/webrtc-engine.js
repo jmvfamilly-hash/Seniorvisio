@@ -395,7 +395,16 @@ class RealCallEngine extends CallEngine {
     // Réactivé, sinon un navigateur qui n'a VRAIMENT pas cette fonction (ex.
     // Firefox desktop) plante au lieu de désactiver proprement les sous-titres.
     if (!SpeechRecognitionCtor) {
+      // Passait jusqu'ici uniquement par console.warn, invisible sans un Mac
+      // relié pour inspecter Safari iOS à distance (Web Inspector). Remonté
+      // maintenant sur l'indicateur d'erreur déjà affiché à l'écran (voir
+      // onCaptionError/app.js) : seul moyen de savoir, sans aucun outil, si
+      // un iPhone échoue parce que l'API n'existe pas du tout ici (ce code),
+      // ou pour une autre raison une fois démarrée (voir recognition.onerror
+      // plus bas) — utile notamment pour comprendre pourquoi les sous-titres
+      // fonctionnent depuis un iPad mais pas depuis un iPhone.
       console.warn("[RealCallEngine] Reconnaissance vocale non supportée par ce navigateur (sous-titres désactivés).");
+      this._captionErrorCb && this._captionErrorCb("not-supported");
       return;
     }
 
@@ -480,11 +489,24 @@ class RealCallEngine extends CallEngine {
     recognition.onend = () => {
       // L'API s'arrête parfois seule après un silence : on la relance tant que l'appel est actif.
       if (this._pc && this._recognition === recognition) {
-        try { recognition.start(); } catch (_) {}
+        try {
+          recognition.start();
+        } catch (e) {
+          // Échec silencieux jusqu'ici (catch vide) : si le redémarrage
+          // automatique échoue systématiquement sur un appareil donné, les
+          // sous-titres s'arrêtent après la première phrase sans qu'aucun
+          // indice n'apparaisse à l'écran — remonté maintenant comme les
+          // autres erreurs (voir onCaptionError/app.js).
+          this._captionErrorCb && this._captionErrorCb("restart-failed");
+        }
       }
     };
 
-    try { recognition.start(); } catch (_) {}
+    try {
+      recognition.start();
+    } catch (e) {
+      this._captionErrorCb && this._captionErrorCb("start-failed");
+    }
   }
 
   /**

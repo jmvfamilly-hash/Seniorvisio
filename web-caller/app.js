@@ -346,6 +346,11 @@ function confidenceClass(confidence) {
 }
 
 engine.onTranscript(({ liveText, isFinal, confidence, history }) => {
+  // Un vrai résultat prouve que la reconnaissance fonctionne : efface une
+  // éventuelle erreur affichée plus tôt (ex. un premier redémarrage raté
+  // après un silence, voir onCaptionError) qui resterait sinon affichée à
+  // tort pour le reste de l'appel.
+  els.captionErrorIndicator.classList.add("hidden");
   els.transcriptCurrent.textContent = liveText || "…";
   els.transcriptCurrent.className = "transcript-current" + (isFinal ? " " + confidenceClass(confidence) : "");
 
