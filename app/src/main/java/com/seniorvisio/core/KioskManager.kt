@@ -1,5 +1,6 @@
 package com.seniorvisio.core
 
+import android.Manifest
 import android.app.Activity
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
@@ -46,6 +47,7 @@ object KioskManager {
         dpm.setLockTaskPackages(admin, standardLockTaskPackages(activity))
         allowHomeButton(dpm, admin)
         protectCompanionApps(activity, dpm, admin)
+        grantLocationPermissionSilently(activity, dpm, admin)
         if (homeActivity != null) registerAsHomeApp(activity, dpm, admin, homeActivity)
 
         try {
@@ -99,6 +101,36 @@ object KioskManager {
             } catch (_: IllegalArgumentException) {
                 // Paquet non installé sur cet appareil : rien à protéger.
             }
+        }
+    }
+
+    /**
+     * Accorde silencieusement la localisation approximative (voir
+     * WeatherClient, qui l'utilise pour la météo de l'écran d'accueil), sans
+     * jamais passer par la popup système habituelle : en Device Owner,
+     * setPermissionGrantState l'accorde directement. Sans ça, il faudrait
+     * compter sur un appui manuel sur "Autoriser" au premier lancement après
+     * mise à jour — que le mode kiosque (lock task) empêche parfois
+     * d'afficher, laissant la météo indéfiniment absente sans recours.
+     *
+     * Silencieux en cas d'échec (ex. appareil non Device Owner en test) :
+     * la fonction se contente alors de rester invisible, comme prévu par
+     * WeatherClient quand la permission manque.
+     */
+    private fun grantLocationPermissionSilently(
+        activity: Activity,
+        dpm: DevicePolicyManager,
+        admin: ComponentName,
+    ) {
+        try {
+            dpm.setPermissionGrantState(
+                admin,
+                activity.packageName,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+            )
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Impossible d'accorder la localisation automatiquement", e)
         }
     }
 
