@@ -46,7 +46,7 @@ import kotlin.math.sqrt
  * déclenche pas assez).
  *
  * Sert aussi de source unique du micro pour la transcription de la pièce
- * (voir RoomTranscriptionActivity, startRoomTranscription) : la même
+ * (voir MainActivity, zone 2 de l'écran, et startRoomTranscription) : la même
  * capture déjà en cours pour le réveil au son est réutilisée, jamais une
  * deuxième capture concurrente — exactement le problème qui rendait les
  * sous-titres d'appel peu fiables (deux consommateurs du même micro),
@@ -64,6 +64,7 @@ class RoomPresenceService : Service() {
 
     private var roomTranscriber: AssemblyAiRealtimeTranscriber? = null
     @Volatile private var roomTranscriptionActive = false
+    private var lastRoomSoundAtMs = 0L
     private var roomTranscriptionOnText: ((text: String, isFinal: Boolean) -> Unit)? = null
     private var roomTranscriptionOnError: ((String) -> Unit)? = null
 
@@ -79,10 +80,10 @@ class RoomPresenceService : Service() {
     }
 
     /**
-     * Lié par RoomTranscriptionActivity (voir startRoomTranscription) — reste
-     * par ailleurs un service démarré classique (startForegroundService) pour
-     * le réveil au son, les deux modes de communication Android coexistant
-     * sans conflit sur un même service.
+     * Lié par l'écran d'accueil (voir MainActivity, startRoomTranscription) —
+     * reste par ailleurs un service démarré classique (startForegroundService)
+     * pour le réveil au son, les deux modes de communication Android
+     * coexistant sans conflit sur un même service.
      */
     override fun onBind(intent: Intent?): IBinder = binder
 
@@ -141,8 +142,9 @@ class RoomPresenceService : Service() {
             while (isCapturing) {
                 val read = record.read(buffer, 0, buffer.size)
                 if (read > 0) {
-                    handleLevel(computeRms(buffer, read))
-                    feedRoomTranscription(buffer, read)
+                    val rms = computeRms(buffer, read)
+                    handleLevel(rms)
+                    feedRoomTranscription(buffer, read, rms)
                 }
             }
         }.apply { start() }
@@ -167,11 +169,15 @@ class RoomPresenceService : Service() {
     }
 
     /**
-     * Démarre les sous-titres de la pièce (voir RoomTranscriptionActivity),
-     * en réutilisant la capture micro déjà en cours ou en la démarrant si
-     * besoin (ex. réveil au son désactivé, voir startCapture). onError
-     * remonte un échec de connexion AssemblyAI directement à l'écran, sans
-     * quoi seul le journal système (inaccessible ici) le révélerait.
+     * Démarre les sous-titres de la pièce (voir MainActivity, zone 2), en
+     * réutilisant la capture micro déjà en cours ou en la démarrant si besoin
+     * (ex. réveil au son désactivé, voir startCapture). onError remonte un
+     * échec de connexion AssemblyAI à l'écran appelant, sans quoi seul le
+     * journal système (inaccessible ici) le révélerait.
+     *
+     * "Démarre" ne veut pas dire "transcrit en permanence" : voir
+     * feedRoomTranscription, qui n'ouvre une session AssemblyAI que le temps
+     * qu'il y a effectivement du son dans la pièce.
      */
     fun startRoomTranscription(onText: (text: String, isFinal: Boolean) -> Unit, onError: (String) -> Unit = {}) {
         roomTranscriptionOnText = onText
@@ -180,7 +186,7 @@ class RoomPresenceService : Service() {
         startCapture()
     }
 
-    /** À appeler quand l'écran de transcription de la pièce se ferme. */
+    /** À appeler quand l'écran qui affiche les paroles de la pièce passe en arrière-plan. */
     fun stopRoomTranscription() {
         roomTranscriptionActive = false
         roomTranscriptionOnText = null
@@ -189,9 +195,35 @@ class RoomPresenceService : Service() {
         roomTranscriber = null
     }
 
-    private fun feedRoomTranscription(buffer: ShortArray, length: Int) {
+    /**
+     * N'ouvre une session AssemblyAI que tant qu'il y a du son dans la pièce,
+     * et la referme après quelques secondes de silence.
+     *
+     * AssemblyAI est facturé à la durée de connexion : laisser la session
+     * ouverte en permanence sur une tablette allumée 24h/24 coûterait une
+     * centaine d'euros par mois pour transcrire, l'essentiel du temps, une
+     * pièce vide. Le seuil réutilisé est celui du réveil au son, déjà réglé
+     * sur place pour cette pièce et ce microphone (voir AdminConfig) — une
+     * seule sensibilité à ajuster, pas deux qui se contredisent.
+     *
+     * Le maintien de quelques secondes après le dernier son évite de couper
+     * la session entre deux phrases d'une même conversation, ce qui ferait
+     * perdre le début de la phrase suivante le temps de rétablir la connexion.
+     */
+    private fun feedRoomTranscription(buffer: ShortArray, length: Int, rms: Double) {
         if (!roomTranscriptionActive) return
         val onText = roomTranscriptionOnText ?: return
+
+        val now = System.currentTimeMillis()
+        if (rms >= adminConfig.roomWakeSensitivityThreshold) lastRoomSoundAtMs = now
+        if (now - lastRoomSoundAtMs > TRANSCRIPTION_HOLD_MS) {
+            roomTranscriber?.let {
+                it.stop()
+                roomTranscriber = null
+            }
+            return
+        }
+
         val apiKey = adminConfig.assemblyAiApiKey
         if (apiKey.isBlank()) return
         val instance = roomTranscriber ?: AssemblyAiRealtimeTranscriber(apiKey).also {
@@ -287,6 +319,15 @@ class RoomPresenceService : Service() {
         private const val CHANNEL_ID = "senior_visio_room_presence"
         private const val SAMPLE_RATE_HZ = 16_000
         private const val SILENCE_HOLD_MS = 3_000L
+
+        /**
+         * Durée de maintien de la session AssemblyAI après le dernier son
+         * détecté (voir feedRoomTranscription). Plus long que SILENCE_HOLD_MS,
+         * qui ne pilote que l'écran : une pause de réflexion au milieu d'une
+         * phrase dure facilement plus de trois secondes, et rétablir la
+         * connexion coûte le début de la phrase suivante.
+         */
+        private const val TRANSCRIPTION_HOLD_MS = 8_000L
         private const val MAX_WAKE_LOCK_MS = 30 * 60 * 1000L
         private const val ACTION_PAUSE = "com.seniorvisio.action.PAUSE_ROOM_PRESENCE"
         private const val ACTION_RESUME = "com.seniorvisio.action.RESUME_ROOM_PRESENCE"

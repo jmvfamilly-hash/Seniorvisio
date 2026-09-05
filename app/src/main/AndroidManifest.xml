@@ -112,14 +112,6 @@
             android:exported="false"
             android:label="Réglages (admin)" />
 
-        <!-- Sous-titres de la pièce (voir RoomTranscriptionActivity,
-             AssemblyAI) : remplace l'application tierce "Transcription
-             instantanée" de Google, voir CompanionApps.kt. -->
-        <activity
-            android:name=".ui.RoomTranscriptionActivity"
-            android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
-
         <!-- Labo d'étude, sans lien avec l'usage normal (voir
              TranscriptionLabActivity.kt) : compare les moteurs de
              transcription vocale disponibles. -->

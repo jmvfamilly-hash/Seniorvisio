@@ -1,213 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-     Écran d'attente (hors appel). Volontairement réduit à l'essentiel : une
-     horloge (voir MainActivity.updateClock) et un gros bouton qui bascule vers
-     la transcription des conversations de la pièce (application Google, voir
-     MainActivity.launchRoomTranscription et CompanionApps).
+     Écran de Jean hors appel. Il n'a plus rien à faire ni à comprendre : les
+     trois zones (voir view_home_zones.xml et HomeZonesController) affichent
+     d'elles-mêmes la date et la météo en permanence, les paroles de la pièce
+     dès que quelqu'un parle, et celles de l'appel dès qu'un appel démarre.
 
-     Le bandeau de sous-titres qui vivait ici a disparu avec la
-     reconnaissance vocale maison : c'est désormais l'application de Google
-     qui affiche le texte, en plein écran, et le bouton Accueil ramène ici
-     (voir KioskManager).
+     Les deux grandes cartes qui occupaient le bas de cet écran ont disparu :
+     le bouton "Voir ce qui se dit" n'a plus de raison d'être maintenant que
+     la pièce est transcrite d'elle-même (voir RoomPresenceService), et le QR
+     code du soignant est passé en vignette de coin — il reste le seul moyen
+     pour un visiteur d'ouvrir le PWA, mais il s'adresse à lui, pas à Jean, et
+     n'a donc pas à occuper la moitié de l'écran.
+
+     Aucune couleur de fond ici : elle est posée en code selon l'heure et la
+     luminosité de la pièce (voir ScreenTheme). L'écrire ici donnerait un
+     écran clair le temps d'une image au réveil de nuit.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/homeRoot"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#1B2A4A">
+    android:layout_height="match_parent">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:gravity="center_horizontal"
-        android:padding="32dp">
+    <include layout="@layout/view_home_zones" />
 
-        <!-- Repère temporel : seule information réellement utile à Jean sur cet
-             écran, à la place du nom de l'application et du "en attente
-             d'appel" qui s'y trouvaient — ni l'un ni l'autre ne lui servaient à
-             quoi que ce soit, et "en attente" pouvait même laisser croire qu'il
-             avait quelque chose à faire.
-
-             Volontairement discret et sans l'heure exacte : un gros "14:35"
-             demande de déchiffrer deux nombres, alors qu'un pictogramme et un
-             mot ("Après-midi") se reconnaissent d'un coup d'œil — ce qui compte
-             au quotidien, c'est de savoir où on en est dans la journée, pas
-             l'heure à la minute près (voir MainActivity.updateClock). Date en
-             toutes lettres en dessous, plus discrète (03/09 se déchiffre,
-             "mercredi 3 septembre" se lit).
-
-             Météo dans la même ligne, séparée par un point : un second
-             pictogramme+mot sans température ni détail (voir WeatherClient) —
-             masqué tant qu'aucune clé API n'est configurée côté admin, pas
-             d'erreur affichée à Jean dans ce cas. -->
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:id="@+id/textMomentIcon"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="56sp"
-                android:text="" />
-
-            <TextView
-                android:id="@+id/textMomentLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:textColor="#FFFFFF"
-                android:textSize="34sp"
-                android:textStyle="bold"
-                android:text="" />
-
-            <TextView
-                android:id="@+id/textMomentWeatherSeparator"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="20dp"
-                android:textColor="#5A6C8A"
-                android:textSize="34sp"
-                android:visibility="gone"
-                android:text="·" />
-
-            <TextView
-                android:id="@+id/textWeatherIcon"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="20dp"
-                android:textSize="56sp"
-                android:visibility="gone"
-                android:text="" />
-
-            <TextView
-                android:id="@+id/textWeatherLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:textColor="#FFFFFF"
-                android:textSize="34sp"
-                android:textStyle="bold"
-                android:visibility="gone"
-                android:text="" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/textClockDate"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:textColor="#AEBBD0"
-            android:textSize="44sp"
-            android:gravity="center"
-            android:text="" />
-
-        <!-- Zone réservée aux deux services accessibles depuis l'accueil, côte
-             à côte et étirés sur tout l'espace restant (layout_weight) :
-             plus ergonomique à repérer et à comparer d'un coup d'œil qu'un
-             empilement vertical, y compris en portrait. À gauche ce que Jean
-             déclenche lui-même (les sous-titres de la pièce), à droite ce
-             qu'un visiteur déclenche pour lui (le QR code du soignant). -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:layout_marginTop="32dp"
-            android:orientation="horizontal">
-
-            <!-- Sous-titres de la pièce : bascule vers l'application Google
-                 (voir MainActivity.launchRoomTranscription). Le libellé dit ce
-                 que ça fait, pas comment ça s'appelle : "Transcription
-                 instantanée" ne veut rien dire pour Jean, "voir ce qui se dit"
-                 si. Le retour d'appui est explicite (voir onClick). -->
-            <LinearLayout
-                android:id="@+id/cardRoomCaptions"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/home_card_bg"
-                android:padding="24dp"
-                android:clickable="true"
-                android:focusable="true">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="👂"
-                    android:textSize="100sp" />
-
-                <TextView
-                    android:id="@+id/textRoomCaptionsLabel"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="Voir ce qui se dit"
-                    android:textColor="#FFFFFF"
-                    android:textSize="34sp"
-                    android:textStyle="bold"
-                    android:gravity="center" />
-
-                <TextView
-                    android:id="@+id/textRoomCaptionsHint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="@string/room_captions_hint"
-                    android:textColor="#AEBBD0"
-                    android:textSize="20sp"
-                    android:gravity="center" />
-            </LinearLayout>
-
-            <!-- QR code à faire scanner par un soignant/visiteur présent dans
-                 la pièce : son téléphone devient un micro qui écrit en grand
-                 sur cette tablette (voir MainActivity.buildCaregiverQrCode).
-                 Appuyer dessus explique la fonction à celui qui la découvre. -->
-            <LinearLayout
-                android:id="@+id/cardCaregiverQr"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginStart="24dp"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/home_card_bg"
-                android:padding="24dp"
-                android:clickable="true"
-                android:focusable="true">
-
-                <ImageView
-                    android:id="@+id/imageCaregiverQr"
-                    android:layout_width="180dp"
-                    android:layout_height="180dp"
-                    android:contentDescription="QR code à scanner pour parler à Jean" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="Vous êtes avec Jean&#160;?"
-                    android:textColor="#FFFFFF"
-                    android:textSize="30sp"
-                    android:textStyle="bold"
-                    android:gravity="center" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="Scannez avec l'appareil photo de votre téléphone : vos paroles s'écrivent aussitôt en grand sur cette tablette, sans que Jean n'ait rien à faire de son côté"
-                    android:textColor="#AEBBD0"
-                    android:textSize="20sp"
-                    android:gravity="center" />
-            </LinearLayout>
-
-        </LinearLayout>
-
-    </LinearLayout>
+    <!-- QR code à scanner par un soignant/visiteur présent dans la pièce :
+         son téléphone ouvre le PWA en mode soignant (voir MainActivity.
+         showCaregiverQrCode). Toucher la vignette explique la fonction à qui
+         la découvre sans savoir ce que c'est. -->
+    <ImageView
+        android:id="@+id/imageCaregiverQr"
+        android:layout_width="110dp"
+        android:layout_height="110dp"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="12dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:contentDescription="QR code à scanner pour parler à Jean" />
 
     <!-- Version affichée en permanence, discrètement, pour vérifier quel APK
          tourne réellement sur la tablette sans la brancher (voir
@@ -218,7 +46,6 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
         android:layout_margin="8dp"
-        android:textColor="#4DFFFFFF"
         android:textSize="11sp"
         android:text="" />
 

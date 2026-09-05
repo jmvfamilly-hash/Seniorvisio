@@ -63,16 +63,22 @@ class AdminConfig(context: Context) {
             ?: BuildConfig.ASSEMBLYAI_API_KEY_DEFAULT
         set(value) = prefs.edit().putString(KEY_ASSEMBLYAI_API_KEY, value).apply()
 
-    // --- Clé API OpenWeatherMap, pour le pictogramme météo de l'écran
-    // d'accueil et de l'écran d'appel (voir WeatherClient, qui obtient la
-    // position par géolocalisation — aucune ville à saisir). Même repli que
-    // la clé AssemblyAI : celle saisie sur la tablette prime, sinon celle
-    // injectée par la CI depuis le secret GitHub WEATHER_API_KEY. ---
-    var weatherApiKey: String
-        get() = prefs.getString(KEY_WEATHER_API_KEY, "")
-            ?.takeIf { it.isNotBlank() }
-            ?: BuildConfig.WEATHER_API_KEY_DEFAULT
-        set(value) = prefs.edit().putString(KEY_WEATHER_API_KEY, value).apply()
+    // --- Ordre d'empilement des trois zones de l'écran de Jean (voir
+    // HomeZonesController) : de haut en bas. Stocké comme la liste des zones
+    // séparées par des virgules plutôt qu'un simple numéro de permutation, pour
+    // rester lisible dans les préférences et survivre à l'ajout d'une
+    // quatrième zone. Toute valeur incomplète ou abîmée (zone inconnue, zone
+    // manquante, doublon) retombe sur l'ordre par défaut plutôt que d'amputer
+    // l'écran de Jean d'une zone. ---
+    var zoneOrder: List<HomeZone>
+        get() {
+            val stored = prefs.getString(KEY_ZONE_ORDER, null)
+                ?.split(',')
+                ?.mapNotNull { name -> HomeZone.entries.firstOrNull { it.name == name } }
+                ?: return HomeZone.DEFAULT_ORDER
+            return if (stored.toSet() == HomeZone.entries.toSet()) stored else HomeZone.DEFAULT_ORDER
+        }
+        set(value) = prefs.edit().putString(KEY_ZONE_ORDER, value.joinToString(",") { it.name }).apply()
 
     // --- Réveil de l'écran au moindre son de la pièce (voir RoomPresenceService) ---
     var roomWakeEnabled: Boolean
@@ -114,7 +120,7 @@ class AdminConfig(context: Context) {
         private const val KEY_BLOCKING_ENABLED = "blocking_enabled"
         private const val KEY_ADMIN_PIN = "admin_pin"
         private const val KEY_ASSEMBLYAI_API_KEY = "assemblyai_api_key"
-        private const val KEY_WEATHER_API_KEY = "weather_api_key"
+        private const val KEY_ZONE_ORDER = "zone_order"
         private const val KEY_ROOM_WAKE_ENABLED = "room_wake_enabled"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
     }

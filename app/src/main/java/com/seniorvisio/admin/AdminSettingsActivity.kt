@@ -10,9 +10,11 @@ import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.webkit.WebView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,6 +25,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.HomeZone
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.WifiConfigurator
 
@@ -70,16 +73,26 @@ class AdminSettingsActivity : AppCompatActivity() {
         val buttonSave = findViewById<Button>(R.id.buttonSaveAdminSettings)
 
         val inputAssemblyAiKey = findViewById<EditText>(R.id.inputAssemblyAiKey)
-        val inputWeatherApiKey = findViewById<EditText>(R.id.inputWeatherApiKey)
         val checkboxRoomWakeEnabled = findViewById<CheckBox>(R.id.checkboxRoomWakeEnabled)
         val inputRoomWakeThreshold = findViewById<EditText>(R.id.inputRoomWakeThreshold)
 
         inputCountdown.setText(adminConfig.countdownSeconds.toString())
         inputPin.setText(adminConfig.adminPin)
         inputAssemblyAiKey.setText(adminConfig.assemblyAiApiKey)
-        inputWeatherApiKey.setText(adminConfig.weatherApiKey)
         checkboxRoomWakeEnabled.isChecked = adminConfig.roomWakeEnabled
         inputRoomWakeThreshold.setText(adminConfig.roomWakeSensitivityThreshold.toString())
+
+        // Ordre d'empilement des trois zones de l'écran de Jean (voir
+        // HomeZone) : les six ordres possibles listés tels quels, l'ordre
+        // actuellement enregistré présélectionné.
+        val zoneOrders = HomeZone.allOrders()
+        val spinnerZoneOrder = findViewById<Spinner>(R.id.spinnerZoneOrder)
+        spinnerZoneOrder.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            zoneOrders.map { order -> order.joinToString(" · ") { it.adminLabel } },
+        )
+        spinnerZoneOrder.setSelection(zoneOrders.indexOf(adminConfig.zoneOrder).coerceAtLeast(0))
 
         buttonSave.setOnClickListener {
             val seconds = inputCountdown.text.toString().toIntOrNull()
@@ -90,7 +103,7 @@ class AdminSettingsActivity : AppCompatActivity() {
             adminConfig.countdownSeconds = seconds
             adminConfig.adminPin = inputPin.text.toString().ifBlank { adminConfig.adminPin }
             adminConfig.assemblyAiApiKey = inputAssemblyAiKey.text.toString().trim()
-            adminConfig.weatherApiKey = inputWeatherApiKey.text.toString().trim()
+            adminConfig.zoneOrder = zoneOrders[spinnerZoneOrder.selectedItemPosition]
             adminConfig.roomWakeEnabled = checkboxRoomWakeEnabled.isChecked
             inputRoomWakeThreshold.text.toString().toIntOrNull()?.let {
                 if (it > 0) adminConfig.roomWakeSensitivityThreshold = it
@@ -150,15 +163,10 @@ class AdminSettingsActivity : AppCompatActivity() {
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             )
-            inputWeatherApiKey.inputType = plainOrPassword(
-                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
-                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            )
             // setInputType ramène sinon le curseur au tout début du champ.
             inputPin.setSelection(inputPin.text.length)
             inputWifiPassword.setSelection(inputWifiPassword.text.length)
             inputAssemblyAiKey.setSelection(inputAssemblyAiKey.text.length)
-            inputWeatherApiKey.setSelection(inputWeatherApiKey.text.length)
         }
     }
 

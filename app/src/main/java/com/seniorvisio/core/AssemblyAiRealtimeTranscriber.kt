@@ -48,10 +48,9 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
      * onText(text, isFinal) : isFinal distingue un texte encore provisoire
      * (revu au mot près pendant que la phrase continue) d'un texte
      * définitivement figé — utile pour accumuler un historique (voir
-     * RoomTranscriptionActivity) sans y empiler chaque révision
-     * intermédiaire de la même phrase. Les sous-titres d'appel (voir
-     * WebRtcCallEngine), eux, ignorent cette distinction : ils affichent
-     * simplement le dernier texte reçu, quel qu'il soit.
+     * PacedCaptionZone) sans y empiler chaque révision intermédiaire de la
+     * même phrase, et pour savoir quand une phrase est réellement close et
+     * peut prendre son tour dans la file d'affichage.
      */
     fun start(onText: (String, Boolean) -> Unit, onError: (String) -> Unit = {}) {
         val request = Request.Builder()

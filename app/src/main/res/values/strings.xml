@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--
-         Libellé sous la carte "Voir ce qui se dit" de l'écran d'accueil.
-         Déclaré ici plutôt qu'en dur dans le layout parce que le code le
-         remplace temporairement ("Ouverture…", puis un message d'échec le cas
-         échéant) et doit pouvoir le remettre à l'identique au retour sur
-         l'écran — voir MainActivity.onResume.
+         Vide pour l'instant : le seul libellé qui vivait ici accompagnait la
+         carte "Voir ce qui se dit" de l'écran d'accueil, disparue avec le
+         passage de la transcription de la pièce en automatique (voir
+         MainActivity et RoomPresenceService). Les textes restants sont écrits
+         directement dans leurs layouts, aucun n'étant remplacé en cours de
+         route par le code.
     -->
-    <string name="room_captions_hint">Ce que dit la personne en face de vous s\'écrit en grand à l\'écran — pratique si Jean entend mal ou est loin de son appareil auditif</string>
 </resources>

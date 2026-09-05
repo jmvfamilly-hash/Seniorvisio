@@ -202,32 +202,30 @@ class CallSignalingClient {
         }
     }
 
-    /** Nombre de lignes visibles dans le bandeau de sous-titres, choisi à distance par l'appelant. */
-    fun listenForCaptionVisibleLines(callId: String, onLines: (Double) -> Unit): ListenerRegistration {
-        return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val lines = snapshot?.getDouble(FIELD_CAPTION_VISIBLE_LINES)
-            if (lines != null) onLines(lines)
-        }
-    }
-
-    /** Délai (en secondes) sans nouvelle parole avant effacement des sous-titres, choisi à distance par l'appelant. */
-    fun listenForCaptionClearDelay(callId: String, onSeconds: (Double) -> Unit): ListenerRegistration {
-        return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val seconds = snapshot?.getDouble(FIELD_CAPTION_CLEAR_DELAY)
-            if (seconds != null) onSeconds(seconds)
-        }
-    }
-
     /**
-     * Signale en continu au proche le retard de lecture de Jean par rapport
-     * au texte reçu (voir IncomingCallActivity.setupCaptionMode) : 0 quand
-     * Jean a tout lu, une valeur croissante (en secondes) tant que le
-     * défilement — plafonné à listenForCaptionScrollSpeed — n'a pas rattrapé
-     * le texte reçu. Remplace l'ancien indicateur booléen "ça déborde", trop
-     * imprécis pour que le proche sache s'il doit ralentir un peu ou beaucoup.
+     * Publie l'état de l'écran de Jean : le texte réellement affiché dans
+     * chacune de ses deux zones (null quand la zone est vide), et l'avance en
+     * secondes que le proche a prise sur ce que Jean a eu le temps de lire
+     * (voir PacedCaptionZone.pendingSeconds).
+     *
+     * Le PWA rejoue ces textes tels quels plutôt que la transcription brute,
+     * qui a toujours de l'avance : c'est ce qui lui permet de montrer au
+     * proche exactement ce que Jean a sous les yeux, au même instant (voir
+     * web-caller/app.js).
+     *
+     * Les trois valeurs partent dans une seule écriture : appelée plusieurs
+     * fois par minute pendant tout l'appel, la découper en trois multiplierait
+     * d'autant les écritures Firestore et les réveils du listener d'en face,
+     * qui écoute le document entier.
      */
-    fun signalCaptionCatchUpLag(callId: String, lagSeconds: Float) {
-        callDoc(callId).update(FIELD_CAPTION_CATCHUP_LAG, lagSeconds.toDouble())
+    fun publishScreenState(callId: String, roomText: String?, callText: String?, lagSeconds: Float) {
+        callDoc(callId).update(
+            mapOf(
+                FIELD_DISPLAYED_ROOM_TEXT to roomText,
+                FIELD_DISPLAYED_CALL_TEXT to callText,
+                FIELD_CAPTION_CATCHUP_LAG to lagSeconds.toDouble(),
+            )
+        )
     }
 
     /**
@@ -303,9 +301,9 @@ class CallSignalingClient {
         private const val FIELD_FORCE_CONNECT = "forceConnectRequested"
         private const val FIELD_SELF_PREVIEW = "selfPreviewEnabled"
         private const val FIELD_CAPTION_SCROLL_SPEED = "captionMaxScrollSpeedDpPerSec"
-        private const val FIELD_CAPTION_VISIBLE_LINES = "captionVisibleLines"
-        private const val FIELD_CAPTION_CLEAR_DELAY = "captionClearDelaySeconds"
         private const val FIELD_CAPTION_CATCHUP_LAG = "captionCatchUpLagSeconds"
+        private const val FIELD_DISPLAYED_ROOM_TEXT = "displayedRoomText"
+        private const val FIELD_DISPLAYED_CALL_TEXT = "displayedCallText"
         private const val FIELD_CALLEE_ERROR = "calleeErrorMessage"
         private const val FIELD_CAPTION_DEBUG = "captionDebugMessage"
         private const val FIELD_MIC_MUTED = "tabletMicMuted"

@@ -22,13 +22,17 @@ import java.net.URL
  * Position obtenue par géolocalisation de la tablette (voir [currentLocation])
  * plutôt qu'une ville saisie à la main : rien à configurer ni à corriger si la
  * tablette change de pièce ou de logement. Une position approximative
- * (réseau Wi-Fi, sans GPS) suffit largement pour une météo par ville.
+ * (réseau Wi-Fi, sans GPS) suffit largement pour une météo par ville. Sans
+ * position connue, wttr.in devine lui-même la région à partir de l'adresse IP
+ * — approximatif mais suffisant pour un pictogramme, et surtout jamais un
+ * écran vide.
  *
- * Source : OpenWeatherMap (gratuit jusqu'à 1000 appels/jour, largement
- * suffisant vu le cache ci-dessous). Clé API configurée depuis les réglages
- * admin (voir AdminConfig.weatherApiKey) — absente par défaut : la fonction
- * reste silencieuse (aucune icône) tant que personne ne l'a renseignée,
- * plutôt que d'afficher une erreur.
+ * Source : wttr.in, qui ne demande aucune clé API — un compte à créer, une clé
+ * à saisir dans le panneau admin et une clé qui expire un jour sans prévenir
+ * étaient trois occasions de panne pour une information d'appoint. Le service
+ * renvoie les codes météo WWO, dont la liste est fermée et connue : chacun des
+ * 48 codes possibles a donc ici son pictogramme et son libellé français, sans
+ * catégorie de repli approximative.
  *
  * Résultat mis en cache une heure : la météo ne change pas assez vite pour
  * justifier un appel réseau à chaque réveil d'écran, et un appel manqué
@@ -60,27 +64,18 @@ class WeatherClient(context: Context) {
             return
         }
 
-        val apiKey = AdminConfig(appContext).weatherApiKey
-        if (apiKey.isBlank()) {
-            // Non configurée : on ne dérange pas avec une erreur, on affiche
-            // simplement ce qu'on a déjà (rien, la première fois).
-            onResult(cached)
-            return
-        }
-
         val location = currentLocation()
         if (location == null) {
             // Pas encore de position connue (juste après l'installation, ou
-            // service de localisation coupé) : on déclenche une recherche en
-            // arrière-plan pour le prochain appel, sans bloquer celui-ci.
+            // service de localisation coupé) : on en demande une pour la
+            // prochaine fois, sans renoncer à la météo pour autant — wttr.in
+            // sait localiser approximativement par adresse IP.
             requestLocationOnce()
-            onResult(cached)
-            return
         }
 
         Thread {
             val fresh = try {
-                fetchFromNetwork(apiKey, location.latitude, location.longitude)
+                fetchFromNetwork(location)
             } catch (e: Exception) {
                 Log.w(TAG, "Rafraîchissement météo impossible, on garde la dernière valeur connue", e)
                 null
@@ -138,12 +133,17 @@ class WeatherClient(context: Context) {
         }
     }
 
-    private fun fetchFromNetwork(apiKey: String, lat: Double, lon: Double): Weather {
-        val url = URL(
-            "https://api.openweathermap.org/data/2.5/weather" +
-                "?lat=$lat&lon=$lon&appid=$apiKey&lang=fr&units=metric"
-        )
+    /**
+     * `format=j1` est la sortie JSON de wttr.in (la sortie par défaut est un
+     * dessin ASCII destiné à un terminal). L'en-tête User-Agent est
+     * obligatoire : sans lui, le service renvoie justement ce dessin ASCII au
+     * lieu du JSON, en supposant un appel depuis curl.
+     */
+    private fun fetchFromNetwork(location: Location?): Weather {
+        val place = location?.let { "${it.latitude},${it.longitude}" } ?: ""
+        val url = URL("https://wttr.in/$place?format=j1")
         val connection = url.openConnection() as HttpURLConnection
+        connection.setRequestProperty("User-Agent", "SeniorVisio/1.0")
         connection.connectTimeout = 10_000
         connection.readTimeout = 10_000
         connection.connect()
@@ -154,23 +154,73 @@ class WeatherClient(context: Context) {
         }
         val body = connection.inputStream.bufferedReader().use { it.readText() }
         connection.disconnect()
-        val main = JSONObject(body).getJSONArray("weather").getJSONObject(0).getString("main")
-        return toWeather(main)
+        val current = JSONObject(body).getJSONArray("current_condition").getJSONObject(0)
+        return toWeather(current.getString("weatherCode").toIntOrNull() ?: -1)
     }
 
     /**
-     * Réduit les catégories d'OpenWeatherMap (une vingtaine, très techniques :
-     * "Drizzle", "Squall", "Ash"...) à quatre pictogrammes/mots simples —
-     * l'exhaustivité ne sert à rien ici, la nuance entre "Rain" et "Drizzle"
-     * n'aide personne à décider s'il faut un parapluie.
+     * Les codes WWO renvoyés par wttr.in forment une liste fermée de 48
+     * valeurs : chacune a donc ici son pictogramme et son libellé, plutôt
+     * qu'un repli fourre-tout. Les libellés restent volontairement des mots
+     * simples et courts — "Bruine verglaçante forte" tient sur l'écran et se
+     * lit d'un coup d'œil, la formulation officielle "Heavy freezing drizzle"
+     * traduite littéralement, non.
      */
-    private fun toWeather(owmMain: String): Weather = when (owmMain) {
-        "Clear" -> Weather("☀️", "Beau")
-        "Clouds" -> Weather("☁️", "Nuageux")
-        "Rain", "Drizzle" -> Weather("🌧️", "Pluie")
-        "Thunderstorm" -> Weather("⛈️", "Orage")
-        "Snow" -> Weather("❄️", "Neige")
-        else -> Weather("🌫️", "Brumeux")
+    private fun toWeather(weatherCode: Int): Weather = when (weatherCode) {
+        113 -> Weather("☀️", "Beau")
+        116 -> Weather("🌤️", "Éclaircies")
+        119 -> Weather("☁️", "Nuageux")
+        122 -> Weather("☁️", "Couvert")
+        143 -> Weather("🌫️", "Brume")
+        176 -> Weather("🌦️", "Pluie possible")
+        179 -> Weather("🌨️", "Neige possible")
+        182 -> Weather("🌨️", "Neige fondue possible")
+        185 -> Weather("🌧️", "Bruine verglaçante possible")
+        200 -> Weather("⛈️", "Orage possible")
+        227 -> Weather("🌬️", "Neige soufflée")
+        230 -> Weather("❄️", "Blizzard")
+        248 -> Weather("🌫️", "Brouillard")
+        260 -> Weather("🌫️", "Brouillard givrant")
+        263 -> Weather("🌦️", "Bruine légère")
+        266 -> Weather("🌦️", "Bruine")
+        281 -> Weather("🌧️", "Bruine verglaçante")
+        284 -> Weather("🌧️", "Bruine verglaçante forte")
+        293 -> Weather("🌦️", "Pluie légère")
+        296 -> Weather("🌧️", "Pluie légère")
+        299 -> Weather("🌧️", "Averses modérées")
+        302 -> Weather("🌧️", "Pluie")
+        305 -> Weather("🌧️", "Fortes averses")
+        308 -> Weather("🌧️", "Forte pluie")
+        311 -> Weather("🌧️", "Pluie verglaçante")
+        314 -> Weather("🌧️", "Forte pluie verglaçante")
+        317 -> Weather("🌨️", "Neige fondue")
+        320 -> Weather("🌨️", "Forte neige fondue")
+        323 -> Weather("🌨️", "Neige légère")
+        326 -> Weather("🌨️", "Neige légère")
+        329 -> Weather("❄️", "Neige")
+        332 -> Weather("❄️", "Neige")
+        335 -> Weather("❄️", "Forte neige")
+        338 -> Weather("❄️", "Forte neige")
+        350 -> Weather("🧊", "Grésil")
+        353 -> Weather("🌦️", "Averse légère")
+        356 -> Weather("🌧️", "Forte averse")
+        359 -> Weather("🌧️", "Pluie torrentielle")
+        362 -> Weather("🌨️", "Averse de neige fondue")
+        365 -> Weather("🌨️", "Forte averse de neige fondue")
+        368 -> Weather("🌨️", "Averse de neige")
+        371 -> Weather("❄️", "Forte averse de neige")
+        374 -> Weather("🧊", "Averse de grésil")
+        377 -> Weather("🧊", "Forte averse de grésil")
+        386 -> Weather("⛈️", "Orage")
+        389 -> Weather("⛈️", "Fort orage")
+        392 -> Weather("⛈️", "Orage de neige")
+        395 -> Weather("⛈️", "Fort orage de neige")
+        // Code inconnu (nouveau code ajouté par le service, réponse
+        // inattendue) : on n'affiche rien plutôt qu'un pictogramme faux.
+        else -> {
+            Log.w(TAG, "Code météo inconnu : $weatherCode")
+            Weather("🌡️", "Météo")
+        }
     }
 
     private fun readCache(): Weather? {

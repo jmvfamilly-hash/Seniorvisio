@@ -3,15 +3,17 @@ package com.seniorvisio.ui
 import android.Manifest
 import android.app.AlertDialog
 import android.app.NotificationManager
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.text.InputType
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
+import android.os.IBinder
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
@@ -30,25 +32,22 @@ import com.seniorvisio.R
 import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.KioskManager
-import com.seniorvisio.core.TimeContext
-import com.seniorvisio.core.WeatherClient
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.signaling.CallSignalingClient
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
- * Écran affiché quand aucun appel n'est en cours. Volontairement épuré pour
- * l'usage senior : un message d'accueil et un unique bouton, qui bascule vers
- * la transcription des conversations de la pièce — rien d'autre à comprendre.
+ * Écran affiché quand aucun appel n'est en cours — et, du point de vue de
+ * Jean, le seul écran de la tablette : les mêmes trois zones restent en place
+ * pendant un appel (voir IncomingCallActivity), seul le fond change.
  *
- * La transcription (voir RoomTranscriptionActivity, AssemblyAI) est un
- * écran à part de Senior Visio, pas une application tierce : Jean en revient
- * par le bouton Accueil, Senior Visio étant le lanceur de la tablette (voir
- * KioskManager). Aucun démarrage automatique : la tablette reste sur cet
- * écran au repos, donc pas de micro ni de coupure du son en permanence.
+ * Jean n'a rien à faire ni à toucher. La date, le moment de la journée et la
+ * météo sont là en permanence ; ce qui se dit dans la pièce s'écrit tout seul
+ * dès que quelqu'un parle (voir RoomPresenceService, lié ci-dessous) ; ce que
+ * dit un proche au téléphone s'écrit tout seul dès qu'un appel démarre. Le
+ * bouton "Voir ce qui se dit" qui occupait la moitié de cet écran a disparu
+ * avec cette bascule : il demandait à Jean de savoir qu'une fonction existait
+ * et de penser à la lancer, ce qui est exactement ce qu'il faut éviter ici.
  *
  * La détection d'appel entrant ne dépend pas du cycle de vie de cet écran :
  * elle tourne en continu dans CallListenerService (démarré ci-dessous),
@@ -60,41 +59,32 @@ class MainActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { /* no-op : voir startLocalMedia() pour le repli si refusé */ }
 
     private val adminConfig by lazy { AdminConfig(this) }
-
-    private lateinit var textMomentIcon: TextView
-    private lateinit var textMomentLabel: TextView
-    private lateinit var textMomentWeatherSeparator: TextView
-    private lateinit var textWeatherIcon: TextView
-    private lateinit var textWeatherLabel: TextView
-    private lateinit var textClockDate: TextView
-    private val clockHandler = Handler(Looper.getMainLooper())
-    private val weatherClient by lazy { WeatherClient(this) }
+    private lateinit var zones: HomeZonesController
+    private var roomService: RoomPresenceService? = null
 
     /**
-     * Recalé sur le quart d'heure suivant à chaque tour, pas chaque minute :
-     * le moment de la journée (matin/après-midi/soir/nuit) ne change que
-     * quelques fois par jour, inutile de réveiller le processeur plus souvent
-     * sur une tablette allumée en permanence.
+     * Les paroles de la pièce viennent du service qui tient déjà le micro
+     * pour le réveil au son (voir RoomPresenceService) : une seule capture,
+     * deux usages. Ouvrir une seconde capture concurrente était précisément
+     * ce qui rendait les sous-titres peu fiables avant cette bascule.
      */
-    private val clockTicker = object : Runnable {
-        override fun run() {
-            updateClock()
-            val quarterHourMs = 15 * 60_000L
-            clockHandler.postDelayed(this, quarterHourMs - (System.currentTimeMillis() % quarterHourMs))
+    private val roomConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            val service = (binder as? RoomPresenceService.LocalBinder)?.getService() ?: return
+            roomService = service
+            service.startRoomTranscription { text, isFinal ->
+                runOnUiThread { zones.roomZone.submit(text, isFinal) }
+            }
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            roomService = null
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
-        textMomentIcon = findViewById(R.id.textMomentIcon)
-        textMomentLabel = findViewById(R.id.textMomentLabel)
-        textMomentWeatherSeparator = findViewById(R.id.textMomentWeatherSeparator)
-        textWeatherIcon = findViewById(R.id.textWeatherIcon)
-        textWeatherLabel = findViewById(R.id.textWeatherLabel)
-        textClockDate = findViewById(R.id.textClockDate)
-        updateClock()
 
         val textBuildRev = findViewById<TextView>(R.id.textBuildRev)
         textBuildRev.text = BuildConfig.BUILD_REV
@@ -103,19 +93,26 @@ class MainActivity : AppCompatActivity() {
         // accéder (Réglages système bloqués), voir KioskManager.
         textBuildRev.setOnLongClickListener { promptAdminPin(); true }
 
-        val cardRoomCaptions = findViewById<View>(R.id.cardRoomCaptions)
-        cardRoomCaptions.setOnClickListener { launchRoomTranscription() }
+        zones = HomeZonesController(
+            root = findViewById(R.id.homeRoot),
+            onPalette = { palette ->
+                findViewById<View>(R.id.homeRoot).setBackgroundColor(palette.background)
+                textBuildRev.setTextColor(palette.secondaryText)
+            },
+        )
+
+        val imageQr = findViewById<ImageView>(R.id.imageCaregiverQr)
+        // Touché plutôt que scanné : c'est le geste naturel de quelqu'un qui
+        // découvre un code sans savoir à quoi il sert. On lui explique.
+        imageQr.setOnClickListener { showCaregiverHelp() }
         // Appui long : labo d'étude comparant les moteurs de transcription
-        // (voir TranscriptionLabActivity), sans toucher à l'usage normal du
-        // bouton (appui simple, inchangé).
-        cardRoomCaptions.setOnLongClickListener {
+        // (voir TranscriptionLabActivity). Il vivait sur la carte "Voir ce qui
+        // se dit", disparue de cet écran ; il se rattache ici plutôt que de
+        // devenir inaccessible, sans gêner l'usage normal de la vignette.
+        imageQr.setOnLongClickListener {
             startActivity(Intent(this, TranscriptionLabActivity::class.java))
             true
         }
-
-        // Touché plutôt que scanné : c'est le geste naturel de quelqu'un qui
-        // découvre un code sans savoir à quoi il sert. On lui explique.
-        findViewById<View>(R.id.cardCaregiverQr).setOnClickListener { showCaregiverHelp() }
         showCaregiverQrCode()
 
         permissionLauncher.launch(
@@ -149,53 +146,35 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         KioskManager.startIfDeviceOwner(this, MainActivity::class.java)
-        // Relancée ici plutôt qu'une seule fois au démarrage : la tablette peut
-        // rester des heures écran éteint, le repère temporel doit être juste
-        // dès qu'elle se rallume, pas au prochain quart d'heure.
-        clockHandler.removeCallbacks(clockTicker)
-        clockHandler.post(clockTicker)
-        // Remet le libellé d'origine après un "Ouverture…" ou un échec : au
-        // retour de la transcription, la carte doit réinviter à l'utiliser.
-        findViewById<TextView>(R.id.textRoomCaptionsHint).text =
-            getString(R.string.room_captions_hint)
-    }
-
-    /** Inutile de faire tourner l'horloge quand l'écran ne l'affiche pas. */
-    override fun onPause() {
-        super.onPause()
-        clockHandler.removeCallbacks(clockTicker)
+        zones.onResume()
     }
 
     /**
-     * Pictogramme + mot ("🌤️ Après-midi") à la place d'une heure exacte : se
-     * reconnaît d'un coup d'œil, là où "14:35" demande de déchiffrer deux
-     * nombres. Ce qui compte au quotidien, c'est de savoir où on en est dans
-     * la journée, pas l'heure à la minute près. Date en toutes lettres
-     * ("Mercredi 3 septembre 2026") plutôt qu'en chiffres, pour la même
-     * raison : plus long à écrire, immédiatement lisible.
-     *
-     * La météo (voir WeatherClient) est demandée à chaque tour mais ne fait
-     * un vrai appel réseau qu'une fois par heure (cache interne) : rien à
-     * gérer de spécial ici, juste rappeler la fonction régulièrement.
+     * La transcription de la pièce s'arrête avec cet écran : pendant un appel
+     * (IncomingCallActivity passe devant), le micro appartient à WebRTC, et
+     * l'écran d'appel a sa propre source de texte.
      */
-    private fun updateClock() {
-        val now = LocalDateTime.now()
-        val moment = TimeContext.momentOfDay(now.hour)
-        textMomentIcon.text = moment.icon
-        textMomentLabel.text = moment.label
-        textClockDate.text = now.format(DATE_FORMAT)
-            .replaceFirstChar { it.titlecase(Locale.FRENCH) }
+    override fun onStart() {
+        super.onStart()
+        bindService(Intent(this, RoomPresenceService::class.java), roomConnection, Context.BIND_AUTO_CREATE)
+    }
 
-        weatherClient.fetchWeather { weather ->
-            val visibility = if (weather == null) View.GONE else View.VISIBLE
-            textMomentWeatherSeparator.visibility = visibility
-            textWeatherIcon.visibility = visibility
-            textWeatherLabel.visibility = visibility
-            if (weather != null) {
-                textWeatherIcon.text = weather.icon
-                textWeatherLabel.text = weather.label
-            }
-        }
+    override fun onStop() {
+        super.onStop()
+        roomService?.stopRoomTranscription()
+        roomService = null
+        unbindService(roomConnection)
+        zones.roomZone.clear()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        zones.onPause()
+    }
+
+    override fun onDestroy() {
+        zones.release()
+        super.onDestroy()
     }
 
     /**
@@ -208,7 +187,8 @@ class MainActivity : AppCompatActivity() {
      * Dessiné en noir sur blanc et non aux couleurs de l'écran : les
      * applications d'appareil photo reconnaissent nettement mieux un QR code
      * franchement contrasté, surtout photographié de biais dans une chambre
-     * mal éclairée.
+     * mal éclairée. C'est aussi pour ça qu'il ne suit pas la palette
+     * clair/sombre du reste de l'écran (voir ScreenTheme).
      */
     private fun showCaregiverQrCode() {
         val imageQr = findViewById<ImageView>(R.id.imageCaregiverQr)
@@ -241,16 +221,6 @@ class MainActivity : AppCompatActivity() {
             .setView(content)
             .setPositiveButton("J'ai compris", null)
             .show()
-    }
-
-    /**
-     * Ouvre les sous-titres de la pièce (voir RoomTranscriptionActivity,
-     * AssemblyAI) — plus d'application tierce à résoudre ni de risque
-     * d'échec de lancement, cet écran fait partie de Senior Visio.
-     */
-    private fun launchRoomTranscription() {
-        findViewById<TextView>(R.id.textRoomCaptionsHint).text = "Ouverture…"
-        startActivity(Intent(this, RoomTranscriptionActivity::class.java))
     }
 
     private fun promptAdminPin() {
@@ -326,7 +296,5 @@ class MainActivity : AppCompatActivity() {
          * sous-titres activés d'office (voir web-caller/app.js).
          */
         private const val CAREGIVER_URL = "https://jmvfamilly-hash.github.io/Seniorvisio/?soignant=1"
-
-        private val DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.FRENCH)
     }
 }

@@ -31,7 +31,6 @@ import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 import java.nio.ByteBuffer
-import kotlin.math.roundToInt
 
 /**
  * Implémentation WebRTC de [CallEngine]. Le signaling (échange de l'offre,
@@ -69,8 +68,6 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var captionModeListener: ListenerRegistration? = null
     private var captionTextSizeListener: ListenerRegistration? = null
     private var captionScrollSpeedListener: ListenerRegistration? = null
-    private var captionVisibleLinesListener: ListenerRegistration? = null
-    private var captionClearDelayListener: ListenerRegistration? = null
     private var selfPreviewListener: ListenerRegistration? = null
     private var forceConnectListener: ListenerRegistration? = null
     private var remoteEndedListener: ListenerRegistration? = null
@@ -79,7 +76,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var autoHangupRunnable: Runnable? = null
 
     // ---- Transcription temps réel (voir listenForCaptions/setCaptionsActive) ----
-    private var transcriptionOnText: ((String) -> Unit)? = null
+    private var transcriptionOnText: ((text: String, isFinal: Boolean) -> Unit)? = null
     private var transcriber: AssemblyAiRealtimeTranscriber? = null
     private var captionsActive = false
     private var remoteAudioSinkAttached = false
@@ -213,7 +210,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * (voir attachTranscriptionSink), avec AssemblyAI — indépendant de
      * l'appareil ou du navigateur utilisé pour appeler.
      */
-    fun listenForCaptions(onText: (String) -> Unit) {
+    fun listenForCaptions(onText: (text: String, isFinal: Boolean) -> Unit) {
         transcriptionOnText = onText
     }
 
@@ -272,7 +269,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                 }
                 val instance = transcriber ?: AssemblyAiRealtimeTranscriber(apiKey).also {
                     transcriber = it
-                    it.start(onText = { text, _ -> onText(text) }) { message ->
+                    it.start(onText = onText) { message ->
                         Log.w(TAG, "AssemblyAI temps réel : $message")
                         callId?.let { id -> signaling.reportCaptionDebug(id, "AssemblyAI : $message") }
                     }
@@ -378,26 +375,15 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         captionScrollSpeedListener = signaling.listenForCaptionScrollSpeed(id) { speed -> onDpPerSec(speed.toFloat()) }
     }
 
-    /** Écoute le nombre de lignes visibles du bandeau de sous-titres, choisi à distance par le proche. */
-    fun listenForCaptionVisibleLines(onLines: (Int) -> Unit) {
-        val id = callId ?: return
-        captionVisibleLinesListener = signaling.listenForCaptionVisibleLines(id) { lines -> onLines(lines.roundToInt()) }
-    }
-
-    /** Écoute le délai (en secondes) sans parole du proche avant effacement des sous-titres. */
-    fun listenForCaptionClearDelay(onSeconds: (Int) -> Unit) {
-        val id = callId ?: return
-        captionClearDelayListener = signaling.listenForCaptionClearDelay(id) { seconds -> onSeconds(seconds.roundToInt()) }
-    }
-
     /**
-     * Signale en continu au proche le retard de lecture de Jean par rapport
-     * au texte reçu (voir IncomingCallActivity.setupCaptionMode), pour un
-     * retour clair de là où il en est plutôt qu'un simple "ça déborde" ou non.
+     * Publie ce que Jean a réellement sous les yeux dans chacune de ses deux
+     * zones de texte, et l'avance prise par le proche sur sa lecture, pour
+     * que le PWA affiche exactement la même chose au même instant (voir
+     * IncomingCallActivity et web-caller/app.js).
      */
-    fun signalCaptionCatchUpLag(lagSeconds: Float) {
+    fun publishScreenState(roomText: String?, callText: String?, lagSeconds: Float) {
         val id = callId ?: return
-        signaling.signalCaptionCatchUpLag(id, lagSeconds)
+        signaling.publishScreenState(id, roomText, callText, lagSeconds)
     }
 
     /**
@@ -690,10 +676,6 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         captionTextSizeListener = null
         captionScrollSpeedListener?.remove()
         captionScrollSpeedListener = null
-        captionVisibleLinesListener?.remove()
-        captionVisibleLinesListener = null
-        captionClearDelayListener?.remove()
-        captionClearDelayListener = null
         selfPreviewListener?.remove()
         selfPreviewListener = null
         forceConnectListener?.remove()

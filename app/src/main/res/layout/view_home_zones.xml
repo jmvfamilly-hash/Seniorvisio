@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Les trois zones de l'écran de Jean, empilées verticalement par-dessus le
+     fond (voir HomeZonesController). Inclus tel quel par l'écran d'accueil
+     (activity_main) et par l'écran d'appel (activity_incoming_call) : c'est
+     le même écran pour Jean, seul le fond change — uni hors appel, remplacé
+     par la vidéo du proche pendant un appel, puis par ses photos s'il lance
+     un diaporama.
+
+     L'ordre des enfants ici est l'ordre par défaut (voir HomeZone) ; il est
+     réappliqué au démarrage depuis le réglage admin, qui peut le changer.
+
+     Aucune couleur n'est fixée ici : la palette entière (fond des zones,
+     couleurs de texte) est posée en code selon l'heure et la luminosité de la
+     pièce (voir ScreenTheme). Les écrire ici donnerait un écran clair le
+     temps d'une image au réveil de nuit.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/zoneStack"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <!-- Zone 1 : la seule toujours affichée. Date, moment de la journée et
+         météo — un pictogramme et un mot pour chacun, jamais l'heure exacte
+         ni la température (voir TimeContext et WeatherClient). -->
+    <LinearLayout
+        android:id="@+id/zoneInfo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:padding="16dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/textMomentIcon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="48sp"
+                android:text="" />
+
+            <TextView
+                android:id="@+id/textMomentLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:textSize="30sp"
+                android:textStyle="bold"
+                android:text="" />
+
+            <TextView
+                android:id="@+id/textMomentWeatherSeparator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="18dp"
+                android:textSize="30sp"
+                android:visibility="gone"
+                android:text="·" />
+
+            <TextView
+                android:id="@+id/textWeatherIcon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="18dp"
+                android:textSize="48sp"
+                android:visibility="gone"
+                android:text="" />
+
+            <TextView
+                android:id="@+id/textWeatherLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:textSize="30sp"
+                android:textStyle="bold"
+                android:visibility="gone"
+                android:text="" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/textClockDate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textSize="38sp"
+            android:gravity="center"
+            android:text="" />
+    </LinearLayout>
+
+    <!-- Zone 2 : ce qui se dit dans la pièce, capté par le micro de la
+         tablette (voir RoomPresenceService). Masquée tant qu'il n'y a rien à
+         lire, et non pas affichée vide : un cadre vide en permanence occupe
+         de la place et fait croire à une panne. -->
+    <LinearLayout
+        android:id="@+id/zoneRoom"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="16dp"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:visibility="gone"
+        android:alpha="0">
+
+        <ScrollView
+            android:id="@+id/roomCaptionScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scrollbars="none">
+
+            <TextView
+                android:id="@+id/textRoomCaption"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textStyle="bold"
+                android:textSize="@dimen/caption_text_size_default"
+                android:text="" />
+        </ScrollView>
+    </LinearLayout>
+
+    <!-- Zone 3 : ce que dit la personne au bout de l'appel — distant, ou dans
+         la même pièce (voir WebRtcCallEngine). Mêmes règles d'affichage que
+         la zone 2, même code (voir PacedCaptionZone). -->
+    <LinearLayout
+        android:id="@+id/zoneCall"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="16dp"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:visibility="gone"
+        android:alpha="0">
+
+        <ScrollView
+            android:id="@+id/callCaptionScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scrollbars="none">
+
+            <TextView
+                android:id="@+id/textCallCaption"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textStyle="bold"
+                android:textSize="@dimen/caption_text_size_default"
+                android:text="" />
+        </ScrollView>
+    </LinearLayout>
+
+</LinearLayout>

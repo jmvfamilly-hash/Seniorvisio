@@ -1,7 +1,6 @@
 package com.seniorvisio.ui
 
 import android.app.NotificationManager
-import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import android.media.RingtoneManager
@@ -11,7 +10,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Base64
 import android.util.Log
-import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -19,8 +17,6 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import android.widget.TextView
@@ -28,16 +24,12 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.KioskManager
-import com.seniorvisio.core.TimeContext
-import com.seniorvisio.core.WeatherClient
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.service.IncomingCallService
 import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.service.TimedCallAlertController
 import org.webrtc.SurfaceViewRenderer
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -45,12 +37,21 @@ import kotlin.math.roundToInt
  * de `AdminConfig.countdownSeconds` (30s par défaut), avec un bouton
  * "Bloquer l'appel" que Jean peut presser à tout moment. Si le délai
  * s'écoule sans action, la connexion vidéo démarre automatiquement.
+ *
+ * Une fois connecté, ce n'est plus vraiment un autre écran que l'accueil du
+ * point de vue de Jean : les mêmes trois zones restent en place (voir
+ * HomeZonesController), seul le fond change — la vidéo du proche remplace le
+ * fond uni, puis ses photos s'il lance un diaporama. Le texte de l'appel
+ * s'affiche dans la zone 3, avec les mêmes règles que celui de la pièce (voir
+ * PacedCaptionZone) : chaque phrase reste le temps d'être lue, les suivantes
+ * attendent leur tour.
  */
 class IncomingCallActivity : AppCompatActivity() {
 
     private val alertController = TimedCallAlertController()
     private lateinit var adminConfig: AdminConfig
     private lateinit var callEngine: WebRtcCallEngine
+    private lateinit var zones: HomeZonesController
     private lateinit var buttonBlock: Button
     private var isConnected = false
     private var callHandled = false
@@ -67,15 +68,19 @@ class IncomingCallActivity : AppCompatActivity() {
     // jamais interrompu par une rotation.
     private var remoteRendererRef: SurfaceViewRenderer? = null
     private var localRendererRef: SurfaceViewRenderer? = null
-    private var captionBannerRef: View? = null
-    private var captionScrollRef: ScrollView? = null
-    private var textCaptionRef: TextView? = null
 
-    /** Nombre de lignes visibles dans le bandeau de sous-titres, réglable à distance (voir setupCaptionMode). */
-    private var captionVisibleLines: Int = DEFAULT_CAPTION_VISIBLE_LINES
+    // Dernier état publié au PWA (voir publishScreenState) : sert à n'écrire
+    // que lorsque quelque chose a réellement changé.
+    private var lastPublishedCallText: String? = null
+    private var lastPublishedLagSeconds = -1f
 
-    /** Délai sans nouvelle parole avant effacement des sous-titres, réglable à distance (voir setupCaptionMode). */
-    private var captionClearDelayMs: Long = DEFAULT_CAPTION_CLEAR_DELAY_MS
+    private val screenStateHandler = Handler(Looper.getMainLooper())
+    private val screenStatePublisher = object : Runnable {
+        override fun run() {
+            publishScreenStateIfChanged()
+            screenStateHandler.postDelayed(this, SCREEN_STATE_PUBLISH_MS)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -126,6 +131,19 @@ class IncomingCallActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.textBuildRev).text = BuildConfig.BUILD_REV
         KioskManager.startIfDeviceOwner(this)
 
+        // Les trois zones sont en place dès la sonnerie, pas seulement une
+        // fois connecté : la date et la météo n'ont pas de raison de
+        // disparaître parce que le téléphone sonne.
+        zones = HomeZonesController(
+            root = findViewById(R.id.callRoot),
+            onPalette = { palette ->
+                // Le fond n'est visible que tant que ni photo d'appelant ni
+                // vidéo ne le recouvrent — d'où une palette qui sert surtout
+                // aux premières secondes de la sonnerie.
+                findViewById<View>(R.id.callRoot).setBackgroundColor(palette.background)
+            },
+        )
+
         val callId = intent.getStringExtra(EXTRA_CALL_ID)
         if (callId == null) {
             finish()
@@ -148,7 +166,6 @@ class IncomingCallActivity : AppCompatActivity() {
             "$callerName vous appelle"
         }
         showCallerPhoto(intent.getStringExtra(EXTRA_CALLER_PHOTO_PATH))
-        updateTimeContext()
 
         countdownFill.pivotX = 0f
         countdownFill.scaleX = 0f
@@ -247,6 +264,16 @@ class IncomingCallActivity : AppCompatActivity() {
         )
     }
 
+    override fun onResume() {
+        super.onResume()
+        zones.onResume()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        zones.onPause()
+    }
+
     /**
      * Avec singleTask (voir AndroidManifest), un second déclenchement pour le
      * même appel (notification plein écran + startActivity explicite, voir
@@ -256,7 +283,7 @@ class IncomingCallActivity : AppCompatActivity() {
      * de plus : l'instance déjà affichée continue normalement son décompte ou
      * son appel en cours.
      */
-    override fun onNewIntent(intent: Intent) {
+    override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         Log.i(TAG, "Second déclenchement ignoré pour un appel déjà affiché")
     }
@@ -330,34 +357,6 @@ class IncomingCallActivity : AppCompatActivity() {
         }.start()
     }
 
-    /**
-     * Même repère temporel que l'écran d'accueil (voir MainActivity,
-     * TimeContext, WeatherClient), demandé pour rester visible aussi pendant
-     * les 30 secondes qui précèdent la connexion — pas seulement en veille.
-     * Une seule fois suffit : contrairement à l'écran d'accueil, cet écran ne
-     * reste jamais affiché assez longtemps pour qu'un rafraîchissement
-     * périodique ait un intérêt.
-     */
-    private fun updateTimeContext() {
-        val now = LocalDateTime.now()
-        val moment = TimeContext.momentOfDay(now.hour)
-        findViewById<TextView>(R.id.textCallMomentIcon).text = moment.icon
-        findViewById<TextView>(R.id.textCallMomentLabel).text = moment.label
-        findViewById<TextView>(R.id.textCallDate).text = now.format(DATE_FORMAT)
-            .replaceFirstChar { it.titlecase(Locale.FRENCH) }
-
-        WeatherClient(this).fetchWeather { weather ->
-            val visibility = if (weather == null) View.GONE else View.VISIBLE
-            findViewById<View>(R.id.textCallMomentWeatherSeparator).visibility = visibility
-            findViewById<View>(R.id.textCallWeatherIcon).visibility = visibility
-            findViewById<View>(R.id.textCallWeatherLabel).visibility = visibility
-            if (weather != null) {
-                findViewById<TextView>(R.id.textCallWeatherIcon).text = weather.icon
-                findViewById<TextView>(R.id.textCallWeatherLabel).text = weather.label
-            }
-        }
-    }
-
     private fun connectVideoCall() {
         // Deux chemins mènent ici (fin du décompte et demande de connexion
         // immédiate) : sans ce garde-fou, ils pouvaient se déclencher tous les
@@ -404,6 +403,7 @@ class IncomingCallActivity : AppCompatActivity() {
         callEngine.onConnectionLost {
             runOnUiThread { if (!callHandled) finish() }
         }
+        screenStateHandler.post(screenStatePublisher)
         // Applique tout de suite la disposition correspondant à l'orientation
         // actuelle (la tablette peut déjà être en paysage au moment où
         // l'appel se connecte, pas seulement lors d'une rotation ultérieure).
@@ -411,105 +411,41 @@ class IncomingCallActivity : AppCompatActivity() {
     }
 
     /**
-     * Adapte la disposition de l'écran d'appel à l'orientation, sans jamais
-     * recréer les vues (voir remoteRendererRef/captionBannerRef, remplies
-     * dans connectVideoCall/setupCaptionMode) : seuls leurs LayoutParams
-     * changent, donc le flux vidéo et le défilement des sous-titres ne sont
-     * jamais interrompus par une rotation.
+     * Adapte à l'orientation ce qui ne s'y adapte pas tout seul. Les trois
+     * zones, elles, n'ont plus rien à recalculer : leur hauteur vient d'un
+     * partage proportionnel de l'espace disponible (voir view_home_zones.xml),
+     * qui suit la rotation de lui-même — contrairement au bandeau de
+     * sous-titres qu'elles remplacent, dont la hauteur en pixels devait être
+     * recalculée à la main à chaque rotation, à chaque changement de taille de
+     * texte et à chaque changement du nombre de lignes.
      *
-     * La première itération du mode paysage (vidéo à droite, sous-titres en
-     * colonne à gauche) s'est révélée plus perturbante à l'usage que le
-     * bandeau en bas utilisé en portrait — la vidéo reste donc plein écran
-     * et le bandeau de sous-titres en surimpression basse dans les deux
-     * orientations. En paysage, le bandeau est aussi élargi au maximum
-     * (marges latérales réduites) et sa hauteur totale (marge basse +
-     * rembourrage interne + zone de texte, voir activity_incoming_call.xml)
-     * est plafonnée à la moitié basse de l'écran, calculée dynamiquement à
-     * partir de la résolution réelle plutôt qu'une valeur fixe — pour rester
-     * valable quelle que soit la tablette utilisée.
-     *
-     * En portrait, le bouton Bloquer/Raccrocher reste tout en bas (loin du
-     * bandeau, qui garde une grande marge basse). En paysage, où le bandeau
-     * de sous-titres occupe toute la largeur près du bord bas, le bouton
-     * passe en haut à droite, par-dessus la vidéo du proche plutôt que sur
-     * le texte — la miniature de Jean (localRenderer, elle aussi en haut à
-     * droite par défaut) descend d'autant pour ne pas être recouverte par le
-     * bouton.
+     * En portrait, le bouton Bloquer/Raccrocher reste en bas à droite. En
+     * paysage, où les zones de texte occupent toute la largeur jusqu'assez
+     * bas, il passe en haut à droite, par-dessus la vidéo du proche plutôt que
+     * sur le texte — la miniature de Jean (localRenderer, elle aussi en haut à
+     * droite par défaut) descend d'autant pour ne pas être recouverte.
      */
     private fun applyOrientationLayout(orientation: Int) {
-        val remoteRenderer = remoteRendererRef ?: return
-        val captionBanner = captionBannerRef ?: return
-        val captionScroll = captionScrollRef ?: return
         val localRenderer = localRendererRef ?: return
         val isLandscape = orientation == Configuration.ORIENTATION_LANDSCAPE
         val density = resources.displayMetrics.density
-        val sideMargin = ((if (isLandscape) 12 else 24) * density).roundToInt()
         val margin16 = (16 * density).roundToInt()
-        // Rembourrage haut+bas du bandeau, fixé dans le layout XML (android:padding="20dp").
-        val bannerVerticalPadding = (20 * density * 2).roundToInt()
-
-        // Hauteur calée sur le nombre de lignes voulu (captionVisibleLines,
-        // réglable à distance, voir setupCaptionMode) plutôt qu'une valeur
-        // fixe : sans ça, changer la taille du texte ou le nombre de lignes
-        // depuis le PWA laissait un bandeau soit trop grand (vide en bas),
-        // soit trop court (texte coupé). lineHeight se base sur la taille de
-        // texte actuelle de textCaption, déjà à jour à cet instant (le
-        // réglage à distance de la taille l'applique avant tout recalcul de
-        // disposition, voir listenForCaptionTextSize ci-dessous).
-        val minLineHeightPx = (24 * density).roundToInt()
-        val lineHeightPx = (textCaptionRef?.lineHeight ?: 0).takeIf { it > 0 } ?: minLineHeightPx
-        val desiredHeightPx = lineHeightPx * captionVisibleLines
-
-        val bottomMargin: Int
-        val captionScrollHeight: Int
-        if (isLandscape) {
-            bottomMargin = (16 * density).roundToInt()
-            val maxBannerAreaPx = resources.displayMetrics.heightPixels / 2
-            val maxHeightPx = (maxBannerAreaPx - bottomMargin - bannerVerticalPadding)
-                .coerceAtLeast(minLineHeightPx)
-            captionScrollHeight = desiredHeightPx.coerceIn(minLineHeightPx, maxHeightPx)
-        } else {
-            bottomMargin = (140 * density).roundToInt()
-            val maxPortraitAreaPx = (resources.displayMetrics.heightPixels * 0.5f).roundToInt()
-            captionScrollHeight = desiredHeightPx.coerceIn(minLineHeightPx, maxPortraitAreaPx)
-        }
-
-        (remoteRenderer.layoutParams as FrameLayout.LayoutParams).apply {
-            width = FrameLayout.LayoutParams.MATCH_PARENT
-            height = FrameLayout.LayoutParams.MATCH_PARENT
-            gravity = Gravity.NO_GRAVITY
-            marginStart = 0
-            remoteRenderer.layoutParams = this
-        }
-
-        (captionBanner.layoutParams as FrameLayout.LayoutParams).apply {
-            width = FrameLayout.LayoutParams.MATCH_PARENT
-            height = FrameLayout.LayoutParams.WRAP_CONTENT
-            gravity = Gravity.BOTTOM
-            marginStart = sideMargin; marginEnd = sideMargin; topMargin = 0; this.bottomMargin = bottomMargin
-            captionBanner.layoutParams = this
-        }
-
-        (captionScroll.layoutParams as LinearLayout.LayoutParams).apply {
-            height = captionScrollHeight
-            captionScroll.layoutParams = this
-        }
 
         (buttonBlock.layoutParams as FrameLayout.LayoutParams).apply {
             if (isLandscape) {
                 gravity = Gravity.TOP or Gravity.END
-                topMargin = margin16; this.bottomMargin = 0
+                topMargin = margin16; bottomMargin = 0
             } else {
                 gravity = Gravity.BOTTOM or Gravity.END
-                topMargin = 0; this.bottomMargin = (24 * density).roundToInt()
+                topMargin = 0; bottomMargin = (24 * density).roundToInt()
             }
-            marginEnd = if (isLandscape) margin16 else sideMargin
+            marginEnd = if (isLandscape) margin16 else (24 * density).roundToInt()
             buttonBlock.layoutParams = this
         }
 
         (localRenderer.layoutParams as FrameLayout.LayoutParams).apply {
             gravity = Gravity.TOP or Gravity.END
-            marginStart = margin16; marginEnd = margin16; this.bottomMargin = 0
+            marginStart = margin16; marginEnd = margin16; bottomMargin = 0
             // Décalée sous le bouton en paysage pour ne pas être recouverte.
             topMargin = if (isLandscape) margin16 + (74 * density).roundToInt() else margin16
             localRenderer.layoutParams = this
@@ -527,207 +463,84 @@ class IncomingCallActivity : AppCompatActivity() {
     }
 
     /**
-     * Sous-titres en surimpression façon sous-titrage TV (recommandation
-     * ergonomique : remplace l'ancien mode 80%/20% en écran divisé) — la
-     * vidéo reste plein écran, le texte apparaît dans un bandeau semi-opaque
-     * en bas. Activé/désactivé à distance par le proche depuis le PWA, avec
-     * une transition en fondu pour éviter tout changement brutal côté Jean.
+     * Branche la zone 3 (les paroles de l'appel) sur la transcription temps
+     * réel de la tablette, et relaie les réglages que le proche pilote depuis
+     * le PWA.
+     *
+     * Le texte vient d'AssemblyAI, alimenté par le son déjà reçu par l'appel
+     * (voir WebRtcCallEngine.attachTranscriptionSink) : plus rien ne dépend de
+     * la reconnaissance vocale du navigateur du proche, absente sur Safari/iOS
+     * et privée de son sur Android/Chrome (micro accaparé par l'appel
+     * lui-même) — c'était le point de fragilité du projet.
+     *
+     * Les réglages "nombre de lignes" et "délai d'effacement" ont disparu avec
+     * le bandeau : la zone occupe une part fixe de l'écran, et elle s'efface
+     * quand il n'y a plus rien à lire, pas au bout d'un délai réglé à
+     * l'avance (voir PacedCaptionZone).
      */
     private fun setupCaptionMode() {
-        val captionBanner = findViewById<View>(R.id.captionBanner)
-        val captionScroll = findViewById<ScrollView>(R.id.captionScroll)
-        val textCaption = findViewById<TextView>(R.id.textCaption)
-        captionBannerRef = captionBanner
-        captionScrollRef = captionScroll
-        textCaptionRef = textCaption
-        // Le défilement est piloté par le code (voir plus bas), pas par Jean.
-        captionScroll.setOnTouchListener { _, _ -> true }
-
-        // Plus aucun texte n'est perdu : si la phrase dépasse l'espace visible,
-        // on défile automatiquement (plutôt que de tronquer avec des "…"), et
-        // on signale le retard de lecture au proche pour qu'il puisse temporiser
-        // (voir WebRtcCallEngine.signalCaptionCatchUpLag / web-caller/app.js).
-        //
-        // Le défilement suit la parole en continu, façon sous-titrage TV en
-        // direct ("roll-up", CEA-608) : tant que le texte reçu prolonge celui
-        // d'avant (la personne continue de parler dans la même phrase, un mot
-        // de plus toutes les ~500ms), on avance d'un cran sans revenir en
-        // haut. Repartir de zéro à chaque mise à jour (comme avant) rendait
-        // le défilement inutilisable en parole continue : l'animation n'avait
-        // jamais le temps d'aller au bout avant d'être relancée depuis le
-        // début. On ne revient en haut que lorsqu'une phrase réellement
-        // nouvelle démarre (le texte ne prolonge plus le précédent).
-        //
-        // Suivi continu par interpolation image par image (voir
-        // CaptionScrollAnimator, logique commune aux sous-titres d'appel et
-        // de la pièce), validé dans le labo de défilement
-        // (experiment/caption-scroll) sur un enregistrement vocal réel —
-        // 60 im/s en moyenne, quasi aucune image saccadée. Le pas par frame
-        // était initialement proportionnel à la distance restante (facteur
-        // de rattrapage 0,35) : plus le proche parlait vite (donc plus de
-        // texte en attente), plus le défilement accélérait — l'inverse de ce
-        // qu'il fallait pour laisser le temps à Jean de lire, constaté lors
-        // des tests réels. Le pas est maintenant plafonné à une vitesse
-        // constante et paramétrable (voir listenForCaptionScrollSpeed,
-        // réglée à distance par le proche) : le texte reçu peut s'accumuler
-        // en attente le temps que le défilement rattrape, plutôt que de
-        // défiler plus vite. Le retard de lecture qui en résulte est signalé
-        // en continu au proche (voir signalCaptionCatchUpLag) pour qu'il
-        // sache précisément où en est Jean, plutôt qu'un simple indicateur
-        // "ça déborde" ou non.
-        var lastCaptionText = ""
-        var lastLagSentAtMs = 0L
-        // Valeur de départ raisonnable en l'absence de mesure labo pour ce
-        // réglage (contrairement au lissage ci-dessus) — ajustée en direct
-        // par le proche via le curseur du PWA.
-        var maxScrollSpeedPxPerSec = 50f * resources.displayMetrics.density
-
-        val scrollAnimator = CaptionScrollAnimator(
-            scrollView = captionScroll,
-            maxSpeedPxPerSec = { maxScrollSpeedPxPerSec },
-            onFrame = { remainingPx ->
-                val lagSeconds = if (maxScrollSpeedPxPerSec > 0f) remainingPx / maxScrollSpeedPxPerSec else 0f
-                val now = System.currentTimeMillis()
-                if (now - lastLagSentAtMs > 300) {
-                    lastLagSentAtMs = now
-                    callEngine.signalCaptionCatchUpLag(lagSeconds)
-                }
-            },
-        )
+        callEngine.listenForCaptions { text, isFinal ->
+            runOnUiThread { zones.callZone.submit(text, isFinal) }
+        }
 
         callEngine.listenForCaptionScrollSpeed { dpPerSec ->
-            maxScrollSpeedPxPerSec = dpPerSec * resources.displayMetrics.density
-        }
-
-        // État d'activation à distance (voir listenForCaptionMode plus bas),
-        // déclaré ici (avant son premier usage textuel) car clearCaption et
-        // listenForCaptions s'y réfèrent aussi : le bandeau ne doit jamais se
-        // réafficher tout seul si le proche a explicitement désactivé les
-        // sous-titres depuis le PWA.
-        var captionsCurrentlyEnabled: Boolean? = null
-
-        fun showCaptionBanner() {
-            captionBanner.animate().cancel()
-            captionBanner.visibility = View.VISIBLE
-            captionBanner.animate().alpha(1f).setDuration(400).start()
-        }
-
-        fun hideCaptionBanner() {
-            captionBanner.animate().cancel()
-            captionBanner.animate().alpha(0f).setDuration(400)
-                .withEndAction { captionBanner.visibility = View.GONE }
-                .start()
-        }
-
-        // Texte relayé tel quel par le proche (reconnaissance vocale de son
-        // propre navigateur, Web Speech API — voir web-caller/webrtc-engine.js
-        // et WebRtcCallEngine.listenForCaptions) : ne fonctionne que sur les
-        // navigateurs qui la supportent (Chrome desktop essentiellement, pas
-        // Safari/iOS), limitation acceptée pour rester gratuit et sans
-        // dépendance à un service tiers.
-        // Efface le texte ET masque le bandeau lui-même quand le proche cesse
-        // de parler, plutôt que de laisser sa dernière phrase figée à l'écran
-        // indéfiniment. Masquer seulement le texte ne suffisait pas : un cadre
-        // semi-opaque vide, plaqué en bas de l'écran, restait affiché sans
-        // rien dedans — constaté en test réel ("le bandeau ne disparaît
-        // jamais"). Indispensable aussi pendant un diaporama : le bandeau
-        // recouvre une partie de la photo, et un cadre vide qui reste dessus
-        // gêne sans rien apporter. Le fondu évite une disparition brutale.
-        val captionClearHandler = Handler(Looper.getMainLooper())
-        val clearCaption = Runnable {
-            textCaption.animate().alpha(0f).setDuration(400).withEndAction {
-                textCaption.text = ""
-                textCaption.alpha = 1f
-                lastCaptionText = ""
-                scrollAnimator.jumpTo(0)
-                callEngine.signalCaptionCatchUpLag(0f)
-            }.start()
-            if (captionsCurrentlyEnabled == true) hideCaptionBanner()
-        }
-
-        callEngine.listenForCaptions { text ->
-            runOnUiThread {
-                val isContinuation = lastCaptionText.isNotEmpty() && text.startsWith(lastCaptionText)
-                lastCaptionText = text
-                // Reprend une nouvelle parole après un silence qui avait fait
-                // disparaître le bandeau (voir clearCaption) — sans effet s'il
-                // est déjà affiché (cancel() sur une animation déjà à 1 ne
-                // clignote pas).
-                if (captionsCurrentlyEnabled == true) showCaptionBanner()
-                textCaption.alpha = 1f
-                textCaption.text = text
-                captionClearHandler.removeCallbacks(clearCaption)
-                captionClearHandler.postDelayed(clearCaption, captionClearDelayMs)
-                textCaption.post {
-                    if (!isContinuation) {
-                        scrollAnimator.jumpTo(0)
-                        callEngine.signalCaptionCatchUpLag(0f)
-                    }
-                    val overflow = textCaption.height > captionScroll.height
-                    val maxScroll = (textCaption.height - captionScroll.height).coerceAtLeast(0)
-                    if (overflow) {
-                        scrollAnimator.scrollTo(maxScroll)
-                    }
-                }
-            }
+            runOnUiThread { zones.callZone.setScrollSpeedDpPerSec(dpPerSec) }
         }
 
         // Ce listener écoute tout le document d'appel Firestore, donc il se
         // redéclenche à chaque écriture (volume, etc.), pas seulement quand
-        // l'activation change. Sans ce garde-fou, le fondu d'apparition
-        // repartirait de zéro à chaque écriture, donnant un clignotement.
+        // l'activation change — d'où le garde-fou.
+        var captionsCurrentlyEnabled: Boolean? = null
         callEngine.listenForCaptionMode { enabled ->
             runOnUiThread {
                 if (captionsCurrentlyEnabled == enabled) return@runOnUiThread
                 captionsCurrentlyEnabled = enabled
                 // Démarre/arrête la transcription temps réel AssemblyAI en
-                // même temps que le bandeau : service payant, inutile de le
+                // même temps que la zone : service payant, inutile de le
                 // faire tourner quand le proche n'a pas activé les sous-titres.
                 callEngine.setCaptionsActive(enabled)
-                if (enabled) showCaptionBanner() else hideCaptionBanner()
+                if (!enabled) zones.callZone.clear()
             }
         }
 
-        // Même garde-fou que ci-dessus : ce listener se redéclenche aussi à
-        // chaque nouveau texte transcrit, pas seulement quand la taille change.
+        // Même garde-fou : ce listener se redéclenche aussi à chaque écriture
+        // dans le document, pas seulement quand la taille change.
         var currentTextSizeSp: Float? = null
         callEngine.listenForCaptionTextSize { sizeSp ->
             runOnUiThread {
                 if (currentTextSizeSp == sizeSp) return@runOnUiThread
                 currentTextSizeSp = sizeSp
-                textCaption.animate().alpha(0f).setDuration(150).withEndAction {
-                    textCaption.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
-                    textCaption.animate().alpha(1f).setDuration(150).start()
-                    // La hauteur du bandeau (captionVisibleLines × hauteur de
-                    // ligne) dépend de cette taille de texte : la recalculer
-                    // ici, sans quoi grossir le texte depuis le PWA finissait
-                    // par tronquer les deux lignes dans un bandeau resté à
-                    // l'ancienne hauteur.
-                    if (isConnected) applyOrientationLayout(resources.configuration.orientation)
-                }.start()
+                zones.callZone.setTextSizeSp(sizeSp)
             }
         }
+    }
 
-        // Nombre de lignes visibles avant défilement, réglable à distance par
-        // le proche (voir CallSignalingClient.listenForCaptionVisibleLines) —
-        // demande initiale : deux lignes, contre un bandeau à taille fixe
-        // auparavant, tantôt trop grand, tantôt trop court selon la taille de
-        // texte choisie.
-        callEngine.listenForCaptionVisibleLines { lines ->
-            runOnUiThread {
-                if (captionVisibleLines == lines) return@runOnUiThread
-                captionVisibleLines = lines
-                if (isConnected) applyOrientationLayout(resources.configuration.orientation)
-            }
-        }
-
-        // Délai sans nouvelle parole avant effacement des sous-titres,
-        // réglable à distance par le proche — pas besoin de runOnUiThread,
-        // une simple lecture/écriture de variable (même choix que
-        // listenForCaptionScrollSpeed ci-dessus).
-        callEngine.listenForCaptionClearDelay { seconds ->
-            captionClearDelayMs = (seconds * 1000L).coerceAtLeast(1000L)
-        }
+    /**
+     * Envoie au PWA ce que Jean a réellement sous les yeux, pour qu'il montre
+     * la même chose au même instant (voir CallSignalingClient.
+     * publishScreenState). N'écrit que lorsque le texte affiché change, ou que
+     * l'avance de lecture bouge d'au moins une demi-seconde : appelée
+     * plusieurs fois par minute pendant tout l'appel, une écriture
+     * systématique multiplierait sans raison les écritures Firestore et les
+     * réveils du listener d'en face.
+     *
+     * La zone 2 (paroles de la pièce) est toujours vide pendant un appel — le
+     * micro appartient alors à WebRTC, et RoomPresenceService est suspendu —
+     * mais elle est publiée quand même : le jour où la tablette saura faire
+     * les deux, le PWA n'aura rien à changer.
+     */
+    private fun publishScreenStateIfChanged() {
+        val callText = zones.callZone.displayedText()
+        val lag = zones.callZone.pendingSeconds()
+        val lagMoved = abs(lag - lastPublishedLagSeconds) >= LAG_PUBLISH_THRESHOLD_SECONDS
+        if (callText == lastPublishedCallText && !lagMoved) return
+        lastPublishedCallText = callText
+        lastPublishedLagSeconds = lag
+        callEngine.publishScreenState(
+            roomText = zones.roomZone.displayedText(),
+            callText = callText,
+            lagSeconds = lag,
+        )
     }
 
     /**
@@ -759,6 +572,8 @@ class IncomingCallActivity : AppCompatActivity() {
         // (voir le flag posé dans onCreate) — usage 24/7, risque batterie/
         // chauffe/marquage d'écran sinon.
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        screenStateHandler.removeCallbacks(screenStatePublisher)
+        zones.release()
         RoomPresenceService.resumeAfterCall(this)
         alertController.cancel()
         if (!callHandled && !isChangingConfigurations) {
@@ -771,21 +586,12 @@ class IncomingCallActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "IncomingCallActivity"
 
-        /**
-         * Valeurs de départ tant que le proche n'a rien réglé depuis le PWA
-         * (voir CallSignalingClient.listenForCaptionVisibleLines/
-         * listenForCaptionClearDelay) : deux lignes visibles avant
-         * défilement, et 30 secondes sans nouvelle parole avant effacement du
-         * sous-titre — assez long pour ne pas effacer entre deux phrases
-         * d'une même explication, assez court pour ne pas laisser une phrase
-         * orpheline indéfiniment sur une photo de diaporama.
-         */
-        private const val DEFAULT_CAPTION_VISIBLE_LINES = 2
-        private const val DEFAULT_CAPTION_CLEAR_DELAY_MS = 30_000L
+        /** Cadence de publication de l'état de l'écran de Jean vers le PWA (voir publishScreenStateIfChanged). */
+        private const val SCREEN_STATE_PUBLISH_MS = 1_000L
+        private const val LAG_PUBLISH_THRESHOLD_SECONDS = 0.5f
+
         const val EXTRA_CALL_ID = "extra_call_id"
         const val EXTRA_CALLER_PHOTO_PATH = "extra_caller_photo_path"
         const val EXTRA_SIGNAL_RECEIVED_AT = "extra_signal_received_at"
-
-        private val DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.FRENCH)
     }
 }

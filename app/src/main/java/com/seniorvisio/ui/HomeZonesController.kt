@@ -1,0 +1,179 @@
+package com.seniorvisio.ui
+
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.view.View
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import com.seniorvisio.R
+import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.HomeZone
+import com.seniorvisio.core.ScreenTheme
+import com.seniorvisio.core.TimeContext
+import com.seniorvisio.core.WeatherClient
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+/**
+ * Pilote les trois zones empilées de l'écran de Jean (voir
+ * view_home_zones.xml) : leur ordre, leur palette, et le contenu de la zone
+ * d'information (date, moment de la journée, météo).
+ *
+ * Le même objet sert à l'écran d'accueil et à l'écran d'appel, qui n'en sont
+ * pas deux mais un seul du point de vue de Jean : les zones ne bougent pas
+ * quand un appel arrive, seul le fond change (uni, puis la vidéo du proche,
+ * puis ses photos s'il lance un diaporama). Factoriser ici évite que les deux
+ * écrans ne divergent — c'est exactement ce qui était arrivé au repère
+ * temporel, dupliqué dans les deux et déjà légèrement différent de l'un à
+ * l'autre.
+ *
+ * Le contenu des zones 2 et 3, lui, vient de l'extérieur : c'est l'écran hôte
+ * qui sait d'où vient le texte (le micro de la tablette, ou l'appel en
+ * cours), il le pousse dans [roomZone] / [callZone].
+ */
+class HomeZonesController(
+    root: View,
+    /**
+     * Appelé à chaque changement de palette, pour que l'écran hôte repeigne
+     * ce qu'il possède en propre (son fond hors appel, ses boutons) — les
+     * zones, elles, sont déjà traitées ici.
+     */
+    private val onPalette: (ScreenTheme.Palette) -> Unit,
+) {
+
+    private val context: Context = root.context
+    private val adminConfig = AdminConfig(context)
+    private val weatherClient = WeatherClient(context)
+    private val clockHandler = Handler(Looper.getMainLooper())
+
+    private val zoneStack: LinearLayout = root.findViewById(R.id.zoneStack)
+    private val zoneInfo: View = root.findViewById(R.id.zoneInfo)
+    private val zoneRoom: View = root.findViewById(R.id.zoneRoom)
+    private val zoneCall: View = root.findViewById(R.id.zoneCall)
+
+    private val textMomentIcon: TextView = root.findViewById(R.id.textMomentIcon)
+    private val textMomentLabel: TextView = root.findViewById(R.id.textMomentLabel)
+    private val textMomentWeatherSeparator: TextView = root.findViewById(R.id.textMomentWeatherSeparator)
+    private val textWeatherIcon: TextView = root.findViewById(R.id.textWeatherIcon)
+    private val textWeatherLabel: TextView = root.findViewById(R.id.textWeatherLabel)
+    private val textClockDate: TextView = root.findViewById(R.id.textClockDate)
+
+    val roomZone = PacedCaptionZone(
+        container = zoneRoom,
+        scrollView = root.findViewById<ScrollView>(R.id.roomCaptionScroll),
+        textView = root.findViewById<TextView>(R.id.textRoomCaption),
+    )
+
+    val callZone = PacedCaptionZone(
+        container = zoneCall,
+        scrollView = root.findViewById<ScrollView>(R.id.callCaptionScroll),
+        textView = root.findViewById<TextView>(R.id.textCallCaption),
+    )
+
+    private val themeMonitor = ScreenTheme.Monitor(context) { palette -> applyPalette(palette) }
+
+    /**
+     * Recalé sur le quart d'heure suivant à chaque tour, pas chaque minute :
+     * le moment de la journée ne change que quelques fois par jour, inutile
+     * de réveiller le processeur plus souvent sur une tablette allumée en
+     * permanence. La palette est réévaluée au passage, l'heure étant l'un de
+     * ses deux critères (voir ScreenTheme).
+     */
+    private val clockTicker = object : Runnable {
+        override fun run() {
+            updateInfoZone()
+            themeMonitor.refresh()
+            val quarterHourMs = 15 * 60_000L
+            clockHandler.postDelayed(this, quarterHourMs - (System.currentTimeMillis() % quarterHourMs))
+        }
+    }
+
+    init {
+        applyZoneOrder()
+    }
+
+    /**
+     * À appeler depuis onResume de l'écran hôte : la tablette peut rester des
+     * heures écran éteint, le repère temporel et la palette doivent être
+     * justes dès qu'elle se rallume, pas au prochain quart d'heure.
+     */
+    fun onResume() {
+        // L'ordre a pu changer pendant que l'admin était dans ses réglages.
+        applyZoneOrder()
+        themeMonitor.start()
+        clockHandler.removeCallbacks(clockTicker)
+        clockHandler.post(clockTicker)
+    }
+
+    fun onPause() {
+        clockHandler.removeCallbacks(clockTicker)
+        themeMonitor.stop()
+    }
+
+    fun release() {
+        onPause()
+        roomZone.release()
+        callZone.release()
+    }
+
+    /**
+     * Réordonne les zones selon le réglage admin. Les vues sont retirées puis
+     * remises dans le nouvel ordre plutôt que recréées : leur contenu, leur
+     * état d'affichage et l'animation en cours survivent au changement.
+     */
+    private fun applyZoneOrder() {
+        val views = mapOf(HomeZone.INFO to zoneInfo, HomeZone.ROOM to zoneRoom, HomeZone.CALL to zoneCall)
+        val ordered = adminConfig.zoneOrder.mapNotNull { views[it] }
+        if (ordered.size != views.size) return
+        val alreadyInOrder = ordered.withIndex().all { (index, view) -> zoneStack.getChildAt(index) === view }
+        if (alreadyInOrder) return
+        zoneStack.removeAllViews()
+        ordered.forEach { zoneStack.addView(it) }
+    }
+
+    private fun applyPalette(palette: ScreenTheme.Palette) {
+        listOf(textMomentLabel, textWeatherLabel, textClockDate).forEach {
+            it.setTextColor(palette.primaryText)
+        }
+        textMomentWeatherSeparator.setTextColor(palette.secondaryText)
+        roomZone.applyColors(palette.primaryText, palette.zoneBackground)
+        callZone.applyColors(palette.primaryText, palette.zoneBackground)
+        onPalette(palette)
+    }
+
+    /**
+     * Pictogramme + mot ("🌤️ Après-midi") à la place d'une heure exacte : se
+     * reconnaît d'un coup d'œil, là où "14:35" demande de déchiffrer deux
+     * nombres. Ce qui compte au quotidien, c'est de savoir où on en est dans
+     * la journée. Date en toutes lettres pour la même raison.
+     *
+     * La météo (voir WeatherClient) est demandée à chaque tour mais ne fait un
+     * vrai appel réseau qu'une fois par heure (cache interne) : rien à gérer
+     * de spécial ici, juste rappeler la fonction régulièrement.
+     */
+    private fun updateInfoZone() {
+        val now = LocalDateTime.now()
+        val moment = TimeContext.momentOfDay(now.hour)
+        textMomentIcon.text = moment.icon
+        textMomentLabel.text = moment.label
+        textClockDate.text = now.format(DATE_FORMAT).replaceFirstChar { it.titlecase(Locale.FRENCH) }
+
+        weatherClient.fetchWeather { weather ->
+            val visibility = if (weather == null) View.GONE else View.VISIBLE
+            textMomentWeatherSeparator.visibility = visibility
+            textWeatherIcon.visibility = visibility
+            textWeatherLabel.visibility = visibility
+            if (weather != null) {
+                textWeatherIcon.text = weather.icon
+                textWeatherLabel.text = weather.label
+            }
+        }
+    }
+
+    companion object {
+        private val DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.FRENCH)
+    }
+}
