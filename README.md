@@ -60,45 +60,54 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   la tablette est fixé au maximum et les boutons physiques de volume sont neutralisés, pour que seul
   ce curseur fasse foi (sinon Jean pourrait couper le son réglé à distance avec les boutons
   physiques, qui agissent en dernier sur le volume final)
-- **Mode "sous-titres"** en surimpression façon sous-titrage TV : les paroles du proche, transcrites
-  en direct par la reconnaissance vocale du navigateur, s'affichent dans un bandeau semi-opaque en
-  bas de l'écran, par-dessus la vidéo qui reste plein écran (remplace l'ancien écran divisé 80/20).
-  Activé/désactivé **à distance depuis le PWA** (case à cocher côté proche — pas de bouton sur la
-  tablette), avec un fondu à l'apparition/disparition pour éviter tout changement brutal côté Jean ;
-  ne fonctionne que si le proche appelle depuis un navigateur supportant la reconnaissance vocale
-  (Chrome Android/desktop) — **pas Safari/iOS**, qui ne l'implémente pas ; l'appel vidéo lui-même
-  n'est pas affecté, seuls les sous-titres restent vides. Un second curseur côté PWA règle aussi la
-  taille de ce texte (24 à 100sp), avec un fondu enchaîné au changement plutôt qu'un redimensionnement brut.
-  Aucun texte n'est perdu : une phrase trop longue pour l'espace visible défile automatiquement vers
-  le bas au lieu d'être tronquée avec des "…", en suivant la parole en continu façon sous-titrage TV
-  en direct ("roll-up", CEA-608) — le défilement avance par petits crans au fil des mots plutôt que de
-  repartir du haut à chaque mise à jour (ce qui rendait le défilement inutilisable en parole continue :
-  l'animation n'avait jamais le temps d'aller au bout avant d'être relancée depuis le début). Il ne
-  revient en haut que lorsqu'une phrase réellement nouvelle démarre. Le défilement suit la position
-  cible par interpolation image par image (`Choreographer`, remplace l'ancien `smoothScrollTo` natif),
-  réglage validé dans le labo de défilement (`experiment/caption-scroll`, `web-caller/caption-scroll-lab.html`)
-  sur un enregistrement vocal réel : 60 im/s en moyenne, quasi aucune image saccadée. Le PWA envoie aussi le
-  texte transcrit plus souvent (300ms au lieu de 500ms, par petits incréments), et la tablette ignore
-  les écritures Firestore qui ne changent pas le texte — au total, plusieurs optimisations pour un
-  défilement plus fluide. En paysage comme en portrait, le bandeau reste en surimpression basse
-  par-dessus la vidéo plein écran (une première version mettait la vidéo à droite et les sous-titres
-  dans une colonne à gauche en paysage — jugée plus perturbante à l'usage, abandonnée)
-- **Vitesse de lecture plafonnée, avec retour de retard côté PWA** : des tests réels ont montré que si
-  le proche parle avec un débit rapide, Jean n'a pas le temps de lire avant que le texte suivant
-  arrive. Le défilement avance donc à une vitesse maximale constante et paramétrable (curseur "Vitesse
-  de défilement" côté PWA, en dp/s) plutôt que proportionnelle au texte en attente — l'ancien réglage
-  accélérait d'autant plus que le proche parlait vite, l'inverse de l'effet recherché. Le texte reçu
-  peut ainsi s'accumuler en attente le temps que Jean rattrape son retard, et ce retard (en secondes)
-  est signalé en continu au PWA ("Jean a environ X,Xs de retard sur ta voix, ralentis un peu"), pour un
-  repère précis plutôt qu'un simple indicateur "ça déborde" ou non
-- **Onglet "visio" côté PWA, séparé des réglages** : dès la connexion, le proche arrive sur une vue
-  quasi plein écran (juste la vidéo, le bouton Raccrocher et un bouton "⚙️ Réglages") plutôt que
-  l'écran complet de contrôles — pensée pour l'usage pendant la conversation elle-même. Un bouton
-  permet de naviguer vers l'écran de réglages complet (volume, sous-titres, miroir de transcription…)
-  et d'en revenir. Quand les sous-titres sont activés, cet onglet affiche aussi un bandeau en
-  surimpression façon Android — mais avec le texte tel qu'il apparaît **réellement** chez Jean à cet
-  instant (retardé du retard de lecture mesuré, voir ci-dessus), pas ce que le proche vient de dire en
-  temps réel comme le fait le miroir de transcription de l'écran de réglages
+- **Un seul écran pour Jean, en trois zones** (`view_home_zones.xml`, `HomeZonesController`) : l'accueil
+  et l'écran d'appel n'en sont plus qu'un de son point de vue. Trois zones empilées par-dessus un fond
+  qui, lui, change — uni hors appel, remplacé par la vidéo du proche pendant un appel, puis par ses
+  photos s'il lance un diaporama. Zone 1 : date, moment de la journée, météo, toujours affichée.
+  Zone 2 : ce qui se dit dans la pièce. Zone 3 : ce que dit la personne au bout de l'appel. Jean n'a
+  rien à faire ni à toucher — plus de bouton "Voir ce qui se dit", qui lui demandait de savoir qu'une
+  fonction existait et de penser à la lancer. L'ordre d'empilement se règle depuis le panneau admin
+  (les six ordres possibles proposés tels quels, pour qu'aucun réglage incohérent ne soit atteignable) :
+  le bon ordre dépend de la position de la tablette et de la façon dont Jean la regarde. La météo vient
+  de wttr.in, qui ne demande aucune clé API — un compte à créer, une clé à saisir sur la tablette et une
+  clé qui expire un jour sans prévenir étaient trois occasions de panne pour une information d'appoint ;
+  les codes renvoyés formant une liste fermée, chacun des 48 possibles a son pictogramme et son libellé
+- **Affichage cadencé** (`PacedCaptionZone`, règle commune aux zones 2 et 3) : la parole va bien plus
+  vite que la lecture, a fortiori pour Jean. Chaque phrase reste donc affichée le temps d'être lue
+  (130 mots/minute, avec un plancher pour qu'un seul mot soit remarqué), les suivantes attendent leur
+  tour dans une file, et la zone ne s'efface que lorsqu'il n'y a plus rien à lire. C'est l'affichage
+  qui s'adapte, là où le bandeau qu'il remplace effaçait au rythme de la parole et laissait au proche
+  la charge de ralentir de lui-même. Une phrase trop longue pour la zone défile à vitesse plafonnée
+  (`CaptionScrollAnimator`, interpolation image par image validée dans `experiment/caption-scroll` :
+  60 im/s, quasi aucune image saccadée) plutôt que d'être tronquée, et sa durée d'affichage est
+  prolongée d'autant. L'écart qui en résulte est mesuré et remonté au proche
+- **Lisibilité adaptée à la pièce** (`ScreenTheme`) : palette claire le jour, sombre le soir et la
+  nuit. L'heure ne suffit pas seule — à 15h volets fermés la pièce est sombre — d'où l'appoint du
+  capteur de luminosité ambiante, avec deux seuils pour que la palette ne fasse pas d'aller-retour à
+  chaque passage de nuage
+- **Trois fenêtres côté PWA** : la vidéo (celle qui s'ouvre à la connexion), les réglages, les photos,
+  les deux dernières accessibles par un bouton depuis la première. Trois vues plein écran et non trois
+  fenêtres de navigateur : le proche appelle depuis son téléphone, où une seconde fenêtre est au mieux
+  un onglet qu'on ne retrouve pas — et surtout, quitter celle qui porte la vidéo mettrait l'appel
+  WebRTC en arrière-plan
+- **La fenêtre vidéo montre ce que Jean voit, à l'identique** : mêmes proportions que sa dalle, mêmes
+  trois zones dans le même ordre, même palette, et surtout les mêmes textes au même moment. Tout est
+  publié par la tablette (`CallSignalingClient.publishScreenLayout` / `publishScreenState`) plutôt que
+  recalculé côté PWA : le proche peut être dans une autre ville (météo différente), l'ordre des zones
+  n'existe que côté tablette, et le texte affiché chez Jean est volontairement en retard sur la parole
+  — un décalage qui dépend de la longueur de chaque phrase et de la file d'attente, et dont toute
+  reconstitution côté PWA ne serait qu'une approximation. L'indicateur associé dit au proche combien de
+  secondes de lecture Jean a encore devant lui
+- **Mode "même pièce", détecté tout seul** (`SameRoomDetector`) : quand le proche est à côté de Jean,
+  la tablette coupe entièrement son son — entendre sa propre voix revenir avec une seconde de décalage
+  est plus gênant que de ne rien entendre — tout en continuant d'afficher le texte. La géolocalisation
+  ne sait pas trancher ce cas (le GPS ne fonctionne pas en intérieur, et sa précision se compte en
+  dizaines de mètres) ; le son, lui, ne traverse pas les murs à haute fréquence. Le téléphone émet donc
+  une tonalité à 17,8 kHz pendant la sonnerie — au-delà de ce que Jean peut entendre, dans ce qu'un
+  haut-parleur de téléphone sait produire — et la tablette l'écoute, en comparant l'énergie à cette
+  fréquence à celle de deux bandes voisines (un bruit large bande monte partout à la fois, une tonalité
+  pure non). C'est la seule fenêtre de l'appel où le micro de la tablette est libre. Le mode reste
+  cochable et décochable à la main si le matériel ne coopère pas
 - **Aperçu de sa propre caméra chez Jean, masqué par défaut** : la petite vignette qui montrait à Jean
   sa propre image (en haut à droite de son écran, portrait comme paysage) est retirée par défaut —
   simplifie l'écran et libère la place que le bouton Raccrocher occupe désormais en paysage à cet
