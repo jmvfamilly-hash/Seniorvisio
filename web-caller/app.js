@@ -184,6 +184,7 @@ const els = {
   saveIdentityButton: document.getElementById("saveIdentityButton"),
   identityStatus: document.getElementById("identityStatus"),
   captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
+  captionDebugIndicator: document.getElementById("captionDebugIndicator"),
 };
 
 let statsInterval = null;
@@ -235,6 +236,7 @@ els.callButton.addEventListener("click", async () => {
   els.tabletMicMuteToggle.checked = false;
   els.sameRoomToggle.checked = false;
   els.captionOverflowIndicator.classList.add("hidden");
+  els.captionDebugIndicator.classList.add("hidden");
   // Désactivé tant que l'appel n'est pas prêt (voir plus bas) : un appui
   // pendant la mise en place (caméra, création de l'offre...) tombait dans
   // le vide côté PWA — le document d'appel n'existait pas encore, la
@@ -320,6 +322,11 @@ engine.onCaptionCatchUpLag((lagSeconds) => {
       `⏳ Jean a environ ${lagSeconds.toFixed(1)}s de retard sur ta voix, ralentis un peu`;
   }
   els.captionOverflowIndicator.classList.toggle("hidden", !lagging);
+});
+
+engine.onCaptionDebug((message) => {
+  els.captionDebugIndicator.textContent = `🔧 ${message}`;
+  els.captionDebugIndicator.classList.remove("hidden");
 });
 
 let textSizeDebounce = null;

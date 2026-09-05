@@ -83,6 +83,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var transcriber: AssemblyAiRealtimeTranscriber? = null
     private var captionsActive = false
     private var remoteAudioSinkAttached = false
+    private var hasReportedFirstAudio = false
     /**
      * Consigne de coupure du micro reçue avant même que la piste audio existe
      * (le mode soignant l'écrit dès la création de l'appel, voir
@@ -252,14 +253,28 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                 numberOfFrames: Int,
                 absoluteCaptureTimestampMs: Long,
             ) {
+                // Confirme, une seule fois, que ce sink reçoit bien de l'audio
+                // — sans outil pour consulter le journal système sur la
+                // tablette, impossible autrement de savoir si AudioTrackSink
+                // fonctionne ici comme prévu ou reste silencieux.
+                if (!hasReportedFirstAudio) {
+                    hasReportedFirstAudio = true
+                    callId?.let {
+                        signaling.reportCaptionDebug(it, "audio reçu (${sampleRate}Hz, ${numberOfChannels}ch)")
+                    }
+                }
                 if (!captionsActive) return
                 val onText = transcriptionOnText ?: return
                 val apiKey = AdminConfig(context).assemblyAiApiKey
-                if (apiKey.isBlank()) return
+                if (apiKey.isBlank()) {
+                    callId?.let { signaling.reportCaptionDebug(it, "clé API AssemblyAI absente") }
+                    return
+                }
                 val instance = transcriber ?: AssemblyAiRealtimeTranscriber(apiKey).also {
                     transcriber = it
                     it.start(onText = { text, _ -> onText(text) }) { message ->
                         Log.w(TAG, "AssemblyAI temps réel : $message")
+                        callId?.let { id -> signaling.reportCaptionDebug(id, "AssemblyAI : $message") }
                     }
                 }
                 // AudioTrackSink fournit un ByteBuffer (potentiellement direct,
@@ -660,6 +675,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         transcriptionOnText = null
         captionsActive = false
         remoteAudioSinkAttached = false
+        hasReportedFirstAudio = false
         micMuteListener?.remove()
         micMuteListener = null
         slideshowListener?.remove()

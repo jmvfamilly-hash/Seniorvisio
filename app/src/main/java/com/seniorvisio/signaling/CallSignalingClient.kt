@@ -83,6 +83,18 @@ class CallSignalingClient {
         callDoc(callId).update(FIELD_CALLEE_ERROR, message)
     }
 
+    /**
+     * Diagnostic de la transcription temps réel de l'appel (voir
+     * WebRtcCallEngine.attachTranscriptionSink) : confirme si le flux audio
+     * distant atteint bien le transcripteur, et remonte les échecs de
+     * connexion AssemblyAI — utile tant que ce circuit n'a pas encore été
+     * confirmé fiable en usage réel, sans quoi seul le journal système
+     * (inaccessible sans Mac ni ordinateur relié à la tablette) le révélerait.
+     */
+    fun reportCaptionDebug(callId: String, message: String) {
+        callDoc(callId).update(FIELD_CAPTION_DEBUG, message)
+    }
+
     fun addCandidate(callId: String, candidate: RemoteIceCandidate) {
         callDoc(callId).collection(CALLEE_CANDIDATES).add(
             mapOf(
@@ -295,6 +307,7 @@ class CallSignalingClient {
         private const val FIELD_CAPTION_CLEAR_DELAY = "captionClearDelaySeconds"
         private const val FIELD_CAPTION_CATCHUP_LAG = "captionCatchUpLagSeconds"
         private const val FIELD_CALLEE_ERROR = "calleeErrorMessage"
+        private const val FIELD_CAPTION_DEBUG = "captionDebugMessage"
         private const val FIELD_MIC_MUTED = "tabletMicMuted"
         private const val FIELD_SLIDESHOW_PHOTO = "slideshowPhotoBase64"
 

@@ -19,6 +19,8 @@ class RealCallEngine extends CallEngine {
     this._countdownCb = null;
     this._countdownInterval = null;
     this._captionCatchUpLagCb = null;
+    this._captionDebugCb = null;
+    this._lastCaptionDebugMessage = null;
     this._hasNotifiedConnected = false;
     this._hasReportedCalleeError = false;
     // Incrémenté à chaque nouvel appel et à chaque annulation (voir
@@ -47,6 +49,8 @@ class RealCallEngine extends CallEngine {
   onCountdown(callback) { this._countdownCb = callback; }
   /** callback(lagSeconds: number) — retard de lecture de Jean par rapport au texte reçu (0 = à jour) : ralentir le débit si ça grimpe. */
   onCaptionCatchUpLag(callback) { this._captionCatchUpLagCb = callback; }
+  /** callback(message: string) — diagnostic de la transcription temps réel AssemblyAI côté tablette (voir attachTranscriptionSink). */
+  onCaptionDebug(callback) { this._captionDebugCb = callback; }
 
   async startCall(targetId, callerName, initialSettings = {}) {
     // Capturé au tout début : si cancelCall() est appelé pendant que cette
@@ -262,6 +266,16 @@ class RealCallEngine extends CallEngine {
       }
       if (typeof data.captionCatchUpLagSeconds === "number") {
         this._captionCatchUpLagCb && this._captionCatchUpLagCb(data.captionCatchUpLagSeconds);
+      }
+      // Diagnostic de la transcription temps réel AssemblyAI côté tablette
+      // (voir WebRtcCallEngine.attachTranscriptionSink) : confirme si le son
+      // de l'appel atteint bien le transcripteur, et montre les échecs de
+      // connexion — tant que ce circuit n'est pas confirmé fiable en usage
+      // réel, seul moyen de savoir où ça bloque sans accès au journal
+      // système de la tablette.
+      if (data.captionDebugMessage && data.captionDebugMessage !== this._lastCaptionDebugMessage) {
+        this._lastCaptionDebugMessage = data.captionDebugMessage;
+        this._captionDebugCb && this._captionDebugCb(data.captionDebugMessage);
       }
       // Cause exacte d'un échec de préparation d'appel côté tablette (voir
       // WebRtcCallEngine.reportPreparationError, core/WebRtcCallEngine.kt) :

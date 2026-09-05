@@ -99,6 +99,11 @@
             🔤 Afficher mes paroles en grand chez Jean
           </label>
           <p class="caption-overflow-indicator hidden" id="captionOverflowIndicator"></p>
+          <!-- Diagnostic temporaire de la transcription temps réel AssemblyAI
+               côté tablette (voir WebRtcCallEngine.attachTranscriptionSink),
+               tant qu'elle n'est pas confirmée fiable en usage réel — seul
+               moyen de savoir où ça bloque sans accès au journal système. -->
+          <p class="hint hidden" id="captionDebugIndicator"></p>
         </div>
 
         <div class="caption-control">
