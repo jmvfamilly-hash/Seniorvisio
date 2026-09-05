@@ -16,20 +16,9 @@ class RealCallEngine extends CallEngine {
     this._callDocRef = null;
     this._unsubscribeCallDoc = null;
     this._unsubscribeCalleeCandidates = null;
-    this._recognition = null;
     this._countdownCb = null;
     this._countdownInterval = null;
-    this._transcriptCb = null;
-    this._silenceCb = null;
-    this._captionErrorCb = null;
     this._captionCatchUpLagCb = null;
-    this._fullscreenCaptionCb = null;
-    this._transcriptHistory = [];
-    this._transcriptBuffer = [];
-    this._lastLagSeconds = 0;
-    this._fullscreenCaptionInterval = null;
-    this._silenceTimer = null;
-    this._silenceActive = false;
     this._hasNotifiedConnected = false;
     this._hasReportedCalleeError = false;
     // Incrémenté à chaque nouvel appel et à chaque annulation (voir
@@ -56,31 +45,8 @@ class RealCallEngine extends CallEngine {
   onError(callback) { this._errorCb = callback; }
   /** callback(remainingSeconds, totalSeconds) — progression du décompte vu côté tablette. */
   onCountdown(callback) { this._countdownCb = callback; }
-  /** callback({liveText, isFinal, confidence, history}) — miroir local de ce que Jean va voir/entendre. */
-  onTranscript(callback) { this._transcriptCb = callback; }
-  /** callback(silent: boolean) — aucun son détecté depuis quelques secondes pendant que le micro écoute. */
-  onSilenceDetected(callback) { this._silenceCb = callback; }
-  /**
-   * callback(errorCode: string) — la reconnaissance vocale (sous-titres)
-   * a signalé une erreur (voir recognition.onerror dans _startCaptioning).
-   * Jusqu'ici cette erreur n'était journalisée que dans la console du
-   * navigateur, jamais montrée : impossible de savoir pourquoi les
-   * sous-titres restaient vides sur certains appareils (Android/Chrome
-   * notamment, où le micro est peut-être déjà occupé par l'appel lui-même)
-   * sans brancher un débogueur.
-   */
-  onCaptionError(callback) { this._captionErrorCb = callback; }
   /** callback(lagSeconds: number) — retard de lecture de Jean par rapport au texte reçu (0 = à jour) : ralentir le débit si ça grimpe. */
   onCaptionCatchUpLag(callback) { this._captionCatchUpLagCb = callback; }
-  /**
-   * callback({text, lagSeconds}) — texte tel qu'il apparaît réellement chez
-   * Jean à l'instant présent (retardé du retard de lecture mesuré, voir
-   * _startFullscreenCaptionTick), pour l'overlay de l'onglet visio plein
-   * écran. Différent de onTranscript, qui montre ce que le proche vient de
-   * dire (temps réel, non synchronisé avec ce que Jean a effectivement sous
-   * les yeux).
-   */
-  onFullscreenCaption(callback) { this._fullscreenCaptionCb = callback; }
 
   async startCall(targetId, callerName, initialSettings = {}) {
     // Capturé au tout début : si cancelCall() est appelé pendant que cette
@@ -295,7 +261,6 @@ class RealCallEngine extends CallEngine {
         this._startCountdownDisplay(data.alertStartedAt.toMillis(), data.alertDurationSeconds);
       }
       if (typeof data.captionCatchUpLagSeconds === "number") {
-        this._lastLagSeconds = data.captionCatchUpLagSeconds;
         this._captionCatchUpLagCb && this._captionCatchUpLagCb(data.captionCatchUpLagSeconds);
       }
       // Cause exacte d'un échec de préparation d'appel côté tablette (voir
@@ -336,8 +301,6 @@ class RealCallEngine extends CallEngine {
       });
     });
 
-    this._startCaptioning();
-    this._startFullscreenCaptionTick();
   }
 
   /**
@@ -372,170 +335,6 @@ class RealCallEngine extends CallEngine {
       console.warn("[RealCallEngine] Capture photo impossible :", e);
       return null;
     }
-  }
-
-  /**
-   * Transcrit en direct la voix du proche (micro local) et envoie le texte
-   * dans Firestore, pour le mode "sous-titres géants" côté tablette (voir
-   * core/WebRtcCallEngine.kt). Non supporté par Safari/iOS : l'appel vidéo
-   * fonctionne quand même, seuls les sous-titres restent vides.
-   *
-   * Miroir local (onTranscript) : montre au proche exactement ce que Jean va
-   * recevoir, avec un historique des 3 dernières phrases finalisées et leur
-   * confiance de reconnaissance (pour repérer les passages mal transcrits).
-   * Détection de silence (onSilenceDetected) : si aucun résultat de
-   * reconnaissance n'arrive pendant 5s alors que le micro écoute, on prévient
-   * le proche que rien n'est capté (micro coupé, trop loin, etc.).
-   */
-  _startCaptioning() {
-    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    // Confirmé en test réel : ce retirer ce test ne change rien sur Android/
-    // Chrome (Samsung A54) — comme attendu, l'API y existe déjà, elle ne
-    // reçoit juste jamais de son (micro accaparé par l'appel WebRTC).
-    // Réactivé, sinon un navigateur qui n'a VRAIMENT pas cette fonction (ex.
-    // Firefox desktop) plante au lieu de désactiver proprement les sous-titres.
-    if (!SpeechRecognitionCtor) {
-      // Passait jusqu'ici uniquement par console.warn, invisible sans un Mac
-      // relié pour inspecter Safari iOS à distance (Web Inspector). Remonté
-      // maintenant sur l'indicateur d'erreur déjà affiché à l'écran (voir
-      // onCaptionError/app.js) : seul moyen de savoir, sans aucun outil, si
-      // un iPhone échoue parce que l'API n'existe pas du tout ici (ce code),
-      // ou pour une autre raison une fois démarrée (voir recognition.onerror
-      // plus bas) — utile notamment pour comprendre pourquoi les sous-titres
-      // fonctionnent depuis un iPad mais pas depuis un iPhone.
-      console.warn("[RealCallEngine] Reconnaissance vocale non supportée par ce navigateur (sous-titres désactivés).");
-      this._captionErrorCb && this._captionErrorCb("not-supported");
-      return;
-    }
-
-    const recognition = new SpeechRecognitionCtor();
-    this._recognition = recognition;
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "fr-FR";
-
-    this._transcriptHistory = [];
-    const SILENCE_MS = 5000;
-    const resetSilenceTimer = () => {
-      if (this._silenceTimer) clearTimeout(this._silenceTimer);
-      if (this._silenceActive) {
-        this._silenceActive = false;
-        this._silenceCb && this._silenceCb(false);
-      }
-      this._silenceTimer = setTimeout(() => {
-        this._silenceActive = true;
-        this._silenceCb && this._silenceCb(true);
-      }, SILENCE_MS);
-    };
-    resetSilenceTimer();
-
-    let lastSent = 0;
-    recognition.onresult = (event) => {
-      let text = "";
-      let hasFinal = false;
-      let confidence = null;
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        text += result[0].transcript;
-        if (result.isFinal) {
-          hasFinal = true;
-          confidence = result[0].confidence;
-        }
-      }
-
-      resetSilenceTimer();
-
-      // Envoi toutes les ~300ms (plutôt que 500ms) : des incréments plus
-      // petits et plus fréquents donnent un défilement plus fluide côté
-      // tablette (voir IncomingCallActivity.setupCaptionMode) qu'un texte
-      // qui avance par gros blocs.
-      const now = Date.now();
-      if (text && now - lastSent > 300 && this._callDocRef) {
-        lastSent = now;
-        this._callDocRef.update({ callerSpeechText: text }).catch(() => {});
-      }
-
-      // Historique horodaté pour reconstituer ce que Jean voit avec le
-      // retard mesuré côté tablette (voir _startFullscreenCaptionTick) —
-      // borné à 60s, largement au-delà des retards observés en pratique.
-      if (text) {
-        this._transcriptBuffer.push({ text, tsMs: now });
-        const cutoffMs = now - 60000;
-        while (this._transcriptBuffer.length > 1 && this._transcriptBuffer[0].tsMs < cutoffMs) {
-          this._transcriptBuffer.shift();
-        }
-      }
-
-      if (hasFinal && text.trim()) {
-        this._transcriptHistory.push({ text: text.trim(), confidence });
-        if (this._transcriptHistory.length > 3) this._transcriptHistory.shift();
-      }
-
-      this._transcriptCb && this._transcriptCb({
-        liveText: text,
-        isFinal: hasFinal,
-        confidence,
-        history: [...this._transcriptHistory],
-      });
-    };
-    recognition.onerror = (e) => {
-      console.warn("[RealCallEngine] Reconnaissance vocale :", e.error);
-      // "no-speech" est un événement normal (personne ne parle en ce moment,
-      // déjà couvert par l'indicateur de silence) — seules les erreurs
-      // réelles (micro déjà occupé par l'appel WebRTC, réseau, permission)
-      // méritent d'être montrées.
-      if (e.error !== "no-speech") this._captionErrorCb && this._captionErrorCb(e.error);
-    };
-    recognition.onend = () => {
-      // L'API s'arrête parfois seule après un silence : on la relance tant que l'appel est actif.
-      if (this._pc && this._recognition === recognition) {
-        try {
-          recognition.start();
-        } catch (e) {
-          // Échec silencieux jusqu'ici (catch vide) : si le redémarrage
-          // automatique échoue systématiquement sur un appareil donné, les
-          // sous-titres s'arrêtent après la première phrase sans qu'aucun
-          // indice n'apparaisse à l'écran — remonté maintenant comme les
-          // autres erreurs (voir onCaptionError/app.js).
-          this._captionErrorCb && this._captionErrorCb("restart-failed");
-        }
-      }
-    };
-
-    try {
-      recognition.start();
-    } catch (e) {
-      this._captionErrorCb && this._captionErrorCb("start-failed");
-    }
-  }
-
-  /**
-   * Reconstitue périodiquement le texte tel qu'il apparaît réellement chez
-   * Jean à l'instant présent (voir onFullscreenCaption), en piochant dans
-   * l'historique horodaté du texte transcrit (_transcriptBuffer) l'entrée la
-   * plus récente antérieure de `_lastLagSeconds` secondes à maintenant —
-   * approximation raisonnable de ce que Jean a sous les yeux tant que le
-   * retard mesuré reste à peu près stable, sans avoir besoin de faire
-   * remonter le texte exact affiché côté tablette.
-   */
-  _startFullscreenCaptionTick() {
-    if (this._fullscreenCaptionInterval) return;
-    this._fullscreenCaptionInterval = setInterval(() => {
-      if (!this._fullscreenCaptionCb) return;
-      const targetTsMs = Date.now() - this._lastLagSeconds * 1000;
-      let delayed = "";
-      for (let i = this._transcriptBuffer.length - 1; i >= 0; i--) {
-        if (this._transcriptBuffer[i].tsMs <= targetTsMs) {
-          delayed = this._transcriptBuffer[i].text;
-          break;
-        }
-      }
-      if (!delayed && this._transcriptBuffer.length > 0) {
-        // Retard plus long que l'historique conservé : montre le plus ancien connu.
-        delayed = this._transcriptBuffer[0].text;
-      }
-      this._fullscreenCaptionCb({ text: delayed, lagSeconds: this._lastLagSeconds });
-    }, 250);
   }
 
   /**
@@ -669,20 +468,6 @@ class RealCallEngine extends CallEngine {
     );
   }
 
-  _stopCaptioning() {
-    if (this._recognition) {
-      const recognition = this._recognition;
-      this._recognition = null;
-      recognition.onend = null;
-      try { recognition.stop(); } catch (_) {}
-    }
-    if (this._silenceTimer) {
-      clearTimeout(this._silenceTimer);
-      this._silenceTimer = null;
-    }
-    this._silenceActive = false;
-  }
-
   /** Résumé lisible des métriques vidéo temps réel (résolution, fps, pertes). */
   async getStatsSummary() {
     if (!this._pc) return "";
@@ -733,17 +518,10 @@ class RealCallEngine extends CallEngine {
   }
 
   _teardown() {
-    this._stopCaptioning();
     if (this._countdownInterval) {
       clearInterval(this._countdownInterval);
       this._countdownInterval = null;
     }
-    if (this._fullscreenCaptionInterval) {
-      clearInterval(this._fullscreenCaptionInterval);
-      this._fullscreenCaptionInterval = null;
-    }
-    this._transcriptBuffer = [];
-    this._lastLagSeconds = 0;
     this._hasNotifiedConnected = false;
     this._hasReportedCalleeError = false;
     if (this._unsubscribeCallDoc) this._unsubscribeCallDoc();

@@ -177,8 +177,6 @@ const els = {
   callingHint: document.getElementById("callingHint"),
   countdownFill: document.getElementById("countdownFill"),
   countdownText: document.getElementById("countdownText"),
-  transcriptCurrent: document.getElementById("transcriptCurrent"),
-  transcriptHistory: document.getElementById("transcriptHistory"),
   resetTranscriptionButton: document.getElementById("resetTranscriptionButton"),
   resetTranscriptionStatus: document.getElementById("resetTranscriptionStatus"),
   identityName: document.getElementById("identityName"),
@@ -187,12 +185,7 @@ const els = {
   identityRights: document.getElementById("identityRights"),
   saveIdentityButton: document.getElementById("saveIdentityButton"),
   identityStatus: document.getElementById("identityStatus"),
-  silenceIndicator: document.getElementById("silenceIndicator"),
-  captionErrorIndicator: document.getElementById("captionErrorIndicator"),
   captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
-  fullscreenCaptionBanner: document.getElementById("fullscreenCaptionBanner"),
-  fullscreenCaption: document.getElementById("fullscreenCaption"),
-  fullscreenCaptionLag: document.getElementById("fullscreenCaptionLag"),
 };
 
 let statsInterval = null;
@@ -239,16 +232,11 @@ els.callButton.addEventListener("click", async () => {
   els.callingHint.textContent = "Connexion à sa tablette…";
   els.countdownFill.style.width = "0%";
   els.countdownText.textContent = "";
-  els.transcriptCurrent.textContent = "";
-  els.transcriptHistory.innerHTML = "";
-  els.silenceIndicator.classList.add("hidden");
-  els.captionErrorIndicator.classList.add("hidden");
   // Remis à zéro à chaque appel : un micro resté coupé d'un appel précédent
   // rendrait Jean muet sans que personne ne comprenne pourquoi.
   els.tabletMicMuteToggle.checked = false;
   els.sameRoomToggle.checked = false;
   els.captionOverflowIndicator.classList.add("hidden");
-  els.fullscreenCaptionBanner.classList.add("hidden");
   // Désactivé tant que l'appel n'est pas prêt (voir plus bas) : un appui
   // pendant la mise en place (caméra, création de l'offre...) tombait dans
   // le vide côté PWA — le document d'appel n'existait pas encore, la
@@ -312,16 +300,6 @@ engine.onCountdown((remaining, total) => {
 
 els.captionToggle.addEventListener("change", () => {
   engine.setCaptionMode(els.captionToggle.checked);
-  // Le bandeau plein écran ne montre les sous-titres que si Jean les a
-  // effectivement affichés — pas de surimpression fantôme sinon.
-  els.fullscreenCaptionBanner.classList.toggle("hidden", !els.captionToggle.checked);
-});
-
-engine.onFullscreenCaption(({ text, lagSeconds }) => {
-  els.fullscreenCaption.textContent = text || "…";
-  const lagging = lagSeconds > 0.3;
-  els.fullscreenCaptionLag.textContent = lagging ? `⏳ ${lagSeconds.toFixed(1)}s de retard` : "";
-  els.fullscreenCaptionLag.classList.toggle("hidden", !lagging);
 });
 
 els.selfPreviewToggle.addEventListener("change", () => {
@@ -335,46 +313,6 @@ els.selfPreviewToggle.addEventListener("change", () => {
 // retrouverait muet sans que personne ne comprenne pourquoi.
 els.tabletMicMuteToggle.addEventListener("change", () => {
   engine.setTabletMicMuted(els.tabletMicMuteToggle.checked);
-});
-
-/** Classe CSS selon la confiance de reconnaissance (repère visuel des passages mal transcrits). */
-function confidenceClass(confidence) {
-  if (confidence == null) return "";
-  if (confidence < 0.5) return "low-confidence";
-  if (confidence < 0.75) return "mid-confidence";
-  return "";
-}
-
-engine.onTranscript(({ liveText, isFinal, confidence, history }) => {
-  // Un vrai résultat prouve que la reconnaissance fonctionne : efface une
-  // éventuelle erreur affichée plus tôt (ex. un premier redémarrage raté
-  // après un silence, voir onCaptionError) qui resterait sinon affichée à
-  // tort pour le reste de l'appel.
-  els.captionErrorIndicator.classList.add("hidden");
-  els.transcriptCurrent.textContent = liveText || "…";
-  els.transcriptCurrent.className = "transcript-current" + (isFinal ? " " + confidenceClass(confidence) : "");
-
-  els.transcriptHistory.innerHTML = "";
-  history.slice(0, -1).forEach((entry) => {
-    const li = document.createElement("li");
-    li.textContent = entry.text;
-    li.className = confidenceClass(entry.confidence);
-    els.transcriptHistory.appendChild(li);
-  });
-});
-
-engine.onSilenceDetected((silent) => {
-  els.silenceIndicator.classList.toggle("hidden", !silent);
-});
-
-// Cause réelle d'un échec de la reconnaissance vocale (voir
-// RealCallEngine.onCaptionError) : sur Android/Chrome notamment, le micro
-// déjà utilisé par l'appel WebRTC lui-même peut empêcher la reconnaissance
-// vocale d'y accéder en parallèle — jusqu'ici, seul l'indicateur générique
-// "aucun son détecté" apparaissait, sans dire pourquoi.
-engine.onCaptionError((errorCode) => {
-  els.captionErrorIndicator.textContent = `⚠️ Sous-titres indisponibles (${errorCode})`;
-  els.captionErrorIndicator.classList.remove("hidden");
 });
 
 engine.onCaptionCatchUpLag((lagSeconds) => {

@@ -102,28 +102,6 @@ class CallSignalingClient {
     }
 
     /**
-     * Texte transcrit en direct de la voix de l'appelant, relayé par son
-     * propre navigateur (Web Speech API, voir web-caller/webrtc-engine.js)
-     * pour le mode "sous-titres géants" — gratuit, mais ne fonctionne que sur
-     * les navigateurs supportant la reconnaissance vocale (Chrome desktop
-     * essentiellement, pas Safari/iOS). Ce listener écoute tout le document
-     * d'appel, donc il se redéclenche à chaque écriture Firestore pendant
-     * l'appel (volume, etc.), pas seulement quand le texte change — on ne
-     * notifie que sur un texte réellement différent, pour éviter de relancer
-     * inutilement l'animation de défilement côté tablette.
-     */
-    fun listenForCallerSpeech(callId: String, onText: (String) -> Unit): ListenerRegistration {
-        var lastText: String? = null
-        return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val text = snapshot?.getString(FIELD_CALLER_SPEECH)
-            if (!text.isNullOrEmpty() && text != lastText) {
-                lastText = text
-                onText(text)
-            }
-        }
-    }
-
-    /**
      * Signale le début du décompte d'alerte côté tablette, pour que le PWA
      * appelant puisse en afficher la progression en direct (voir
      * web-caller/app.js). L'horodatage vient du serveur Firestore, pas de
@@ -306,7 +284,6 @@ class CallSignalingClient {
         private const val FIELD_OFFER_SDP = "offerSdp"
         private const val FIELD_ANSWER_SDP = "answerSdp"
         private const val FIELD_REMOTE_VOLUME = "remoteVolume"
-        private const val FIELD_CALLER_SPEECH = "callerSpeechText"
         private const val FIELD_ALERT_STARTED_AT = "alertStartedAt"
         private const val FIELD_ALERT_DURATION = "alertDurationSeconds"
         private const val FIELD_CAPTION_MODE = "captionModeEnabled"

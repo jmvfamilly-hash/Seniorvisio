@@ -51,11 +51,12 @@ class AdminConfig(context: Context) {
         get() = prefs.getString(KEY_ADMIN_PIN, "0000") ?: "0000"
         set(value) = prefs.edit().putString(KEY_ADMIN_PIN, value).apply()
 
-    // --- Clé API AssemblyAI, utilisée uniquement par le labo de comparaison
-    // de transcription (voir TranscriptionLabActivity) — jamais par les
-    // sous-titres de la pièce ou d'appel en usage normal. Si l'admin n'a rien
-    // saisi sur la tablette, on retombe sur celle injectée par la CI depuis
-    // le secret GitHub ASSEMBLYAI_API_KEY (voir build.gradle). ---
+    // --- Clé API AssemblyAI : utilisée par le labo de comparaison de
+    // transcription (voir TranscriptionLabActivity) ET par la transcription
+    // temps réel des sous-titres d'appel (voir WebRtcCallEngine.
+    // attachTranscriptionSink, AssemblyAiRealtimeTranscriber). Si l'admin n'a
+    // rien saisi sur la tablette, on retombe sur celle injectée par la CI
+    // depuis le secret GitHub ASSEMBLYAI_API_KEY (voir build.gradle). ---
     var assemblyAiApiKey: String
         get() = prefs.getString(KEY_ASSEMBLYAI_API_KEY, "")
             ?.takeIf { it.isNotBlank() }

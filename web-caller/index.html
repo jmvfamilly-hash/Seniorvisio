@@ -91,11 +91,6 @@
       <video id="remoteVideo" autoplay playsinline></video>
       <video id="localVideo" autoplay playsinline muted></video>
 
-      <div id="fullscreenCaptionBanner" class="hidden">
-        <p id="fullscreenCaption"></p>
-        <p id="fullscreenCaptionLag" class="fullscreen-caption-lag hidden"></p>
-      </div>
-
       <div id="connectedControls">
         <pre id="callStats" class="stats"></pre>
 
@@ -189,14 +184,6 @@
         <!-- Rappelée pendant l'appel, pas seulement avant : le réflexe de
              baisser le téléphone pour parler à la personne revient vite. -->
         <p class="caregiver-only caregiver-hint" id="caregiverCallHint"></p>
-
-        <div class="transcript-mirror">
-          <p class="transcript-hint">Ce que Jean va voir :</p>
-          <p class="transcript-current" id="transcriptCurrent"></p>
-          <p class="silence-indicator hidden" id="silenceIndicator">🔇 Aucun son détecté depuis quelques secondes</p>
-          <p class="silence-indicator hidden" id="captionErrorIndicator"></p>
-          <ul class="transcript-history" id="transcriptHistory"></ul>
-        </div>
       </div>
 
       <button id="toggleViewButton" class="secondary">⚙️ Réglages</button>

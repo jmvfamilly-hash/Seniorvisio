@@ -12,6 +12,7 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.seniorvisio.signaling.CallSignalingClient
 import com.seniorvisio.signaling.RemoteIceCandidate
 import org.webrtc.AudioTrack
+import org.webrtc.AudioTrackSink
 import org.webrtc.Camera2Enumerator
 import org.webrtc.CameraVideoCapturer
 import org.webrtc.DataChannel
@@ -55,7 +56,6 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var localAudioTrack: AudioTrack? = null
     private var remoteVideoTrack: VideoTrack? = null
     private var remoteAudioTrack: AudioTrack? = null
-    private var speechListener: ListenerRegistration? = null
     private var micMuteListener: ListenerRegistration? = null
     private var slideshowListener: ListenerRegistration? = null
 
@@ -76,6 +76,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var connectionLostCb: (() -> Unit)? = null
     private val autoHangupHandler = Handler(Looper.getMainLooper())
     private var autoHangupRunnable: Runnable? = null
+
+    // ---- Transcription temps réel (voir listenForCaptions/setCaptionsActive) ----
+    private var transcriptionOnText: ((String) -> Unit)? = null
+    private var transcriber: AssemblyAiRealtimeTranscriber? = null
+    private var captionsActive = false
+    private var remoteAudioSinkAttached = false
     /**
      * Consigne de coupure du micro reçue avant même que la piste audio existe
      * (le mode soignant l'écrit dès la création de l'appel, voir
@@ -197,17 +203,65 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     /**
-     * Écoute le texte transcrit en direct de la voix de l'appelant (envoyé par
-     * webrtc-engine.js via reconnaissance vocale navigateur) pour le mode
-     * "sous-titres géants". Ne fait rien si le navigateur appelant ne
-     * supporte pas la reconnaissance vocale (ex. Safari/iOS) : aucun texte
-     * n'arrivera jamais, l'appel vidéo reste inchangé — limitation acceptée
-     * pour rester gratuit et sans dépendance à un service tiers (AssemblyAI/
-     * Deepgram/Vosk essayés puis abandonnés pour cet usage).
+     * Enregistre le texte transcrit à afficher en "sous-titres géants". Ne
+     * dépend plus de la reconnaissance vocale du navigateur de l'appelant
+     * (absente sur Safari/iOS, présente mais privée de son sur Android/
+     * Chrome car le micro est accaparé par l'appel WebRTC lui-même) : la
+     * tablette transcrit maintenant elle-même le son déjà reçu par l'appel
+     * (voir attachTranscriptionSink), avec AssemblyAI — indépendant de
+     * l'appareil ou du navigateur utilisé pour appeler.
      */
     fun listenForCaptions(onText: (String) -> Unit) {
-        val id = callId ?: return
-        speechListener = signaling.listenForCallerSpeech(id, onText)
+        transcriptionOnText = onText
+    }
+
+    /**
+     * Démarre/arrête la transcription temps réel selon que le proche a activé
+     * les sous-titres depuis le PWA (voir listenForCaptionMode) : AssemblyAI
+     * est un service payant à l'usage, contrairement à la reconnaissance
+     * vocale du navigateur qu'il remplace — inutile de le faire tourner
+     * pendant tout l'appel si personne ne regarde le texte.
+     */
+    fun setCaptionsActive(active: Boolean) {
+        if (captionsActive == active) return
+        captionsActive = active
+        if (!active) {
+            transcriber?.stop()
+            transcriber = null
+        }
+    }
+
+    /**
+     * Relié à la piste audio distante dès qu'elle est disponible (voir
+     * onTrack) : reçoit en continu le son déjà reçu par l'appel WebRTC, sous
+     * forme de PCM brut, et le transmet à AssemblyAI tant que les sous-titres
+     * sont actifs (voir setCaptionsActive). Le transcripteur n'est créé qu'au
+     * premier bloc audio reçu, pour connaître la fréquence d'échantillonnage
+     * réelle plutôt que de la deviner à l'avance.
+     */
+    private fun attachTranscriptionSink(track: AudioTrack) {
+        if (remoteAudioSinkAttached) return
+        remoteAudioSinkAttached = true
+        track.addSink(object : AudioTrackSink {
+            override fun onData(
+                audioData: ByteArray,
+                bitsPerSample: Int,
+                sampleRate: Int,
+                numberOfChannels: Int,
+                numberOfFrames: Int,
+                absoluteCaptureTimestampMs: Long,
+            ) {
+                if (!captionsActive) return
+                val onText = transcriptionOnText ?: return
+                val apiKey = AdminConfig(context).assemblyAiApiKey
+                if (apiKey.isBlank()) return
+                val instance = transcriber ?: AssemblyAiRealtimeTranscriber(apiKey).also {
+                    transcriber = it
+                    it.start(onText) { message -> Log.w(TAG, "AssemblyAI temps réel : $message") }
+                }
+                instance.sendAudio(audioData, sampleRate, numberOfChannels)
+            }
+        })
     }
 
     /**
@@ -506,6 +560,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                     remoteAudioTrack = track
                     track.setVolume(pendingVolume)
                     currentVolume = pendingVolume
+                    attachTranscriptionSink(track)
                 }
             }
 
@@ -592,8 +647,11 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private fun cleanup() {
         cancelScheduledAutoHangup()
         restoreAudio()
-        speechListener?.remove()
-        speechListener = null
+        transcriber?.stop()
+        transcriber = null
+        transcriptionOnText = null
+        captionsActive = false
+        remoteAudioSinkAttached = false
         micMuteListener?.remove()
         micMuteListener = null
         slideshowListener?.remove()

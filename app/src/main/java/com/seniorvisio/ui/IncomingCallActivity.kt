@@ -680,6 +680,10 @@ class IncomingCallActivity : AppCompatActivity() {
             runOnUiThread {
                 if (captionsCurrentlyEnabled == enabled) return@runOnUiThread
                 captionsCurrentlyEnabled = enabled
+                // Démarre/arrête la transcription temps réel AssemblyAI en
+                // même temps que le bandeau : service payant, inutile de le
+                // faire tourner quand le proche n'a pas activé les sous-titres.
+                callEngine.setCaptionsActive(enabled)
                 if (enabled) showCaptionBanner() else hideCaptionBanner()
             }
         }

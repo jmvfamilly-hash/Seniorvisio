@@ -110,4 +110,11 @@ dependencies {
     // capture caméra, prête à l'emploi (pas besoin de CameraX/ML Kit ici).
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
     implementation 'com.google.zxing:core:3.5.2'
+
+    // WebSocket vers AssemblyAI (transcription temps réel du flux audio
+    // distant reçu par l'appel, voir core/AssemblyAiRealtimeTranscriber.kt) :
+    // HttpURLConnection (utilisé partout ailleurs dans ce projet) ne gère pas
+    // la bascule WebSocket de façon praticable, réimplémenter RFC 6455 à la
+    // main serait disproportionné pour une fonction jugée prioritaire.
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 }
