@@ -104,21 +104,18 @@
             android:gravity="center"
             android:text="" />
 
-        <!-- Zone réservée aux deux services accessibles depuis l'accueil,
-             empilés (pas côte à côte) et étirés sur tout l'espace vertical
-             restant (layout_weight) : en portrait, deux cartes fixes de
-             340dp laissaient un grand vide en haut et en bas de l'écran — la
-             tablette est plus haute que large dans cette orientation, autant
-             s'en servir plutôt que de reproduire une disposition pensée pour
-             le paysage. En haut ce que Jean déclenche lui-même (les
-             sous-titres de la pièce), en bas ce qu'un visiteur déclenche
-             pour lui (le QR code du soignant). -->
+        <!-- Zone réservée aux deux services accessibles depuis l'accueil, côte
+             à côte et étirés sur tout l'espace restant (layout_weight) :
+             plus ergonomique à repérer et à comparer d'un coup d'œil qu'un
+             empilement vertical, y compris en portrait. À gauche ce que Jean
+             déclenche lui-même (les sous-titres de la pièce), à droite ce
+             qu'un visiteur déclenche pour lui (le QR code du soignant). -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:layout_marginTop="32dp"
-            android:orientation="vertical">
+            android:orientation="horizontal">
 
             <!-- Sous-titres de la pièce : bascule vers l'application Google
                  (voir MainActivity.launchRoomTranscription). Le libellé dit ce
@@ -127,8 +124,8 @@
                  si. Le retour d'appui est explicite (voir onClick). -->
             <LinearLayout
                 android:id="@+id/cardRoomCaptions"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:orientation="vertical"
                 android:gravity="center"
@@ -171,10 +168,10 @@
                  Appuyer dessus explique la fonction à celui qui la découvre. -->
             <LinearLayout
                 android:id="@+id/cardCaregiverQr"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:layout_marginTop="24dp"
+                android:layout_marginStart="24dp"
                 android:orientation="vertical"
                 android:gravity="center"
                 android:background="@drawable/home_card_bg"
