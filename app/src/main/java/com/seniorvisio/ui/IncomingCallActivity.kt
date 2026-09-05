@@ -593,17 +593,40 @@ class IncomingCallActivity : AppCompatActivity() {
             maxScrollSpeedPxPerSec = dpPerSec * resources.displayMetrics.density
         }
 
+        // État d'activation à distance (voir listenForCaptionMode plus bas),
+        // déclaré ici (avant son premier usage textuel) car clearCaption et
+        // listenForCaptions s'y réfèrent aussi : le bandeau ne doit jamais se
+        // réafficher tout seul si le proche a explicitement désactivé les
+        // sous-titres depuis le PWA.
+        var captionsCurrentlyEnabled: Boolean? = null
+
+        fun showCaptionBanner() {
+            captionBanner.animate().cancel()
+            captionBanner.visibility = View.VISIBLE
+            captionBanner.animate().alpha(1f).setDuration(400).start()
+        }
+
+        fun hideCaptionBanner() {
+            captionBanner.animate().cancel()
+            captionBanner.animate().alpha(0f).setDuration(400)
+                .withEndAction { captionBanner.visibility = View.GONE }
+                .start()
+        }
+
         // Texte relayé tel quel par le proche (reconnaissance vocale de son
         // propre navigateur, Web Speech API — voir web-caller/webrtc-engine.js
         // et WebRtcCallEngine.listenForCaptions) : ne fonctionne que sur les
         // navigateurs qui la supportent (Chrome desktop essentiellement, pas
         // Safari/iOS), limitation acceptée pour rester gratuit et sans
         // dépendance à un service tiers.
-        // Efface le texte quand le proche cesse de parler, plutôt que de laisser
-        // sa dernière phrase figée à l'écran indéfiniment. Indispensable pendant
-        // un diaporama : le bandeau recouvre une partie de la photo, et une
-        // phrase qui reste plantée dessus alors que plus personne ne parle gêne
-        // sans rien apporter. Le fondu évite une disparition brutale.
+        // Efface le texte ET masque le bandeau lui-même quand le proche cesse
+        // de parler, plutôt que de laisser sa dernière phrase figée à l'écran
+        // indéfiniment. Masquer seulement le texte ne suffisait pas : un cadre
+        // semi-opaque vide, plaqué en bas de l'écran, restait affiché sans
+        // rien dedans — constaté en test réel ("le bandeau ne disparaît
+        // jamais"). Indispensable aussi pendant un diaporama : le bandeau
+        // recouvre une partie de la photo, et un cadre vide qui reste dessus
+        // gêne sans rien apporter. Le fondu évite une disparition brutale.
         val captionClearHandler = Handler(Looper.getMainLooper())
         val clearCaption = Runnable {
             textCaption.animate().alpha(0f).setDuration(400).withEndAction {
@@ -613,12 +636,18 @@ class IncomingCallActivity : AppCompatActivity() {
                 scrollAnimator.jumpTo(0)
                 callEngine.signalCaptionCatchUpLag(0f)
             }.start()
+            if (captionsCurrentlyEnabled == true) hideCaptionBanner()
         }
 
         callEngine.listenForCaptions { text ->
             runOnUiThread {
                 val isContinuation = lastCaptionText.isNotEmpty() && text.startsWith(lastCaptionText)
                 lastCaptionText = text
+                // Reprend une nouvelle parole après un silence qui avait fait
+                // disparaître le bandeau (voir clearCaption) — sans effet s'il
+                // est déjà affiché (cancel() sur une animation déjà à 1 ne
+                // clignote pas).
+                if (captionsCurrentlyEnabled == true) showCaptionBanner()
                 textCaption.alpha = 1f
                 textCaption.text = text
                 captionClearHandler.removeCallbacks(clearCaption)
@@ -641,19 +670,11 @@ class IncomingCallActivity : AppCompatActivity() {
         // redéclenche à chaque écriture (volume, etc.), pas seulement quand
         // l'activation change. Sans ce garde-fou, le fondu d'apparition
         // repartirait de zéro à chaque écriture, donnant un clignotement.
-        var captionsCurrentlyEnabled: Boolean? = null
         callEngine.listenForCaptionMode { enabled ->
             runOnUiThread {
                 if (captionsCurrentlyEnabled == enabled) return@runOnUiThread
                 captionsCurrentlyEnabled = enabled
-                if (enabled) {
-                    captionBanner.visibility = View.VISIBLE
-                    captionBanner.animate().alpha(1f).setDuration(400).start()
-                } else {
-                    captionBanner.animate().alpha(0f).setDuration(400)
-                        .withEndAction { captionBanner.visibility = View.GONE }
-                        .start()
-                }
+                if (enabled) showCaptionBanner() else hideCaptionBanner()
             }
         }
 
