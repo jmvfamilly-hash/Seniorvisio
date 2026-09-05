@@ -73,6 +73,18 @@ class AdminConfig(context: Context) {
             ?: BuildConfig.WEATHER_API_KEY_DEFAULT
         set(value) = prefs.edit().putString(KEY_WEATHER_API_KEY, value).apply()
 
+    // --- Réveil de l'écran au moindre son de la pièce (voir RoomPresenceService) ---
+    var roomWakeEnabled: Boolean
+        get() = prefs.getBoolean(KEY_ROOM_WAKE_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_ROOM_WAKE_ENABLED, value).apply()
+
+    // --- Seuil de déclenchement (RMS, échelle 0-32767) : plus petit = plus
+    // sensible. Dépend du microphone et de l'acoustique de la pièce, à
+    // ajuster sur place plutôt qu'une valeur unique valable partout. ---
+    var roomWakeSensitivityThreshold: Int
+        get() = prefs.getInt(KEY_ROOM_WAKE_THRESHOLD, 1000)
+        set(value) = prefs.edit().putInt(KEY_ROOM_WAKE_THRESHOLD, value).apply()
+
     fun isCurrentlyNightWindow(hourNow: Int): Boolean {
         return if (nightStartHour <= nightEndHour) {
             hourNow in nightStartHour until nightEndHour
@@ -102,5 +114,7 @@ class AdminConfig(context: Context) {
         private const val KEY_ADMIN_PIN = "admin_pin"
         private const val KEY_ASSEMBLYAI_API_KEY = "assemblyai_api_key"
         private const val KEY_WEATHER_API_KEY = "weather_api_key"
+        private const val KEY_ROOM_WAKE_ENABLED = "room_wake_enabled"
+        private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
     }
 }

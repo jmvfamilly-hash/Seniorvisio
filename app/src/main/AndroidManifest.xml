@@ -8,6 +8,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Réveil de l'écran au moindre son de la pièce (voir RoomPresenceService) :
+         nécessaire depuis Android 14 pour qu'un service de premier plan
+         utilise le microphone en continu, en plus de RECORD_AUDIO déjà
+         déclarée ci-dessus. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
@@ -126,6 +131,11 @@
             android:name=".service.CallListenerService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".service.RoomPresenceService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <!-- Réveil par notification push (voir functions/index.js et
              SeniorVisioMessagingService.kt) : complète l'écoute Firestore

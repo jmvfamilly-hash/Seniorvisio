@@ -28,6 +28,7 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED || intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
             Log.i(TAG, "Relance après ${intent.action} (build ${com.seniorvisio.BuildConfig.BUILD_REV})")
             ContextCompat.startForegroundService(context, Intent(context, CallListenerService::class.java))
+            ContextCompat.startForegroundService(context, Intent(context, RoomPresenceService::class.java))
             context.startActivity(
                 Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )

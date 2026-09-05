@@ -219,5 +219,39 @@
         android:layout_height="wrap_content"
         android:inputType="textPassword" />
 
+    <!-- Réveil de l'écran au moindre son de la pièce (voir RoomPresenceService) :
+         la tablette n'a pas de capteur de présence dédié, le microphone déjà
+         autorisé (RECORD_AUDIO) sert de repli. Sensibilité et durée de
+         silence dépendent du microphone et de l'acoustique de la pièce,
+         impossibles à régler une fois pour toutes en usine — à ajuster ici
+         sur place si besoin. -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="40dp"
+        android:text="Réveil de l'écran au son"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <CheckBox
+        android:id="@+id/checkboxRoomWakeEnabled"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Réveiller l'écran au moindre son de la pièce" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="Sensibilité (plus petit = plus sensible, ex. 1000)"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/inputRoomWakeThreshold"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="number" />
+
 </LinearLayout>
 </ScrollView>

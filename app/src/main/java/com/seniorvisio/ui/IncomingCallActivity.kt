@@ -32,6 +32,7 @@ import com.seniorvisio.core.TimeContext
 import com.seniorvisio.core.WeatherClient
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.service.IncomingCallService
+import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.service.TimedCallAlertController
 import org.webrtc.SurfaceViewRenderer
 import java.time.LocalDateTime
@@ -80,6 +81,11 @@ class IncomingCallActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         adminConfig = AdminConfig(this)
         callEngine = WebRtcCallEngine(applicationContext)
+        // Le micro ne peut servir qu'à un composant à la fois : suspendu ici
+        // (avant même la connexion WebRTC) plutôt qu'à la réponse effective,
+        // pour ne jamais se disputer le micro avec RoomPresenceService le
+        // temps d'une bascule. Repris dans onDestroy.
+        RoomPresenceService.pauseForCall(this)
 
         // Réveille l'écran et l'affiche même si verrouillé, sans son.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -749,6 +755,7 @@ class IncomingCallActivity : AppCompatActivity() {
         // (voir le flag posé dans onCreate) — usage 24/7, risque batterie/
         // chauffe/marquage d'écran sinon.
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        RoomPresenceService.resumeAfterCall(this)
         alertController.cancel()
         if (!callHandled && !isChangingConfigurations) {
             callHandled = true

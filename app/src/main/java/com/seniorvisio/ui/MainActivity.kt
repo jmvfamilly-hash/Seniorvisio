@@ -36,6 +36,7 @@ import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.TimeContext
 import com.seniorvisio.core.WeatherClient
 import com.seniorvisio.service.CallListenerService
+import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.signaling.CallSignalingClient
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -130,6 +131,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         ContextCompat.startForegroundService(this, Intent(this, CallListenerService::class.java))
+        ContextCompat.startForegroundService(this, Intent(this, RoomPresenceService::class.java))
         requestIgnoreBatteryOptimizations()
         requestFullScreenIntentPermission()
         registerFcmToken()

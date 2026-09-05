@@ -71,11 +71,15 @@ class AdminSettingsActivity : AppCompatActivity() {
 
         val inputAssemblyAiKey = findViewById<EditText>(R.id.inputAssemblyAiKey)
         val inputWeatherApiKey = findViewById<EditText>(R.id.inputWeatherApiKey)
+        val checkboxRoomWakeEnabled = findViewById<CheckBox>(R.id.checkboxRoomWakeEnabled)
+        val inputRoomWakeThreshold = findViewById<EditText>(R.id.inputRoomWakeThreshold)
 
         inputCountdown.setText(adminConfig.countdownSeconds.toString())
         inputPin.setText(adminConfig.adminPin)
         inputAssemblyAiKey.setText(adminConfig.assemblyAiApiKey)
         inputWeatherApiKey.setText(adminConfig.weatherApiKey)
+        checkboxRoomWakeEnabled.isChecked = adminConfig.roomWakeEnabled
+        inputRoomWakeThreshold.setText(adminConfig.roomWakeSensitivityThreshold.toString())
 
         buttonSave.setOnClickListener {
             val seconds = inputCountdown.text.toString().toIntOrNull()
@@ -87,6 +91,10 @@ class AdminSettingsActivity : AppCompatActivity() {
             adminConfig.adminPin = inputPin.text.toString().ifBlank { adminConfig.adminPin }
             adminConfig.assemblyAiApiKey = inputAssemblyAiKey.text.toString().trim()
             adminConfig.weatherApiKey = inputWeatherApiKey.text.toString().trim()
+            adminConfig.roomWakeEnabled = checkboxRoomWakeEnabled.isChecked
+            inputRoomWakeThreshold.text.toString().toIntOrNull()?.let {
+                if (it > 0) adminConfig.roomWakeSensitivityThreshold = it
+            }
             Toast.makeText(this, "Réglages enregistrés", Toast.LENGTH_SHORT).show()
             finish()
         }
