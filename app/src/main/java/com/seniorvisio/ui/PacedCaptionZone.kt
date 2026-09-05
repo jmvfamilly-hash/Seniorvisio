@@ -51,6 +51,9 @@ class PacedCaptionZone(
     /** Vrai tant que la phrase à l'écran est celle en cours d'énonciation (elle continue de s'allonger). */
     private var displayedIsLive = false
 
+    /** Dernier allongement de la phrase en cours (voir advance, garde-fou de fin de tour). */
+    private var lastLiveUpdateAtMs = 0L
+
     private var maxScrollSpeedPxPerSec = 50f * scrollView.resources.displayMetrics.density
     private val scrollAnimator = CaptionScrollAnimator(
         scrollView = scrollView,
@@ -96,14 +99,12 @@ class PacedCaptionZone(
             return
         }
 
-        // Phrase close : si elle prolonge le tour en cours déjà affiché, elle
-        // le remplace sur place (c'est le même propos, dans sa version
-        // définitive) plutôt que de le réafficher une seconde fois.
-        if (displayedIsLive && displayed != null && phrase.startsWith(displayed!!.take(TAIL_MATCH_CHARS))) {
-            show(phrase, live = false)
-            return
-        }
-        if (displayed == null) show(phrase, live = false) else queue.addLast(phrase)
+        // Une phrase close est toujours la version définitive du tour de
+        // parole en cours d'affichage : elle le remplace sur place plutôt que
+        // de s'ajouter derrière lui. C'est aussi ce qui met fin à l'état
+        // "en cours" — sans quoi la phrase affichée n'expirerait jamais (voir
+        // advance) et la file ne se viderait plus.
+        if (displayedIsLive || displayed == null) show(phrase, live = false) else queue.addLast(phrase)
     }
 
     /** Vide la zone immédiatement (fin d'appel, sortie d'écran). */
@@ -172,8 +173,19 @@ class PacedCaptionZone(
      */
     private fun advance() {
         if (displayed == null) return
-        if (displayedIsLive) return
-        if (System.currentTimeMillis() < readableAtMs) return
+        val now = System.currentTimeMillis()
+        if (displayedIsLive) {
+            // Un tour de parole n'est "en cours" que tant qu'il s'allonge
+            // vraiment. Sans ce garde-fou, une connexion AssemblyAI perdue en
+            // plein milieu d'une phrase (elle n'enverra alors jamais sa
+            // version close) laisserait ce bout de phrase figé à l'écran pour
+            // le reste de l'appel.
+            if (now - lastLiveUpdateAtMs < LIVE_STALE_MS) return
+            displayedIsLive = false
+            readableAtMs = now + readingDurationMs(displayed!!)
+            return
+        }
+        if (now < readableAtMs) return
         val next = queue.removeFirstOrNull()
         if (next != null) show(next, live = false) else clear()
     }
@@ -181,8 +193,15 @@ class PacedCaptionZone(
     private fun show(phrase: String, live: Boolean) {
         displayed = phrase
         displayedIsLive = live
+        if (live) lastLiveUpdateAtMs = System.currentTimeMillis()
         textView.text = phrase
         reveal()
+        // Posée tout de suite, avant même de savoir si le texte débordera :
+        // la mesure ci-dessous n'a lieu qu'au prochain passage de mise en
+        // page, et d'ici là advance() pourrait voir une échéance périmée et
+        // enchaîner sur la phrase suivante sans laisser le temps de lire
+        // celle-ci.
+        readableAtMs = System.currentTimeMillis() + readingDurationMs(phrase)
 
         textView.post {
             // Une phrase plus haute que la zone défile jusqu'en bas au lieu
@@ -240,13 +259,11 @@ class PacedCaptionZone(
         private const val MIN_DISPLAY_MS = 2_500L
 
         /**
-         * Un tour de parole clos par AssemblyAI est renvoyé entier, mais son
-         * début peut avoir été corrigé au passage (le modèle révise les
-         * premiers mots à la lumière de la suite). Comparer les tout premiers
-         * caractères suffit à reconnaître qu'il s'agit du même propos, sans
-         * exiger une égalité stricte qui ferait afficher deux fois la même
-         * phrase.
+         * Au-delà de ce silence, la phrase en cours est considérée comme
+         * terminée même si sa version close n'est jamais arrivée. Plus long
+         * qu'une simple respiration, assez court pour ne pas laisser un bout
+         * de phrase figé à l'écran après une coupure de connexion.
          */
-        private const val TAIL_MATCH_CHARS = 12
+        private const val LIVE_STALE_MS = 6_000L
     }
 }

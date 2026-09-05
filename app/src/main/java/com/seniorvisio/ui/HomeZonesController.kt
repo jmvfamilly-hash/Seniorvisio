@@ -1,6 +1,7 @@
 package com.seniorvisio.ui
 
 import android.content.Context
+import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.view.View
@@ -157,6 +158,15 @@ class HomeZonesController(
             it.setTextColor(palette.primaryText)
         }
         textMomentWeatherSeparator.setTextColor(palette.secondaryText)
+        // La zone d'information reçoit le même fond que les deux autres, alors
+        // qu'elle n'a pas de texte à faire ressortir en temps normal : pendant
+        // un appel, elle se retrouve posée sur la vidéo du proche, dont les
+        // couleurs sont quelconques. Sans fond, sa date devenait illisible dès
+        // que la scène filmée était claire.
+        zoneInfo.background = GradientDrawable().apply {
+            cornerRadius = ZONE_CORNER_RADIUS_DP * context.resources.displayMetrics.density
+            setColor(palette.zoneBackground)
+        }
         roomZone.applyColors(palette.primaryText, palette.zoneBackground)
         callZone.applyColors(palette.primaryText, palette.zoneBackground)
         onPalette(palette)
@@ -200,6 +210,9 @@ class HomeZonesController(
     }
 
     companion object {
+        /** Même arrondi que les deux zones de texte (voir PacedCaptionZone). */
+        private const val ZONE_CORNER_RADIUS_DP = 16f
+
         private val DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.FRENCH)
     }
 }
