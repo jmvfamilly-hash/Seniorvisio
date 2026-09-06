@@ -104,6 +104,14 @@ dependencies {
     // core/CallEngine.kt / core/WebRtcCallEngine.kt
     implementation 'io.github.webrtc-sdk:android:144.7559.09'
 
+    // Reconnaissance vocale embarquée, utilisée pour ce qui se dit dans la
+    // pièce (voir core/VoskSpeechRecognizer.kt) : gratuite et hors-ligne une
+    // fois le modèle téléchargé, ce qui permet d'écouter la pièce toute la
+    // journée sans facturation à la durée. Les appels, eux, restent sur
+    // AssemblyAI, plus juste — voir core/SpeechRecognizer.kt.
+    implementation 'com.alphacephei:vosk-android:0.3.47'
+    implementation 'net.java.dev.jna:jna:5.13.0@aar'
+
     // Scan de QR Wi-Fi depuis les réglages admin (voir WifiConfigurator.kt) :
     // évite de retaper à la main un SSID/mot de passe sur un écran tactile,
     // source d'erreurs de frappe fréquente. Fournit sa propre Activity de

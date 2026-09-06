@@ -20,6 +20,7 @@ import androidx.core.app.NotificationCompat
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.TranscriptionEngine
 import com.seniorvisio.core.TranscriptionSource
+import com.seniorvisio.core.VoskModelProvider
 import com.seniorvisio.ui.MainActivity
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -98,6 +99,7 @@ class RoomPresenceService : Service() {
         val wakeRequests: Int,
         val transcribing: Boolean,
         val captureError: String?,
+        val voskModel: String,
     )
 
     fun currentStatus() = Status(
@@ -112,6 +114,12 @@ class RoomPresenceService : Service() {
         wakeRequests = wakeRequests,
         transcribing = transcription?.activeSource() != null,
         captureError = lastCaptureError,
+        voskModel = when (val modelState = VoskModelProvider.state()) {
+            VoskModelProvider.State.Ready -> "prêt (transcription de la pièce gratuite)"
+            VoskModelProvider.State.Downloading -> "téléchargement en cours (~45 Mo)"
+            VoskModelProvider.State.Absent -> "pas encore demandé"
+            is VoskModelProvider.State.Failed -> "échec : ${modelState.reason}"
+        },
     )
     private var roomTranscriptionOnText: ((text: String, isFinal: Boolean) -> Unit)? = null
     private var roomTranscriptionOnError: ((String) -> Unit)? = null
@@ -125,6 +133,11 @@ class RoomPresenceService : Service() {
         super.onCreate()
         adminConfig = AdminConfig(this)
         startForeground(FOREGROUND_ID, buildForegroundNotification())
+        // Le modèle de reconnaissance embarqué se télécharge une seule fois
+        // (~45 Mo) : lancé ici, au démarrage du service permanent, pour qu'il
+        // soit prêt bien avant qu'on en ait besoin. Sans effet s'il est déjà
+        // en place (voir VoskModelProvider.prepare).
+        VoskModelProvider.prepare(this)
     }
 
     /**

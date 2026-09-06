@@ -36,7 +36,7 @@ class TranscriptionEngine(
     private val onDiagnostic: (String) -> Unit = {},
 ) {
 
-    private var transcriber: AssemblyAiRealtimeTranscriber? = null
+    private var recognizer: SpeechRecognizer? = null
     @Volatile private var activeSource: TranscriptionSource? = null
 
     /** Sources dont l'arrivée de son a déjà été signalée, pour ne le dire qu'une fois chacune. */
@@ -70,13 +70,8 @@ class TranscriptionEngine(
         }
         if (source != activeSource) return
 
-        val apiKey = AdminConfig(context).assemblyAiApiKey
-        if (apiKey.isBlank()) {
-            onDiagnostic("clé API AssemblyAI absente")
-            return
-        }
-        val instance = transcriber ?: AssemblyAiRealtimeTranscriber(apiKey).also { created ->
-            transcriber = created
+        val instance = recognizer ?: createRecognizerFor(source)?.also { created ->
+            recognizer = created
             created.start(
                 onText = { text, isFinal ->
                     // La source peut avoir changé pendant que ce texte
@@ -85,12 +80,12 @@ class TranscriptionEngine(
                     onText(source, text, isFinal)
                 },
                 onError = { message ->
-                    Log.w(TAG, "AssemblyAI temps réel (${label(source)}) : $message")
-                    onDiagnostic("AssemblyAI : $message")
+                    Log.w(TAG, "Transcription ${label(source)} : $message")
+                    onDiagnostic(message)
                 },
             )
-        }
-        instance.sendAudio(pcm16, sampleRate, channels)
+        } ?: return
+        instance.accept(pcm16, sampleRate, channels)
     }
 
     /** Ferme tout : plus aucune source active, plus aucune session ouverte. */
@@ -100,9 +95,35 @@ class TranscriptionEngine(
         reportedSources.clear()
     }
 
+    /**
+     * Le choix du moteur découle de la source, exactement comme le choix de
+     * la zone d'affichage : la pièce est écoutée des heures par jour et doit
+     * donc être gratuite, un appel est ponctuel et c'est là que la justesse
+     * du texte se voit le plus (voir SpeechRecognizer).
+     *
+     * Tant que le modèle embarqué n'est pas prêt — il se télécharge une fois,
+     * au premier démarrage — la pièce passe par AssemblyAI plutôt que de
+     * rester muette sans explication. Quelques minutes facturées une seule
+     * fois valent mieux qu'une fonction qui semble cassée.
+     */
+    private fun createRecognizerFor(source: TranscriptionSource): SpeechRecognizer? {
+        val voskReady = VoskModelProvider.getModel() != null
+        if (source == TranscriptionSource.ROOM && voskReady) return VoskSpeechRecognizer()
+
+        val apiKey = AdminConfig(context).assemblyAiApiKey
+        if (apiKey.isBlank()) {
+            onDiagnostic("clé API AssemblyAI absente")
+            return null
+        }
+        if (source == TranscriptionSource.ROOM) {
+            onDiagnostic("modèle Vosk pas encore prêt, AssemblyAI en attendant")
+        }
+        return AssemblyAiRealtimeTranscriber(apiKey)
+    }
+
     private fun stopSession() {
-        transcriber?.stop()
-        transcriber = null
+        recognizer?.stop()
+        recognizer = null
     }
 
     private fun label(source: TranscriptionSource) = when (source) {

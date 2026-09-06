@@ -95,7 +95,8 @@ class AdminSettingsActivity : AppCompatActivity() {
             appendLine("Écran allumé : ${if (status.screenOn) "oui" else "non"}")
             appendLine("Verrou de réveil tenu : ${if (status.wakeLockHeld) "oui" else "non"}")
             appendLine("Rallumages demandés : ${status.wakeRequests}")
-            append("Transcription en cours : ${if (status.transcribing) "oui" else "non"}")
+            appendLine("Transcription en cours : ${if (status.transcribing) "oui" else "non"}")
+            append("Modèle hors-ligne (pièce) : ${status.voskModel}")
         }
     }
 

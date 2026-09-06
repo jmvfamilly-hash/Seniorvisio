@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit
  * pour les appels, ni pour la pièce), confirmé en cherchant la documentation
  * à jour au lieu de deviner davantage.
  */
-class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
+class AssemblyAiRealtimeTranscriber(private val apiKey: String) : SpeechRecognizer {
 
     private var webSocket: WebSocket? = null
     private val pendingAudio = java.io.ByteArrayOutputStream()
@@ -53,7 +53,7 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
      * comprises — mais l'information est conservée : elle est gratuite, et
      * tout affichage qui raisonnerait par phrase en dépendrait.
      */
-    fun start(onText: (String, Boolean) -> Unit, onError: (String) -> Unit = {}) {
+    override fun start(onText: (text: String, isFinal: Boolean) -> Unit, onError: (String) -> Unit) {
         val request = Request.Builder()
             .url("$REALTIME_URL?sample_rate=$TARGET_SAMPLE_RATE_HZ&encoding=pcm_s16le&speech_model=$SPEECH_MODEL")
             .addHeader("Authorization", apiKey)
@@ -116,9 +116,9 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
      * Les blocs sont donc accumulés ici jusqu'à un seuil raisonnable avant
      * d'être envoyés en un seul message.
      */
-    fun sendAudio(pcm16: ByteArray, sourceSampleRate: Int, sourceChannels: Int) {
+    override fun accept(pcm16: ByteArray, sampleRate: Int, channels: Int) {
         val socket = webSocket ?: return
-        val converted = resampleToMono16k(pcm16, sourceSampleRate, sourceChannels.coerceAtLeast(1))
+        val converted = resampleToMono16k(pcm16, sampleRate, channels.coerceAtLeast(1))
         val chunk = synchronized(pendingAudio) {
             pendingAudio.write(converted)
             if (pendingAudio.size() < MIN_CHUNK_BYTES) return
@@ -132,7 +132,7 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
         socket.send(Buffer().write(chunk).readByteString())
     }
 
-    fun stop() {
+    override fun stop() {
         webSocket?.send(JSONObject().put("type", "Terminate").toString())
         webSocket?.close(1000, null)
         webSocket = null
