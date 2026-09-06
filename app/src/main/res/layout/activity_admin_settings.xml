@@ -193,6 +193,30 @@
         android:layout_height="wrap_content"
         android:inputType="textPassword" />
 
+    <!-- État en direct de la surveillance du son (voir
+         RoomPresenceService.currentStatus). Le seuil de déclenchement dépend
+         du microphone et de l'acoustique de la pièce : sans voir le niveau
+         réellement mesuré en face, on le règle à l'aveugle. Et quand le
+         réveil ne se déclenche pas, ces lignes disent laquelle des causes
+         possibles est en jeu — niveau trop faible, capture arrêtée, réveil
+         désactivé, ou fenêtre de nuit — là où l'écran muet ne disait rien. -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="40dp"
+        android:text="Surveillance du son — état en direct"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/textRoomSoundStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:fontFamily="monospace"
+        android:textSize="14sp"
+        android:text="Connexion au service…" />
+
     <!-- Ordre d'empilement des trois zones de l'écran de Jean (voir
          HomeZonesController) : le bon ordre dépend de la position de la
          tablette et de la vue de Jean (assis, couché, tablette en hauteur),

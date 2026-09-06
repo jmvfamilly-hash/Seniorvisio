@@ -11,7 +11,9 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Binder
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -65,6 +67,45 @@ class RoomPresenceService : Service() {
 
     private var transcription: TranscriptionEngine? = null
     private var lastRoomSoundAtMs = 0L
+
+    @Volatile private var lastRms = 0
+    @Volatile private var lastCaptureError: String? = null
+    private var captureRetries = 0
+    private val retryHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Photographie de ce que fait réellement le service, affichée en direct
+     * dans l'écran admin (voir AdminSettingsActivity).
+     *
+     * Sans ça, le réveil au son se règle à l'aveugle : le seuil dépend du
+     * microphone et de l'acoustique de la pièce, et rien ne permettait de voir
+     * le niveau réellement mesuré face à ce seuil, ni de distinguer "le son
+     * n'atteint pas le seuil" de "la capture ne tourne pas" ou de "le réveil
+     * est désactivé". Trois causes très différentes, jusqu'ici impossibles à
+     * départager sans brancher la tablette à un ordinateur.
+     */
+    data class Status(
+        val capturing: Boolean,
+        val lastRms: Int,
+        val threshold: Int,
+        val wakeEnabled: Boolean,
+        val inNightWindow: Boolean,
+        val wakeLockHeld: Boolean,
+        val transcribing: Boolean,
+        val captureError: String?,
+    )
+
+    fun currentStatus() = Status(
+        capturing = isCapturing,
+        lastRms = lastRms,
+        threshold = adminConfig.roomWakeSensitivityThreshold,
+        wakeEnabled = adminConfig.roomWakeEnabled,
+        inNightWindow = adminConfig.nightModeEnabled &&
+            adminConfig.isCurrentlyNightWindow(LocalDateTime.now().hour),
+        wakeLockHeld = wakeLock?.isHeld == true,
+        transcribing = transcription?.activeSource() != null,
+        captureError = lastCaptureError,
+    )
     private var roomTranscriptionOnText: ((text: String, isFinal: Boolean) -> Unit)? = null
     private var roomTranscriptionOnError: ((String) -> Unit)? = null
 
@@ -109,11 +150,13 @@ class RoomPresenceService : Service() {
      */
     private fun startCapture() {
         if (isCapturing) return
+        retryHandler.removeCallbacksAndMessages(null)
 
         val minBufferSize = AudioRecord.getMinBufferSize(
             SAMPLE_RATE_HZ, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
         )
         if (minBufferSize <= 0) {
+            lastCaptureError = "configuration audio non supportée par cet appareil"
             Log.w(TAG, "Configuration audio non supportée par cet appareil, réveil au son désactivé")
             return
         }
@@ -124,15 +167,19 @@ class RoomPresenceService : Service() {
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBufferSize * 2
             )
         } catch (e: SecurityException) {
+            lastCaptureError = "permission micro refusée"
             Log.w(TAG, "Permission micro refusée, réveil au son désactivé", e)
             null
-        } ?: return
+        }
 
-        if (record.state != AudioRecord.STATE_INITIALIZED) {
-            record.release()
+        if (record == null || record.state != AudioRecord.STATE_INITIALIZED) {
+            record?.release()
+            scheduleCaptureRetry()
             return
         }
 
+        lastCaptureError = null
+        captureRetries = 0
         audioRecord = record
         isCapturing = true
         record.startRecording()
@@ -150,7 +197,26 @@ class RoomPresenceService : Service() {
         }.apply { start() }
     }
 
+    /**
+     * Le micro est parfois encore tenu par quelqu'un d'autre au moment où on
+     * le réclame — typiquement WebRTC en fin d'appel, dont la libération se
+     * fait sur un autre fil et prend un instant. Sans ce réessai, l'échec
+     * était silencieux et définitif : plus aucune surveillance du son jusqu'au
+     * redémarrage de la tablette, sans le moindre signe extérieur.
+     */
+    private fun scheduleCaptureRetry() {
+        if (captureRetries >= MAX_CAPTURE_RETRIES) {
+            lastCaptureError = "micro indisponible après $MAX_CAPTURE_RETRIES tentatives"
+            Log.w(TAG, "Micro toujours indisponible, abandon de la capture")
+            return
+        }
+        captureRetries++
+        lastCaptureError = "micro occupé, nouvelle tentative ($captureRetries/$MAX_CAPTURE_RETRIES)"
+        retryHandler.postDelayed({ startCapture() }, CAPTURE_RETRY_DELAY_MS)
+    }
+
     private fun stopCapture() {
+        retryHandler.removeCallbacksAndMessages(null)
         isCapturing = false
         captureThread?.interrupt()
         captureThread = null
@@ -246,6 +312,7 @@ class RoomPresenceService : Service() {
      * séparée, les blocs audio arrivent déjà à un rythme largement suffisant.
      */
     private fun handleLevel(rms: Double) {
+        lastRms = rms.toInt()
         val now = System.currentTimeMillis()
         if (rms >= adminConfig.roomWakeSensitivityThreshold) {
             lastLoudAtMs = now
@@ -319,6 +386,8 @@ class RoomPresenceService : Service() {
          */
         private const val TRANSCRIPTION_HOLD_MS = 8_000L
         private const val MAX_WAKE_LOCK_MS = 30 * 60 * 1000L
+        private const val CAPTURE_RETRY_DELAY_MS = 2_000L
+        private const val MAX_CAPTURE_RETRIES = 15
         private const val ACTION_PAUSE = "com.seniorvisio.action.PAUSE_ROOM_PRESENCE"
         private const val ACTION_RESUME = "com.seniorvisio.action.RESUME_ROOM_PRESENCE"
 

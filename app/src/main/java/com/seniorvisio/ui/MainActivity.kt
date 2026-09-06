@@ -13,11 +13,14 @@ import android.text.InputType
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.view.View
+import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -87,6 +90,42 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val screenAwakeHandler = Handler(Looper.getMainLooper())
+    private var textGoneSinceMs = 0L
+
+    /**
+     * Empêche la tablette de s'endormir tant qu'il reste du texte à l'écran,
+     * et rend la main à la veille un moment après que tout a été affiché.
+     *
+     * Le réveil au son (voir RoomPresenceService) ne suffit pas pour ça : il
+     * suit le SON, qu'il relâche quelques secondes après le dernier bruit. Or
+     * la transcription arrive avec du retard sur la parole, et le texte
+     * continue de défiler après que la personne s'est tue — l'écran
+     * s'éteignait donc en plein milieu de ce que Jean était en train de lire.
+     * Ce qui doit décider ici, c'est ce qui est affiché, pas ce qui s'entend.
+     *
+     * Passe par le drapeau de fenêtre plutôt que par un verrou de réveil :
+     * c'est le mécanisme prévu pour "garder l'écran allumé pendant que cet
+     * écran-ci est visible", il ne demande aucune permission et fonctionne
+     * sur toutes les versions d'Android.
+     */
+    private val screenAwakeTicker = object : Runnable {
+        override fun run() {
+            val hasText = zones.hasTextOnScreen()
+            val now = System.currentTimeMillis()
+            if (hasText) textGoneSinceMs = 0L
+            else if (textGoneSinceMs == 0L) textGoneSinceMs = now
+
+            val keepAwake = hasText || (now - textGoneSinceMs) < READING_GRACE_MS
+            if (keepAwake) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+            screenAwakeHandler.postDelayed(this, SCREEN_AWAKE_TICK_MS)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -152,6 +191,8 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         KioskManager.startIfDeviceOwner(this, MainActivity::class.java)
         zones.onResume()
+        screenAwakeHandler.removeCallbacks(screenAwakeTicker)
+        screenAwakeHandler.post(screenAwakeTicker)
     }
 
     /**
@@ -175,6 +216,10 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         zones.onPause()
+        screenAwakeHandler.removeCallbacks(screenAwakeTicker)
+        // Jamais d'écran forcé allumé une fois cet écran quitté : usage 24h/24,
+        // risque de marquage de dalle et de chauffe sinon.
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     override fun onDestroy() {
@@ -293,6 +338,16 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+
+        private const val SCREEN_AWAKE_TICK_MS = 1_000L
+
+        /**
+         * Délai laissé après la disparition du dernier texte avant de rendre
+         * la main à la veille : le temps de finir de lire ce qui vient de
+         * s'effacer, et d'éviter qu'un écran s'éteigne pile au moment où on y
+         * jetait un œil.
+         */
+        private const val READING_GRACE_MS = 20_000L
 
         /**
          * Adresse encodée dans le QR code de l'écran d'accueil. Le paramètre

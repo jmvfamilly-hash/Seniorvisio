@@ -4,10 +4,16 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
 import android.text.InputType
 import android.webkit.WebView
 import android.widget.ArrayAdapter
@@ -28,6 +34,7 @@ import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.HomeZone
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.WifiConfigurator
+import com.seniorvisio.service.RoomPresenceService
 
 /**
  * Écran de réglages admin minimal : PIN d'accès et durée du décompte
@@ -42,6 +49,66 @@ class AdminSettingsActivity : AppCompatActivity() {
     private lateinit var textWifiStatus: TextView
     private lateinit var webViewCaptivePortal: WebView
     private lateinit var buttonValidateCaptivePortal: Button
+
+    private var roomService: RoomPresenceService? = null
+    private val statusHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Affiche en direct ce que fait la surveillance du son (voir
+     * RoomPresenceService.currentStatus). Rafraîchi deux fois par seconde :
+     * assez vite pour voir le niveau bouger en parlant devant la tablette,
+     * ce qui est la seule façon de régler le seuil autrement qu'au hasard.
+     */
+    private val statusTicker = object : Runnable {
+        override fun run() {
+            refreshRoomSoundStatus()
+            statusHandler.postDelayed(this, STATUS_REFRESH_MS)
+        }
+    }
+
+    private val roomConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            roomService = (binder as? RoomPresenceService.LocalBinder)?.getService()
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            roomService = null
+        }
+    }
+
+    private fun refreshRoomSoundStatus() {
+        val view = findViewById<TextView>(R.id.textRoomSoundStatus)
+        val status = roomService?.currentStatus()
+        if (status == null) {
+            view.text = "Service non joignable"
+            return
+        }
+        // Chaque ligne répond à une question précise qu'on se pose quand le
+        // réveil ne se déclenche pas — et une seule d'entre elles sera fausse.
+        view.text = buildString {
+            appendLine("Niveau mesuré : ${status.lastRms}  (seuil ${status.threshold})")
+            appendLine(if (status.lastRms >= status.threshold) "  → au-dessus du seuil" else "  → sous le seuil")
+            appendLine("Capture micro : ${if (status.capturing) "active" else "ARRÊTÉE"}")
+            status.captureError?.let { appendLine("  ⚠️ $it") }
+            appendLine("Réveil au son : ${if (status.wakeEnabled) "activé" else "DÉSACTIVÉ"}")
+            appendLine("Fenêtre de nuit : ${if (status.inNightWindow) "OUI (réveil suspendu)" else "non"}")
+            appendLine("Écran maintenu allumé : ${if (status.wakeLockHeld) "oui" else "non"}")
+            append("Transcription en cours : ${if (status.transcribing) "oui" else "non"}")
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        bindService(Intent(this, RoomPresenceService::class.java), roomConnection, Context.BIND_AUTO_CREATE)
+        statusHandler.post(statusTicker)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        statusHandler.removeCallbacks(statusTicker)
+        unbindService(roomConnection)
+        roomService = null
+    }
 
     private val qrScanLauncher = registerForActivityResult(ScanContract()) { result ->
         val content = result.contents ?: return@registerForActivityResult
@@ -316,4 +383,8 @@ class AdminSettingsActivity : AppCompatActivity() {
     }
 
     private fun textBrowserAccessStatus() = findViewById<TextView>(R.id.textBrowserAccessStatus)
+
+    companion object {
+        private const val STATUS_REFRESH_MS = 500L
+    }
 }

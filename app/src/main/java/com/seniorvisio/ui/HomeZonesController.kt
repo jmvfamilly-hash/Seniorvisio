@@ -145,6 +145,14 @@ class HomeZonesController(
     /** Ce que Jean a réellement sous les yeux dans la zone de cette source, null si elle est vide. */
     fun displayedText(source: TranscriptionSource): String? = zoneFor(source).displayedText()
 
+    /**
+     * Vrai tant qu'au moins une zone a du texte à l'écran. L'écran hôte s'en
+     * sert pour ne pas laisser la tablette s'endormir au milieu d'une phrase
+     * (voir MainActivity) : la veille reprend ses droits une fois que tout a
+     * été affiché, pas quand le bruit s'arrête.
+     */
+    fun hasTextOnScreen(): Boolean = roomZone.hasText() || callZone.hasText()
+
     /** Le plus grand retard de lecture des deux zones — une seule a une source à la fois. */
     fun pendingSeconds(): Float = maxOf(roomZone.pendingSeconds(), callZone.pendingSeconds())
 

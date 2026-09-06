@@ -120,6 +120,9 @@ class RollingCaptionZone(
      */
     fun displayedText(): String? = displayed
 
+    /** Vrai tant que quelque chose est affiché — donc tant qu'il reste à lire. */
+    fun hasText(): Boolean = displayed != null
+
     /** À appeler quand l'écran qui héberge cette zone disparaît. */
     fun release() {
         handler.removeCallbacks(clearRunnable)
