@@ -80,13 +80,13 @@ class HomeZonesController(
     private val textWeatherLabel: TextView = root.findViewById(R.id.textWeatherLabel)
     private val textClockDate: TextView = root.findViewById(R.id.textClockDate)
 
-    val roomZone = PacedCaptionZone(
+    val roomZone = RollingCaptionZone(
         container = zoneRoom,
         scrollView = root.findViewById<ScrollView>(R.id.roomCaptionScroll),
         textView = root.findViewById<TextView>(R.id.textRoomCaption),
     )
 
-    val callZone = PacedCaptionZone(
+    val callZone = RollingCaptionZone(
         container = zoneCall,
         scrollView = root.findViewById<ScrollView>(R.id.callCaptionScroll),
         textView = root.findViewById<TextView>(R.id.textCallCaption),
@@ -167,6 +167,8 @@ class HomeZonesController(
             cornerRadius = ZONE_CORNER_RADIUS_DP * context.resources.displayMetrics.density
             setColor(palette.zoneBackground)
         }
+        textMomentIcon.setTextColor(palette.primaryText)
+        textWeatherIcon.setTextColor(palette.primaryText)
         roomZone.applyColors(palette.primaryText, palette.zoneBackground)
         callZone.applyColors(palette.primaryText, palette.zoneBackground)
         onPalette(palette)
@@ -210,7 +212,7 @@ class HomeZonesController(
     }
 
     companion object {
-        /** Même arrondi que les deux zones de texte (voir PacedCaptionZone). */
+        /** Même arrondi que les deux zones de texte (voir RollingCaptionZone). */
         private const val ZONE_CORNER_RADIUS_DP = 16f
 
         private val DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.FRENCH)

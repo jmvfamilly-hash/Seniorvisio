@@ -43,9 +43,15 @@ import kotlin.math.roundToInt
  * point de vue de Jean : les mêmes trois zones restent en place (voir
  * HomeZonesController), seul le fond change — la vidéo du proche remplace le
  * fond uni, puis ses photos s'il lance un diaporama. Le texte de l'appel
- * s'affiche dans la zone 3, avec les mêmes règles que celui de la pièce (voir
- * PacedCaptionZone) : chaque phrase reste le temps d'être lue, les suivantes
- * attendent leur tour.
+ * s'affiche dans la zone 3, avec les mêmes règles de défilement que celui de
+ * la pièce (voir RollingCaptionZone).
+ *
+ * L'appelant peut à tout moment demander que la transcription écoute la pièce
+ * plutôt que sa propre voix (voir setupCaptionMode, listenForMicToRoom) : le
+ * texte passe alors en zone 2, la zone 3 s'efface faute de source, et les deux
+ * gardent leur place — Jean retrouve toujours chaque chose au même endroit. Le
+ * son, lui, continue de circuler dans les deux sens : l'appelant peut parler
+ * avec la personne présente auprès de Jean pendant ce temps.
  */
 class IncomingCallActivity : AppCompatActivity() {
 
@@ -73,6 +79,7 @@ class IncomingCallActivity : AppCompatActivity() {
     // Dernier état publié au PWA (voir publishScreenState) : sert à n'écrire
     // que lorsque quelque chose a réellement changé.
     private var lastPublishedCallText: String? = null
+    private var lastPublishedRoomText: String? = null
     private var lastPublishedLagSeconds = -1f
 
     // Description de l'écran pour la réplique côté PWA (voir
@@ -519,20 +526,25 @@ class IncomingCallActivity : AppCompatActivity() {
      * Les réglages "nombre de lignes" et "délai d'effacement" ont disparu avec
      * le bandeau : la zone occupe une part fixe de l'écran, et elle s'efface
      * quand il n'y a plus rien à lire, pas au bout d'un délai réglé à
-     * l'avance (voir PacedCaptionZone).
+     * l'avance (voir RollingCaptionZone).
      */
     private fun setupCaptionMode() {
-        callEngine.listenForCaptions { text, isFinal ->
-            runOnUiThread { zones.callZone.submit(text, isFinal) }
-        }
+        callEngine.listenForCaptions(
+            onCallText = { text, isFinal -> runOnUiThread { zones.callZone.submit(text, isFinal) } },
+            onRoomText = { text, isFinal -> runOnUiThread { zones.roomZone.submit(text, isFinal) } },
+        )
 
         callEngine.listenForCaptionScrollSpeed { dpPerSec ->
-            runOnUiThread { zones.callZone.setScrollSpeedDpPerSec(dpPerSec) }
+            runOnUiThread {
+                zones.callZone.setScrollSpeedDpPerSec(dpPerSec)
+                zones.roomZone.setScrollSpeedDpPerSec(dpPerSec)
+            }
         }
 
         // Ce listener écoute tout le document d'appel Firestore, donc il se
         // redéclenche à chaque écriture (volume, etc.), pas seulement quand
-        // l'activation change — d'où le garde-fou.
+        // l'activation change — d'où le garde-fou, répété plus bas pour les
+        // autres réglages.
         var captionsCurrentlyEnabled: Boolean? = null
         callEngine.listenForCaptionMode { enabled ->
             runOnUiThread {
@@ -542,18 +554,45 @@ class IncomingCallActivity : AppCompatActivity() {
                 // même temps que la zone : service payant, inutile de le
                 // faire tourner quand le proche n'a pas activé les sous-titres.
                 callEngine.setCaptionsActive(enabled)
-                if (!enabled) zones.callZone.clear()
+                if (!enabled) {
+                    zones.callZone.clear()
+                    zones.roomZone.clear()
+                }
             }
         }
 
-        // Même garde-fou : ce listener se redéclenche aussi à chaque écriture
-        // dans le document, pas seulement quand la taille change.
-        var currentTextSizeSp: Float? = null
-        callEngine.listenForCaptionTextSize { sizeSp ->
+        var currentVisibleLines: Int? = null
+        callEngine.listenForCaptionVisibleLines { lines ->
             runOnUiThread {
-                if (currentTextSizeSp == sizeSp) return@runOnUiThread
-                currentTextSizeSp = sizeSp
-                zones.callZone.setTextSizeSp(sizeSp)
+                if (currentVisibleLines == lines) return@runOnUiThread
+                currentVisibleLines = lines
+                zones.callZone.setVisibleLines(lines)
+                zones.roomZone.setVisibleLines(lines)
+            }
+        }
+
+        var currentClearDelay: Int? = null
+        callEngine.listenForCaptionClearDelay { seconds ->
+            runOnUiThread {
+                if (currentClearDelay == seconds) return@runOnUiThread
+                currentClearDelay = seconds
+                zones.callZone.setClearDelaySeconds(seconds)
+                zones.roomZone.setClearDelaySeconds(seconds)
+            }
+        }
+
+        // Bascule de la transcription vers le microphone de la tablette : Jean
+        // lit alors ce que dit quelqu'un présent dans sa pièce plutôt que son
+        // correspondant. La zone d'appel n'est pas masquée, elle perd
+        // simplement sa source et s'efface d'elle-même après le délai habituel
+        // — les deux zones gardent leur place, pour que Jean retrouve toujours
+        // le texte de la pièce au même endroit.
+        var currentMicToRoom: Boolean? = null
+        callEngine.listenForMicToRoom { enabled ->
+            runOnUiThread {
+                if (currentMicToRoom == enabled) return@runOnUiThread
+                currentMicToRoom = enabled
+                callEngine.setMicToRoom(enabled)
             }
         }
     }
@@ -600,16 +639,17 @@ class IncomingCallActivity : AppCompatActivity() {
 
     private fun publishScreenStateIfChanged() {
         val callText = zones.callZone.displayedText()
-        val lag = zones.callZone.pendingSeconds()
+        val roomText = zones.roomZone.displayedText()
+        // Le retard de lecture est celui de la zone qui a une source à cet
+        // instant : les deux ne transcrivent jamais en même temps (voir
+        // WebRtcCallEngine.setMicToRoom).
+        val lag = maxOf(zones.callZone.pendingSeconds(), zones.roomZone.pendingSeconds())
         val lagMoved = abs(lag - lastPublishedLagSeconds) >= LAG_PUBLISH_THRESHOLD_SECONDS
-        if (callText == lastPublishedCallText && !lagMoved) return
+        if (callText == lastPublishedCallText && roomText == lastPublishedRoomText && !lagMoved) return
         lastPublishedCallText = callText
+        lastPublishedRoomText = roomText
         lastPublishedLagSeconds = lag
-        callEngine.publishScreenState(
-            roomText = zones.roomZone.displayedText(),
-            callText = callText,
-            lagSeconds = lag,
-        )
+        callEngine.publishScreenState(roomText = roomText, callText = callText, lagSeconds = lag)
     }
 
     /**

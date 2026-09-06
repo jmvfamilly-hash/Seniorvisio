@@ -137,11 +137,42 @@ class CallSignalingClient {
         }
     }
 
-    /** Taille du texte des sous-titres (en sp), choisie à distance par l'appelant. */
-    fun listenForCaptionTextSize(callId: String, onSizeSp: (Double) -> Unit): ListenerRegistration {
+    /**
+     * Nombre de lignes visibles avant que le texte ne se mette à défiler,
+     * choisi à distance par l'appelant. Commande indirectement la taille de la
+     * police : les zones occupant une place fixe à l'écran, c'est elle qui
+     * s'ajuste pour que ce nombre de lignes y tienne (voir
+     * RollingCaptionZone.setVisibleLines) — moins de lignes, texte plus gros.
+     */
+    fun listenForCaptionVisibleLines(callId: String, onLines: (Double) -> Unit): ListenerRegistration {
         return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val size = snapshot?.getDouble(FIELD_CAPTION_TEXT_SIZE)
-            if (size != null) onSizeSp(size)
+            val lines = snapshot?.getDouble(FIELD_CAPTION_VISIBLE_LINES)
+            if (lines != null) onLines(lines)
+        }
+    }
+
+    /** Délai (en secondes) sans nouvelle parole avant effacement du texte, choisi à distance par l'appelant. */
+    fun listenForCaptionClearDelay(callId: String, onSeconds: (Double) -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            val seconds = snapshot?.getDouble(FIELD_CAPTION_CLEAR_DELAY)
+            if (seconds != null) onSeconds(seconds)
+        }
+    }
+
+    /**
+     * L'appelant demande que la transcription écoute la pièce de Jean plutôt
+     * que sa propre voix (voir WebRtcCallEngine.listenForMicToRoom) — pour
+     * suivre par écrit ce que dit quelqu'un présent auprès de lui, un soignant
+     * par exemple, sans raccrocher.
+     *
+     * Seule la source de la transcription bascule : le son continue de
+     * circuler dans les deux sens, l'appelant peut donc parler avec la
+     * personne présente dans la pièce pendant tout ce temps.
+     */
+    fun listenForMicToRoom(callId: String, onEnabled: (Boolean) -> Unit): ListenerRegistration {
+        return callDoc(callId).addSnapshotListener { snapshot, _ ->
+            val enabled = snapshot?.getBoolean(FIELD_MIC_TO_ROOM)
+            if (enabled != null) onEnabled(enabled)
         }
     }
 
@@ -228,7 +259,7 @@ class CallSignalingClient {
      * Publie l'état de l'écran de Jean : le texte réellement affiché dans
      * chacune de ses deux zones (null quand la zone est vide), et l'avance en
      * secondes que le proche a prise sur ce que Jean a eu le temps de lire
-     * (voir PacedCaptionZone.pendingSeconds).
+     * (voir RollingCaptionZone.pendingSeconds).
      *
      * Le PWA rejoue ces textes tels quels plutôt que la transcription brute,
      * qui a toujours de l'avance : c'est ce qui lui permet de montrer au
@@ -356,7 +387,9 @@ class CallSignalingClient {
         private const val FIELD_ALERT_STARTED_AT = "alertStartedAt"
         private const val FIELD_ALERT_DURATION = "alertDurationSeconds"
         private const val FIELD_CAPTION_MODE = "captionModeEnabled"
-        private const val FIELD_CAPTION_TEXT_SIZE = "captionTextSize"
+        private const val FIELD_CAPTION_VISIBLE_LINES = "captionVisibleLines"
+        private const val FIELD_CAPTION_CLEAR_DELAY = "captionClearDelaySeconds"
+        private const val FIELD_MIC_TO_ROOM = "micToRoom"
         private const val FIELD_FORCE_CONNECT = "forceConnectRequested"
         private const val FIELD_SELF_PREVIEW = "selfPreviewEnabled"
         private const val FIELD_CAPTION_SCROLL_SPEED = "captionMaxScrollSpeedDpPerSec"

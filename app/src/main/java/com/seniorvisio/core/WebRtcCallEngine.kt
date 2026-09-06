@@ -31,6 +31,7 @@ import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 import java.nio.ByteBuffer
+import kotlin.math.roundToInt
 
 /**
  * Implémentation WebRTC de [CallEngine]. Le signaling (échange de l'offre,
@@ -70,7 +71,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var remoteRenderer: SurfaceViewRenderer? = null
     private var volumeListener: ListenerRegistration? = null
     private var captionModeListener: ListenerRegistration? = null
-    private var captionTextSizeListener: ListenerRegistration? = null
+    private var captionVisibleLinesListener: ListenerRegistration? = null
+    private var captionClearDelayListener: ListenerRegistration? = null
+    private var micToRoomListener: ListenerRegistration? = null
     private var captionScrollSpeedListener: ListenerRegistration? = null
     private var selfPreviewListener: ListenerRegistration? = null
     private var forceConnectListener: ListenerRegistration? = null
@@ -80,11 +83,16 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var autoHangupRunnable: Runnable? = null
 
     // ---- Transcription temps réel (voir listenForCaptions/setCaptionsActive) ----
-    private var transcriptionOnText: ((text: String, isFinal: Boolean) -> Unit)? = null
+    private var transcriptionOnCallText: ((text: String, isFinal: Boolean) -> Unit)? = null
+    private var transcriptionOnRoomText: ((text: String, isFinal: Boolean) -> Unit)? = null
     private var transcriber: AssemblyAiRealtimeTranscriber? = null
     private var captionsActive = false
-    private var remoteAudioSinkAttached = false
-    private var hasReportedFirstAudio = false
+
+    /** Voir setMicToRoom : quelle des deux pistes audio alimente la transcription. */
+    private var micToRoom = false
+
+    /** Sources dont l'arrivée d'audio a déjà été confirmée au PWA (voir attachTranscriptionSink). */
+    private val reportedAudioSources = mutableSetOf<String>()
     /**
      * Consigne de coupure du micro reçue avant même que la piste audio existe
      * (le mode soignant l'écrit dès la création de l'appel, voir
@@ -214,8 +222,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * (voir attachTranscriptionSink), avec AssemblyAI — indépendant de
      * l'appareil ou du navigateur utilisé pour appeler.
      */
-    fun listenForCaptions(onText: (text: String, isFinal: Boolean) -> Unit) {
-        transcriptionOnText = onText
+    fun listenForCaptions(
+        onCallText: (text: String, isFinal: Boolean) -> Unit,
+        onRoomText: (text: String, isFinal: Boolean) -> Unit,
+    ) {
+        transcriptionOnCallText = onCallText
+        transcriptionOnRoomText = onRoomText
     }
 
     /**
@@ -228,23 +240,51 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     fun setCaptionsActive(active: Boolean) {
         if (captionsActive == active) return
         captionsActive = active
-        if (!active) {
-            transcriber?.stop()
-            transcriber = null
-        }
+        if (!active) stopTranscriber()
     }
 
     /**
-     * Relié à la piste audio distante dès qu'elle est disponible (voir
-     * onTrack) : reçoit en continu le son déjà reçu par l'appel WebRTC, sous
-     * forme de PCM brut, et le transmet à AssemblyAI tant que les sous-titres
-     * sont actifs (voir setCaptionsActive). Le transcripteur n'est créé qu'au
-     * premier bloc audio reçu, pour connaître la fréquence d'échantillonnage
-     * réelle plutôt que de la deviner à l'avance.
+     * Bascule la transcription du son de l'appel vers le microphone de la
+     * tablette, sur demande de l'appelant (voir listenForMicToRoom) : Jean lit
+     * alors ce que dit quelqu'un présent dans sa pièce — un soignant, un
+     * visiteur — au lieu de ce que dit son correspondant.
+     *
+     * Seule la SOURCE de la transcription change. Le son continue de circuler
+     * dans les deux sens exactement comme avant : c'est ce qui permet à
+     * l'appelant de parler avec la personne présente auprès de Jean pendant
+     * tout ce temps, pendant que Jean, lui, lit la conversation.
+     *
+     * Une seule transcription tourne à la fois, jamais deux : AssemblyAI est
+     * facturé à la durée de connexion, et surtout la zone qui perd sa source
+     * doit s'effacer d'elle-même comme après n'importe quel silence — c'est ce
+     * qui garantit à Jean qu'un texte affiché correspond toujours à quelque
+     * chose qui vient d'être dit.
      */
-    private fun attachTranscriptionSink(track: AudioTrack) {
-        if (remoteAudioSinkAttached) return
-        remoteAudioSinkAttached = true
+    fun setMicToRoom(enabled: Boolean) {
+        if (micToRoom == enabled) return
+        micToRoom = enabled
+        // La session en cours écoutait l'autre source : on la ferme, la
+        // suivante s'ouvrira au premier bloc audio de la nouvelle.
+        stopTranscriber()
+    }
+
+    private fun stopTranscriber() {
+        transcriber?.stop()
+        transcriber = null
+    }
+
+    /**
+     * Branche AssemblyAI sur une des deux pistes audio de l'appel : celle
+     * reçue du proche (dès qu'elle arrive, voir onTrack) et celle du
+     * microphone de la tablette (créée par startLocalMedia). Les deux sont
+     * reliées en permanence, mais une seule alimente la transcription à un
+     * instant donné — voir setMicToRoom.
+     *
+     * Le transcripteur n'est créé qu'au premier bloc audio reçu, pour
+     * connaître la fréquence d'échantillonnage réelle plutôt que de la deviner
+     * à l'avance.
+     */
+    private fun attachTranscriptionSink(track: AudioTrack, isLocalMicrophone: Boolean) {
         track.addSink(object : AudioTrackSink {
             override fun onData(
                 audioData: ByteBuffer,
@@ -254,18 +294,23 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                 numberOfFrames: Int,
                 absoluteCaptureTimestampMs: Long,
             ) {
-                // Confirme, une seule fois, que ce sink reçoit bien de l'audio
-                // — sans outil pour consulter le journal système sur la
-                // tablette, impossible autrement de savoir si AudioTrackSink
-                // fonctionne ici comme prévu ou reste silencieux.
-                if (!hasReportedFirstAudio) {
-                    hasReportedFirstAudio = true
+                // Confirme, une seule fois par source, que ce sink reçoit bien
+                // de l'audio — sans outil pour consulter le journal système sur
+                // la tablette, impossible autrement de savoir si AudioTrackSink
+                // fonctionne ici comme prévu ou reste silencieux. Le cas du
+                // microphone local est le plus incertain des deux : rien ne
+                // garantit que la bibliothèque WebRTC alimente les sinks d'une
+                // piste locale comme elle le fait pour une piste reçue.
+                val source = if (isLocalMicrophone) "micro tablette" else "appel"
+                if (reportedAudioSources.add(source)) {
                     callId?.let {
-                        signaling.reportCaptionDebug(it, "audio reçu (${sampleRate}Hz, ${numberOfChannels}ch)")
+                        signaling.reportCaptionDebug(it, "audio $source reçu (${sampleRate}Hz, ${numberOfChannels}ch)")
                     }
                 }
+
                 if (!captionsActive) return
-                val onText = transcriptionOnText ?: return
+                if (isLocalMicrophone != micToRoom) return
+                val onText = (if (isLocalMicrophone) transcriptionOnRoomText else transcriptionOnCallText) ?: return
                 val apiKey = AdminConfig(context).assemblyAiApiKey
                 if (apiKey.isBlank()) {
                     callId?.let { signaling.reportCaptionDebug(it, "clé API AssemblyAI absente") }
@@ -307,10 +352,22 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         captionModeListener = signaling.listenForCaptionMode(id, onEnabled)
     }
 
-    /** Écoute la taille de texte des sous-titres choisie à distance par le proche depuis le PWA. */
-    fun listenForCaptionTextSize(onSizeSp: (Float) -> Unit) {
+    /** Écoute le nombre de lignes visibles choisi à distance par le proche (voir RollingCaptionZone.setVisibleLines). */
+    fun listenForCaptionVisibleLines(onLines: (Int) -> Unit) {
         val id = callId ?: return
-        captionTextSizeListener = signaling.listenForCaptionTextSize(id) { size -> onSizeSp(size.toFloat()) }
+        captionVisibleLinesListener = signaling.listenForCaptionVisibleLines(id) { lines -> onLines(lines.roundToInt()) }
+    }
+
+    /** Écoute le délai (en secondes) sans nouvelle parole avant effacement du texte. */
+    fun listenForCaptionClearDelay(onSeconds: (Int) -> Unit) {
+        val id = callId ?: return
+        captionClearDelayListener = signaling.listenForCaptionClearDelay(id) { seconds -> onSeconds(seconds.roundToInt()) }
+    }
+
+    /** Écoute la demande de basculer la transcription sur le microphone de la tablette (voir setMicToRoom). */
+    fun listenForMicToRoom(onEnabled: (Boolean) -> Unit) {
+        val id = callId ?: return
+        micToRoomListener = signaling.listenForMicToRoom(id, onEnabled)
     }
 
     /**
@@ -624,7 +681,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                     val initialVolume = if (sameRoomMode) 0.0 else pendingVolume
                     track.setVolume(initialVolume)
                     currentVolume = initialVolume
-                    attachTranscriptionSink(track)
+                    attachTranscriptionSink(track, isLocalMicrophone = false)
                 }
             }
 
@@ -678,6 +735,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         // arrivée (mode soignant) : rien ne doit sortir du micro de la tablette,
         // pas même le temps d'un instantané Firestore.
         audioTrack.setEnabled(!pendingMicMuted)
+        // Reliée en permanence, mais n'alimente la transcription que si
+        // l'appelant a demandé d'écouter la pièce (voir setMicToRoom).
+        attachTranscriptionSink(audioTrack, isLocalMicrophone = true)
 
         pc.addTrack(videoTrack, listOf("SVIO_STREAM"))
         pc.addTrack(audioTrack, listOf("SVIO_STREAM"))
@@ -711,12 +771,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private fun cleanup() {
         cancelScheduledAutoHangup()
         restoreAudio()
-        transcriber?.stop()
-        transcriber = null
-        transcriptionOnText = null
+        stopTranscriber()
+        transcriptionOnCallText = null
+        transcriptionOnRoomText = null
         captionsActive = false
-        remoteAudioSinkAttached = false
-        hasReportedFirstAudio = false
+        micToRoom = false
+        reportedAudioSources.clear()
         micMuteListener?.remove()
         micMuteListener = null
         sameRoomListener?.remove()
@@ -730,8 +790,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         volumeListener = null
         captionModeListener?.remove()
         captionModeListener = null
-        captionTextSizeListener?.remove()
-        captionTextSizeListener = null
+        captionVisibleLinesListener?.remove()
+        captionVisibleLinesListener = null
+        captionClearDelayListener?.remove()
+        captionClearDelayListener = null
+        micToRoomListener?.remove()
+        micToRoomListener = null
         captionScrollSpeedListener?.remove()
         captionScrollSpeedListener = null
         selfPreviewListener?.remove()

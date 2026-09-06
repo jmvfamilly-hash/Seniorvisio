@@ -48,13 +48,14 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
      * onText(text, isFinal) : isFinal distingue un texte encore provisoire
      * (revu au mot près pendant que la phrase continue) d'un texte
      * définitivement figé — utile pour accumuler un historique (voir
-     * PacedCaptionZone) sans y empiler chaque révision intermédiaire de la
-     * même phrase, et pour savoir quand une phrase est réellement close et
-     * peut prendre son tour dans la file d'affichage.
+     * RollingCaptionZone). L'affichage actuel, à défilement continu, n'en a
+     * pas besoin — il suit la parole telle qu'elle arrive, révisions
+     * comprises — mais l'information est conservée : elle est gratuite, et
+     * tout affichage qui raisonnerait par phrase en dépendrait.
      */
     fun start(onText: (String, Boolean) -> Unit, onError: (String) -> Unit = {}) {
         val request = Request.Builder()
-            .url("$REALTIME_URL?sample_rate=$TARGET_SAMPLE_RATE_HZ&encoding=pcm_s16le")
+            .url("$REALTIME_URL?sample_rate=$TARGET_SAMPLE_RATE_HZ&encoding=pcm_s16le&speech_model=$SPEECH_MODEL")
             .addHeader("Authorization", apiKey)
             .build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -171,6 +172,21 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) {
     companion object {
         private const val TAG = "AssemblyAiRealtime"
         private const val REALTIME_URL = "wss://streaming.assemblyai.com/v3/ws"
+
+        /**
+         * Sans ce modèle, AssemblyAI transcrit en ANGLAIS : c'est son réglage
+         * par défaut en streaming, et rien dans la réponse ne le signale. On
+         * lui envoyait donc du français à transcrire en anglais depuis le
+         * premier jour — de quoi expliquer l'essentiel de ce qui a été pris
+         * pour un problème de qualité audio.
+         *
+         * Ce modèle reconnaît six langues (anglais, espagnol, français,
+         * allemand, italien, portugais) et détecte seul celle qui est parlée ;
+         * il n'existe pas, à la connaissance actuelle, de moyen de le figer
+         * sur le français uniquement en streaming. À ajouter si AssemblyAI
+         * l'expose un jour : ici, personne ne parle autre chose.
+         */
+        private const val SPEECH_MODEL = "universal-streaming-multilingual"
         private const val TARGET_SAMPLE_RATE_HZ = 16_000
 
         // 100ms à 16 kHz mono 16 bits (16000 × 2 octets × 0,1s) : dans la

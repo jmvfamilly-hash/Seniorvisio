@@ -296,9 +296,14 @@ class RealCallEngine extends CallEngine {
         // confort habituel sans que le proche ait à retoucher chaque curseur.
         remoteVolume: initialSettings.remoteVolume ?? 1,
         captionModeEnabled: initialSettings.captionModeEnabled ?? false,
-        captionTextSize: initialSettings.captionTextSize ?? 56,
+        captionVisibleLines: initialSettings.captionVisibleLines ?? 2,
+        captionClearDelaySeconds: initialSettings.captionClearDelaySeconds ?? 30,
         captionMaxScrollSpeedDpPerSec: initialSettings.captionMaxScrollSpeedDpPerSec ?? 50,
         selfPreviewEnabled: initialSettings.selfPreviewEnabled ?? false,
+        // Remise à faux à chaque appel, comme le mode même pièce : une
+        // transcription restée sur la pièce d'un appel précédent laisserait
+        // l'appelant parler sans que rien ne s'écrive de ce qu'il dit.
+        micToRoom: false,
         // Remis à faux à chaque appel : un mode "même pièce" resté actif d'un
         // appel précédent laisserait Jean sans aucun son, sans que personne ne
         // comprenne pourquoi.
@@ -509,10 +514,38 @@ class RealCallEngine extends CallEngine {
     }
   }
 
-  /** Règle à distance la taille (en sp) du texte des sous-titres géants côté tablette. */
-  async setCaptionTextSize(sizeSp) {
+  /**
+   * Règle à distance le nombre de lignes visibles avant défilement chez Jean.
+   * Commande indirectement la taille du texte : les zones occupent une place
+   * fixe sur son écran, c'est donc la police qui s'ajuste pour que ce nombre
+   * de lignes y tienne (voir RollingCaptionZone.setVisibleLines) — moins de
+   * lignes, texte plus gros.
+   */
+  async setCaptionVisibleLines(lines) {
     if (this._callDocRef) {
-      await this._callDocRef.update({ captionTextSize: sizeSp }).catch(() => {});
+      await this._callDocRef.update({ captionVisibleLines: lines }).catch(() => {});
+    }
+  }
+
+  /** Règle à distance le délai (en secondes) sans nouvelle parole avant effacement du texte. */
+  async setCaptionClearDelay(seconds) {
+    if (this._callDocRef) {
+      await this._callDocRef.update({ captionClearDelaySeconds: seconds }).catch(() => {});
+    }
+  }
+
+  /**
+   * Demande que la transcription écoute la pièce de Jean plutôt que la voix de
+   * l'appelant (voir WebRtcCallEngine.setMicToRoom côté Android) — pour suivre
+   * par écrit ce que dit quelqu'un présent auprès de lui.
+   *
+   * Seule la source de la transcription bascule : le son continue de circuler
+   * dans les deux sens, l'appelant peut donc parler avec cette personne
+   * pendant tout ce temps.
+   */
+  async setMicToRoom(enabled) {
+    if (this._callDocRef) {
+      await this._callDocRef.update({ micToRoom: enabled }).catch(() => {});
     }
   }
 

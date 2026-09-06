@@ -294,6 +294,41 @@ video {
   margin-bottom: 12px;
 }
 
+/* Rappel permanent tant que la transcription écoute la pièce de Jean plutôt
+   que la voix de l'appelant (voir app.js, setMicToRoom). Franc et non
+   discret : sans lui, l'appelant parle sans comprendre pourquoi rien ne
+   s'écrit de ce qu'il dit. */
+.mic-to-room-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #4A3A1E;
+  border: 1px solid #8A6D2F;
+  text-align: left;
+}
+
+.mic-to-room-banner.hidden { display: none; }
+
+.mic-to-room-banner p {
+  flex: 1 1 180px;
+  margin: 0;
+  color: #F5E6C8;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.mic-to-room-banner button {
+  margin: 0;
+  font-size: 15px;
+  padding: 10px 16px;
+}
+
+#micToRoomControl.hidden { display: none; }
+
 /* Onglet visio : le PWA passe en pleine page, sans titre ni marges — la
    réplique de l'écran de Jean est le sujet, pas un aperçu parmi d'autres. */
 body.video-mode #app {

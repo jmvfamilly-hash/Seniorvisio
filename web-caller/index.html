@@ -115,6 +115,16 @@
         </div>
 
         <p class="hint" id="mirrorHint">👆 Exactement ce que Jean a sous les yeux en ce moment</p>
+
+        <!-- Rappel permanent tant que la transcription écoute la pièce : sans
+             lui, l'appelant parle dans le vide sans comprendre pourquoi rien
+             ne s'écrit de ce qu'il dit. Le bouton ramène la transcription sur
+             sa voix sans avoir à rouvrir les réglages. -->
+        <div class="mic-to-room-banner hidden" id="micToRoomBanner">
+          <p>👂 La transcription écoute la pièce de Jean, pas votre voix.</p>
+          <button id="micToRoomBackButton" class="secondary">Réécouter ma voix</button>
+        </div>
+
         <p class="caption-overflow-indicator hidden" id="captionOverflowIndicator"></p>
         <!-- Diagnostic temporaire de la transcription temps réel AssemblyAI
              côté tablette (voir WebRtcCallEngine.attachTranscriptionSink),
@@ -176,14 +186,37 @@
           </label>
         </div>
 
+        <!-- Un seul réglage là où il y en avait deux qui se contredisaient :
+             les zones occupent une place fixe sur l'écran de Jean, donc moins
+             de lignes veut dire un texte plus gros (voir
+             RollingCaptionZone.setVisibleLines côté Android). -->
         <div class="volume-control">
-          <label for="textSizeSlider">🔠 Taille du texte chez Jean</label>
-          <input type="range" id="textSizeSlider" min="24" max="100" value="56" step="4">
+          <label for="captionLinesSlider">📏 Lignes affichées chez Jean (moins = plus gros)</label>
+          <input type="range" id="captionLinesSlider" min="1" max="4" value="2" step="1">
         </div>
 
         <div class="volume-control">
           <label for="scrollSpeedSlider">🐢🐇 Vitesse de défilement max chez Jean</label>
           <input type="range" id="scrollSpeedSlider" min="20" max="100" value="50" step="10">
+        </div>
+
+        <div class="volume-control">
+          <label for="captionClearDelaySlider">⏱️ Efface après ce temps sans parole (secondes)</label>
+          <input type="range" id="captionClearDelaySlider" min="1" max="60" value="30" step="1">
+        </div>
+
+        <!-- Quelqu'un est entré dans la chambre de Jean et lui parle : ce
+             bouton fait écouter la pièce à la transcription plutôt que la voix
+             de l'appelant, pour que Jean puisse suivre cette conversation-là
+             par écrit. Le son continue de circuler dans les deux sens —
+             l'appelant peut donc parler avec la personne présente. Sans objet
+             en mode même pièce, où l'appelant EST cette personne : masqué là. -->
+        <div class="caption-control" id="micToRoomControl">
+          <label>
+            <input type="checkbox" id="micToRoomToggle">
+            👂 Écrire chez Jean ce qui se dit dans sa pièce (au lieu de ma voix)
+          </label>
+          <p class="hint" id="micToRoomStatus"></p>
         </div>
 
         <button id="rememberSettingsButton" class="secondary">💾 Mémoriser ces réglages pour la prochaine fois</button>

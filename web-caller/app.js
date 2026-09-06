@@ -36,8 +36,9 @@ const DEFAULT_SETTINGS = {
   volume: 100,
   captionEnabled: false,
   selfPreview: false,
-  textSize: 56,
   scrollSpeed: 50,
+  captionVisibleLines: 2,
+  captionClearDelaySeconds: 30,
 };
 
 // --- Identité de l'appelant, mémorisée dans ce navigateur uniquement ---
@@ -121,8 +122,9 @@ function currentSettingsFromUi() {
     volume: Number(els.volumeSlider.value),
     captionEnabled: els.captionToggle.checked,
     selfPreview: els.selfPreviewToggle.checked,
-    textSize: Number(els.textSizeSlider.value),
     scrollSpeed: Number(els.scrollSpeedSlider.value),
+    captionVisibleLines: Number(els.captionLinesSlider.value),
+    captionClearDelaySeconds: Number(els.captionClearDelaySlider.value),
   };
 }
 
@@ -130,8 +132,9 @@ function applySettingsToUi(settings) {
   els.volumeSlider.value = settings.volume;
   els.captionToggle.checked = settings.captionEnabled;
   els.selfPreviewToggle.checked = settings.selfPreview;
-  els.textSizeSlider.value = settings.textSize;
   els.scrollSpeedSlider.value = settings.scrollSpeed;
+  els.captionLinesSlider.value = settings.captionVisibleLines;
+  els.captionClearDelaySlider.value = settings.captionClearDelaySeconds;
 }
 
 // --- Câblage UI ---
@@ -169,8 +172,14 @@ const els = {
   sameRoomStatus: document.getElementById("sameRoomStatus"),
   slideshowStatus: document.getElementById("slideshowStatus"),
   selfPreviewToggle: document.getElementById("selfPreviewToggle"),
-  textSizeSlider: document.getElementById("textSizeSlider"),
   scrollSpeedSlider: document.getElementById("scrollSpeedSlider"),
+  captionLinesSlider: document.getElementById("captionLinesSlider"),
+  captionClearDelaySlider: document.getElementById("captionClearDelaySlider"),
+  micToRoomControl: document.getElementById("micToRoomControl"),
+  micToRoomToggle: document.getElementById("micToRoomToggle"),
+  micToRoomStatus: document.getElementById("micToRoomStatus"),
+  micToRoomBanner: document.getElementById("micToRoomBanner"),
+  micToRoomBackButton: document.getElementById("micToRoomBackButton"),
   callingHint: document.getElementById("callingHint"),
   countdownFill: document.getElementById("countdownFill"),
   countdownText: document.getElementById("countdownText"),
@@ -304,6 +313,10 @@ els.callButton.addEventListener("click", async () => {
   els.sameRoomToggle.checked = false;
   els.sameRoomStatus.textContent = "";
   els.volumeSlider.disabled = false;
+  els.micToRoomControl.classList.remove("hidden");
+  els.micToRoomToggle.checked = false;
+  els.micToRoomBanner.classList.add("hidden");
+  els.micToRoomStatus.textContent = "";
   els.captionOverflowIndicator.classList.add("hidden");
   els.captionDebugIndicator.classList.add("hidden");
   // La réplique de l'écran de Jean repart vide : les textes du dernier appel
@@ -327,7 +340,8 @@ els.callButton.addEventListener("click", async () => {
       // Les sous-titres sont toute la raison d'être de ce mode : activés
       // d'office, jamais à cocher.
       captionModeEnabled: true,
-      captionTextSize: DEFAULT_SETTINGS.textSize,
+      captionVisibleLines: DEFAULT_SETTINGS.captionVisibleLines,
+      captionClearDelaySeconds: DEFAULT_SETTINGS.captionClearDelaySeconds,
       captionMaxScrollSpeedDpPerSec: DEFAULT_SETTINGS.scrollSpeed,
       selfPreviewEnabled: false,
       // Ni décompte, ni photo, ni caméra : voir le commentaire de CAREGIVER_MODE.
@@ -346,7 +360,8 @@ els.callButton.addEventListener("click", async () => {
     await engine.startCall(CONFIG.targetDeviceId, identity.name || CONFIG.callerName, {
       remoteVolume: settings.volume / 100,
       captionModeEnabled: settings.captionEnabled,
-      captionTextSize: settings.textSize,
+      captionVisibleLines: settings.captionVisibleLines,
+      captionClearDelaySeconds: settings.captionClearDelaySeconds,
       captionMaxScrollSpeedDpPerSec: settings.scrollSpeed,
       selfPreviewEnabled: settings.selfPreview,
       callerPhotoBase64: identity.photoBase64 || null,
@@ -409,11 +424,19 @@ engine.onCaptionDebug((message) => {
   els.captionDebugIndicator.classList.remove("hidden");
 });
 
-let textSizeDebounce = null;
-els.textSizeSlider.addEventListener("input", () => {
-  clearTimeout(textSizeDebounce);
-  textSizeDebounce = setTimeout(() => {
-    engine.setCaptionTextSize(Number(els.textSizeSlider.value));
+let captionLinesDebounce = null;
+els.captionLinesSlider.addEventListener("input", () => {
+  clearTimeout(captionLinesDebounce);
+  captionLinesDebounce = setTimeout(() => {
+    engine.setCaptionVisibleLines(Number(els.captionLinesSlider.value));
+  }, 150);
+});
+
+let captionClearDelayDebounce = null;
+els.captionClearDelaySlider.addEventListener("input", () => {
+  clearTimeout(captionClearDelayDebounce);
+  captionClearDelayDebounce = setTimeout(() => {
+    engine.setCaptionClearDelay(Number(els.captionClearDelaySlider.value));
   }, 150);
 });
 
@@ -680,7 +703,33 @@ els.sameRoomToggle.addEventListener("change", () => {
   els.sameRoomStatus.textContent = sameRoom
     ? "Son de la tablette entièrement coupé. Vos paroles continuent de s'écrire chez Jean."
     : "";
+  // Sans objet quand on est déjà dans la pièce : la personne qui parle à Jean,
+  // c'est soi, et son micro est justement coupé.
+  els.micToRoomControl.classList.toggle("hidden", sameRoom);
+  if (sameRoom && els.micToRoomToggle.checked) setMicToRoom(false);
 });
+
+// Quelqu'un est entré dans la chambre de Jean et lui parle : la transcription
+// écoute la pièce plutôt que la voix de l'appelant, pour que Jean puisse
+// suivre cette conversation-là par écrit. Le son continue de circuler dans les
+// deux sens — l'appelant peut donc parler avec la personne présente pendant ce
+// temps, c'est même tout l'intérêt.
+//
+// Côté Jean, la zone d'appel n'est pas masquée : elle perd sa source et
+// s'efface d'elle-même après le délai habituel, exactement comme après un
+// silence. Les deux zones gardent leur place, il retrouve donc toujours
+// chaque chose au même endroit.
+function setMicToRoom(enabled) {
+  els.micToRoomToggle.checked = enabled;
+  engine.setMicToRoom(enabled);
+  els.micToRoomBanner.classList.toggle("hidden", !enabled);
+  els.micToRoomStatus.textContent = enabled
+    ? "Jean lit ce qui se dit autour de lui. Vous restez audible et pouvez lui parler, mais vos paroles ne s'écrivent plus."
+    : "";
+}
+
+els.micToRoomToggle.addEventListener("change", () => setMicToRoom(els.micToRoomToggle.checked));
+els.micToRoomBackButton.addEventListener("click", () => setMicToRoom(false));
 
 els.hangupButton.addEventListener("click", async () => {
   await engine.cancelCall();
