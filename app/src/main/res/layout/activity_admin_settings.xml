@@ -276,6 +276,49 @@
         android:text="Sensibilité (plus petit = plus sensible, ex. 1000)"
         android:textSize="14sp" />
 
+    <!-- Blocage nocturne du réveil, DÉSACTIVÉ par défaut (voir
+         AdminConfig.blockWakeAtNight). Une chambre où l'on parle à trois
+         heures du matin est justement le moment où Jean a le plus besoin de
+         lire ce qui se dit — un soignant qui entre, quelqu'un qui l'appelle.
+         À cocher ici seulement si la lumière de la dalle finit par gêner le
+         sommeil, ce qui dépend de la pièce et de la personne. -->
+    <CheckBox
+        android:id="@+id/checkboxBlockWakeAtNight"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Ne pas réveiller l'écran la nuit" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Nuit : de … h à … h (heures, 0 à 23)"
+        android:textSize="14sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <EditText
+            android:id="@+id/inputNightStartHour"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:hint="Début"
+            android:inputType="number" />
+
+        <EditText
+            android:id="@+id/inputNightEndHour"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:hint="Fin"
+            android:inputType="number" />
+    </LinearLayout>
+
     <EditText
         android:id="@+id/inputRoomWakeThreshold"
         android:layout_width="match_parent"

@@ -91,7 +91,7 @@ class AdminSettingsActivity : AppCompatActivity() {
             appendLine("Capture micro : ${if (status.capturing) "active" else "ARRÊTÉE"}")
             status.captureError?.let { appendLine("  ⚠️ $it") }
             appendLine("Réveil au son : ${if (status.wakeEnabled) "activé" else "DÉSACTIVÉ"}")
-            appendLine("Fenêtre de nuit : ${if (status.inNightWindow) "OUI (réveil suspendu)" else "non"}")
+            appendLine("Réveil bloqué par la nuit : ${if (status.inNightWindow) "OUI" else "non"}")
             appendLine("Écran allumé : ${if (status.screenOn) "oui" else "non"}")
             appendLine("Verrou de réveil tenu : ${if (status.wakeLockHeld) "oui" else "non"}")
             appendLine("Rallumages demandés : ${status.wakeRequests}")
@@ -143,12 +143,18 @@ class AdminSettingsActivity : AppCompatActivity() {
 
         val inputAssemblyAiKey = findViewById<EditText>(R.id.inputAssemblyAiKey)
         val checkboxRoomWakeEnabled = findViewById<CheckBox>(R.id.checkboxRoomWakeEnabled)
+        val checkboxBlockWakeAtNight = findViewById<CheckBox>(R.id.checkboxBlockWakeAtNight)
+        val inputNightStartHour = findViewById<EditText>(R.id.inputNightStartHour)
+        val inputNightEndHour = findViewById<EditText>(R.id.inputNightEndHour)
         val inputRoomWakeThreshold = findViewById<EditText>(R.id.inputRoomWakeThreshold)
 
         inputCountdown.setText(adminConfig.countdownSeconds.toString())
         inputPin.setText(adminConfig.adminPin)
         inputAssemblyAiKey.setText(adminConfig.assemblyAiApiKey)
         checkboxRoomWakeEnabled.isChecked = adminConfig.roomWakeEnabled
+        checkboxBlockWakeAtNight.isChecked = adminConfig.blockWakeAtNight
+        inputNightStartHour.setText(adminConfig.nightStartHour.toString())
+        inputNightEndHour.setText(adminConfig.nightEndHour.toString())
         inputRoomWakeThreshold.setText(adminConfig.roomWakeSensitivityThreshold.toString())
 
         // Ordre d'empilement des trois zones de l'écran de Jean (voir
@@ -174,6 +180,17 @@ class AdminSettingsActivity : AppCompatActivity() {
             adminConfig.assemblyAiApiKey = inputAssemblyAiKey.text.toString().trim()
             adminConfig.zoneOrder = zoneOrders[spinnerZoneOrder.selectedItemPosition]
             adminConfig.roomWakeEnabled = checkboxRoomWakeEnabled.isChecked
+            adminConfig.blockWakeAtNight = checkboxBlockWakeAtNight.isChecked
+            // Une heure hors 0-23 est ignorée plutôt que rejetée : l'admin
+            // corrige rarement un champ qu'il vient de quitter, et perdre les
+            // autres réglages du formulaire pour une faute de frappe sur
+            // celui-ci serait disproportionné.
+            inputNightStartHour.text.toString().toIntOrNull()?.let {
+                if (it in 0..23) adminConfig.nightStartHour = it
+            }
+            inputNightEndHour.text.toString().toIntOrNull()?.let {
+                if (it in 0..23) adminConfig.nightEndHour = it
+            }
             inputRoomWakeThreshold.text.toString().toIntOrNull()?.let {
                 if (it > 0) adminConfig.roomWakeSensitivityThreshold = it
             }

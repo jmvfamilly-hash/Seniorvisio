@@ -105,7 +105,7 @@ class RoomPresenceService : Service() {
         lastRms = lastRms,
         threshold = adminConfig.roomWakeSensitivityThreshold,
         wakeEnabled = adminConfig.roomWakeEnabled,
-        inNightWindow = adminConfig.nightModeEnabled &&
+        inNightWindow = adminConfig.blockWakeAtNight &&
             adminConfig.isCurrentlyNightWindow(LocalDateTime.now().hour),
         wakeLockHeld = wakeLock?.isHeld == true,
         screenOn = (getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive == true,
@@ -359,7 +359,7 @@ class RoomPresenceService : Service() {
     @Suppress("DEPRECATION")
     private fun ensureAwake() {
         if (!adminConfig.roomWakeEnabled) return
-        if (adminConfig.nightModeEnabled && adminConfig.isCurrentlyNightWindow(LocalDateTime.now().hour)) return
+        if (adminConfig.blockWakeAtNight && adminConfig.isCurrentlyNightWindow(LocalDateTime.now().hour)) return
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
 

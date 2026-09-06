@@ -22,12 +22,23 @@ class AdminConfig(context: Context) {
         get() = prefs.getBoolean(KEY_VISUAL_ALERT_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_VISUAL_ALERT_ENABLED, value).apply()
 
-    // --- Mode nuit : silencieux par défaut tant que non désactivé ---
-    var nightModeEnabled: Boolean
-        get() = prefs.getBoolean(KEY_NIGHT_MODE_ENABLED, true)
-        set(value) = prefs.edit().putBoolean(KEY_NIGHT_MODE_ENABLED, value).apply()
+    // --- Blocage du réveil de l'écran pendant la nuit (voir
+    // RoomPresenceService.ensureAwake). Désactivé par défaut : une chambre où
+    // l'on parle à trois heures du matin est justement le moment où Jean a le
+    // plus besoin de lire ce qui se dit — un soignant qui entre, quelqu'un qui
+    // l'appelle. Bloquer par défaut revenait à éteindre la fonction
+    // précisément quand elle sert le plus, et de façon invisible : rien à
+    // l'écran ne disait que c'était l'heure qui l'empêchait.
+    //
+    // À activer sur place si la lumière de la dalle finit par gêner le
+    // sommeil — ce qui dépend de la pièce et de la personne, pas d'une règle
+    // générale. Clé distincte de l'ancienne : le sens du réglage s'inverse,
+    // une valeur enregistrée sous l'ancien nom voudrait dire le contraire. ---
+    var blockWakeAtNight: Boolean
+        get() = prefs.getBoolean(KEY_BLOCK_WAKE_AT_NIGHT, false)
+        set(value) = prefs.edit().putBoolean(KEY_BLOCK_WAKE_AT_NIGHT, value).apply()
 
-    // --- Plage horaire nuit (pour bascule silencieux automatique par défaut) ---
+    // --- Plage horaire considérée comme la nuit (voir blockWakeAtNight) ---
     var nightStartHour: Int
         get() = prefs.getInt(KEY_NIGHT_START_HOUR, 22)
         set(value) = prefs.edit().putInt(KEY_NIGHT_START_HOUR, value).apply()
@@ -104,7 +115,7 @@ class AdminConfig(context: Context) {
     /** Export pratique pour debug/logs à distance. */
     fun toDebugJson(): String = JSONObject().apply {
         put("visualAlertModeEnabled", visualAlertModeEnabled)
-        put("nightModeEnabled", nightModeEnabled)
+        put("blockWakeAtNight", blockWakeAtNight)
         put("nightStartHour", nightStartHour)
         put("nightEndHour", nightEndHour)
         put("countdownSeconds", countdownSeconds)
@@ -113,7 +124,7 @@ class AdminConfig(context: Context) {
 
     companion object {
         private const val KEY_VISUAL_ALERT_ENABLED = "visual_alert_enabled"
-        private const val KEY_NIGHT_MODE_ENABLED = "night_mode_enabled"
+        private const val KEY_BLOCK_WAKE_AT_NIGHT = "block_wake_at_night"
         private const val KEY_NIGHT_START_HOUR = "night_start_hour"
         private const val KEY_NIGHT_END_HOUR = "night_end_hour"
         private const val KEY_COUNTDOWN_SECONDS = "countdown_seconds"
