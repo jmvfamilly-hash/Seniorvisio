@@ -14,7 +14,10 @@
      on ne voit pas pour autant un cadre semi-opaque vide occuper l'écran.
 
      L'ordre des enfants ici est l'ordre par défaut (voir HomeZone) ; il est
-     réappliqué au démarrage depuis le réglage admin, qui peut le changer.
+     réappliqué au démarrage depuis le réglage admin, qui peut le changer —
+     d'où la même marge haute sur les trois plutôt que sur les deux dernières :
+     celle qui se retrouve en premier ne doit pas coller au bord plus que les
+     autres.
 
      Aucune couleur n'est fixée ici : la palette entière (fond des zones,
      couleurs de texte) est posée en code selon l'heure et la luminosité de la
@@ -37,7 +40,8 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:orientation="vertical"
-        android:gravity="center"
+        android:gravity="top|center_horizontal"
+        android:layout_marginTop="8dp"
         android:padding="16dp">
 
         <LinearLayout
@@ -108,7 +112,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="8dp"
         android:orientation="vertical"
         android:padding="20dp"
         android:visibility="invisible"
@@ -141,7 +145,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="8dp"
         android:orientation="vertical"
         android:padding="20dp"
         android:visibility="invisible"

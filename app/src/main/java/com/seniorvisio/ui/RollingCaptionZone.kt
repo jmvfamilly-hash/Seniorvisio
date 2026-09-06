@@ -62,7 +62,7 @@ class RollingCaptionZone(
         // ferait disparaître du texte sans moyen de le retrouver.
         scrollView.setOnTouchListener { _, _ -> true }
         container.alpha = 0f
-        container.visibility = View.GONE
+        container.visibility = View.INVISIBLE
         // La taille de police se déduit de la hauteur réelle de la zone, qui
         // n'est connue qu'une fois la mise en page faite — et qui change à
         // chaque rotation.
@@ -208,11 +208,18 @@ class RollingCaptionZone(
         container.animate().alpha(1f).setDuration(FADE_MS).start()
     }
 
+    /**
+     * INVISIBLE et jamais GONE : une zone en GONE sort de la mise en page, et
+     * les deux autres se partagent alors sa place — la zone d'appel occupait
+     * ainsi la moitié basse de l'écran dès que celle de la pièce était vide,
+     * au lieu du tiers du bas. Invisible, elle garde sa place : rien ne bouge
+     * jamais, et Jean retrouve toujours chaque chose au même endroit.
+     */
     private fun hide() {
-        if (container.visibility == View.GONE) return
+        if (container.visibility == View.INVISIBLE) return
         container.animate().cancel()
         container.animate().alpha(0f).setDuration(FADE_MS)
-            .withEndAction { container.visibility = View.GONE }
+            .withEndAction { container.visibility = View.INVISIBLE }
             .start()
     }
 

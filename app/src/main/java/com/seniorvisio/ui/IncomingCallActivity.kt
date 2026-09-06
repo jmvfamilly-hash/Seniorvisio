@@ -29,6 +29,7 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.KioskManager
+import com.seniorvisio.core.ScreenTheme
 import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.service.IncomingCallService
@@ -192,6 +193,7 @@ class IncomingCallActivity : AppCompatActivity() {
                 // vidéo ne le recouvrent — d'où une palette qui sert surtout
                 // aux premières secondes de la sonnerie.
                 findViewById<View>(R.id.callRoot).setBackgroundColor(palette.background)
+                applyPaletteToAlert(palette)
                 screenIsDark = palette.isDark
                 publishScreenLayout()
             },
@@ -325,6 +327,27 @@ class IncomingCallActivity : AppCompatActivity() {
             },
             onTimeoutConnect = { connectVideoCall() },
             onBlocked = { /* déclenché via le bouton, voir ci-dessus */ }
+        )
+    }
+
+    /**
+     * Le nom de l'appelant, la barre d'attente et sa légende suivent la
+     * palette du moment. Leurs couleurs étaient écrites en dur du temps où le
+     * fond était toujours bleu foncé : sur la palette claire du jour, l'écran
+     * de sonnerie devenait du blanc sur blanc — un écran entièrement vide, avec
+     * seulement le son de notification pour dire qu'il se passait quelque
+     * chose.
+     *
+     * La piste du décompte est dessinée en code plutôt que teintée : sa
+     * couleur doit rester lisible aussi bien sur fond clair que sombre, ce
+     * qu'une teinte unique ne permet pas. Le vert de remplissage, lui, ne
+     * bouge pas — il contraste avec les deux.
+     */
+    private fun applyPaletteToAlert(palette: ScreenTheme.Palette) {
+        findViewById<TextView>(R.id.textCallerName).setTextColor(palette.primaryText)
+        findViewById<TextView>(R.id.textCountdownHint).setTextColor(palette.secondaryText)
+        findViewById<View>(R.id.countdownProgressContainer).setBackgroundColor(
+            if (palette.isDark) COUNTDOWN_TRACK_ON_DARK else COUNTDOWN_TRACK_ON_LIGHT
         )
     }
 
@@ -724,6 +747,10 @@ class IncomingCallActivity : AppCompatActivity() {
         private const val TAG = "IncomingCallActivity"
 
         /** Cadence de publication de l'état de l'écran de Jean vers le PWA (voir publishScreenStateIfChanged). */
+        /** Piste du décompte : un voile clair sur fond sombre, sombre sur fond clair. */
+        private const val COUNTDOWN_TRACK_ON_DARK = 0x33FFFFFF
+        private const val COUNTDOWN_TRACK_ON_LIGHT = 0x22000000
+
         private const val SCREEN_STATE_PUBLISH_MS = 1_000L
         private const val LAG_PUBLISH_THRESHOLD_SECONDS = 0.5f
 

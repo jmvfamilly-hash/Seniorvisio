@@ -77,12 +77,16 @@
         android:gravity="center"
         android:padding="32dp">
 
+        <!-- Aucune couleur fixée sur ces trois éléments : elles suivent la
+             palette du moment (voir IncomingCallActivity, onPalette). Écrites
+             en dur, elles dataient du fond bleu foncé permanent — sur la
+             palette claire du jour, l'écran de sonnerie devenait du blanc sur
+             blanc, sans nom d'appelant ni barre d'attente visibles. -->
         <TextView
             android:id="@+id/textCallerName"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Appel de..."
-            android:textColor="#FFFFFF"
             android:textSize="48sp"
             android:textStyle="bold"
             android:gravity="center" />
@@ -95,8 +99,7 @@
             android:id="@+id/countdownProgressContainer"
             android:layout_width="280dp"
             android:layout_height="10dp"
-            android:layout_marginTop="28dp"
-            android:background="#33FFFFFF">
+            android:layout_marginTop="28dp">
 
             <View
                 android:id="@+id/countdownProgressFill"
@@ -106,11 +109,11 @@
         </FrameLayout>
 
         <TextView
+            android:id="@+id/textCountdownHint"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="La visio démarre automatiquement"
-            android:textColor="#999999"
             android:textSize="18sp"
             android:gravity="center" />
 
