@@ -1,12 +1,17 @@
 package com.seniorvisio.ui
 
 import android.app.NotificationManager
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
 import android.util.Base64
 import android.util.Log
@@ -24,7 +29,7 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.KioskManager
-import com.seniorvisio.core.SameRoomDetector
+import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.service.IncomingCallService
 import com.seniorvisio.service.RoomPresenceService
@@ -88,8 +93,42 @@ class IncomingCallActivity : AppCompatActivity() {
     private var screenIsDark = true
     private var lastInfo: HomeZonesController.InfoSnapshot? = null
 
-    /** Actif pendant la sonnerie uniquement (voir SameRoomDetector). */
-    private var sameRoomDetector: SameRoomDetector? = null
+    private var roomService: RoomPresenceService? = null
+
+    /**
+     * Pendant la sonnerie, le microphone appartient encore au service d'écoute
+     * de la pièce : la zone 2 continue donc de fonctionner exactement comme sur
+     * l'écran d'accueil, et Jean voit ce qui se dit autour de lui pendant que
+     * la tablette sonne. Le micro ne change de main qu'au décrochage (voir
+     * connectVideoCall), où c'est WebRTC qui le réclame.
+     */
+    private val roomConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            if (isConnected) return
+            val service = (binder as? RoomPresenceService.LocalBinder)?.getService() ?: return
+            roomService = service
+            service.startRoomTranscription(
+                onText = { text, isFinal ->
+                    runOnUiThread { zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal) }
+                },
+            )
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            roomService = null
+        }
+    }
+
+    private var boundToRoomService = false
+
+    /** Rend le micro au moment où WebRTC en a besoin, ou à la fin de l'écran. */
+    private fun stopRoomTranscription() {
+        roomService?.stopRoomTranscription()
+        roomService = null
+        if (!boundToRoomService) return
+        boundToRoomService = false
+        unbindService(roomConnection)
+    }
 
     private val screenStateHandler = Handler(Looper.getMainLooper())
     private val screenStatePublisher = object : Runnable {
@@ -103,11 +142,6 @@ class IncomingCallActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         adminConfig = AdminConfig(this)
         callEngine = WebRtcCallEngine(applicationContext)
-        // Le micro ne peut servir qu'à un composant à la fois : suspendu ici
-        // (avant même la connexion WebRTC) plutôt qu'à la réponse effective,
-        // pour ne jamais se disputer le micro avec RoomPresenceService le
-        // temps d'une bascule. Repris dans onDestroy.
-        RoomPresenceService.pauseForCall(this)
 
         // Réveille l'écran et l'affiche même si verrouillé, sans son.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -276,17 +310,6 @@ class IncomingCallActivity : AppCompatActivity() {
             }
         }
 
-        // Écoute la balise sonore inaudible émise par le téléphone de
-        // l'appelant (voir SameRoomDetector) pendant toute la sonnerie —
-        // seule fenêtre de l'appel où le microphone est libre : WebRTC ne le
-        // prendra qu'à l'acceptation, et RoomPresenceService est déjà
-        // suspendu (voir plus haut). Arrêté dans connectVideoCall, avant que
-        // WebRTC ne réclame le micro.
-        sameRoomDetector = SameRoomDetector {
-            Log.i(TAG, "Balise de proximité reconnue : le proche est dans la pièce")
-            callEngine.reportSameRoomDetected()
-        }.apply { start() }
-
         val durationSeconds = adminConfig.countdownSeconds
         callEngine.signalAlertStarted(durationSeconds)
         playDiscreetAlertSound()
@@ -308,6 +331,11 @@ class IncomingCallActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         zones.onResume()
+        if (!isConnected && !boundToRoomService) {
+            boundToRoomService = bindService(
+                Intent(this, RoomPresenceService::class.java), roomConnection, Context.BIND_AUTO_CREATE
+            )
+        }
     }
 
     override fun onPause() {
@@ -380,7 +408,10 @@ class IncomingCallActivity : AppCompatActivity() {
     private fun showSlideshowPhoto(photoBase64: String?) {
         val imageSlideshow = findViewById<ImageView>(R.id.imageSlideshow)
         if (photoBase64.isNullOrEmpty()) {
-            runOnUiThread { imageSlideshow.visibility = View.GONE }
+            runOnUiThread {
+                imageSlideshow.visibility = View.GONE
+                zones.setBackground(HomeZonesController.Background.VIDEO)
+            }
             return
         }
         Thread {
@@ -394,6 +425,7 @@ class IncomingCallActivity : AppCompatActivity() {
             runOnUiThread {
                 imageSlideshow.setImageBitmap(bitmap)
                 imageSlideshow.visibility = View.VISIBLE
+                zones.setBackground(HomeZonesController.Background.SLIDESHOW)
             }
         }.start()
     }
@@ -406,10 +438,15 @@ class IncomingCallActivity : AppCompatActivity() {
         // raccrochait donc côté proche, sans explication.
         if (isConnected) return
         isConnected = true
-        // Rend le micro avant qu'answer() ne le réclame pour WebRTC : un seul
-        // composant à la fois peut le tenir.
-        sameRoomDetector?.stop()
-        sameRoomDetector = null
+        // C'est ici, et pas à l'arrivée de l'appel, que le micro change de
+        // main : pendant toute la sonnerie il reste à l'écoute de la pièce,
+        // pour que la zone 2 continue de fonctionner normalement. WebRTC le
+        // réclame maintenant, et un seul composant à la fois peut le tenir.
+        stopRoomTranscription()
+        RoomPresenceService.pauseForCall(this)
+        // Le fond n'est plus uni : la date et la météo s'effacent en fondu et
+        // laissent la place à la vidéo (voir HomeZonesController.setBackground).
+        zones.setBackground(HomeZonesController.Background.VIDEO)
         findViewById<View>(R.id.alertContent).visibility = View.GONE
         // La photo et son voile sont des calques plein écran, frères de
         // alertContent et non ses enfants : sans ça ils resteraient affichés
@@ -529,16 +566,14 @@ class IncomingCallActivity : AppCompatActivity() {
      * l'avance (voir RollingCaptionZone).
      */
     private fun setupCaptionMode() {
-        callEngine.listenForCaptions(
-            onCallText = { text, isFinal -> runOnUiThread { zones.callZone.submit(text, isFinal) } },
-            onRoomText = { text, isFinal -> runOnUiThread { zones.roomZone.submit(text, isFinal) } },
-        )
+        // La source du texte suffit à décider de sa zone : rien ici n'a à
+        // savoir laquelle (voir HomeZonesController).
+        callEngine.listenForCaptions { source, text, isFinal ->
+            runOnUiThread { zones.submitTranscription(source, text, isFinal) }
+        }
 
         callEngine.listenForCaptionScrollSpeed { dpPerSec ->
-            runOnUiThread {
-                zones.callZone.setScrollSpeedDpPerSec(dpPerSec)
-                zones.roomZone.setScrollSpeedDpPerSec(dpPerSec)
-            }
+            runOnUiThread { zones.setScrollSpeedDpPerSec(dpPerSec) }
         }
 
         // Ce listener écoute tout le document d'appel Firestore, donc il se
@@ -554,10 +589,7 @@ class IncomingCallActivity : AppCompatActivity() {
                 // même temps que la zone : service payant, inutile de le
                 // faire tourner quand le proche n'a pas activé les sous-titres.
                 callEngine.setCaptionsActive(enabled)
-                if (!enabled) {
-                    zones.callZone.clear()
-                    zones.roomZone.clear()
-                }
+                if (!enabled) zones.clearTranscriptions()
             }
         }
 
@@ -566,8 +598,7 @@ class IncomingCallActivity : AppCompatActivity() {
             runOnUiThread {
                 if (currentVisibleLines == lines) return@runOnUiThread
                 currentVisibleLines = lines
-                zones.callZone.setVisibleLines(lines)
-                zones.roomZone.setVisibleLines(lines)
+                zones.setVisibleLines(lines)
             }
         }
 
@@ -576,8 +607,7 @@ class IncomingCallActivity : AppCompatActivity() {
             runOnUiThread {
                 if (currentClearDelay == seconds) return@runOnUiThread
                 currentClearDelay = seconds
-                zones.callZone.setClearDelaySeconds(seconds)
-                zones.roomZone.setClearDelaySeconds(seconds)
+                zones.setClearDelaySeconds(seconds)
             }
         }
 
@@ -638,12 +668,9 @@ class IncomingCallActivity : AppCompatActivity() {
     }
 
     private fun publishScreenStateIfChanged() {
-        val callText = zones.callZone.displayedText()
-        val roomText = zones.roomZone.displayedText()
-        // Le retard de lecture est celui de la zone qui a une source à cet
-        // instant : les deux ne transcrivent jamais en même temps (voir
-        // WebRtcCallEngine.setMicToRoom).
-        val lag = maxOf(zones.callZone.pendingSeconds(), zones.roomZone.pendingSeconds())
+        val callText = zones.displayedText(TranscriptionSource.CALL)
+        val roomText = zones.displayedText(TranscriptionSource.ROOM)
+        val lag = zones.pendingSeconds()
         val lagMoved = abs(lag - lastPublishedLagSeconds) >= LAG_PUBLISH_THRESHOLD_SECONDS
         if (callText == lastPublishedCallText && roomText == lastPublishedRoomText && !lagMoved) return
         lastPublishedCallText = callText
@@ -682,8 +709,7 @@ class IncomingCallActivity : AppCompatActivity() {
         // chauffe/marquage d'écran sinon.
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         screenStateHandler.removeCallbacks(screenStatePublisher)
-        sameRoomDetector?.stop()
-        sameRoomDetector = null
+        stopRoomTranscription()
         zones.release()
         RoomPresenceService.resumeAfterCall(this)
         alertController.cancel()

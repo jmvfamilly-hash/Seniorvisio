@@ -13,27 +13,35 @@ import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.HomeZone
 import com.seniorvisio.core.ScreenTheme
 import com.seniorvisio.core.TimeContext
+import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.core.WeatherClient
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Pilote les trois zones empilées de l'écran de Jean (voir
- * view_home_zones.xml) : leur ordre, leur palette, et le contenu de la zone
- * d'information (date, moment de la journée, météo).
+ * La couche d'affichage de l'écran de Jean : trois zones empilées (voir
+ * view_home_zones.xml), chacune occupant un tiers de la hauteur, qui réagissent
+ * à leur contexte sans rien savoir de ce qui le produit.
+ *
+ * Elle ignore délibérément s'il y a un appel en cours, qui a décroché, ou qui a
+ * appuyé sur quoi. Elle ne connaît que deux choses :
+ *
+ *  - **d'où vient un texte** — sa source (voir TranscriptionSource) suffit à
+ *    déterminer sa zone, via l'unique table de correspondance [zoneFor] ;
+ *  - **ce qu'il y a derrière** — un fond uni, une vidéo ou un diaporama (voir
+ *    [setBackground]), ce qui décide si le repère date/météo a sa place.
  *
  * Le même objet sert à l'écran d'accueil et à l'écran d'appel, qui n'en sont
  * pas deux mais un seul du point de vue de Jean : les zones ne bougent pas
- * quand un appel arrive, seul le fond change (uni, puis la vidéo du proche,
- * puis ses photos s'il lance un diaporama). Factoriser ici évite que les deux
+ * quand un appel arrive, seul le fond change. Factoriser ici évite que les deux
  * écrans ne divergent — c'est exactement ce qui était arrivé au repère
  * temporel, dupliqué dans les deux et déjà légèrement différent de l'un à
  * l'autre.
  *
- * Le contenu des zones 2 et 3, lui, vient de l'extérieur : c'est l'écran hôte
- * qui sait d'où vient le texte (le micro de la tablette, ou l'appel en
- * cours), il le pousse dans [roomZone] / [callZone].
+ * Les deux zones de texte partagent le même code d'affichage (voir
+ * RollingCaptionZone) et les mêmes réglages : même défilement, même
+ * effacement, même nombre de lignes. Rien ne les distingue que leur source.
  */
 class HomeZonesController(
     root: View,
@@ -60,6 +68,11 @@ class HomeZonesController(
     /** Prévenu à chaque rafraîchissement de la zone 1 (voir updateInfoZone). */
     var onInfoChanged: ((InfoSnapshot) -> Unit)? = null
 
+    /** Ce qui occupe le fond de l'écran derrière les zones (voir setBackground). */
+    enum class Background { SOLID, VIDEO, SLIDESHOW }
+
+    private var currentBackground = Background.SOLID
+
     /** Ordre courant des zones, sous la forme attendue par le PWA ("INFO,ROOM,CALL"). */
     fun zoneOrderNames(): String = adminConfig.zoneOrder.joinToString(",") { it.name }
 
@@ -80,17 +93,79 @@ class HomeZonesController(
     private val textWeatherLabel: TextView = root.findViewById(R.id.textWeatherLabel)
     private val textClockDate: TextView = root.findViewById(R.id.textClockDate)
 
-    val roomZone = RollingCaptionZone(
+    private val roomZone = RollingCaptionZone(
         container = zoneRoom,
         scrollView = root.findViewById<ScrollView>(R.id.roomCaptionScroll),
         textView = root.findViewById<TextView>(R.id.textRoomCaption),
     )
 
-    val callZone = RollingCaptionZone(
+    private val callZone = RollingCaptionZone(
         container = zoneCall,
         scrollView = root.findViewById<ScrollView>(R.id.callCaptionScroll),
         textView = root.findViewById<TextView>(R.id.textCallCaption),
     )
+
+    /**
+     * La seule table de correspondance entre une source de son et l'endroit où
+     * son texte s'affiche. Aucun appelant n'a à connaître les zones : il dit
+     * d'où vient le son, la couche d'affichage s'occupe du reste.
+     */
+    private fun zoneFor(source: TranscriptionSource) = when (source) {
+        TranscriptionSource.ROOM -> roomZone
+        TranscriptionSource.CALL -> callZone
+    }
+
+    /** Nouveau texte transcrit : il va dans la zone que sa source désigne. */
+    fun submitTranscription(source: TranscriptionSource, text: String, isFinal: Boolean) {
+        zoneFor(source).submit(text, isFinal)
+    }
+
+    /** Vide les deux zones de texte immédiatement (fin d'appel, sortie d'écran). */
+    fun clearTranscriptions() {
+        roomZone.clear()
+        callZone.clear()
+    }
+
+    /** Réglages d'affichage communs aux deux zones — elles obéissent aux mêmes règles. */
+    fun setVisibleLines(lines: Int) {
+        roomZone.setVisibleLines(lines)
+        callZone.setVisibleLines(lines)
+    }
+
+    fun setScrollSpeedDpPerSec(dpPerSec: Float) {
+        roomZone.setScrollSpeedDpPerSec(dpPerSec)
+        callZone.setScrollSpeedDpPerSec(dpPerSec)
+    }
+
+    fun setClearDelaySeconds(seconds: Int) {
+        roomZone.setClearDelaySeconds(seconds)
+        callZone.setClearDelaySeconds(seconds)
+    }
+
+    /** Ce que Jean a réellement sous les yeux dans la zone de cette source, null si elle est vide. */
+    fun displayedText(source: TranscriptionSource): String? = zoneFor(source).displayedText()
+
+    /** Le plus grand retard de lecture des deux zones — une seule a une source à la fois. */
+    fun pendingSeconds(): Float = maxOf(roomZone.pendingSeconds(), callZone.pendingSeconds())
+
+    /**
+     * Ce qu'il y a derrière les zones. La zone d'information s'efface en fondu
+     * dès qu'une image occupe le fond : la date et la météo sont un repère
+     * pour un écran au repos, pas quelque chose qui doive rester posé sur le
+     * visage du proche ou sur une photo de famille. Sa place reste réservée
+     * (invisible, pas retirée) pour que les deux zones de texte ne bougent
+     * pas d'un pixel au passage.
+     */
+    fun setBackground(background: Background) {
+        if (currentBackground == background) return
+        currentBackground = background
+        val visible = background == Background.SOLID
+        zoneInfo.animate().cancel()
+        if (visible) zoneInfo.visibility = View.VISIBLE
+        zoneInfo.animate().alpha(if (visible) 1f else 0f).setDuration(FADE_MS)
+            .withEndAction { if (!visible) zoneInfo.visibility = View.INVISIBLE }
+            .start()
+    }
 
     private val themeMonitor = ScreenTheme.Monitor(context) { palette -> applyPalette(palette) }
 
@@ -214,6 +289,9 @@ class HomeZonesController(
     companion object {
         /** Même arrondi que les deux zones de texte (voir RollingCaptionZone). */
         private const val ZONE_CORNER_RADIUS_DP = 16f
+
+        /** Même durée de fondu que les zones de texte, pour que tout l'écran respire au même rythme. */
+        private const val FADE_MS = 400L
 
         private val DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.FRENCH)
     }

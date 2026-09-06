@@ -7,6 +7,12 @@
      par la vidéo du proche pendant un appel, puis par ses photos s'il lance
      un diaporama.
 
+     Les trois occupent chacune exactement un tiers de la hauteur, en
+     permanence. Les zones de texte vides sont rendues invisibles et non
+     retirées de la mise en page : leur place reste réservée, donc rien ne
+     bouge jamais et Jean retrouve toujours chaque chose au même endroit — mais
+     on ne voit pas pour autant un cadre semi-opaque vide occuper l'écran.
+
      L'ordre des enfants ici est l'ordre par défaut (voir HomeZone) ; il est
      réappliqué au démarrage depuis le réglage admin, qui peut le changer.
 
@@ -28,9 +34,10 @@
     <LinearLayout
         android:id="@+id/zoneInfo"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:orientation="vertical"
-        android:gravity="center_horizontal"
+        android:gravity="center"
         android:padding="16dp">
 
         <LinearLayout
@@ -94,10 +101,8 @@
             android:text="" />
     </LinearLayout>
 
-    <!-- Zone 2 : ce qui se dit dans la pièce, capté par le micro de la
-         tablette (voir RoomPresenceService). Masquée tant qu'il n'y a rien à
-         lire, et non pas affichée vide : un cadre vide en permanence occupe
-         de la place et fait croire à une panne. -->
+    <!-- Zone 2 : tout ce que le microphone de la tablette entend — ce qui se
+         dit dans la pièce, auprès de Jean (voir TranscriptionSource.ROOM). -->
     <LinearLayout
         android:id="@+id/zoneRoom"
         android:layout_width="match_parent"
@@ -106,7 +111,7 @@
         android:layout_marginTop="16dp"
         android:orientation="vertical"
         android:padding="20dp"
-        android:visibility="gone"
+        android:visibility="invisible"
         android:alpha="0">
 
         <ScrollView
@@ -126,9 +131,11 @@
         </ScrollView>
     </LinearLayout>
 
-    <!-- Zone 3 : ce que dit la personne au bout de l'appel — distant, ou dans
-         la même pièce (voir WebRtcCallEngine). Mêmes règles d'affichage que
-         la zone 2, même code (voir PacedCaptionZone). -->
+    <!-- Zone 3 : tout ce qui ne vient PAS du microphone de la tablette,
+         aujourd'hui le son reçu d'un appel (voir TranscriptionSource.CALL).
+         Mêmes règles d'affichage que la zone 2, même code (voir
+         RollingCaptionZone) : c'est la source, et elle seule, qui décide de
+         la zone. -->
     <LinearLayout
         android:id="@+id/zoneCall"
         android:layout_width="match_parent"
@@ -137,7 +144,7 @@
         android:layout_marginTop="16dp"
         android:orientation="vertical"
         android:padding="20dp"
-        android:visibility="gone"
+        android:visibility="invisible"
         android:alpha="0">
 
         <ScrollView

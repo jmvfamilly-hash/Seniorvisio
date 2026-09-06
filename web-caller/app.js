@@ -348,10 +348,11 @@ els.callButton.addEventListener("click", async () => {
       forceConnect: true,
       skipPhoto: true,
       audioOnly: true,
-      // Ce mode EST le mode "même pièce" : rien à détecter, et la balise
-      // n'aurait de toute façon pas le temps d'être entendue, le décompte
-      // étant sauté.
-      skipSameRoomBeacon: true,
+      // Scanner le QR code de la tablette, c'est être debout devant elle :
+      // le mode "même pièce" est acquis par construction, sans rien à cocher
+      // ni à détecter. C'est le second des deux chemins vers ce mode, l'autre
+      // étant la case des réglages.
+      sameRoomMode: true,
     });
   } else {
     // Identité renseignée sur l'écran d'attente, sinon repli sur l'ancien
@@ -405,24 +406,6 @@ els.tabletMicMuteToggle.addEventListener("change", () => {
 
 engine.onScreenState(applyScreenState);
 engine.onScreenLayout(applyScreenLayout);
-
-// La tablette a reconnu la balise sonore : le proche est dans la pièce (voir
-// SameRoomDetector côté Android). On coche le mode pour lui plutôt que de le
-// lui demander — c'est précisément la situation où il a autre chose en tête
-// que les réglages, et où l'écho est le plus désagréable. Il reste libre de
-// décocher depuis la fenêtre Réglages.
-engine.onSameRoomDetected(() => {
-  if (els.sameRoomToggle.checked) return;
-  els.sameRoomToggle.checked = true;
-  els.sameRoomToggle.dispatchEvent(new Event("change"));
-  els.sameRoomStatus.textContent =
-    "Détecté automatiquement : vous êtes dans la même pièce que Jean. Décochez si ce n'est pas le cas.";
-});
-
-engine.onCaptionDebug((message) => {
-  els.captionDebugIndicator.textContent = `🔧 ${message}`;
-  els.captionDebugIndicator.classList.remove("hidden");
-});
 
 let captionLinesDebounce = null;
 els.captionLinesSlider.addEventListener("input", () => {

@@ -32,6 +32,7 @@ import com.seniorvisio.R
 import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.KioskManager
+import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.signaling.CallSignalingClient
@@ -75,7 +76,9 @@ class MainActivity : AppCompatActivity() {
             // Argument nommé, pas un lambda en fin d'appel : celui-ci se
             // rattacherait au DERNIER paramètre (onError), pas à onText.
             service.startRoomTranscription(
-                onText = { text, isFinal -> runOnUiThread { zones.roomZone.submit(text, isFinal) } },
+                onText = { text, isFinal ->
+                    runOnUiThread { zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal) }
+                },
             )
         }
 
@@ -166,7 +169,7 @@ class MainActivity : AppCompatActivity() {
         roomService?.stopRoomTranscription()
         roomService = null
         unbindService(roomConnection)
-        zones.roomZone.clear()
+        zones.clearTranscriptions()
     }
 
     override fun onPause() {

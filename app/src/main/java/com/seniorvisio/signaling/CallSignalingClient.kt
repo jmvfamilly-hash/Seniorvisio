@@ -237,16 +237,6 @@ class CallSignalingClient {
         }
     }
 
-    /**
-     * La tablette a reconnu la balise sonore du téléphone de l'appelant : ils
-     * sont dans la même pièce (voir SameRoomDetector). Le PWA s'en sert pour
-     * cocher le mode "même pièce" de lui-même, sans que le proche ait à y
-     * penser — c'est justement la situation où il a autre chose en tête.
-     */
-    fun reportSameRoomDetected(callId: String) {
-        callDoc(callId).update(FIELD_SAME_ROOM_DETECTED, true)
-    }
-
     /** Vitesse maximale (dp/s) à laquelle le texte défile chez Jean, choisie à distance par l'appelant. */
     fun listenForCaptionScrollSpeed(callId: String, onDpPerSec: (Double) -> Unit): ListenerRegistration {
         return callDoc(callId).addSnapshotListener { snapshot, _ ->
@@ -406,7 +396,6 @@ class CallSignalingClient {
         private const val FIELD_CAPTION_DEBUG = "captionDebugMessage"
         private const val FIELD_MIC_MUTED = "tabletMicMuted"
         private const val FIELD_SAME_ROOM_MODE = "sameRoomMode"
-        private const val FIELD_SAME_ROOM_DETECTED = "sameRoomDetected"
         private const val FIELD_SLIDESHOW_PHOTO = "slideshowPhotoBase64"
 
         private const val DEVICE_TOKEN_DOC = "devices/jean_tablet"

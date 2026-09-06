@@ -16,7 +16,8 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.seniorvisio.core.AdminConfig
-import com.seniorvisio.core.AssemblyAiRealtimeTranscriber
+import com.seniorvisio.core.TranscriptionEngine
+import com.seniorvisio.core.TranscriptionSource
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.LocalDateTime
@@ -62,8 +63,7 @@ class RoomPresenceService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var lastLoudAtMs = 0L
 
-    private var roomTranscriber: AssemblyAiRealtimeTranscriber? = null
-    @Volatile private var roomTranscriptionActive = false
+    private var transcription: TranscriptionEngine? = null
     private var lastRoomSoundAtMs = 0L
     private var roomTranscriptionOnText: ((text: String, isFinal: Boolean) -> Unit)? = null
     private var roomTranscriptionOnError: ((String) -> Unit)? = null
@@ -164,8 +164,7 @@ class RoomPresenceService : Service() {
         }
         audioRecord = null
         releaseWakeLockIfHeld()
-        roomTranscriber?.stop()
-        roomTranscriber = null
+        transcription?.stop()
     }
 
     /**
@@ -182,17 +181,20 @@ class RoomPresenceService : Service() {
     fun startRoomTranscription(onText: (text: String, isFinal: Boolean) -> Unit, onError: (String) -> Unit = {}) {
         roomTranscriptionOnText = onText
         roomTranscriptionOnError = onError
-        roomTranscriptionActive = true
+        transcription = TranscriptionEngine(
+            context = this,
+            onText = { _, text, isFinal -> roomTranscriptionOnText?.invoke(text, isFinal) },
+            onDiagnostic = { message -> roomTranscriptionOnError?.invoke(message) },
+        )
         startCapture()
     }
 
     /** À appeler quand l'écran qui affiche les paroles de la pièce passe en arrière-plan. */
     fun stopRoomTranscription() {
-        roomTranscriptionActive = false
         roomTranscriptionOnText = null
         roomTranscriptionOnError = null
-        roomTranscriber?.stop()
-        roomTranscriber = null
+        transcription?.stop()
+        transcription = null
     }
 
     /**
@@ -211,32 +213,20 @@ class RoomPresenceService : Service() {
      * perdre le début de la phrase suivante le temps de rétablir la connexion.
      */
     private fun feedRoomTranscription(buffer: ShortArray, length: Int, rms: Double) {
-        if (!roomTranscriptionActive) return
-        val onText = roomTranscriptionOnText ?: return
+        val engine = transcription ?: return
 
         val now = System.currentTimeMillis()
         if (rms >= adminConfig.roomWakeSensitivityThreshold) lastRoomSoundAtMs = now
-        if (now - lastRoomSoundAtMs > TRANSCRIPTION_HOLD_MS) {
-            roomTranscriber?.let {
-                it.stop()
-                roomTranscriber = null
-            }
-            return
-        }
+        // Silence prolongé : on rend la source inactive, ce qui ferme la
+        // session AssemblyAI. Elle se rouvrira au premier son suivant.
+        val someoneIsSpeaking = now - lastRoomSoundAtMs <= TRANSCRIPTION_HOLD_MS
+        engine.setActiveSource(if (someoneIsSpeaking) TranscriptionSource.ROOM else null)
+        if (!someoneIsSpeaking) return
 
-        val apiKey = adminConfig.assemblyAiApiKey
-        if (apiKey.isBlank()) return
-        val instance = roomTranscriber ?: AssemblyAiRealtimeTranscriber(apiKey).also {
-            roomTranscriber = it
-            it.start(onText) { message ->
-                Log.w(TAG, "AssemblyAI temps réel (pièce) : $message")
-                roomTranscriptionOnError?.invoke(message)
-            }
-        }
         val bytes = ByteArray(length * 2)
         val byteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         for (i in 0 until length) byteBuffer.putShort(buffer[i])
-        instance.sendAudio(bytes, SAMPLE_RATE_HZ, 1)
+        engine.feed(TranscriptionSource.ROOM, bytes, SAMPLE_RATE_HZ, 1)
     }
 
     private fun computeRms(buffer: ShortArray, length: Int): Double {
