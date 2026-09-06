@@ -92,7 +92,9 @@ class AdminSettingsActivity : AppCompatActivity() {
             status.captureError?.let { appendLine("  ⚠️ $it") }
             appendLine("Réveil au son : ${if (status.wakeEnabled) "activé" else "DÉSACTIVÉ"}")
             appendLine("Fenêtre de nuit : ${if (status.inNightWindow) "OUI (réveil suspendu)" else "non"}")
-            appendLine("Écran maintenu allumé : ${if (status.wakeLockHeld) "oui" else "non"}")
+            appendLine("Écran allumé : ${if (status.screenOn) "oui" else "non"}")
+            appendLine("Verrou de réveil tenu : ${if (status.wakeLockHeld) "oui" else "non"}")
+            appendLine("Rallumages demandés : ${status.wakeRequests}")
             append("Transcription en cours : ${if (status.transcribing) "oui" else "non"}")
         }
     }

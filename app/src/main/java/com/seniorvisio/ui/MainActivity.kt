@@ -129,6 +129,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        applyWakeOnSoundRequest(intent)
 
         val textBuildRev = findViewById<TextView>(R.id.textBuildRev)
         textBuildRev.text = BuildConfig.BUILD_REV
@@ -180,6 +181,48 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Cet écran étant déclaré singleTask (voir AndroidManifest), une demande
+     * de réveil arrivée alors qu'il existe déjà passe par ici plutôt que de
+     * créer une seconde instance.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyWakeOnSoundRequest(intent)
+    }
+
+    /**
+     * Allume la dalle quand le service d'écoute a entendu du bruit dans la
+     * pièce écran éteint (voir RoomPresenceService.ensureAwake).
+     *
+     * C'est le mécanisme que le système prévoit pour ça aujourd'hui, et celui
+     * qui fonctionne déjà pour les appels entrants (voir
+     * IncomingCallActivity) — le verrou de réveil d'écran employé jusqu'ici
+     * est déprécié de longue date et a cessé d'avoir un effet sur cette
+     * tablette sans qu'une ligne de code ne change.
+     *
+     * Le drapeau est retiré dès que cet écran passe à l'arrière-plan (voir
+     * onPause) : laissé actif en permanence, la dalle se rallumerait à chaque
+     * fois que cet écran revient au premier plan, pour n'importe quelle
+     * raison — sur une tablette allumée 24h/24, de quoi ne plus jamais la
+     * laisser s'éteindre.
+     */
+    private fun applyWakeOnSoundRequest(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_WAKE_ON_SOUND, false) != true) return
+        intent.removeExtra(EXTRA_WAKE_ON_SOUND)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+    }
+
+    /**
      * Referme toute fenêtre de maintenance encore ouverte (voir
      * KioskManager.grantTemporaryBrowserAccess, déclenchée depuis l'écran
      * admin pour se connecter au réseau de la résidence) dès le retour ici
@@ -220,6 +263,14 @@ class MainActivity : AppCompatActivity() {
         // Jamais d'écran forcé allumé une fois cet écran quitté : usage 24h/24,
         // risque de marquage de dalle et de chauffe sinon.
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Voir applyWakeOnSoundRequest : le rallumage ne vaut que pour la
+        // demande qui l'a déclenché, jamais pour les retours suivants.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setTurnScreenOn(false)
+        } else {
+            @Suppress("DEPRECATION")
+            window.clearFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+        }
     }
 
     override fun onDestroy() {
@@ -338,6 +389,9 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+
+        /** Voir RoomPresenceService.ensureAwake : un bruit dans la pièce demande d'allumer la dalle. */
+        const val EXTRA_WAKE_ON_SOUND = "extra_wake_on_sound"
 
         private const val SCREEN_AWAKE_TICK_MS = 1_000L
 

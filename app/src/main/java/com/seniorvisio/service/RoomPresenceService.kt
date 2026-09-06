@@ -20,6 +20,7 @@ import androidx.core.app.NotificationCompat
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.TranscriptionEngine
 import com.seniorvisio.core.TranscriptionSource
+import com.seniorvisio.ui.MainActivity
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.LocalDateTime
@@ -70,6 +71,8 @@ class RoomPresenceService : Service() {
 
     @Volatile private var lastRms = 0
     @Volatile private var lastCaptureError: String? = null
+    @Volatile private var wakeRequests = 0
+    private var lastWakeRequestAtMs = 0L
     private var captureRetries = 0
     private val retryHandler = Handler(Looper.getMainLooper())
 
@@ -91,6 +94,8 @@ class RoomPresenceService : Service() {
         val wakeEnabled: Boolean,
         val inNightWindow: Boolean,
         val wakeLockHeld: Boolean,
+        val screenOn: Boolean,
+        val wakeRequests: Int,
         val transcribing: Boolean,
         val captureError: String?,
     )
@@ -103,6 +108,8 @@ class RoomPresenceService : Service() {
         inNightWindow = adminConfig.nightModeEnabled &&
             adminConfig.isCurrentlyNightWindow(LocalDateTime.now().hour),
         wakeLockHeld = wakeLock?.isHeld == true,
+        screenOn = (getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive == true,
+        wakeRequests = wakeRequests,
         transcribing = transcription?.activeSource() != null,
         captureError = lastCaptureError,
     )
@@ -331,21 +338,64 @@ class RoomPresenceService : Service() {
      * main au minuteur de veille système via ON_AFTER_RELEASE plutôt que
      * d'éteindre l'écran d'un coup.
      */
+    /**
+     * Rallume l'écran quand un son dépasse le seuil.
+     *
+     * Deux mécanismes, et le second fait tout le travail sur les versions
+     * récentes d'Android. Le verrou de réveil d'écran est déprécié depuis
+     * longtemps et n'a plus d'effet garanti : il a cessé d'allumer l'écran sur
+     * cette tablette sans que rien dans le code ne change, ce qui est
+     * exactement le mode d'échec d'une interface dépréciée que le système
+     * finit par ignorer. Il est conservé — il ne coûte rien et fonctionne
+     * encore sur certaines versions — mais il ne suffit plus.
+     *
+     * Le second est celui qui marche déjà pour les appels entrants (voir
+     * IncomingCallActivity, setTurnScreenOn) : amener l'écran d'accueil au
+     * premier plan en lui demandant d'allumer la dalle. C'est la méthode que
+     * le système prévoit aujourd'hui pour ça, et le commentaire de
+     * IncomingCallService.launchAlertScreen constate déjà, pour l'appel
+     * entrant, que l'ancienne ne suffit plus.
+     */
     @Suppress("DEPRECATION")
     private fun ensureAwake() {
         if (!adminConfig.roomWakeEnabled) return
         if (adminConfig.nightModeEnabled && adminConfig.isCurrentlyNightWindow(LocalDateTime.now().hour)) return
-        if (wakeLock?.isHeld == true) return
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
-        val lock = powerManager.newWakeLock(
-            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE,
-            "SeniorVisio:RoomSoundWakeLock"
-        )
-        // Filet de sécurité en cas de bug empêchant le release explicite
-        // (voir handleLevel) : jamais un écran forcé allumé indéfiniment.
-        lock.acquire(MAX_WAKE_LOCK_MS)
-        wakeLock = lock
+
+        if (wakeLock?.isHeld != true) {
+            val lock = powerManager.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE,
+                "SeniorVisio:RoomSoundWakeLock"
+            )
+            // Filet de sécurité en cas de bug empêchant le release explicite
+            // (voir handleLevel) : jamais un écran forcé allumé indéfiniment.
+            lock.acquire(MAX_WAKE_LOCK_MS)
+            wakeLock = lock
+        }
+
+        // Écran déjà allumé : rien à faire de plus, et surtout ne pas ramener
+        // l'écran d'accueil au premier plan par-dessus ce que Jean regarde.
+        if (powerManager.isInteractive) return
+
+        val now = System.currentTimeMillis()
+        if (now - lastWakeRequestAtMs < WAKE_REQUEST_MIN_INTERVAL_MS) return
+        lastWakeRequestAtMs = now
+        wakeRequests++
+        retryHandler.post {
+            try {
+                startActivity(
+                    Intent(this, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        .putExtra(MainActivity.EXTRA_WAKE_ON_SOUND, true)
+                )
+            } catch (e: Exception) {
+                // Démarrage d'activité refusé par le système : on le dit dans
+                // l'état affiché côté admin plutôt que de rester muet.
+                lastCaptureError = "réveil de l'écran refusé : ${e.message}"
+                Log.w(TAG, "Impossible de rallumer l'écran", e)
+            }
+        }
     }
 
     private fun releaseWakeLockIfHeld() {
@@ -388,6 +438,9 @@ class RoomPresenceService : Service() {
         private const val MAX_WAKE_LOCK_MS = 30 * 60 * 1000L
         private const val CAPTURE_RETRY_DELAY_MS = 2_000L
         private const val MAX_CAPTURE_RETRIES = 15
+
+        /** Un seul rallumage d'écran demandé par intervalle : le son arrive par blocs, plusieurs fois par seconde. */
+        private const val WAKE_REQUEST_MIN_INTERVAL_MS = 5_000L
         private const val ACTION_PAUSE = "com.seniorvisio.action.PAUSE_ROOM_PRESENCE"
         private const val ACTION_RESUME = "com.seniorvisio.action.RESUME_ROOM_PRESENCE"
 
