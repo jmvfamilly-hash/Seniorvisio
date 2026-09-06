@@ -23,6 +23,10 @@ if (CAREGIVER_MODE) document.body.classList.add("caregiver-mode");
 // --- Paramètres, alignés avec AdminConfig côté Android ---
 const CONFIG = {
   targetDeviceId: "jean-tablette-01", // non utilisé par le signaling Firestore (un seul foyer), gardé pour usage futur multi-tablette
+  // Document d'état de la tablette dans Firestore : signe de vie, batterie,
+  // version installée, et réglages de transcription pilotés d'ici. Doit rester
+  // identique à DEVICE_DOC_PATH dans core/DeviceStatusReporter.kt.
+  deviceDocId: "jean_tablet",
   callerName: "Un proche",
 };
 
@@ -189,6 +193,10 @@ const els = {
   identityRights: document.getElementById("identityRights"),
   saveIdentityButton: document.getElementById("saveIdentityButton"),
   identityStatus: document.getElementById("identityStatus"),
+  roomEngineSelect: document.getElementById("roomEngineSelect"),
+  callEngineSelect: document.getElementById("callEngineSelect"),
+  voskModelSelect: document.getElementById("voskModelSelect"),
+  engineStatus: document.getElementById("engineStatus"),
   captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
   captionDebugIndicator: document.getElementById("captionDebugIndicator"),
   // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
@@ -450,6 +458,84 @@ els.cancelButton.addEventListener("click", async () => {
 });
 
 els.retryButton.addEventListener("click", () => showState("idle"));
+
+// --- Moteur de transcription de la tablette, réglé à distance ---
+// Sur l'écran d'accueil et non dans les réglages d'appel : le moteur de la
+// pièce écoute toute la journée, il doit pouvoir être changé sans avoir à
+// déranger Jean par un appel. La tablette relit ce réglage à chaque bloc de
+// son (voir TranscriptionEngine.feed), la bascule prend donc effet en pleine
+// phrase — ce qui est exactement ce qu'il faut pour comparer deux moteurs sur
+// la même voix.
+
+// Ce que la tablette a réellement enregistré, pour ne pas écraser un réglage
+// venu d'ailleurs par le simple fait d'afficher la page (les <select>
+// démarrent sur leur première option, qui n'est pas forcément la vraie).
+let deviceSettingsLoaded = false;
+
+const ENGINE_SELECT_FIELDS = [
+  ["roomEngineSelect", "roomTranscriptionEngine"],
+  ["callEngineSelect", "callTranscriptionEngine"],
+  ["voskModelSelect", "voskModelSize"],
+];
+
+function applyDeviceSettings(data) {
+  deviceSettingsLoaded = true;
+  for (const [elementKey, field] of ENGINE_SELECT_FIELDS) {
+    const select = els[elementKey];
+    const value = data[field];
+    // Une valeur inconnue (réglage écrit à la main, ancienne version) est
+    // ignorée plutôt qu'imposée au <select>, qui retomberait sinon sur une
+    // sélection vide donnant l'impression que rien n'est configuré.
+    if (value && [...select.options].some((option) => option.value === value)) {
+      select.value = value;
+      select.dataset.appliedValue = value;
+    }
+  }
+  renderEngineStatus(data);
+}
+
+function renderEngineStatus(data) {
+  const modelState = data.voskModelState;
+  const heartbeat = data.lastHeartbeatAt;
+  if (!modelState) {
+    els.engineStatus.textContent = heartbeat
+      ? "La tablette n'a pas encore signalé l'état de son modèle embarqué."
+      : "En attente du premier signe de vie de la tablette…";
+    return;
+  }
+  // Le téléchargement du grand modèle (1,4 Go) peut durer une heure : sans ce
+  // retour, la personne qui vient de le demander, souvent à l'autre bout du
+  // pays, n'aurait aucun moyen de distinguer un transfert qui avance d'un
+  // échec silencieux.
+  els.engineStatus.textContent = `Modèle embarqué : ${modelState}`;
+}
+
+async function writeDeviceSetting(field, value, select) {
+  const previous = select.dataset.appliedValue;
+  select.disabled = true;
+  try {
+    await engine.setDeviceSetting(CONFIG.deviceDocId, field, value);
+    select.dataset.appliedValue = value;
+  } catch (e) {
+    console.warn("[app] Réglage de transcription non transmis :", e);
+    // Remis dans son état précédent : laisser le <select> afficher un choix
+    // que la tablette n'a jamais reçu ferait croire la bascule faite.
+    if (previous) select.value = previous;
+    els.engineStatus.textContent =
+      "Réglage non transmis (réseau ?). La tablette garde son moteur actuel.";
+  } finally {
+    select.disabled = false;
+  }
+}
+
+for (const [elementKey, field] of ENGINE_SELECT_FIELDS) {
+  els[elementKey].addEventListener("change", () => {
+    if (!deviceSettingsLoaded) return;
+    writeDeviceSetting(field, els[elementKey].value, els[elementKey]);
+  });
+}
+
+engine.watchDeviceSettings(CONFIG.deviceDocId, applyDeviceSettings);
 
 // --- Identité de l'appelant ---
 // Photo retenue en mémoire tant qu'elle n'est pas enregistrée : le

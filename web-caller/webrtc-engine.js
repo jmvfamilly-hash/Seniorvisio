@@ -16,6 +16,9 @@ class RealCallEngine extends CallEngine {
     this._callDocRef = null;
     this._unsubscribeCallDoc = null;
     this._unsubscribeCalleeCandidates = null;
+    // Volontairement hors de _teardown() : cette écoute-là ne suit pas un
+    // appel, elle vit tant que la page est ouverte.
+    this._unsubscribeDeviceDoc = null;
     this._countdownCb = null;
     this._countdownInterval = null;
     this._screenStateCb = null;
@@ -575,6 +578,44 @@ class RealCallEngine extends CallEngine {
     if (this._callDocRef) {
       await this._callDocRef.update({ forceConnectRequested: true }).catch(() => {});
     }
+  }
+
+  /**
+   * Réglages de transcription de la tablette, portés par le document
+   * d'appareil et non par celui d'un appel : le moteur de la pièce doit
+   * pouvoir changer alors que personne n'appelle, et la bascule doit survivre
+   * au raccroché (voir DeviceStatusReporter.applyTranscriptionSettings côté
+   * Android).
+   *
+   * callback({ roomTranscriptionEngine, callTranscriptionEngine,
+   * voskModelSize, voskModelState }) — rappelé à chaque écriture sur le
+   * document, donc aussi à chaque signe de vie de la tablette : c'est ce qui
+   * fait avancer tout seul l'affichage du téléchargement du modèle.
+   */
+  watchDeviceSettings(deviceId, callback) {
+    if (!this._available) return () => {};
+    if (this._unsubscribeDeviceDoc) this._unsubscribeDeviceDoc();
+    this._unsubscribeDeviceDoc = this._db
+      .collection("devices")
+      .doc(deviceId)
+      .onSnapshot(
+        (snapshot) => callback(snapshot.data() || {}),
+        (error) => console.warn("[RealCallEngine] Lecture des réglages tablette impossible :", error)
+      );
+    return this._unsubscribeDeviceDoc;
+  }
+
+  /**
+   * Écrit un réglage de transcription. `merge` et non `update` : le document
+   * d'appareil n'existe pas encore tant que la tablette n'a pas envoyé son
+   * premier signe de vie, et un update échouerait alors silencieusement.
+   */
+  async setDeviceSetting(deviceId, field, value) {
+    if (!this._available) return;
+    await this._db
+      .collection("devices")
+      .doc(deviceId)
+      .set({ [field]: value }, { merge: true });
   }
 
   async cancelCall() {

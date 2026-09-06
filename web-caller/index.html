@@ -58,6 +58,51 @@
         <p class="hint" id="identityStatus"></p>
       </details>
 
+      <!-- Réglages de la tablette elle-même, pas d'un appel : ils passent par
+           le document d'appareil et non par celui d'un appel (voir
+           DeviceStatusReporter.applyTranscriptionSettings), et prennent donc
+           effet immédiatement, appel en cours ou non. Placés sur l'écran
+           d'attente pour la même raison : le moteur de la pièce doit pouvoir
+           être changé sans avoir à appeler Jean. -->
+      <details class="side-panel" id="enginePanel">
+        <summary>Moteur de transcription</summary>
+        <p class="hint">
+          Le partage habituel : ce qui se dit dans la pièce est transcrit par le
+          moteur embarqué de la tablette (gratuit, il tourne des heures par
+          jour), les appels par AssemblyAI (payant à la durée, mais plus juste).
+          Les forcer sert surtout à comparer les deux sur la même voix.
+        </p>
+
+        <label for="roomEngineSelect">Paroles dans la pièce</label>
+        <select id="roomEngineSelect">
+          <option value="auto">Automatique — moteur embarqué</option>
+          <option value="vosk">Forcer le moteur embarqué (gratuit)</option>
+          <option value="assemblyai">Forcer AssemblyAI (payant)</option>
+        </select>
+
+        <label for="callEngineSelect">Paroles pendant un appel</label>
+        <select id="callEngineSelect">
+          <option value="auto">Automatique — AssemblyAI</option>
+          <option value="assemblyai">Forcer AssemblyAI (payant)</option>
+          <option value="vosk">Forcer le moteur embarqué (gratuit)</option>
+        </select>
+
+        <label for="voskModelSelect">Modèle embarqué</label>
+        <select id="voskModelSelect">
+          <option value="large">Grand — 1,4 Go, nettement plus juste</option>
+          <option value="small">Petit — 45 Mo, approximatif</option>
+        </select>
+
+        <p class="hint">
+          Le changement de modèle déclenche un téléchargement sur la tablette,
+          une seule fois par modèle : une fois les deux téléchargés, passer de
+          l'un à l'autre est immédiat.
+        </p>
+        <p class="hint" id="engineStatus">
+          En attente du premier signe de vie de la tablette…
+        </p>
+      </details>
+
     </div>
 
     <div id="stateCalling" class="state hidden">

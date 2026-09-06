@@ -114,12 +114,7 @@ class RoomPresenceService : Service() {
         wakeRequests = wakeRequests,
         transcribing = transcription?.activeSource() != null,
         captureError = lastCaptureError,
-        voskModel = when (val modelState = VoskModelProvider.state()) {
-            VoskModelProvider.State.Ready -> "prêt (transcription de la pièce gratuite)"
-            VoskModelProvider.State.Downloading -> "téléchargement en cours (~45 Mo)"
-            VoskModelProvider.State.Absent -> "pas encore demandé"
-            is VoskModelProvider.State.Failed -> "échec : ${modelState.reason}"
-        },
+        voskModel = VoskModelProvider.describeState(),
     )
     private var roomTranscriptionOnText: ((text: String, isFinal: Boolean) -> Unit)? = null
     private var roomTranscriptionOnError: ((String) -> Unit)? = null
@@ -137,7 +132,7 @@ class RoomPresenceService : Service() {
         // (~45 Mo) : lancé ici, au démarrage du service permanent, pour qu'il
         // soit prêt bien avant qu'on en ait besoin. Sans effet s'il est déjà
         // en place (voir VoskModelProvider.prepare).
-        VoskModelProvider.prepare(this)
+        VoskModelProvider.prepare(this, adminConfig.voskModelSize)
     }
 
     /**

@@ -42,6 +42,10 @@ class DeviceStatusReporter(private val context: Context) {
                 FIELD_BATTERY_PERCENT to batteryPercent,
                 FIELD_COMPANION_APPS to companionAppVersions(),
                 FIELD_LAST_HEARTBEAT_AT to FieldValue.serverTimestamp(),
+                // Renvoyé au PWA pour que la bascule de moteur à distance ne
+                // soit pas aveugle : c'est le seul retour dont dispose le
+                // proche qui vient de demander le grand modèle.
+                FIELD_VOSK_MODEL_STATE to VoskModelProvider.describeState(),
             ),
             SetOptions.merge()
         ).addOnFailureListener { e -> Log.e(TAG, "Échec de l'envoi du signe de vie à Firestore", e) }
@@ -98,11 +102,52 @@ class DeviceStatusReporter(private val context: Context) {
     }
 
     private fun handleRemoteUpdate(snapshot: DocumentSnapshot) {
+        applyTranscriptionSettings(snapshot)
         val requestedVersion = snapshot.getString(FIELD_REQUESTED_VERSION) ?: return
         val apkUrl = snapshot.getString(FIELD_REQUESTED_APK_URL) ?: return
         if (requestedVersion == BuildConfig.BUILD_REV) return
         Log.i(TAG, "Mise à jour à distance détectée : $requestedVersion (version actuelle ${BuildConfig.BUILD_REV})")
         installUpdate(apkUrl)
+    }
+
+    /**
+     * Applique le choix de moteur de reconnaissance vocale et la taille du
+     * modèle embarqué, réglés à distance depuis le PWA (voir
+     * web-caller/app.js). Passe par le document d'appareil et non par celui
+     * d'un appel : le moteur de la pièce doit pouvoir changer sans qu'un appel
+     * soit en cours, et la bascule doit survivre au raccroché.
+     *
+     * Aucune notification à faire au reste de l'application : le moteur de
+     * transcription relit ce réglage à chaque bloc de son et referme sa
+     * session si le moteur voulu a changé (voir TranscriptionEngine.feed). La
+     * bascule prend donc effet en pleine phrase, ce qui est justement ce qu'on
+     * veut pour comparer deux moteurs sur la même voix.
+     */
+    private fun applyTranscriptionSettings(snapshot: DocumentSnapshot) {
+        val adminConfig = AdminConfig(context)
+
+        TranscriptionEngineChoice.fromRemoteValue(snapshot.getString(FIELD_ROOM_ENGINE))?.let {
+            if (adminConfig.roomEngine != it) {
+                adminConfig.roomEngine = it
+                Log.i(TAG, "Moteur de la pièce réglé à distance : ${it.remoteValue}")
+            }
+        }
+        TranscriptionEngineChoice.fromRemoteValue(snapshot.getString(FIELD_CALL_ENGINE))?.let {
+            if (adminConfig.callEngine != it) {
+                adminConfig.callEngine = it
+                Log.i(TAG, "Moteur des appels réglé à distance : ${it.remoteValue}")
+            }
+        }
+        VoskModelSize.fromRemoteValue(snapshot.getString(FIELD_VOSK_MODEL_SIZE))?.let {
+            if (adminConfig.voskModelSize != it) {
+                adminConfig.voskModelSize = it
+                Log.i(TAG, "Taille du modèle embarqué réglée à distance : ${it.remoteValue}")
+            }
+            // Appelé même quand la valeur n'a pas changé : c'est ce qui relance
+            // un téléchargement précédemment échoué, sans rien demander à
+            // personne (voir VoskModelProvider.prepare, sans effet si prêt).
+            VoskModelProvider.prepare(context, it)
+        }
     }
 
     private fun installUpdate(apkUrl: String) {
@@ -215,6 +260,10 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_LAST_UPDATE_SUCCEEDED = "lastUpdateSucceeded"
         private const val FIELD_LAST_UPDATE_MESSAGE = "lastUpdateMessage"
         private const val FIELD_LAST_UPDATE_AT = "lastUpdateAt"
+        private const val FIELD_ROOM_ENGINE = "roomTranscriptionEngine"
+        private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"
+        private const val FIELD_VOSK_MODEL_SIZE = "voskModelSize"
+        private const val FIELD_VOSK_MODEL_STATE = "voskModelState"
 
         private const val LISTENER_RETRY_DELAY_MS = 60_000L
     }

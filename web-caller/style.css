@@ -369,6 +369,7 @@ body.video-mode #localVideo {
   font-size: 14px;
 }
 
+.side-panel select,
 .side-panel input[type="text"],
 .side-panel input[type="file"] {
   width: 100%;

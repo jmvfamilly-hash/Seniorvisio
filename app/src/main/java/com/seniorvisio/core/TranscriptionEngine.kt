@@ -37,6 +37,7 @@ class TranscriptionEngine(
 ) {
 
     private var recognizer: SpeechRecognizer? = null
+    private var recognizerKind: TranscriptionEngineChoice? = null
     @Volatile private var activeSource: TranscriptionSource? = null
 
     /** Sources dont l'arrivée de son a déjà été signalée, pour ne le dire qu'une fois chacune. */
@@ -70,8 +71,23 @@ class TranscriptionEngine(
         }
         if (source != activeSource) return
 
-        val instance = recognizer ?: createRecognizerFor(source)?.also { created ->
+        // Le réglage a pu changer à distance depuis l'ouverture de la session
+        // (voir DeviceStatusReporter) : on ferme celle en cours pour que la
+        // suivante utilise le moteur demandé, sans rien avoir à notifier. La
+        // bascule attend que le moteur voulu soit réellement disponible :
+        // recognizerKind retient ce qui tourne vraiment, pas ce qui a été
+        // demandé, sinon un repli sur AssemblyAI faute de modèle embarqué
+        // resterait en place pour toujours — et le comparer à `wanted` sans
+        // vérifier la disponibilité rouvrirait une session à chaque bloc de
+        // son, soit une reconnexion WebSocket toutes les 100 ms.
+        val wanted = resolveEngine(source)
+        if (recognizer != null && recognizerKind != wanted && isAvailable(wanted)) stopSession()
+
+        val instance = recognizer ?: createRecognizerFor(wanted)?.also { created ->
             recognizer = created
+            recognizerKind =
+                if (created is VoskSpeechRecognizer) TranscriptionEngineChoice.VOSK
+                else TranscriptionEngineChoice.ASSEMBLYAI
             created.start(
                 onText = { text, isFinal ->
                     // La source peut avoir changé pendant que ce texte
@@ -106,17 +122,43 @@ class TranscriptionEngine(
      * rester muette sans explication. Quelques minutes facturées une seule
      * fois valent mieux qu'une fonction qui semble cassée.
      */
-    private fun createRecognizerFor(source: TranscriptionSource): SpeechRecognizer? {
-        val voskReady = VoskModelProvider.getModel() != null
-        if (source == TranscriptionSource.ROOM && voskReady) return VoskSpeechRecognizer()
+    private fun resolveEngine(source: TranscriptionSource): TranscriptionEngineChoice {
+        val adminConfig = AdminConfig(context)
+        val choice = when (source) {
+            TranscriptionSource.ROOM -> adminConfig.roomEngine
+            TranscriptionSource.CALL -> adminConfig.callEngine
+        }
+        if (choice != TranscriptionEngineChoice.AUTO) return choice
+        return when (source) {
+            TranscriptionSource.ROOM -> TranscriptionEngineChoice.VOSK
+            TranscriptionSource.CALL -> TranscriptionEngineChoice.ASSEMBLYAI
+        }
+    }
+
+    /** Le moteur voulu peut-il réellement démarrer maintenant ? */
+    private fun isAvailable(wanted: TranscriptionEngineChoice): Boolean = when (wanted) {
+        TranscriptionEngineChoice.VOSK -> VoskModelProvider.getModel() != null
+        else -> AdminConfig(context).assemblyAiApiKey.isNotBlank()
+    }
+
+    /**
+     * Tant que le modèle embarqué n'est pas prêt — il se télécharge une fois —
+     * on retombe sur AssemblyAI plutôt que de rester muet sans explication.
+     * Quelques minutes facturées valent mieux qu'une fonction qui semble
+     * cassée, et le repli se voit dans le diagnostic. La bascule vers le
+     * modèle embarqué se fera d'elle-même à la session suivante, une fois le
+     * téléchargement terminé (voir feed).
+     */
+    private fun createRecognizerFor(wanted: TranscriptionEngineChoice): SpeechRecognizer? {
+        if (wanted == TranscriptionEngineChoice.VOSK) {
+            if (VoskModelProvider.getModel() != null) return VoskSpeechRecognizer()
+            onDiagnostic("modèle embarqué indisponible (${VoskModelProvider.describeState()}), AssemblyAI en attendant")
+        }
 
         val apiKey = AdminConfig(context).assemblyAiApiKey
         if (apiKey.isBlank()) {
             onDiagnostic("clé API AssemblyAI absente")
             return null
-        }
-        if (source == TranscriptionSource.ROOM) {
-            onDiagnostic("modèle Vosk pas encore prêt, AssemblyAI en attendant")
         }
         return AssemblyAiRealtimeTranscriber(apiKey)
     }
@@ -124,6 +166,7 @@ class TranscriptionEngine(
     private fun stopSession() {
         recognizer?.stop()
         recognizer = null
+        recognizerKind = null
     }
 
     private fun label(source: TranscriptionSource) = when (source) {

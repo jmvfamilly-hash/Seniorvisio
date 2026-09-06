@@ -91,6 +91,31 @@ class AdminConfig(context: Context) {
         }
         set(value) = prefs.edit().putString(KEY_ZONE_ORDER, value.joinToString(",") { it.name }).apply()
 
+    // --- Moteur de reconnaissance vocale, réglable séparément par source et
+    // modifiable à distance en cours de route (voir DeviceStatusReporter).
+    // AUTO applique le partage par défaut : la pièce sur le moteur embarqué,
+    // gratuit, parce qu'elle est écoutée des heures par jour ; les appels sur
+    // AssemblyAI, ponctuels et où la justesse du texte se voit le plus. Les
+    // forcer l'un ou l'autre sert surtout à les comparer sur la même voix
+    // dans la même pièce, ce qu'aucun avis a priori ne remplace. ---
+    var roomEngine: TranscriptionEngineChoice
+        get() = TranscriptionEngineChoice.fromRemoteValue(prefs.getString(KEY_ROOM_ENGINE, null))
+            ?: TranscriptionEngineChoice.AUTO
+        set(value) = prefs.edit().putString(KEY_ROOM_ENGINE, value.remoteValue).apply()
+
+    var callEngine: TranscriptionEngineChoice
+        get() = TranscriptionEngineChoice.fromRemoteValue(prefs.getString(KEY_CALL_ENGINE, null))
+            ?: TranscriptionEngineChoice.AUTO
+        set(value) = prefs.edit().putString(KEY_CALL_ENGINE, value.remoteValue).apply()
+
+    // --- Taille du modèle embarqué (voir VoskModelSize). Le grand par défaut :
+    // le petit s'est révélé conçu pour de la commande vocale plus que pour une
+    // conversation captée à deux mètres, ce qui est précisément l'usage ici. ---
+    var voskModelSize: VoskModelSize
+        get() = VoskModelSize.fromRemoteValue(prefs.getString(KEY_VOSK_MODEL_SIZE, null))
+            ?: VoskModelSize.LARGE
+        set(value) = prefs.edit().putString(KEY_VOSK_MODEL_SIZE, value.remoteValue).apply()
+
     // --- Réveil de l'écran au moindre son de la pièce (voir RoomPresenceService) ---
     var roomWakeEnabled: Boolean
         get() = prefs.getBoolean(KEY_ROOM_WAKE_ENABLED, true)
@@ -132,6 +157,9 @@ class AdminConfig(context: Context) {
         private const val KEY_ADMIN_PIN = "admin_pin"
         private const val KEY_ASSEMBLYAI_API_KEY = "assemblyai_api_key"
         private const val KEY_ZONE_ORDER = "zone_order"
+        private const val KEY_ROOM_ENGINE = "room_engine"
+        private const val KEY_CALL_ENGINE = "call_engine"
+        private const val KEY_VOSK_MODEL_SIZE = "vosk_model_size"
         private const val KEY_ROOM_WAKE_ENABLED = "room_wake_enabled"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
     }
