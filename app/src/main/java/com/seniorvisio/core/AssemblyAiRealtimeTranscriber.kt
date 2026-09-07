@@ -8,8 +8,6 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.Buffer
 import org.json.JSONObject
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.util.concurrent.TimeUnit
 
 /**
@@ -55,7 +53,7 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) : SpeechRecogniz
      */
     override fun start(onText: (text: String, isFinal: Boolean) -> Unit, onError: (String) -> Unit) {
         val request = Request.Builder()
-            .url("$REALTIME_URL?sample_rate=$TARGET_SAMPLE_RATE_HZ&encoding=pcm_s16le&speech_model=$SPEECH_MODEL")
+            .url("$REALTIME_URL?sample_rate=${Pcm16.TARGET_SAMPLE_RATE_HZ}&encoding=pcm_s16le&speech_model=$SPEECH_MODEL")
             .addHeader("Authorization", apiKey)
             .build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -118,7 +116,7 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) : SpeechRecogniz
      */
     override fun accept(pcm16: ByteArray, sampleRate: Int, channels: Int) {
         val socket = webSocket ?: return
-        val converted = resampleToMono16k(pcm16, sampleRate, channels.coerceAtLeast(1))
+        val converted = Pcm16.toBytes(Pcm16.toMono16k(pcm16, sampleRate, channels))
         val chunk = synchronized(pendingAudio) {
             pendingAudio.write(converted)
             if (pendingAudio.size() < MIN_CHUNK_BYTES) return
@@ -139,36 +137,6 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) : SpeechRecogniz
         synchronized(pendingAudio) { pendingAudio.reset() }
     }
 
-    private fun resampleToMono16k(pcm: ByteArray, sourceSampleRate: Int, sourceChannels: Int): ByteArray {
-        val sampleCount = pcm.size / 2 / sourceChannels
-        if (sampleCount <= 0) return ByteArray(0)
-        val input = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN)
-        val mono = ShortArray(sampleCount)
-        for (i in 0 until sampleCount) {
-            var sum = 0
-            for (c in 0 until sourceChannels) sum += input.short.toInt()
-            mono[i] = (sum / sourceChannels).toShort()
-        }
-
-        if (sourceSampleRate == TARGET_SAMPLE_RATE_HZ) return shortsToBytes(mono)
-
-        val ratio = sourceSampleRate.toDouble() / TARGET_SAMPLE_RATE_HZ
-        val outCount = (mono.size / ratio).toInt().coerceAtLeast(1)
-        val resampled = ShortArray(outCount)
-        for (i in 0 until outCount) {
-            val srcIndex = (i * ratio).toInt().coerceIn(0, mono.size - 1)
-            resampled[i] = mono[srcIndex]
-        }
-        return shortsToBytes(resampled)
-    }
-
-    private fun shortsToBytes(shorts: ShortArray): ByteArray {
-        val bytes = ByteArray(shorts.size * 2)
-        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-        shorts.forEach { buffer.putShort(it) }
-        return bytes
-    }
-
     companion object {
         private const val TAG = "AssemblyAiRealtime"
         private const val REALTIME_URL = "wss://streaming.assemblyai.com/v3/ws"
@@ -187,7 +155,6 @@ class AssemblyAiRealtimeTranscriber(private val apiKey: String) : SpeechRecogniz
          * l'expose un jour : ici, personne ne parle autre chose.
          */
         private const val SPEECH_MODEL = "universal-streaming-multilingual"
-        private const val TARGET_SAMPLE_RATE_HZ = 16_000
 
         // 100ms à 16 kHz mono 16 bits (16000 × 2 octets × 0,1s) : dans la
         // plage 50-1000ms par message documentée par AssemblyAI, et bien

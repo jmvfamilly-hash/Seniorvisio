@@ -264,6 +264,20 @@
           <p class="hint" id="micToRoomStatus"></p>
         </div>
 
+        <!-- La transcription tourne par défaut sur le moteur embarqué de la
+             tablette : gratuit, et il écoute la pièce toute la journée sans
+             que ça coûte quoi que ce soit. AssemblyAI est plus juste mais
+             facturé à la durée : c'est donc une dépense décidée ici, appel par
+             appel, par celui qui lit le texte — et qui s'arrête en
+             raccrochant. Volontairement non mémorisé d'un appel à l'autre. -->
+        <div class="caption-control" id="preciseEngineControl">
+          <label>
+            <input type="checkbox" id="preciseEngineToggle">
+            🎯 Transcrire ma voix plus finement (payant, cet appel seulement)
+          </label>
+          <p class="hint" id="preciseEngineStatus"></p>
+        </div>
+
         <button id="rememberSettingsButton" class="secondary">💾 Mémoriser ces réglages pour la prochaine fois</button>
 
         <!-- Rappelée pendant l'appel, pas seulement avant : le réflexe de

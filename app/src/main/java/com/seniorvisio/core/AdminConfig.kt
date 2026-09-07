@@ -93,11 +93,12 @@ class AdminConfig(context: Context) {
 
     // --- Moteur de reconnaissance vocale, réglable séparément par source et
     // modifiable à distance en cours de route (voir DeviceStatusReporter).
-    // AUTO applique le partage par défaut : la pièce sur le moteur embarqué,
-    // gratuit, parce qu'elle est écoutée des heures par jour ; les appels sur
-    // AssemblyAI, ponctuels et où la justesse du texte se voit le plus. Les
-    // forcer l'un ou l'autre sert surtout à les comparer sur la même voix
-    // dans la même pièce, ce qu'aucun avis a priori ne remplace. ---
+    // AUTO met tout sur le moteur embarqué : gratuit, hors-ligne, et sans
+    // service en ligne qui puisse tomber au mauvais moment. La dépense se
+    // décide alors cas par cas, par l'appelant, pour son appel seulement (voir
+    // TranscriptionEngine.setCallEngineOverride) — plutôt que subie en
+    // permanence. Forcer l'un ou l'autre sert surtout à les comparer sur la
+    // même voix, ce qu'aucun avis a priori ne remplace. ---
     var roomEngine: TranscriptionEngineChoice
         get() = TranscriptionEngineChoice.fromRemoteValue(prefs.getString(KEY_ROOM_ENGINE, null))
             ?: TranscriptionEngineChoice.AUTO

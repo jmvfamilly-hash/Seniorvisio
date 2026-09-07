@@ -9,12 +9,13 @@ package com.seniorvisio.core
  */
 enum class TranscriptionEngineChoice(val remoteValue: String, val adminLabel: String) {
     /**
-     * Le partage par défaut, et celui qui a du sens la plupart du temps : la
-     * pièce sur le moteur embarqué (écoutée des heures par jour, elle doit
-     * être gratuite), les appels sur AssemblyAI (ponctuels, et c'est là que la
-     * justesse du texte se voit le plus).
+     * Tout sur le moteur embarqué : gratuit, hors-ligne, et indépendant d'un
+     * service en ligne qui pourrait tomber au mauvais moment. L'appelant peut
+     * demander AssemblyAI pour son appel s'il trouve le texte insuffisant
+     * (voir TranscriptionEngine.setCallEngineOverride) — une dépense décidée
+     * cas par cas, par celui qui lit le texte, plutôt que subie en permanence.
      */
-    AUTO("auto", "Automatique (pièce : embarqué, appels : AssemblyAI)"),
+    AUTO("auto", "Automatique (tout sur le moteur embarqué)"),
 
     ASSEMBLYAI("assemblyai", "AssemblyAI (en ligne, payant à la durée)"),
 

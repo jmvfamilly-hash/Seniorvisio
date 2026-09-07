@@ -3,15 +3,15 @@ package com.seniorvisio.core
 import android.util.Log
 import org.json.JSONObject
 import org.vosk.Recognizer
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /**
  * Reconnaissance vocale embarquée sur la tablette (voir SpeechRecognizer),
- * utilisée pour ce qui se dit dans la pièce. Gratuite et hors-ligne une fois
- * le modèle en place (voir VoskModelProvider) — c'est ce qui permet d'écouter
- * la pièce toute la journée sans que ça coûte quoi que ce soit, là où un
- * service facturé à la durée reviendrait à une centaine d'euros par mois.
+ * utilisée par défaut pour tout — la pièce comme les appels. Gratuite et
+ * hors-ligne une fois le modèle en place (voir VoskModelProvider) : c'est ce
+ * qui permet d'écouter la pièce toute la journée sans que ça coûte quoi que ce
+ * soit, là où un service facturé à la durée reviendrait à une centaine d'euros
+ * par mois. L'appelant peut basculer son appel sur AssemblyAI s'il trouve le
+ * texte insuffisant (voir TranscriptionEngine.setCallEngineOverride).
  *
  * Un moteur neuf par session : l'état de reconnaissance porte le contexte des
  * phrases précédentes et n'a rien à faire d'une conversation à l'autre.
@@ -19,7 +19,6 @@ import java.nio.ByteOrder
 class VoskSpeechRecognizer : SpeechRecognizer {
 
     private var recognizer: Recognizer? = null
-    private var recognizerSampleRate = -1
     private var onText: ((String, Boolean) -> Unit)? = null
     private var onError: ((String) -> Unit)? = null
     private var reportedMissingModel = false
@@ -47,14 +46,16 @@ class VoskSpeechRecognizer : SpeechRecognizer {
             return
         }
 
-        // Le moteur est lié à une fréquence d'échantillonnage donnée : si la
-        // source change (la pièce capture à 16 kHz, un appel à 48 kHz), il
-        // faut en refaire un plutôt que de lui donner du son qu'il
-        // interpréterait à la mauvaise vitesse.
-        val active = recognizer?.takeIf { recognizerSampleRate == sampleRate } ?: run {
-            recognizer?.close()
+        // Toujours 16 kHz, quelle que soit la source. Les modèles Vosk sont
+        // entraînés à cette fréquence, et le moteur applique telle quelle
+        // celle qu'on lui annonce : lui déclarer les 48 kHz d'une piste WebRTC
+        // lui ferait calculer ses paramètres acoustiques sur une bande trois
+        // fois trop large, et le texte n'aurait plus grand rapport avec ce qui
+        // a été dit. La pièce arrive déjà en 16 kHz mono, un appel est ramené
+        // à ce format (voir Pcm16).
+        val active = recognizer ?: run {
             val created = try {
-                Recognizer(model, sampleRate.toFloat())
+                Recognizer(model, Pcm16.TARGET_SAMPLE_RATE_HZ.toFloat())
             } catch (e: Exception) {
                 Log.w(TAG, "Moteur Vosk indisponible", e)
                 onError?.invoke("Vosk : ${e.message}")
@@ -62,11 +63,10 @@ class VoskSpeechRecognizer : SpeechRecognizer {
                 return
             }
             recognizer = created
-            recognizerSampleRate = sampleRate
             created
         }
 
-        val mono = toMonoSamples(pcm16, channels.coerceAtLeast(1))
+        val mono = Pcm16.toMono16k(pcm16, sampleRate, channels)
         if (mono.isEmpty()) return
         val isFinal = active.acceptWaveForm(mono, mono.size)
         val json = if (isFinal) active.result else active.partialResult
@@ -95,28 +95,9 @@ class VoskSpeechRecognizer : SpeechRecognizer {
     override fun stop() {
         recognizer?.close()
         recognizer = null
-        recognizerSampleRate = -1
         hasOpenSegment = false
         onText = null
         onError = null
-    }
-
-    /** Vosk attend du mono ; les sources peuvent livrer plusieurs canaux entrelacés. */
-    private fun toMonoSamples(pcm16: ByteArray, channels: Int): ShortArray {
-        val samples = ByteBuffer.wrap(pcm16).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
-        val frames = samples.remaining() / channels
-        if (frames <= 0) return ShortArray(0)
-        val mono = ShortArray(frames)
-        if (channels == 1) {
-            samples.get(mono, 0, frames)
-            return mono
-        }
-        for (i in 0 until frames) {
-            var sum = 0
-            for (c in 0 until channels) sum += samples.get(i * channels + c)
-            mono[i] = (sum / channels).toShort()
-        }
-        return mono
     }
 
     private fun extractText(json: String, isFinal: Boolean): String? = try {
