@@ -15,12 +15,20 @@ import android.widget.TextView
  * usage réel : défilement continu façon sous-titrage TV en direct ("roll-up",
  * CEA-608).
  *
- * Tant que le texte reçu prolonge le précédent (la personne continue sa
- * phrase, un mot de plus toutes les ~500 ms), le défilement avance d'un cran
- * sans revenir en haut. Repartir de zéro à chaque mise à jour rendait le
- * défilement inutilisable en parole continue : l'animation n'avait jamais le
- * temps d'aller au bout avant d'être relancée depuis le début. On ne remonte
- * qu'au démarrage d'une phrase réellement nouvelle.
+ * Le texte ne repart jamais de zéro : il s'allonge, et le défilement l'amène
+ * sous les yeux de Jean. Une phrase nouvelle se pose à la suite de la
+ * précédente et n'apparaît qu'une fois le défilement arrivé jusqu'à elle.
+ *
+ * Une version antérieure devinait la suite d'une phrase en regardant si le
+ * texte reçu commençait par celui déjà affiché. C'était vrai d'AssemblyAI,
+ * dont le texte est cumulatif sur toute une prise de parole, et faux du
+ * moteur embarqué, qui découpe en énoncés courts et repart d'une chaîne vide
+ * après chacun. Le premier mot de l'énoncé suivant était alors pris pour une
+ * phrase neuve : la zone se vidait et remontait en haut, emportant les deux
+ * lignes que Jean était en train de lire. D'où le passage à `isFinal`, que
+ * les deux moteurs fournissent et qui dit la même chose chez l'un et chez
+ * l'autre : ce segment-ci est clos, le suivant recommence. Plus rien n'est
+ * deviné.
  *
  * Le défilement est plafonné à une vitesse constante et réglable à distance
  * (voir setScrollSpeedDpPerSec) plutôt que proportionnel au texte en attente :
@@ -42,8 +50,19 @@ class RollingCaptionZone(
 
     private val handler = Handler(Looper.getMainLooper())
 
-    /** Texte actuellement à l'écran, null si la zone est vide. */
-    private var displayed: String? = null
+    /**
+     * Les segments déjà clos, mis bout à bout. Ne change plus une fois écrit :
+     * c'est le texte acquis, celui que Jean a lu ou qu'il est en train de
+     * rattraper.
+     */
+    private var committed = ""
+
+    /**
+     * Le segment en cours de dictée, encore susceptible d'être révisé par le
+     * moteur d'un bloc de son à l'autre. Remplacé à chaque mise à jour, puis
+     * versé dans [committed] quand le moteur le déclare clos.
+     */
+    private var pending = ""
 
     private var visibleLines = DEFAULT_VISIBLE_LINES
     private var clearDelayMs = DEFAULT_CLEAR_DELAY_MS
@@ -54,7 +73,23 @@ class RollingCaptionZone(
         maxSpeedPxPerSec = { maxScrollSpeedPxPerSec },
     )
 
-    private val clearRunnable = Runnable { clear() }
+    /**
+     * L'effacement au bout du délai de silence, mais jamais avant que le
+     * défilement ait atteint la fin du texte : tant qu'il reste de la distance
+     * à parcourir, il reste des mots que Jean n'a pas encore eus sous les yeux,
+     * et les effacer reviendrait à les lui retirer avant qu'il ait pu les lire.
+     * On repousse alors juste le temps qu'il faut au défilement pour finir.
+     */
+    private val clearRunnable = object : Runnable {
+        override fun run() {
+            val remaining = pendingSeconds()
+            if (remaining > 0f) {
+                handler.postDelayed(this, (remaining * 1000f).toLong().coerceAtLeast(RECHECK_DELAY_MS))
+                return
+            }
+            clear()
+        }
+    }
 
     init {
         // Le défilement est piloté par le code, jamais par un doigt sur
@@ -72,29 +107,38 @@ class RollingCaptionZone(
     }
 
     /**
-     * Nouveau texte transcrit. `isFinal` n'est pas utilisé ici : contrairement
-     * à un affichage phrase par phrase, le défilement continu se moque de
-     * savoir si la phrase est close — il suit la parole telle qu'elle arrive,
-     * révisions comprises. Le paramètre reste dans la signature parce que les
-     * deux sources en disposent et qu'un futur affichage pourrait s'en servir.
+     * Nouveau texte transcrit. Un texte non final remplace le segment en
+     * cours — les moteurs se corrigent au fil des mots ; un texte final le
+     * clôt et le verse à la suite de ce qui précède.
+     *
+     * Un final vide n'est pas un non-événement : il signale la fin d'un
+     * segment que le moteur n'a finalement pas su transcrire, et il faut tout
+     * de même fermer celui en attente, sinon le segment suivant l'écraserait
+     * en croyant le corriger.
      */
-    fun submit(text: String, @Suppress("UNUSED_PARAMETER") isFinal: Boolean) {
+    fun submit(text: String, isFinal: Boolean) {
         val phrase = text.trim()
-        if (phrase.isEmpty()) return
+        // Silence pur : rien à afficher, et surtout pas de délai d'effacement
+        // à réarmer — sans quoi la zone ne disparaîtrait plus jamais.
+        if (phrase.isEmpty() && (!isFinal || pending.isEmpty())) return
 
-        val isContinuation = displayed?.let { phrase.startsWith(it) } == true
-        displayed = phrase
+        if (phrase.isNotEmpty()) pending = phrase
+        if (isFinal) {
+            committed = join(committed, pending)
+            pending = ""
+        }
+
         textView.alpha = 1f
-        textView.text = phrase
+        textView.text = renderedText()
         reveal()
 
         handler.removeCallbacks(clearRunnable)
         handler.postDelayed(clearRunnable, clearDelayMs)
 
         textView.post {
-            // Une phrase réellement nouvelle repart du haut ; la suite d'une
-            // phrase en cours poursuit son défilement là où il en était.
-            if (!isContinuation) scrollAnimator.jumpTo(0)
+            // Jamais de retour en haut : le texte ne fait que s'allonger, et
+            // c'est au défilement d'amener la suite sous les yeux de Jean.
+            trimTextAlreadyScrolledPast()
             val maxScroll = (textView.height - scrollView.height).coerceAtLeast(0)
             if (maxScroll > 0) scrollAnimator.scrollTo(maxScroll)
         }
@@ -103,8 +147,9 @@ class RollingCaptionZone(
     /** Vide la zone immédiatement (fin d'appel, sortie d'écran, silence prolongé). */
     fun clear() {
         handler.removeCallbacks(clearRunnable)
-        if (displayed == null) return
-        displayed = null
+        if (committed.isEmpty() && pending.isEmpty()) return
+        committed = ""
+        pending = ""
         textView.animate().alpha(0f).setDuration(FADE_MS).withEndAction {
             textView.text = ""
             textView.alpha = 1f
@@ -113,15 +158,30 @@ class RollingCaptionZone(
         hide()
     }
 
+    private fun renderedText(): String = join(committed, pending)
+
+    /**
+     * Les segments se suivent séparés d'une simple espace, et c'est le retour
+     * à la ligne naturel du texte qui les répartit sur les lignes. Un saut de
+     * ligne forcé par segment donnerait, avec un moteur qui découpe à chaque
+     * respiration, une ligne de trois mots suivie de beaucoup de vide — là où
+     * deux lignes bien remplies se lisent d'un coup d'œil.
+     */
+    private fun join(head: String, tail: String): String = when {
+        head.isEmpty() -> tail
+        tail.isEmpty() -> head
+        else -> "$head $tail"
+    }
+
     /**
      * Ce que Jean a réellement sous les yeux à cet instant, null si la zone
      * est vide. C'est cette valeur que le PWA rejoue pour montrer à l'appelant
      * la même chose au même moment (voir IncomingCallActivity).
      */
-    fun displayedText(): String? = displayed
+    fun displayedText(): String? = renderedText().ifEmpty { null }
 
     /** Vrai tant que quelque chose est affiché — donc tant qu'il reste à lire. */
-    fun hasText(): Boolean = displayed != null
+    fun hasText(): Boolean = committed.isNotEmpty() || pending.isNotEmpty()
 
     /** À appeler quand l'écran qui héberge cette zone disparaît. */
     fun release() {
@@ -204,6 +264,41 @@ class RollingCaptionZone(
         }
     }
 
+    /**
+     * Retire du tampon les lignes déjà sorties par le haut. Sans ça, une
+     * conversation d'une heure finirait par tenir des milliers de mots dans
+     * une zone qui en montre deux lignes, et la distance de défilement
+     * grandirait sans fin.
+     *
+     * Seules les lignes entièrement passées au-dessus de la fenêtre sont
+     * jetées : jamais un mot que Jean n'a pas eu sous les yeux — c'est
+     * précisément ce qu'on cherche à ne plus faire. La coupe tombe sur un
+     * début de ligne, ce qui laisse les retours à la ligne suivants
+     * inchangés, et la position comme la cible du défilement sont décalées
+     * d'exactement la hauteur retirée : à l'écran, rien ne bouge.
+     */
+    private fun trimTextAlreadyScrolledPast() {
+        val layout = textView.layout ?: return
+        if (layout.lineCount <= visibleLines * BUFFERED_SCREENS) return
+
+        var lastHiddenLine = -1
+        for (line in 0 until layout.lineCount - 1) {
+            if (layout.getLineBottom(line) > scrollView.scrollY) break
+            lastHiddenLine = line
+        }
+        if (lastHiddenLine < 0) return
+
+        val removedPx = layout.getLineBottom(lastHiddenLine)
+        val cutAt = layout.getLineStart(lastHiddenLine + 1)
+        // La coupe doit rester dans le texte acquis : le segment en cours est
+        // encore réécrit à chaque bloc de son, on n'y touche pas.
+        if (cutAt <= 0 || cutAt > committed.length) return
+
+        committed = committed.substring(cutAt)
+        textView.text = renderedText()
+        scrollAnimator.shiftBy(-removedPx)
+    }
+
     private fun reveal() {
         if (container.visibility == View.VISIBLE && container.alpha == 1f) return
         container.animate().cancel()
@@ -244,6 +339,16 @@ class RollingCaptionZone(
         private const val MIN_VISIBLE_LINES = 1
         private const val MAX_VISIBLE_LINES = 4
         private const val MIN_CLEAR_DELAY_MS = 1_000L
+
+        /**
+         * Combien de hauteurs de zone on garde en mémoire avant de jeter le
+         * texte déjà lu. Assez pour que le tampon ne se réduise pas à chaque
+         * ligne, assez peu pour qu'il reste borné.
+         */
+        private const val BUFFERED_SCREENS = 6
+
+        /** Intervalle de nouvelle vérification quand l'effacement attend la fin du défilement. */
+        private const val RECHECK_DELAY_MS = 500L
 
         /** Bornes de sécurité : une zone très plate ou très haute ne doit produire ni texte illisible ni texte absurde. */
         private const val MIN_TEXT_SIZE_PX = 18f

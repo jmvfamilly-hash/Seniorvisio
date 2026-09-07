@@ -41,6 +41,18 @@ class CaptionScrollAnimator(
         lastFrameTimeNanos = 0L
     }
 
+    /**
+     * Décale d'un coup la position ET la cible de la même quantité, sans rien
+     * animer ni interrompre le défilement en cours. Sert quand du texte est
+     * retiré au-dessus de la fenêtre (voir RollingCaptionZone) : le contenu
+     * s'est déplacé sous le regard, la position doit suivre à l'identique pour
+     * que rien ne bouge à l'écran.
+     */
+    fun shiftBy(deltaY: Int) {
+        target = (target + deltaY).coerceAtLeast(0)
+        scrollView.scrollTo(0, (scrollView.scrollY + deltaY).coerceAtLeast(0))
+    }
+
     private fun requestFrame() {
         if (frameScheduled) return
         frameScheduled = true
@@ -60,7 +72,17 @@ class CaptionScrollAnimator(
                 val maxStep = (maxSpeedPxPerSec() * dtSeconds).coerceAtLeast(1f)
                 val step = diff.coerceIn(-maxStep, maxStep)
                 scrollView.scrollTo(0, (current + step).roundToInt())
-                requestFrame()
+                if (scrollView.scrollY != current) {
+                    requestFrame()
+                } else {
+                    // La vue refuse d'aller plus loin : la cible visait au-delà
+                    // du contenu réel, en général parce que celui-ci a raccourci
+                    // depuis (voir RollingCaptionZone, qui jette le texte déjà
+                    // sorti par le haut). Sans cette sortie, l'écart à la cible
+                    // ne se réduisait jamais et on redemandait une image
+                    // soixante fois par seconde, indéfiniment.
+                    target = scrollView.scrollY
+                }
             }
             onFrame?.invoke((target - scrollView.scrollY).coerceAtLeast(0))
         }
