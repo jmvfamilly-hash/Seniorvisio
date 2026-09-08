@@ -52,6 +52,41 @@ class AndroidSpeechSession(
 
     private val handler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
+    private val adminConfig = AdminConfig(context)
+
+    @Volatile private var lastLevelDb = 0f
+    @Volatile private var peakLevelDb = 0f
+
+    /** Dernier niveau observé, en décibels relatifs à ce moteur. Pour le diagnostic. */
+    fun lastLevelDb(): Float = lastLevelDb
+
+    /**
+     * Le plus fort niveau depuis la dernière lecture, puis remis à zéro —
+     * même raison que pour l'autre mécanisme d'écoute (voir
+     * RoomPresenceService.consumePeakRms) : entre deux signes de vie il se
+     * passe cinq minutes, et l'instant précis où l'on regarde a toutes les
+     * chances d'être un instant de silence.
+     */
+    fun consumePeakLevelDb(): Float {
+        val peak = peakLevelDb
+        peakLevelDb = 0f
+        return peak
+    }
+
+    /**
+     * Le seuil réglé par l'administrateur, reporté sur l'échelle de ce moteur.
+     *
+     * Les bornes RMS sont celles du curseur côté administration : ce qui est
+     * transposé, c'est la position du curseur dans sa course, pas une valeur
+     * physique. Les bornes en décibels encadrent ce que ce moteur produit en
+     * pratique — autour de zéro dans une pièce calme, une dizaine sur une voix
+     * proche.
+     */
+    fun wakeThresholdDb(): Float {
+        val raw = adminConfig.roomWakeSensitivityThreshold.toFloat()
+        val fraction = ((raw - RMS_SCALE_MIN) / (RMS_SCALE_MAX - RMS_SCALE_MIN)).coerceIn(0f, 1f)
+        return DB_SCALE_MIN + fraction * (DB_SCALE_MAX - DB_SCALE_MIN)
+    }
 
     /** Vrai entre start() et stop() : distingue un arrêt voulu d'une fin d'énoncé. */
     private var wanted = false
@@ -157,13 +192,32 @@ class AndroidSpeechSession(
         }
 
         override fun onBeginningOfSpeech() {
-            // Le seul signal de présence dont on dispose dans ce mode : la
-            // capture qui alimentait d'ordinaire le réveil a laissé le micro
-            // à ce moteur.
-            onSpeechDetected()
+            // Volontairement sans effet sur le réveil. C'est ici que le réveil
+            // était déclenché, et c'était le défaut : ce signal est la
+            // détection de parole de Google, qui n'a pas de seuil réglable et
+            // se déclenche sur un bruit de clavier à deux mètres. Le curseur
+            // de sensibilité de l'écran d'administration ne servait alors
+            // strictement à rien dans ce mode — il ne commandait que l'autre
+            // mécanisme d'écoute.
         }
 
-        override fun onRmsChanged(rmsdB: Float) {}
+        /**
+         * Le réveil passe par là, comme sur l'autre mécanisme d'écoute (voir
+         * RoomPresenceService.handleLevel) : un niveau sonore comparé à un
+         * seuil réglable, et rien d'autre.
+         *
+         * L'unité n'est pas la même — ce moteur donne des décibels relatifs,
+         * notre capture donne une valeur efficace sur 16 bits — et aucune
+         * conversion honnête n'existe entre les deux. Le seuil réglé est donc
+         * reporté en proportion de sa propre échelle (voir wakeThresholdDb) :
+         * un curseur à mi-course reste à mi-course dans les deux modes, ce qui
+         * est ce qu'on attend d'un curseur, à défaut d'être une mesure.
+         */
+        override fun onRmsChanged(rmsdB: Float) {
+            lastLevelDb = rmsdB
+            if (rmsdB > peakLevelDb) peakLevelDb = rmsdB
+            if (rmsdB >= wakeThresholdDb()) onSpeechDetected()
+        }
         override fun onBufferReceived(buffer: ByteArray?) {}
         override fun onEndOfSpeech() {}
         override fun onEvent(eventType: Int, params: Bundle?) {}
@@ -232,5 +286,13 @@ class AndroidSpeechSession(
         const val RESTART_DELAY_MS = 300L
         const val MAX_RESTART_DELAY_MS = 30_000L
         const val MAX_CONSECUTIVE_ERRORS = 8
+
+        /** Bornes du curseur de sensibilité, côté administration (voir index.html). */
+        const val RMS_SCALE_MIN = 500f
+        const val RMS_SCALE_MAX = 15_000f
+
+        /** Ce que ce moteur produit en pratique : ~0 dans une pièce calme, ~10 sur une voix proche. */
+        const val DB_SCALE_MIN = 0f
+        const val DB_SCALE_MAX = 9f
     }
 }

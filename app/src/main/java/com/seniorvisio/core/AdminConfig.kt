@@ -150,9 +150,14 @@ class AdminConfig(context: Context) {
 
     // --- Seuil de déclenchement (RMS, échelle 0-32767) : plus petit = plus
     // sensible. Dépend du microphone et de l'acoustique de la pièce, à
-    // ajuster sur place plutôt qu'une valeur unique valable partout. ---
+    // ajuster sur place plutôt qu'une valeur unique valable partout.
+    //
+    // Défaut remonté de 1000 à 3000 : à 1000, un bruit de clavier à deux
+    // mètres rallumait l'écran, constaté en usage réel. Le pic mesuré est
+    // publié face au seuil dans le diagnostic (voir describeRoomListening) —
+    // c'est de là que doit venir le réglage fin, pas d'une valeur devinée. ---
     var roomWakeSensitivityThreshold: Int
-        get() = prefs.getInt(KEY_ROOM_WAKE_THRESHOLD, 1000)
+        get() = prefs.getInt(KEY_ROOM_WAKE_THRESHOLD, 3000)
         set(value) = prefs.edit().putInt(KEY_ROOM_WAKE_THRESHOLD, value).apply()
 
     fun isCurrentlyNightWindow(hourNow: Int): Boolean {

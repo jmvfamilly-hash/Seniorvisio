@@ -78,6 +78,19 @@ video {
   width: 100%;
 }
 
+/* Valeur courante du curseur (voir renderSliderValue). En chiffres tabulaires
+   et alignée à droite : sans ça, la ligne se décale à chaque passage de 9 à
+   10 pendant qu'on fait glisser le curseur, ce qui donne l'impression que la
+   page bouge sous le doigt. */
+.slider-value {
+  display: block;
+  text-align: right;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #E6ECF7;
+  margin-top: 2px;
+}
+
 .caption-control {
   text-align: left;
   margin-top: 16px;
@@ -591,6 +604,19 @@ body.video-mode #localVideo {
 }
 
 .admin-overlay.hidden { display: none; }
+
+/* Règle générique, ajoutée après coup et qui aurait dû l'être d'emblée.
+   Toutes les règles de masquage de cette feuille étaient composées
+   (.pane.hidden, .admin-overlay.hidden, .jean-zone.hidden…), si bien qu'un
+   élément portant la classe « hidden » nue n'était pas masqué du tout —
+   aucun sélecteur ne s'y appliquait.
+
+   Ce qui a eu une conséquence sérieuse : #adminLock et #adminPanel ne
+   portent que cette classe nue. Le panneau de réglages de la tablette
+   s'affichait donc en permanence, sous la demande de code, et le code lui-
+   même ne servait à rien — juste ou faux, tout était déjà visible et
+   modifiable. Le JavaScript, lui, faisait exactement ce qu'il fallait. */
+.hidden { display: none; }
 
 .admin-sheet {
   width: 100%;

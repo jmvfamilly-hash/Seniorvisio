@@ -523,6 +523,33 @@ for (const [elementKey, field] of ADMIN_TOGGLE_FIELDS) {
   });
 }
 
+// --- Valeur numérique à côté de chaque curseur ----------------------------
+// Un curseur seul ne dit pas où il est. « Efface après ce temps sans parole »
+// à mi-course, c'est 30 secondes ou 12 ? Impossible à savoir, donc impossible
+// de reproduire un réglage, de le dire à quelqu'un au téléphone, ou de
+// constater qu'on vient de le changer par mégarde.
+//
+// Fait pour tous les curseurs de la page d'un coup, plutôt que curseur par
+// curseur : celui qu'on ajoutera demain sera affiché sans qu'on y pense.
+// L'unité vient de l'attribut data-unit posé dans le HTML.
+function renderSliderValue(input) {
+  const output = input.nextElementSibling;
+  if (!output || !output.classList.contains("slider-value")) return;
+  output.textContent = `${input.value}${input.dataset.unit || ""}`;
+}
+
+function refreshAllSliderValues() {
+  document.querySelectorAll('input[type="range"]').forEach(renderSliderValue);
+}
+
+document.querySelectorAll('input[type="range"]').forEach((input) => {
+  const output = document.createElement("span");
+  output.className = "slider-value";
+  input.insertAdjacentElement("afterend", output);
+  input.addEventListener("input", () => renderSliderValue(input));
+  renderSliderValue(input);
+});
+
 const adminSliderDebounce = {};
 for (const [elementKey, field] of ADMIN_SLIDER_FIELDS) {
   els[elementKey].addEventListener("input", () => {
@@ -867,6 +894,10 @@ function applyDeviceSettings(data) {
     const value = Number(data[field]);
     if (Number.isFinite(value) && value > 0) els[elementKey].value = value;
   }
+  // Affecter .value par programme ne déclenche aucun événement « input » :
+  // sans ce rappel, le curseur bougerait en affichant l'ancien nombre, ce qui
+  // est pire que de n'en afficher aucun.
+  refreshAllSliderValues();
   for (const [elementKey, field] of ADMIN_TOGGLE_FIELDS) {
     // Ces deux-là sont vrais par défaut côté tablette (voir AdminConfig) :
     // un champ absent veut donc dire « jamais réglé d'ici », pas « désactivé ».

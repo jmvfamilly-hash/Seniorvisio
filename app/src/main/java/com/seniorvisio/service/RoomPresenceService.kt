@@ -148,6 +148,16 @@ class RoomPresenceService : Service() {
         val voskModel: String,
         /** Lequel des deux mécanismes tient le micro (voir startListening). */
         val listeningMode: String,
+
+        /**
+         * Niveau instantané et seuil du moteur d'Android, en décibels relatifs
+         * à ce moteur — nuls quand ce n'est pas lui qui écoute. Séparés de
+         * lastRms et threshold volontairement : ce ne sont pas les mêmes
+         * unités, et les confondre dans un même champ ferait comparer des
+         * valeurs qui n'ont rien à voir.
+         */
+        val androidLevelDb: Float? = null,
+        val androidThresholdDb: Float? = null,
     )
 
     /**
@@ -178,7 +188,19 @@ class RoomPresenceService : Service() {
         listeningMode = if (androidSpeech?.isRunning() == true) "reconnaissance Android"
         else if (isCapturing) "capture interne"
         else "aucune écoute",
+        androidLevelDb = androidSpeech?.takeIf { it.isRunning() }?.lastLevelDb(),
+        androidThresholdDb = androidSpeech?.takeIf { it.isRunning() }?.wakeThresholdDb(),
     )
+
+    /**
+     * Pendant du consumePeakRms de l'autre mécanisme d'écoute, et séparé de
+     * currentStatus() pour la même raison qu'elle : lire le pic le remet à
+     * zéro. L'écran d'administration de la tablette interroge l'état chaque
+     * seconde ; si la lecture du pic était faite là, le signe de vie n'en
+     * verrait plus jamais aucun, et inversement.
+     */
+    fun consumeAndroidPeakLevelDb(): Float? =
+        androidSpeech?.takeIf { it.isRunning() }?.consumePeakLevelDb()
     private var roomTranscriptionOnText: ((text: String, isFinal: Boolean) -> Unit)? = null
     private var roomTranscriptionOnError: ((String) -> Unit)? = null
 

@@ -108,6 +108,9 @@ class DeviceStatusReporter(private val context: Context) {
      * Comparé au seuil, ce pic dit tout de suite si le son de la pièce
      * atteint, ou non, de quoi réveiller l'écran.
      */
+    /** Une décimale suffit : c'est un repère de réglage, pas une mesure de laboratoire. */
+    private fun format1(value: Float): String = String.format(java.util.Locale.FRANCE, "%.1f", value)
+
     private fun describeRoomListening(): String {
         val service = RoomPresenceService.running
             ?: return "service d'écoute non démarré"
@@ -116,11 +119,18 @@ class DeviceStatusReporter(private val context: Context) {
         return buildString {
             append(status.listeningMode)
             status.captureError?.let { append(" ($it)") }
-            // Le moteur d'Android écoute le micro lui-même et ne nous laisse
-            // aucun niveau à mesurer : afficher « pic 0 » laisserait croire à
-            // un micro muet alors que la parole est bien détectée, autrement.
+            // Les deux mécanismes mesurent, mais pas dans la même unité : une
+            // valeur efficace sur 16 bits pour notre capture, des décibels
+            // relatifs pour le moteur d'Android. Chacun affiche la sienne
+            // face à son propre seuil — c'est ce qui permet de régler la
+            // sensibilité sur une mesure plutôt qu'au jugé.
+            val androidPeak = service.consumeAndroidPeakLevelDb()
+            val androidThreshold = status.androidThresholdDb
             if (status.capturing) {
                 append(" — pic ").append(peak).append(" / seuil ").append(status.threshold)
+            } else if (androidPeak != null && androidThreshold != null) {
+                append(" — pic ").append(format1(androidPeak))
+                append(" dB / seuil ").append(format1(androidThreshold)).append(" dB")
             }
             if (!status.wakeEnabled) append(" — réveil désactivé")
             if (status.inNightWindow) append(" — réveil bloqué (nuit)")

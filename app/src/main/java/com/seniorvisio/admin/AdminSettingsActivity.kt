@@ -92,8 +92,20 @@ class AdminSettingsActivity : AppCompatActivity() {
         // Chaque ligne répond à une question précise qu'on se pose quand le
         // réveil ne se déclenche pas — et une seule d'entre elles sera fausse.
         view.text = buildString {
-            appendLine("Niveau mesuré : ${status.lastRms}  (seuil ${status.threshold})")
-            appendLine(if (status.lastRms >= status.threshold) "  → au-dessus du seuil" else "  → sous le seuil")
+            // Deux mécanismes d'écoute, deux unités. Afficher le niveau de la
+            // capture interne pendant que c'est le moteur d'Android qui écoute
+            // donnerait « 0 / seuil 3000 → sous le seuil » en permanence, y
+            // compris pendant que quelqu'un parle : de quoi conclure à un
+            // micro mort et régler le seuil à l'aveugle dans le mauvais sens.
+            val level = status.androidLevelDb
+            val threshold = status.androidThresholdDb
+            if (level != null && threshold != null) {
+                appendLine("Niveau mesuré : %.1f dB  (seuil %.1f dB)".format(level, threshold))
+                appendLine(if (level >= threshold) "  → au-dessus du seuil" else "  → sous le seuil")
+            } else {
+                appendLine("Niveau mesuré : ${status.lastRms}  (seuil ${status.threshold})")
+                appendLine(if (status.lastRms >= status.threshold) "  → au-dessus du seuil" else "  → sous le seuil")
+            }
             appendLine("Capture micro : ${if (status.capturing) "active" else "ARRÊTÉE"}")
             status.captureError?.let { appendLine("  ⚠️ $it") }
             appendLine("Réveil au son : ${if (status.wakeEnabled) "activé" else "DÉSACTIVÉ"}")
