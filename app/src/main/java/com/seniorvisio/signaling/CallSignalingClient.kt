@@ -138,28 +138,6 @@ class CallSignalingClient {
     }
 
     /**
-     * Nombre de lignes visibles avant que le texte ne se mette à défiler,
-     * choisi à distance par l'appelant. Commande indirectement la taille de la
-     * police : les zones occupant une place fixe à l'écran, c'est elle qui
-     * s'ajuste pour que ce nombre de lignes y tienne (voir
-     * RollingCaptionZone.setVisibleLines) — moins de lignes, texte plus gros.
-     */
-    fun listenForCaptionVisibleLines(callId: String, onLines: (Double) -> Unit): ListenerRegistration {
-        return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val lines = snapshot?.getDouble(FIELD_CAPTION_VISIBLE_LINES)
-            if (lines != null) onLines(lines)
-        }
-    }
-
-    /** Délai (en secondes) sans nouvelle parole avant effacement du texte, choisi à distance par l'appelant. */
-    fun listenForCaptionClearDelay(callId: String, onSeconds: (Double) -> Unit): ListenerRegistration {
-        return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val seconds = snapshot?.getDouble(FIELD_CAPTION_CLEAR_DELAY)
-            if (seconds != null) onSeconds(seconds)
-        }
-    }
-
-    /**
      * L'appelant demande que la transcription écoute la pièce de Jean plutôt
      * que sa propre voix (voir WebRtcCallEngine.listenForMicToRoom) — pour
      * suivre par écrit ce que dit quelqu'un présent auprès de lui, un soignant
@@ -249,14 +227,6 @@ class CallSignalingClient {
         return callDoc(callId).addSnapshotListener { snapshot, _ ->
             val enabled = snapshot?.getBoolean(FIELD_SAME_ROOM_MODE)
             if (enabled != null) onEnabled(enabled)
-        }
-    }
-
-    /** Vitesse maximale (dp/s) à laquelle le texte défile chez Jean, choisie à distance par l'appelant. */
-    fun listenForCaptionScrollSpeed(callId: String, onDpPerSec: (Double) -> Unit): ListenerRegistration {
-        return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val speed = snapshot?.getDouble(FIELD_CAPTION_SCROLL_SPEED)
-            if (speed != null) onDpPerSec(speed)
         }
     }
 
@@ -392,13 +362,10 @@ class CallSignalingClient {
         private const val FIELD_ALERT_STARTED_AT = "alertStartedAt"
         private const val FIELD_ALERT_DURATION = "alertDurationSeconds"
         private const val FIELD_CAPTION_MODE = "captionModeEnabled"
-        private const val FIELD_CAPTION_VISIBLE_LINES = "captionVisibleLines"
-        private const val FIELD_CAPTION_CLEAR_DELAY = "captionClearDelaySeconds"
         private const val FIELD_MIC_TO_ROOM = "micToRoom"
         private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"
         private const val FIELD_FORCE_CONNECT = "forceConnectRequested"
         private const val FIELD_SELF_PREVIEW = "selfPreviewEnabled"
-        private const val FIELD_CAPTION_SCROLL_SPEED = "captionMaxScrollSpeedDpPerSec"
         private const val FIELD_CAPTION_CATCHUP_LAG = "captionCatchUpLagSeconds"
         private const val FIELD_DISPLAYED_ROOM_TEXT = "displayedRoomText"
         private const val FIELD_DISPLAYED_CALL_TEXT = "displayedCallText"

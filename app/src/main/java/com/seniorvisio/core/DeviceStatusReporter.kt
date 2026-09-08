@@ -46,9 +46,31 @@ class DeviceStatusReporter(private val context: Context) {
                 // soit pas aveugle : c'est le seul retour dont dispose le
                 // proche qui vient de demander le grand modèle.
                 FIELD_VOSK_MODEL_STATE to VoskModelProvider.describeState(),
+                FIELD_ADMIN_PIN_FINGERPRINT to adminPinFingerprint(),
             ),
             SetOptions.merge()
         ).addOnFailureListener { e -> Log.e(TAG, "Échec de l'envoi du signe de vie à Firestore", e) }
+    }
+
+
+    /**
+     * Empreinte du code d'accès admin de la tablette, republiée avec le signe
+     * de vie pour que le PWA puisse déverrouiller son propre panneau
+     * d'administration avec le MÊME code (voir web-caller/app.js). Un seul code
+     * à retenir pour les deux, et il se change au même endroit.
+     *
+     * Une empreinte plutôt que le code en clair, pour qu'il ne se lise pas
+     * d'un coup d'œil dans la console Firestore. Ce n'est pas pour autant une
+     * barrière : quatre chiffres se retrouvent instantanément à partir de leur
+     * empreinte, et les règles Firestore de ce projet laissent de toute façon
+     * écrire quiconque connaît l'adresse. Le code protège contre la fausse
+     * manœuvre d'un proche qui explore l'application, pas contre quelqu'un de
+     * mal intentionné — et il ne faut pas lui faire dire autre chose.
+     */
+    private fun adminPinFingerprint(): String {
+        val pin = AdminConfig(context).adminPin
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(pin.toByteArray())
+        return digest.joinToString("") { "%02x".format(it) }
     }
 
     /**
@@ -138,6 +160,16 @@ class DeviceStatusReporter(private val context: Context) {
                 Log.i(TAG, "Moteur des appels réglé à distance : ${it.remoteValue}")
             }
         }
+        snapshot.getLong(FIELD_CAPTION_VISIBLE_LINES)?.let {
+            adminConfig.captionVisibleLines = it.toInt()
+        }
+        snapshot.getLong(FIELD_CAPTION_SCROLL_SPEED)?.let {
+            adminConfig.captionScrollSpeedDp = it.toInt()
+        }
+        snapshot.getLong(FIELD_CAPTION_CLEAR_DELAY)?.let {
+            adminConfig.captionClearDelaySeconds = it.toInt()
+        }
+
         VoskModelSize.fromRemoteValue(snapshot.getString(FIELD_VOSK_MODEL_SIZE))?.let {
             if (adminConfig.voskModelSize != it) {
                 adminConfig.voskModelSize = it
@@ -264,6 +296,10 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"
         private const val FIELD_VOSK_MODEL_SIZE = "voskModelSize"
         private const val FIELD_VOSK_MODEL_STATE = "voskModelState"
+        private const val FIELD_CAPTION_VISIBLE_LINES = "captionVisibleLines"
+        private const val FIELD_CAPTION_SCROLL_SPEED = "captionScrollSpeedDp"
+        private const val FIELD_CAPTION_CLEAR_DELAY = "captionClearDelaySeconds"
+        private const val FIELD_ADMIN_PIN_FINGERPRINT = "adminPinFingerprint"
 
         private const val LISTENER_RETRY_DELAY_MS = 60_000L
     }

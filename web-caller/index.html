@@ -58,50 +58,10 @@
         <p class="hint" id="identityStatus"></p>
       </details>
 
-      <!-- Réglages de la tablette elle-même, pas d'un appel : ils passent par
-           le document d'appareil et non par celui d'un appel (voir
-           DeviceStatusReporter.applyTranscriptionSettings), et prennent donc
-           effet immédiatement, appel en cours ou non. Placés sur l'écran
-           d'attente pour la même raison : le moteur de la pièce doit pouvoir
-           être changé sans avoir à appeler Jean. -->
-      <details class="side-panel" id="enginePanel">
-        <summary>Moteur de transcription</summary>
-        <p class="hint">
-          Le partage habituel : ce qui se dit dans la pièce est transcrit par le
-          moteur embarqué de la tablette (gratuit, il tourne des heures par
-          jour), les appels par AssemblyAI (payant à la durée, mais plus juste).
-          Les forcer sert surtout à comparer les deux sur la même voix.
-        </p>
-
-        <label for="roomEngineSelect">Paroles dans la pièce</label>
-        <select id="roomEngineSelect">
-          <option value="auto">Automatique — moteur embarqué</option>
-          <option value="vosk">Forcer le moteur embarqué (gratuit)</option>
-          <option value="assemblyai">Forcer AssemblyAI (payant)</option>
-        </select>
-
-        <label for="callEngineSelect">Paroles pendant un appel</label>
-        <select id="callEngineSelect">
-          <option value="auto">Automatique — AssemblyAI</option>
-          <option value="assemblyai">Forcer AssemblyAI (payant)</option>
-          <option value="vosk">Forcer le moteur embarqué (gratuit)</option>
-        </select>
-
-        <label for="voskModelSelect">Modèle embarqué</label>
-        <select id="voskModelSelect">
-          <option value="large">Grand — 1,4 Go, nettement plus juste</option>
-          <option value="small">Petit — 45 Mo, approximatif</option>
-        </select>
-
-        <p class="hint">
-          Le changement de modèle déclenche un téléchargement sur la tablette,
-          une seule fois par modèle : une fois les deux téléchargés, passer de
-          l'un à l'autre est immédiat.
-        </p>
-        <p class="hint" id="engineStatus">
-          En attente du premier signe de vie de la tablette…
-        </p>
-      </details>
+      <!-- Le panneau d'administration règle la tablette elle-même et non un
+           appel : il est donc accessible d'ici, sans avoir à déranger Jean.
+           Protégé par le code de la tablette (voir openAdmin dans app.js). -->
+      <button id="openAdminIdleButton" class="secondary">🔒 Administration</button>
 
     </div>
 
@@ -189,18 +149,9 @@
         <button class="secondary pane-back" data-back-to-video>◀ Revenir à la vidéo</button>
         <h2 class="pane-title">Réglages de l'appel</h2>
 
-        <pre id="callStats" class="stats"></pre>
-
         <div class="volume-control">
           <label for="volumeSlider">🔊 Volume chez Jean</label>
           <input type="range" id="volumeSlider" min="0" max="200" value="100" step="5">
-        </div>
-
-        <div class="caption-control">
-          <label>
-            <input type="checkbox" id="tabletMicMuteToggle">
-            🎤 Couper le micro de Jean
-          </label>
         </div>
 
         <!-- Cas où le proche est physiquement à côté de Jean : la tablette ne
@@ -229,25 +180,6 @@
             <input type="checkbox" id="selfPreviewToggle">
             🪞 Montrer à Jean sa propre image (petite vignette)
           </label>
-        </div>
-
-        <!-- Un seul réglage là où il y en avait deux qui se contredisaient :
-             les zones occupent une place fixe sur l'écran de Jean, donc moins
-             de lignes veut dire un texte plus gros (voir
-             RollingCaptionZone.setVisibleLines côté Android). -->
-        <div class="volume-control">
-          <label for="captionLinesSlider">📏 Lignes affichées chez Jean (moins = plus gros)</label>
-          <input type="range" id="captionLinesSlider" min="1" max="4" value="2" step="1">
-        </div>
-
-        <div class="volume-control">
-          <label for="scrollSpeedSlider">🐢🐇 Vitesse de défilement max chez Jean</label>
-          <input type="range" id="scrollSpeedSlider" min="20" max="100" value="50" step="10">
-        </div>
-
-        <div class="volume-control">
-          <label for="captionClearDelaySlider">⏱️ Efface après ce temps sans parole (secondes)</label>
-          <input type="range" id="captionClearDelaySlider" min="1" max="60" value="30" step="1">
         </div>
 
         <!-- Quelqu'un est entré dans la chambre de Jean et lui parle : ce
@@ -279,6 +211,7 @@
         </div>
 
         <button id="rememberSettingsButton" class="secondary">💾 Mémoriser ces réglages pour la prochaine fois</button>
+        <button id="openAdminCallButton" class="secondary">🔒 Administration</button>
 
         <!-- Rappelée pendant l'appel, pas seulement avant : le réflexe de
              baisser le téléphone pour parler à la personne revient vite. -->
@@ -317,6 +250,121 @@
       </section>
 
     </div>
+    <!-- ================= ADMINISTRATION =================
+         Deux catégories d'utilisateur, une seule application. Ce qui précède
+         est l'écran de l'utilisateur standard : appeler Jean, voir ce qu'il a
+         sous les yeux, décider si ses paroles s'écrivent, faire écouter la
+         pièce, régler le volume, dire qu'on est dans la même pièce, gérer ses
+         photos. Rien là-dedans ne peut abîmer durablement la tablette : tout
+         meurt en raccrochant.
+
+         Ce panneau-ci règle la tablette elle-même, et ses réglages s'appliquent
+         immédiatement, appel en cours ou non (ils passent par le document
+         d'appareil, voir DeviceStatusReporter). L'administrateur a donc accès
+         à l'écran standard — c'est le même — et bascule ici par un code.
+
+         Le code est celui de l'écran admin de la tablette : un seul à retenir,
+         qui se change au même endroit. Ce n'est pas une barrière de sécurité
+         (voir DeviceStatusReporter.adminPinFingerprint) mais un garde-fou
+         contre la fausse manœuvre d'un proche qui explore l'application. -->
+    <div id="adminOverlay" class="admin-overlay hidden">
+      <div class="admin-sheet">
+
+        <div id="adminLock">
+          <h2 class="pane-title">Administration</h2>
+          <p class="hint">
+            Réservé à la personne qui gère la tablette. Le code est le même que
+            celui de l'écran de réglages sur la tablette elle-même.
+          </p>
+          <label for="adminPinInput">Code d'accès</label>
+          <input type="password" id="adminPinInput" inputmode="numeric" autocomplete="off" placeholder="••••">
+          <button id="adminUnlockButton">Déverrouiller</button>
+          <button id="adminCancelButton" class="secondary">Annuler</button>
+          <p class="hint" id="adminLockStatus"></p>
+        </div>
+
+        <div id="adminPanel" class="hidden">
+          <h2 class="pane-title">Réglages de la tablette</h2>
+          <p class="hint">
+            Ces réglages s'appliquent tout de suite chez Jean, qu'un appel soit
+            en cours ou non, et valent pour tout le monde.
+          </p>
+
+          <h3 class="admin-section">Lecture chez Jean</h3>
+          <!-- Un seul réglage là où il y en avait deux qui se contredisaient :
+               les zones occupent une place fixe sur l'écran de Jean, donc moins
+               de lignes veut dire un texte plus gros (voir
+               RollingCaptionZone.setVisibleLines côté Android). -->
+          <div class="volume-control">
+            <label for="captionLinesSlider">📏 Lignes affichées chez Jean (moins = plus gros)</label>
+            <input type="range" id="captionLinesSlider" min="1" max="4" value="2" step="1">
+          </div>
+
+          <div class="volume-control">
+            <label for="scrollSpeedSlider">🐢🐇 Vitesse de défilement max chez Jean</label>
+            <input type="range" id="scrollSpeedSlider" min="20" max="100" value="50" step="10">
+          </div>
+
+          <div class="volume-control">
+            <label for="captionClearDelaySlider">⏱️ Efface après ce temps sans parole (secondes)</label>
+            <input type="range" id="captionClearDelaySlider" min="1" max="60" value="30" step="1">
+          </div>
+
+          <h3 class="admin-section">Moteur de transcription</h3>
+          <p class="hint">
+            Tout passe par défaut par le moteur embarqué de la tablette :
+            gratuit, hors-ligne, et il écoute la pièce des heures par jour sans
+            que ça coûte quoi que ce soit. Forcer l'un ou l'autre sert surtout à
+            les comparer sur la même voix.
+          </p>
+
+          <label for="roomEngineSelect">Paroles dans la pièce</label>
+          <select id="roomEngineSelect">
+            <option value="auto">Automatique — moteur embarqué</option>
+            <option value="vosk">Forcer le moteur embarqué (gratuit)</option>
+            <option value="assemblyai">Forcer AssemblyAI (payant)</option>
+          </select>
+
+          <label for="callEngineSelect">Paroles pendant un appel</label>
+          <select id="callEngineSelect">
+            <option value="auto">Automatique — moteur embarqué</option>
+            <option value="assemblyai">Forcer AssemblyAI (payant)</option>
+            <option value="vosk">Forcer le moteur embarqué (gratuit)</option>
+          </select>
+
+          <label for="voskModelSelect">Modèle embarqué</label>
+          <select id="voskModelSelect">
+            <option value="large">Grand — 1,4 Go, nettement plus juste</option>
+            <option value="small">Petit — 45 Mo, approximatif</option>
+          </select>
+
+          <p class="hint">
+            Le changement de modèle déclenche un téléchargement sur la tablette,
+            une seule fois par modèle : une fois les deux téléchargés, passer de
+            l'un à l'autre est immédiat.
+          </p>
+          <p class="hint" id="engineStatus">
+            En attente du premier signe de vie de la tablette…
+          </p>
+
+          <h3 class="admin-section">Diagnostic</h3>
+          <!-- Test décisif pour localiser un écho : s'il disparaît en coupant
+               le micro de la tablette, il vient d'elle ; s'il persiste, il
+               vient du téléphone de l'appelant. Sans effet hors appel. -->
+          <div class="caption-control">
+            <label>
+              <input type="checkbox" id="tabletMicMuteToggle">
+              🎤 Couper le micro de Jean (pendant l'appel en cours)
+            </label>
+          </div>
+          <pre id="callStats" class="stats"></pre>
+
+          <button id="adminCloseButton" class="secondary">Fermer</button>
+        </div>
+
+      </div>
+    </div>
+
   </main>
 
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>

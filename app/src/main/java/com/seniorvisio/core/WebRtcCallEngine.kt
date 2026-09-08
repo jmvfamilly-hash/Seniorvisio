@@ -31,7 +31,6 @@ import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 import java.nio.ByteBuffer
-import kotlin.math.roundToInt
 
 /**
  * Implémentation WebRTC de [CallEngine]. Le signaling (échange de l'offre,
@@ -71,11 +70,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var remoteRenderer: SurfaceViewRenderer? = null
     private var volumeListener: ListenerRegistration? = null
     private var captionModeListener: ListenerRegistration? = null
-    private var captionVisibleLinesListener: ListenerRegistration? = null
-    private var captionClearDelayListener: ListenerRegistration? = null
     private var micToRoomListener: ListenerRegistration? = null
     private var callEngineListener: ListenerRegistration? = null
-    private var captionScrollSpeedListener: ListenerRegistration? = null
     private var selfPreviewListener: ListenerRegistration? = null
     private var forceConnectListener: ListenerRegistration? = null
     private var remoteEndedListener: ListenerRegistration? = null
@@ -326,18 +322,6 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         captionModeListener = signaling.listenForCaptionMode(id, onEnabled)
     }
 
-    /** Écoute le nombre de lignes visibles choisi à distance par le proche (voir RollingCaptionZone.setVisibleLines). */
-    fun listenForCaptionVisibleLines(onLines: (Int) -> Unit) {
-        val id = callId ?: return
-        captionVisibleLinesListener = signaling.listenForCaptionVisibleLines(id) { lines -> onLines(lines.roundToInt()) }
-    }
-
-    /** Écoute le délai (en secondes) sans nouvelle parole avant effacement du texte. */
-    fun listenForCaptionClearDelay(onSeconds: (Int) -> Unit) {
-        val id = callId ?: return
-        captionClearDelayListener = signaling.listenForCaptionClearDelay(id) { seconds -> onSeconds(seconds.roundToInt()) }
-    }
-
     /** Écoute la demande de basculer la transcription sur le microphone de la tablette (voir setMicToRoom). */
     fun listenForMicToRoom(onEnabled: (Boolean) -> Unit) {
         val id = callId ?: return
@@ -448,12 +432,6 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     fun listenForSelfPreviewMode(onEnabled: (Boolean) -> Unit) {
         val id = callId ?: return
         selfPreviewListener = signaling.listenForSelfPreviewMode(id, onEnabled)
-    }
-
-    /** Écoute la vitesse maximale de défilement des sous-titres choisie à distance par le proche. */
-    fun listenForCaptionScrollSpeed(onDpPerSec: (Float) -> Unit) {
-        val id = callId ?: return
-        captionScrollSpeedListener = signaling.listenForCaptionScrollSpeed(id) { speed -> onDpPerSec(speed.toFloat()) }
     }
 
     /**
@@ -777,16 +755,10 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         volumeListener = null
         captionModeListener?.remove()
         captionModeListener = null
-        captionVisibleLinesListener?.remove()
-        captionVisibleLinesListener = null
-        captionClearDelayListener?.remove()
-        captionClearDelayListener = null
         micToRoomListener?.remove()
         micToRoomListener = null
         callEngineListener?.remove()
         callEngineListener = null
-        captionScrollSpeedListener?.remove()
-        captionScrollSpeedListener = null
         selfPreviewListener?.remove()
         selfPreviewListener = null
         forceConnectListener?.remove()

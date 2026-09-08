@@ -40,9 +40,6 @@ const DEFAULT_SETTINGS = {
   volume: 100,
   captionEnabled: false,
   selfPreview: false,
-  scrollSpeed: 50,
-  captionVisibleLines: 2,
-  captionClearDelaySeconds: 30,
 };
 
 // --- Identité de l'appelant, mémorisée dans ce navigateur uniquement ---
@@ -126,9 +123,6 @@ function currentSettingsFromUi() {
     volume: Number(els.volumeSlider.value),
     captionEnabled: els.captionToggle.checked,
     selfPreview: els.selfPreviewToggle.checked,
-    scrollSpeed: Number(els.scrollSpeedSlider.value),
-    captionVisibleLines: Number(els.captionLinesSlider.value),
-    captionClearDelaySeconds: Number(els.captionClearDelaySlider.value),
   };
 }
 
@@ -136,9 +130,6 @@ function applySettingsToUi(settings) {
   els.volumeSlider.value = settings.volume;
   els.captionToggle.checked = settings.captionEnabled;
   els.selfPreviewToggle.checked = settings.selfPreview;
-  els.scrollSpeedSlider.value = settings.scrollSpeed;
-  els.captionLinesSlider.value = settings.captionVisibleLines;
-  els.captionClearDelaySlider.value = settings.captionClearDelaySeconds;
 }
 
 // --- Câblage UI ---
@@ -182,6 +173,16 @@ const els = {
   micToRoomControl: document.getElementById("micToRoomControl"),
   micToRoomToggle: document.getElementById("micToRoomToggle"),
   micToRoomStatus: document.getElementById("micToRoomStatus"),
+  openAdminIdleButton: document.getElementById("openAdminIdleButton"),
+  openAdminCallButton: document.getElementById("openAdminCallButton"),
+  adminOverlay: document.getElementById("adminOverlay"),
+  adminLock: document.getElementById("adminLock"),
+  adminPanel: document.getElementById("adminPanel"),
+  adminPinInput: document.getElementById("adminPinInput"),
+  adminUnlockButton: document.getElementById("adminUnlockButton"),
+  adminCancelButton: document.getElementById("adminCancelButton"),
+  adminCloseButton: document.getElementById("adminCloseButton"),
+  adminLockStatus: document.getElementById("adminLockStatus"),
   preciseEngineToggle: document.getElementById("preciseEngineToggle"),
   preciseEngineStatus: document.getElementById("preciseEngineStatus"),
   micToRoomBanner: document.getElementById("micToRoomBanner"),
@@ -383,9 +384,6 @@ els.callButton.addEventListener("click", async () => {
       // Les sous-titres sont toute la raison d'être de ce mode : activés
       // d'office, jamais à cocher.
       captionModeEnabled: true,
-      captionVisibleLines: DEFAULT_SETTINGS.captionVisibleLines,
-      captionClearDelaySeconds: DEFAULT_SETTINGS.captionClearDelaySeconds,
-      captionMaxScrollSpeedDpPerSec: DEFAULT_SETTINGS.scrollSpeed,
       selfPreviewEnabled: false,
       // Ni décompte, ni photo, ni caméra : voir le commentaire de CAREGIVER_MODE.
       forceConnect: true,
@@ -404,9 +402,6 @@ els.callButton.addEventListener("click", async () => {
     await engine.startCall(CONFIG.targetDeviceId, identity.name || CONFIG.callerName, {
       remoteVolume: settings.volume / 100,
       captionModeEnabled: settings.captionEnabled,
-      captionVisibleLines: settings.captionVisibleLines,
-      captionClearDelaySeconds: settings.captionClearDelaySeconds,
-      captionMaxScrollSpeedDpPerSec: settings.scrollSpeed,
       selfPreviewEnabled: settings.selfPreview,
       callerPhotoBase64: identity.photoBase64 || null,
     });
@@ -450,29 +445,36 @@ els.tabletMicMuteToggle.addEventListener("change", () => {
 engine.onScreenState(applyScreenState);
 engine.onScreenLayout(applyScreenLayout);
 
-let captionLinesDebounce = null;
-els.captionLinesSlider.addEventListener("input", () => {
-  clearTimeout(captionLinesDebounce);
-  captionLinesDebounce = setTimeout(() => {
-    engine.setCaptionVisibleLines(Number(els.captionLinesSlider.value));
-  }, 150);
-});
+// Ergonomie de lecture : réglages d'ADMINISTRATEUR et non d'appel. Ils
+// décrivent la façon dont Jean lit, qui ne change pas selon qui l'appelle, et
+// ils doivent valoir aussi pour ce qui se dit dans la pièce — c'est-à-dire
+// l'essentiel des journées de la tablette, où personne n'est au bout du fil.
+// Ils passent donc par le document d'appareil et s'appliquent tout de suite
+// (voir DeviceStatusReporter, et applyCaptionErgonomics côté tablette).
+//
+// Les avoir laissés à chaque appelant faisait varier l'écran de Jean d'un
+// appel à l'autre sans que personne ne sache pourquoi.
+const ADMIN_SLIDER_FIELDS = [
+  ["captionLinesSlider", "captionVisibleLines"],
+  ["scrollSpeedSlider", "captionScrollSpeedDp"],
+  ["captionClearDelaySlider", "captionClearDelaySeconds"],
+];
 
-let captionClearDelayDebounce = null;
-els.captionClearDelaySlider.addEventListener("input", () => {
-  clearTimeout(captionClearDelayDebounce);
-  captionClearDelayDebounce = setTimeout(() => {
-    engine.setCaptionClearDelay(Number(els.captionClearDelaySlider.value));
-  }, 150);
-});
-
-let scrollSpeedDebounce = null;
-els.scrollSpeedSlider.addEventListener("input", () => {
-  clearTimeout(scrollSpeedDebounce);
-  scrollSpeedDebounce = setTimeout(() => {
-    engine.setCaptionScrollSpeed(Number(els.scrollSpeedSlider.value));
-  }, 150);
-});
+const adminSliderDebounce = {};
+for (const [elementKey, field] of ADMIN_SLIDER_FIELDS) {
+  els[elementKey].addEventListener("input", () => {
+    if (!deviceSettingsLoaded) return;
+    clearTimeout(adminSliderDebounce[field]);
+    // Le curseur produit une écriture par pixel parcouru : sans ce délai, un
+    // seul geste coûterait des dizaines d'écritures Firestore et autant de
+    // relectures sur la tablette.
+    adminSliderDebounce[field] = setTimeout(() => {
+      engine
+        .setDeviceSetting(CONFIG.deviceDocId, field, Number(els[elementKey].value))
+        .catch((e) => console.warn("[app] Réglage tablette non transmis :", e));
+    }, 250);
+  });
+}
 
 let volumeDebounce = null;
 els.volumeSlider.addEventListener("input", () => {
@@ -493,6 +495,118 @@ els.cancelButton.addEventListener("click", async () => {
 });
 
 els.retryButton.addEventListener("click", () => showState("idle"));
+
+
+// --- Administration ------------------------------------------------------
+// Deux catégories d'utilisateur, une seule application.
+//
+// L'utilisateur standard appelle Jean, voit ce qu'il a sous les yeux, décide
+// si ses paroles s'écrivent, peut faire écouter la pièce, règle le volume, dit
+// qu'il est dans la même pièce, et gère ses photos. Rien de tout cela ne peut
+// abîmer durablement la tablette : ces réglages vivent dans le document
+// d'appel et meurent en raccrochant.
+//
+// L'administrateur voit exactement le même écran — c'est lui aussi quelqu'un
+// qui appelle — et bascule vers les réglages de la tablette par un code. Ces
+// réglages-là passent par le document d'appareil et s'appliquent tout de
+// suite, appel ou pas, pour tout le monde.
+//
+// Le code est celui de l'écran admin de la tablette : elle en publie
+// l'empreinte avec son signe de vie (voir DeviceStatusReporter.
+// adminPinFingerprint). Un seul code à retenir, changé au même endroit.
+//
+// Ce n'est pas une barrière de sécurité et il ne faut pas lui faire dire
+// autre chose : les règles Firestore de ce projet laissent écrire quiconque
+// connaît l'adresse, et quatre chiffres se retrouvent instantanément à partir
+// de leur empreinte. C'est un garde-fou contre la fausse manœuvre d'un proche
+// qui explore l'application, rien de plus.
+const ADMIN_UNLOCKED_KEY = "seniorvisio_admin_unlocked";
+
+// Empreinte publiée par la tablette. Null tant qu'elle n'a pas donné signe de
+// vie, ou si elle tourne encore une version qui ne la publie pas.
+let adminPinFingerprint = null;
+
+/** Déverrouillage retenu le temps de l'onglet seulement, jamais au-delà. */
+function isAdminUnlocked() {
+  try {
+    return sessionStorage.getItem(ADMIN_UNLOCKED_KEY) === "1";
+  } catch (e) {
+    return false;
+  }
+}
+
+function rememberAdminUnlocked() {
+  try {
+    sessionStorage.setItem(ADMIN_UNLOCKED_KEY, "1");
+  } catch (e) {
+    // Navigation privée, stockage refusé : sans effet, le code sera
+    // simplement redemandé à la prochaine ouverture du panneau.
+  }
+}
+
+async function sha256Hex(text) {
+  const bytes = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function openAdmin() {
+  els.adminOverlay.classList.remove("hidden");
+  const unlocked = isAdminUnlocked();
+  els.adminLock.classList.toggle("hidden", unlocked);
+  els.adminPanel.classList.toggle("hidden", !unlocked);
+  els.adminLockStatus.textContent = "";
+  els.adminPinInput.value = "";
+  if (!unlocked) els.adminPinInput.focus();
+}
+
+function closeAdmin() {
+  els.adminOverlay.classList.add("hidden");
+}
+
+async function tryUnlockAdmin() {
+  const typed = els.adminPinInput.value.trim();
+  if (!typed) return;
+
+  if (!adminPinFingerprint) {
+    // Sans empreinte publiée, impossible de vérifier quoi que ce soit. Refuser
+    // plutôt que d'ouvrir : mieux vaut un panneau inaccessible le temps que la
+    // tablette se manifeste qu'un panneau qui s'ouvre sans contrôle.
+    els.adminLockStatus.textContent =
+      "La tablette n'a pas encore donné signe de vie : code invérifiable pour l'instant.";
+    return;
+  }
+
+  els.adminUnlockButton.disabled = true;
+  try {
+    if ((await sha256Hex(typed)) !== adminPinFingerprint) {
+      els.adminLockStatus.textContent = "Code incorrect.";
+      els.adminPinInput.value = "";
+      return;
+    }
+    rememberAdminUnlocked();
+    els.adminLock.classList.add("hidden");
+    els.adminPanel.classList.remove("hidden");
+  } catch (e) {
+    // crypto.subtle n'existe qu'en contexte sécurisé (HTTPS ou localhost). Le
+    // PWA est servi en HTTPS, mais le dire explicitement évite de chercher
+    // longtemps si quelqu'un l'ouvre un jour autrement.
+    console.warn("[app] Vérification du code impossible :", e);
+    els.adminLockStatus.textContent =
+      "Vérification impossible sur cette page (connexion non sécurisée ?).";
+  } finally {
+    els.adminUnlockButton.disabled = false;
+  }
+}
+
+els.openAdminIdleButton.addEventListener("click", openAdmin);
+els.openAdminCallButton.addEventListener("click", openAdmin);
+els.adminUnlockButton.addEventListener("click", tryUnlockAdmin);
+els.adminCancelButton.addEventListener("click", closeAdmin);
+els.adminCloseButton.addEventListener("click", closeAdmin);
+els.adminPinInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") tryUnlockAdmin();
+});
 
 // --- Moteur de transcription de la tablette, réglé à distance ---
 // Sur l'écran d'accueil et non dans les réglages d'appel : le moteur de la
@@ -515,6 +629,20 @@ const ENGINE_SELECT_FIELDS = [
 
 function applyDeviceSettings(data) {
   deviceSettingsLoaded = true;
+
+  // Empreinte du code d'accès, publiée par la tablette avec son signe de vie
+  // (voir DeviceStatusReporter.adminPinFingerprint). Elle arrive par le même
+  // canal que les réglages : un seul abonnement au document d'appareil.
+  adminPinFingerprint = data.adminPinFingerprint || null;
+
+  // Les curseurs reflètent ce que la tablette applique réellement, et pas la
+  // dernière position touchée sur CE téléphone : plusieurs personnes peuvent
+  // administrer, et l'affichage doit dire l'état de la tablette.
+  for (const [elementKey, field] of ADMIN_SLIDER_FIELDS) {
+    const value = Number(data[field]);
+    if (Number.isFinite(value) && value > 0) els[elementKey].value = value;
+  }
+
   for (const [elementKey, field] of ENGINE_SELECT_FIELDS) {
     const select = els[elementKey];
     const value = data[field];

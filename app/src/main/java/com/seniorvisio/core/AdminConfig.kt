@@ -117,6 +117,23 @@ class AdminConfig(context: Context) {
             ?: VoskModelSize.LARGE
         set(value) = prefs.edit().putString(KEY_VOSK_MODEL_SIZE, value.remoteValue).apply()
 
+    // --- Ergonomie des deux zones de texte (voir RollingCaptionZone). Réglages
+    // d'appareil et non d'appel : ils décrivent la façon dont Jean lit, qui ne
+    // change pas selon qui l'appelle. Ils s'appliquent donc aussi à la pièce,
+    // hors de tout appel — c'est même là qu'ils servent le plus, la tablette
+    // passant l'essentiel de ses journées sans personne au bout du fil. ---
+    var captionVisibleLines: Int
+        get() = prefs.getInt(KEY_CAPTION_VISIBLE_LINES, 2)
+        set(value) = prefs.edit().putInt(KEY_CAPTION_VISIBLE_LINES, value.coerceIn(1, 4)).apply()
+
+    var captionScrollSpeedDp: Int
+        get() = prefs.getInt(KEY_CAPTION_SCROLL_SPEED_DP, 50)
+        set(value) = prefs.edit().putInt(KEY_CAPTION_SCROLL_SPEED_DP, value.coerceIn(10, 200)).apply()
+
+    var captionClearDelaySeconds: Int
+        get() = prefs.getInt(KEY_CAPTION_CLEAR_DELAY_SECONDS, 30)
+        set(value) = prefs.edit().putInt(KEY_CAPTION_CLEAR_DELAY_SECONDS, value.coerceIn(1, 120)).apply()
+
     // --- Réveil de l'écran au moindre son de la pièce (voir RoomPresenceService) ---
     var roomWakeEnabled: Boolean
         get() = prefs.getBoolean(KEY_ROOM_WAKE_ENABLED, true)
@@ -161,6 +178,9 @@ class AdminConfig(context: Context) {
         private const val KEY_ROOM_ENGINE = "room_engine"
         private const val KEY_CALL_ENGINE = "call_engine"
         private const val KEY_VOSK_MODEL_SIZE = "vosk_model_size"
+        private const val KEY_CAPTION_VISIBLE_LINES = "caption_visible_lines"
+        private const val KEY_CAPTION_SCROLL_SPEED_DP = "caption_scroll_speed_dp"
+        private const val KEY_CAPTION_CLEAR_DELAY_SECONDS = "caption_clear_delay_seconds"
         private const val KEY_ROOM_WAKE_ENABLED = "room_wake_enabled"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
     }

@@ -377,6 +377,8 @@ body.video-mode #localVideo {
   padding: 6px 0;
 }
 
+#adminPanel > label,
+#adminLock > label,
 .side-panel label {
   display: block;
   margin-top: 14px;
@@ -384,6 +386,8 @@ body.video-mode #localVideo {
   font-size: 14px;
 }
 
+.admin-sheet select,
+.admin-sheet input[type="password"],
 .side-panel select,
 .side-panel input[type="text"],
 .side-panel input[type="file"] {
@@ -557,4 +561,53 @@ body.video-mode #localVideo {
   font-size: 17px;
   line-height: 1.45;
   text-align: left;
+}
+
+/* ================= ADMINISTRATION =================
+   Un calque par-dessus tout le reste plutôt qu'une quatrième fenêtre : les
+   fenêtres (vidéo/réglages/photos) n'existent que pendant un appel, or les
+   réglages de la tablette doivent aussi être accessibles depuis l'écran
+   d'attente — c'est même le cas normal, la tablette écoutant la pièce toute la
+   journée sans que personne n'appelle. */
+.admin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(6, 10, 20, 0.92);
+  overflow-y: auto;
+  padding: 16px;
+  /* Le fond couvre l'écran entier mais la feuille reste centrée et lisible sur
+     une tablette, où elle s'étalerait sinon sur toute la largeur. */
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.admin-overlay.hidden { display: none; }
+
+.admin-sheet {
+  width: 100%;
+  max-width: 520px;
+  background: #22314F;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.admin-section {
+  margin: 24px 0 8px;
+  font-size: 1rem;
+  /* Une simple ligne pour séparer les familles de réglages : le panneau est
+     long, et sans repère on ne sait plus ce qu'on est en train de régler. */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  padding-bottom: 4px;
+}
+
+#adminPinInput {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 12px;
+  /* Chiffres espacés : le code se saisit souvent à l'aveugle, masqué. */
+  letter-spacing: 0.3em;
+  text-align: center;
+  font-size: 1.4rem;
 }

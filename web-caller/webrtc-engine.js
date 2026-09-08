@@ -240,9 +240,6 @@ class RealCallEngine extends CallEngine {
         // confort habituel sans que le proche ait à retoucher chaque curseur.
         remoteVolume: initialSettings.remoteVolume ?? 1,
         captionModeEnabled: initialSettings.captionModeEnabled ?? false,
-        captionVisibleLines: initialSettings.captionVisibleLines ?? 2,
-        captionClearDelaySeconds: initialSettings.captionClearDelaySeconds ?? 30,
-        captionMaxScrollSpeedDpPerSec: initialSettings.captionMaxScrollSpeedDpPerSec ?? 50,
         selfPreviewEnabled: initialSettings.selfPreviewEnabled ?? false,
         // Remise à faux à chaque appel, comme le mode même pièce : une
         // transcription restée sur la pièce d'un appel précédent laisserait
@@ -441,26 +438,6 @@ class RealCallEngine extends CallEngine {
   }
 
   /**
-   * Règle à distance le nombre de lignes visibles avant défilement chez Jean.
-   * Commande indirectement la taille du texte : les zones occupent une place
-   * fixe sur son écran, c'est donc la police qui s'ajuste pour que ce nombre
-   * de lignes y tienne (voir RollingCaptionZone.setVisibleLines) — moins de
-   * lignes, texte plus gros.
-   */
-  async setCaptionVisibleLines(lines) {
-    if (this._callDocRef) {
-      await this._callDocRef.update({ captionVisibleLines: lines }).catch(() => {});
-    }
-  }
-
-  /** Règle à distance le délai (en secondes) sans nouvelle parole avant effacement du texte. */
-  async setCaptionClearDelay(seconds) {
-    if (this._callDocRef) {
-      await this._callDocRef.update({ captionClearDelaySeconds: seconds }).catch(() => {});
-    }
-  }
-
-  /**
    * Demande que la transcription écoute la pièce de Jean plutôt que la voix de
    * l'appelant (voir WebRtcCallEngine.setMicToRoom côté Android) — pour suivre
    * par écrit ce que dit quelqu'un présent auprès de lui.
@@ -530,18 +507,6 @@ class RealCallEngine extends CallEngine {
   async setSelfPreviewMode(enabled) {
     if (this._callDocRef) {
       await this._callDocRef.update({ selfPreviewEnabled: enabled }).catch(() => {});
-    }
-  }
-
-  /**
-   * Règle à distance la vitesse maximale (en dp/s) à laquelle le texte des
-   * sous-titres défile chez Jean (voir IncomingCallActivity.setupCaptionMode
-   * côté Android) — plus c'est bas, plus Jean a le temps de lire, au prix
-   * d'un retard qui s'accumule si le proche parle vite (voir onScreenState).
-   */
-  async setCaptionScrollSpeed(dpPerSec) {
-    if (this._callDocRef) {
-      await this._callDocRef.update({ captionMaxScrollSpeedDpPerSec: dpPerSec }).catch(() => {});
     }
   }
 

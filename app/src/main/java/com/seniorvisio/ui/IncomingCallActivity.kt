@@ -134,6 +134,10 @@ class IncomingCallActivity : AppCompatActivity() {
     private val screenStateHandler = Handler(Looper.getMainLooper())
     private val screenStatePublisher = object : Runnable {
         override fun run() {
+            // Relu à chaque passage : un réglage d'ergonomie changé depuis le
+            // PWA pendant l'appel doit prendre effet dans la seconde, pas au
+            // prochain appel.
+            applyCaptionErgonomics()
             publishScreenStateIfChanged()
             screenStateHandler.postDelayed(this, SCREEN_STATE_PUBLISH_MS)
         }
@@ -573,6 +577,18 @@ class IncomingCallActivity : AppCompatActivity() {
     }
 
     /**
+     * Ergonomie de lecture réglée par l'administrateur depuis le PWA (voir
+     * AdminConfig.captionVisibleLines et suivants). Même code que sur l'écran
+     * d'accueil, pour que Jean lise de la même façon qu'un appel soit en cours
+     * ou non.
+     */
+    private fun applyCaptionErgonomics() {
+        zones.setVisibleLines(adminConfig.captionVisibleLines)
+        zones.setScrollSpeedDpPerSec(adminConfig.captionScrollSpeedDp.toFloat())
+        zones.setClearDelaySeconds(adminConfig.captionClearDelaySeconds)
+    }
+
+    /**
      * Branche la zone 3 (les paroles de l'appel) sur la transcription temps
      * réel de la tablette, et relaie les réglages que le proche pilote depuis
      * le PWA.
@@ -595,9 +611,14 @@ class IncomingCallActivity : AppCompatActivity() {
             runOnUiThread { zones.submitTranscription(source, text, isFinal) }
         }
 
-        callEngine.listenForCaptionScrollSpeed { dpPerSec ->
-            runOnUiThread { zones.setScrollSpeedDpPerSec(dpPerSec) }
-        }
+        // Ergonomie de lecture : réglages d'administrateur, pas d'appel. Ils
+        // décrivent la façon dont Jean lit, qui ne change pas selon qui
+        // l'appelle, et ils doivent valoir aussi pour la pièce hors de tout
+        // appel — ils viennent donc d'AdminConfig, alimenté par le document
+        // d'appareil (voir DeviceStatusReporter). Avoir laissé chaque appelant
+        // les régler pour lui-même faisait varier l'écran de Jean d'un appel à
+        // l'autre sans que personne ne sache pourquoi.
+        applyCaptionErgonomics()
 
         // Ce listener écoute tout le document d'appel Firestore, donc il se
         // redéclenche à chaque écriture (volume, etc.), pas seulement quand
@@ -613,24 +634,6 @@ class IncomingCallActivity : AppCompatActivity() {
                 // faire tourner quand le proche n'a pas activé les sous-titres.
                 callEngine.setCaptionsActive(enabled)
                 if (!enabled) zones.clearTranscriptions()
-            }
-        }
-
-        var currentVisibleLines: Int? = null
-        callEngine.listenForCaptionVisibleLines { lines ->
-            runOnUiThread {
-                if (currentVisibleLines == lines) return@runOnUiThread
-                currentVisibleLines = lines
-                zones.setVisibleLines(lines)
-            }
-        }
-
-        var currentClearDelay: Int? = null
-        callEngine.listenForCaptionClearDelay { seconds ->
-            runOnUiThread {
-                if (currentClearDelay == seconds) return@runOnUiThread
-                currentClearDelay = seconds
-                zones.setClearDelaySeconds(seconds)
             }
         }
 

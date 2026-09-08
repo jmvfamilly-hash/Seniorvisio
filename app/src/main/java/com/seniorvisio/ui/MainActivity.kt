@@ -111,6 +111,7 @@ class MainActivity : AppCompatActivity() {
      */
     private val screenAwakeTicker = object : Runnable {
         override fun run() {
+            applyCaptionErgonomics()
             val hasText = zones.hasTextOnScreen()
             val now = System.currentTimeMillis()
             if (hasText) textGoneSinceMs = 0L
@@ -124,6 +125,24 @@ class MainActivity : AppCompatActivity() {
             }
             screenAwakeHandler.postDelayed(this, SCREEN_AWAKE_TICK_MS)
         }
+    }
+
+    /**
+     * Applique l'ergonomie de lecture réglée par l'administrateur (lignes
+     * visibles, vitesse de défilement, délai d'effacement). Relue au fil du
+     * temps plutôt qu'une fois au démarrage : ces réglages arrivent depuis le
+     * PWA par le document d'appareil (voir DeviceStatusReporter), et
+     * l'administrateur qui bouge un curseur à distance doit en voir l'effet sur
+     * la tablette dans la seconde, sans attendre le prochain appel ni un
+     * redémarrage.
+     *
+     * Les valeurs identiques sont ignorées en aval (voir
+     * RollingCaptionZone.setVisibleLines), la relecture ne coûte donc rien.
+     */
+    private fun applyCaptionErgonomics() {
+        zones.setVisibleLines(adminConfig.captionVisibleLines)
+        zones.setScrollSpeedDpPerSec(adminConfig.captionScrollSpeedDp.toFloat())
+        zones.setClearDelaySeconds(adminConfig.captionClearDelaySeconds)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
