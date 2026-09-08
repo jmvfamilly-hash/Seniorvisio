@@ -384,6 +384,25 @@
                pièce, et c'est ici qu'ils manquaient. -->
           <p class="hint" id="transcriptionDiagnostic"></p>
 
+          <h3 class="admin-section">Utilisation</h3>
+          <p class="hint">
+            Ce que la tablette a réellement fait. Mis à jour à chaque signe de
+            vie, donc toutes les cinq minutes.
+          </p>
+          <button id="refreshUsageButton" class="secondary">🔄 Rafraîchir</button>
+          <div id="usageSummary"></div>
+          <div id="usageDays"></div>
+
+          <h3 class="admin-section">Commandes</h3>
+          <p class="hint">
+            Les deux gestes qu'on finit sinon par faire à la main, en se
+            déplaçant jusqu'à la tablette et en coupant sans savoir ce qu'on
+            interrompt.
+          </p>
+          <button id="restartAppButton" class="secondary">♻️ Relancer l'application</button>
+          <button id="rebootDeviceButton" class="secondary">⚡ Redémarrer la tablette</button>
+          <p class="hint" id="commandStatus"></p>
+
           <h3 class="admin-section">Diagnostic</h3>
           <!-- Test décisif pour localiser un écho : s'il disparaît en coupant
                le micro de la tablette, il vient d'elle ; s'il persiste, il

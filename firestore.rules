@@ -9,6 +9,14 @@ service cloud.firestore {
     }
     match /devices/{deviceId} {
       allow read, write: if true;
+      // Les règles Firestore ne descendent PAS dans les sous-collections : sans
+      // cette seconde règle, la publication des journées d'usage (voir
+      // DeviceStatusReporter.publishUsage) serait refusée en silence, et le
+      // panneau d'administration afficherait une semaine vide sans que rien
+      // n'indique pourquoi.
+      match /usage/{day} {
+        allow read, write: if true;
+      }
     }
   }
 }

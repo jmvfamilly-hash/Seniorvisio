@@ -134,6 +134,15 @@ class AdminConfig(context: Context) {
         get() = prefs.getInt(KEY_CAPTION_CLEAR_DELAY_SECONDS, 30)
         set(value) = prefs.edit().putInt(KEY_CAPTION_CLEAR_DELAY_SECONDS, value.coerceIn(1, 120)).apply()
 
+    // --- Dernière commande à distance exécutée (voir
+    // DeviceStatusReporter.applyRemoteCommand). Persistée, et non gardée en
+    // mémoire : un redémarrage n'a pas de suite, et une trace en mémoire
+    // disparaîtrait précisément avec lui — la tablette relancerait alors la
+    // même commande à chaque démarrage, indéfiniment. ---
+    var lastExecutedCommandId: String
+        get() = prefs.getString(KEY_LAST_COMMAND_ID, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_LAST_COMMAND_ID, value).apply()
+
     // --- Réveil de l'écran au moindre son de la pièce (voir RoomPresenceService) ---
     var roomWakeEnabled: Boolean
         get() = prefs.getBoolean(KEY_ROOM_WAKE_ENABLED, true)
@@ -181,6 +190,7 @@ class AdminConfig(context: Context) {
         private const val KEY_CAPTION_VISIBLE_LINES = "caption_visible_lines"
         private const val KEY_CAPTION_SCROLL_SPEED_DP = "caption_scroll_speed_dp"
         private const val KEY_CAPTION_CLEAR_DELAY_SECONDS = "caption_clear_delay_seconds"
+        private const val KEY_LAST_COMMAND_ID = "last_command_id"
         private const val KEY_ROOM_WAKE_ENABLED = "room_wake_enabled"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
     }

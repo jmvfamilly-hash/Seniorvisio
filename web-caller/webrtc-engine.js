@@ -590,6 +590,39 @@ class RealCallEngine extends CallEngine {
   }
 
   /**
+   * Les journées d'usage publiées par la tablette (voir
+   * DeviceStatusReporter.publishUsage) — une par jour, la plus récente
+   * d'abord. Lecture ponctuelle et non écoute permanente : ces documents ne
+   * changent qu'au signe de vie, toutes les cinq minutes, et un abonnement
+   * coûterait une lecture facturée à chaque écriture pour rien.
+   */
+  async readUsageDays(deviceId, days = 8) {
+    if (!this._available) return [];
+    const snapshot = await this._db
+      .collection("devices").doc(deviceId).collection("usage")
+      .orderBy(firebase.firestore.FieldPath.documentId(), "desc")
+      .limit(days)
+      .get();
+    return snapshot.docs.map((doc) => ({ date: doc.id, ...doc.data() }));
+  }
+
+  /**
+   * Demande à la tablette de se relancer ou de redémarrer.
+   *
+   * L'identifiant unique est ce qui empêche la boucle : un champ « redémarre »
+   * resterait vrai après le redémarrage et relancerait l'appareil sans fin. La
+   * tablette n'exécute que si l'identifiant diffère du dernier exécuté (voir
+   * DeviceStatusReporter.applyRemoteCommand).
+   */
+  async sendDeviceCommand(deviceId, command) {
+    if (!this._available) return;
+    await this._db.collection("devices").doc(deviceId).set({
+      command,
+      commandId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    }, { merge: true });
+  }
+
+  /**
    * Réglages de transcription de la tablette, portés par le document
    * d'appareil et non par celui d'un appel : le moteur de la pièce doit
    * pouvoir changer alors que personne n'appelle, et la bascule doit survivre

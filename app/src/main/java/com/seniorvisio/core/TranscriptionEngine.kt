@@ -99,6 +99,12 @@ class TranscriptionEngine(
             recognizerKind =
                 if (created is VoskSpeechRecognizer) TranscriptionEngineChoice.VOSK
                 else TranscriptionEngineChoice.ASSEMBLYAI
+            // La session, et non la parole : AssemblyAI facture la durée de
+            // connexion, pas le nombre de mots (voir UsageStats).
+            UsageStats.noteTranscriptionStart(
+                if (recognizerKind == TranscriptionEngineChoice.VOSK) UsageStats.ENGINE_VOSK
+                else UsageStats.ENGINE_ASSEMBLYAI
+            )
             created.start(
                 onText = { text, isFinal ->
                     // La source peut avoir changé pendant que ce texte
@@ -190,6 +196,7 @@ class TranscriptionEngine(
     }
 
     private fun stopSession() {
+        if (recognizer != null) UsageStats.noteTranscriptionStop()
         recognizer?.stop()
         recognizer = null
         recognizerKind = null

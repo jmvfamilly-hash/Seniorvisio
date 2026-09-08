@@ -31,6 +31,7 @@ import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.ScreenTheme
 import com.seniorvisio.core.TranscriptionSource
+import com.seniorvisio.core.UsageStats
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.signaling.CallSignalingClient
 import com.seniorvisio.service.IncomingCallService
@@ -69,6 +70,14 @@ class IncomingCallActivity : AppCompatActivity() {
     private lateinit var buttonBlock: Button
     private var isConnected = false
     private var callHandled = false
+
+    /**
+     * Instant du décrochage effectif, pour mesurer la durée de la conversation
+     * (voir UsageStats.noteCall). Zéro tant que l'appel n'a pas abouti : une
+     * sonnerie sans réponse n'est pas un appel, et la compter comme telle
+     * fausserait autant le nombre que la durée moyenne.
+     */
+    private var connectedAtMs = 0L
 
     /** Vrai dès que l'offre WebRTC du proche est reçue et acceptée (voir prepareIncomingCall). */
     private var isPrepared = false
@@ -527,6 +536,7 @@ class IncomingCallActivity : AppCompatActivity() {
         callEngine.onConnectionLost {
             runOnUiThread { if (!callHandled) finish() }
         }
+        connectedAtMs = System.currentTimeMillis()
         screenStateHandler.post(screenStatePublisher)
         // Applique tout de suite la disposition correspondant à l'orientation
         // actuelle (la tablette peut déjà être en paysage au moment où
@@ -757,6 +767,11 @@ class IncomingCallActivity : AppCompatActivity() {
         if (!callHandled && !isChangingConfigurations) {
             callHandled = true
             callEngine.hangUp()
+        }
+        if (connectedAtMs > 0L) {
+            val seconds = ((System.currentTimeMillis() - connectedAtMs) / 1000L).toInt()
+            UsageStats.noteCall(connectedAtMs, seconds)
+            connectedAtMs = 0L
         }
         // La tablette redevient joignable. Pas pendant une rotation, où
         // l'Activity est détruite et aussitôt recréée : la déclarer libre un

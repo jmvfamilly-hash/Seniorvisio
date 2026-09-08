@@ -3,8 +3,11 @@ package com.seniorvisio.service
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.PowerManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
@@ -14,6 +17,7 @@ import androidx.lifecycle.LifecycleService
 import com.google.firebase.firestore.ListenerRegistration
 import com.seniorvisio.core.CallerPhotoCache
 import com.seniorvisio.core.DeviceStatusReporter
+import com.seniorvisio.core.UsageStats
 import com.seniorvisio.signaling.CallSignalingClient
 
 /**
@@ -52,8 +56,28 @@ class CallListenerService : LifecycleService() {
     private val heartbeatHandler = Handler(Looper.getMainLooper())
     private val heartbeatRunnable = object : Runnable {
         override fun run() {
+            // Rattrape le temps écoulé avant de publier : sans ça, la
+            // journée en cours ne comptabiliserait que les changements
+            // d'état, jamais les longues plages sans le moindre événement.
+            UsageStats.flush()
+            UsageStats.pruneOldDays()
             statusReporter.reportHeartbeat()
             heartbeatHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
+        }
+    }
+
+    /**
+     * Éveil et sommeil de l'écran, à la source plutôt que par sondage : ce sont
+     * eux qui dessinent la journée de Jean (voir UsageStats), et un sondage
+     * toutes les cinq minutes manquerait la moitié des réveils au son, qui ne
+     * durent souvent qu'une poignée de secondes.
+     */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_ON -> UsageStats.noteScreenState(true)
+                Intent.ACTION_SCREEN_OFF -> UsageStats.noteScreenState(false)
+            }
         }
     }
 
@@ -61,6 +85,19 @@ class CallListenerService : LifecycleService() {
         super.onCreate()
         startForeground(FOREGROUND_ID, buildForegroundNotification())
         acquireWifiLock()
+        UsageStats.init(this)
+        // L'état de départ ne se déduit d'aucune diffusion : elles ne
+        // signalent que les changements. Sans cette lecture initiale, tout le
+        // temps précédant le premier basculement serait attribué au sommeil.
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        UsageStats.noteScreenState(powerManager?.isInteractive == true)
+        registerReceiver(
+            screenReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            }
+        )
         startListening()
         statusReporter.listenForRemoteCommands()
         heartbeatHandler.post(heartbeatRunnable)
@@ -101,6 +138,12 @@ class CallListenerService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        UsageStats.flush()
+        try {
+            unregisterReceiver(screenReceiver)
+        } catch (_: IllegalArgumentException) {
+            // Jamais enregistré (création interrompue) : sans conséquence.
+        }
         callListener?.remove()
         callListener = null
         heartbeatHandler.removeCallbacks(heartbeatRunnable)

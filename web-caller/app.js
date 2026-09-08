@@ -204,6 +204,12 @@ const els = {
   blockWakeAtNightToggle: document.getElementById("blockWakeAtNightToggle"),
   roomListeningStatus: document.getElementById("roomListeningStatus"),
   transcriptionDiagnostic: document.getElementById("transcriptionDiagnostic"),
+  refreshUsageButton: document.getElementById("refreshUsageButton"),
+  usageSummary: document.getElementById("usageSummary"),
+  usageDays: document.getElementById("usageDays"),
+  restartAppButton: document.getElementById("restartAppButton"),
+  rebootDeviceButton: document.getElementById("rebootDeviceButton"),
+  commandStatus: document.getElementById("commandStatus"),
   captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
   captionDebugIndicator: document.getElementById("captionDebugIndicator"),
   // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
@@ -582,7 +588,8 @@ function openAdmin() {
   els.adminPanel.classList.toggle("hidden", !unlocked);
   els.adminLockStatus.textContent = "";
   els.adminPinInput.value = "";
-  if (!unlocked) els.adminPinInput.focus();
+  if (unlocked) loadUsage();
+  else els.adminPinInput.focus();
 }
 
 function closeAdmin() {
@@ -612,6 +619,7 @@ async function tryUnlockAdmin() {
     rememberAdminUnlocked();
     els.adminLock.classList.add("hidden");
     els.adminPanel.classList.remove("hidden");
+    loadUsage();
   } catch (e) {
     // crypto.subtle n'existe qu'en contexte sécurisé (HTTPS ou localhost). Le
     // PWA est servi en HTTPS, mais le dire explicitement évite de chercher
@@ -632,6 +640,166 @@ els.adminCloseButton.addEventListener("click", closeAdmin);
 els.adminPinInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") tryUnlockAdmin();
 });
+
+
+// --- Utilisation et commandes ---------------------------------------------
+// Ce que la tablette a réellement fait de ses journées, publié par elle
+// (voir UsageStats et DeviceStatusReporter.publishUsage). Chargé à la
+// demande plutôt qu'écouté en permanence : ces documents ne changent qu'au
+// signe de vie, toutes les cinq minutes.
+
+const SLOTS_PER_DAY = 96;
+
+function formatDuration(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (hours > 0) return `${hours} h ${String(minutes).padStart(2, "0")}`;
+  if (minutes > 0) return `${minutes} min`;
+  return `${total} s`;
+}
+
+/**
+ * Une journée en 96 tranches d'un quart d'heure. L'opacité de chaque tranche
+ * dit la proportion de ce quart d'heure passée écran allumé — un total
+ * quotidien ne dirait ni à quelles heures il y a de l'activité, ni si elle est
+ * groupée ou éparpillée, qui est justement ce qu'on cherche à voir.
+ */
+function renderDayBar(day) {
+  const slots = Array.isArray(day.awakeSlots) ? day.awakeSlots : [];
+  const bar = document.createElement("div");
+  bar.className = "usage-bar";
+  for (let i = 0; i < SLOTS_PER_DAY; i++) {
+    const cell = document.createElement("div");
+    cell.className = "usage-slot";
+    // 900 secondes = un quart d'heure entier éveillé.
+    const share = Math.min(1, (Number(slots[i]) || 0) / 900);
+    cell.style.opacity = share === 0 ? 0.08 : 0.25 + share * 0.75;
+    bar.appendChild(cell);
+  }
+  return bar;
+}
+
+function renderUsageDays(days) {
+  els.usageDays.textContent = "";
+  days.forEach((day) => {
+    const block = document.createElement("div");
+    block.className = "usage-day";
+
+    const label = document.createElement("div");
+    label.className = "usage-day-label";
+    const left = document.createElement("span");
+    left.textContent = day.date;
+    const right = document.createElement("span");
+    const callCount = Array.isArray(day.calls) ? day.calls.length : 0;
+    right.textContent = `éveil ${formatDuration(day.awakeSeconds)} · ${callCount} appel${callCount > 1 ? "s" : ""}`;
+    label.append(left, right);
+
+    const hours = document.createElement("div");
+    hours.className = "usage-hours";
+    ["0 h", "6 h", "12 h", "18 h", "24 h"].forEach((h) => {
+      const span = document.createElement("span");
+      span.textContent = h;
+      hours.appendChild(span);
+    });
+
+    block.append(label, renderDayBar(day), hours);
+
+    // Le détail des appels : l'heure et la durée, ce qui permet de rapprocher
+    // une plage d'éveil d'un appel plutôt que d'une visite.
+    if (callCount > 0) {
+      const list = document.createElement("div");
+      list.className = "usage-day-label";
+      const detail = document.createElement("span");
+      detail.textContent = day.calls
+        .map((c) => `${String(c.h).padStart(2, "0")}:${String(c.m).padStart(2, "0")} (${formatDuration(c.d)})`)
+        .join(" · ");
+      list.appendChild(detail);
+      block.appendChild(list);
+    }
+
+    els.usageDays.appendChild(block);
+  });
+}
+
+function renderUsageSummary(days) {
+  els.usageSummary.textContent = "";
+  if (days.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "Aucune journée publiée pour l'instant.";
+    els.usageSummary.appendChild(empty);
+    return;
+  }
+
+  const today = days[0];
+  const week = days.slice(0, 7);
+  const sum = (field) => week.reduce((total, d) => total + (Number(d[field]) || 0), 0);
+  const engineSum = (name) =>
+    week.reduce((total, d) => total + (Number((d.engineSeconds || {})[name]) || 0), 0);
+
+  const billableEquivalent = sum("billableEquivalentSeconds");
+  const actuallyPaid = engineSum("assemblyai");
+
+  const box = document.createElement("div");
+  box.className = "usage-figures";
+  const lines = [
+    `<strong>Aujourd'hui</strong> — éveil ${formatDuration(today.awakeSeconds)}, sommeil ${formatDuration(today.asleepSeconds)}`,
+    `<strong>Moyenne par jour sur ${week.length} jour${week.length > 1 ? "s" : ""}</strong> — éveil ${formatDuration(sum("awakeSeconds") / week.length)}`,
+    `<strong>Transcription (${week.length} j)</strong> — embarqué ${formatDuration(engineSum("vosk"))}, Android ${formatDuration(engineSum("android"))}, AssemblyAI ${formatDuration(actuallyPaid)}`,
+    `<strong>Facturé par AssemblyAI</strong> — ${formatDuration(actuallyPaid)}`,
+    `<strong>Ce qu'il aurait facturé pour tout</strong> — ${formatDuration(billableEquivalent)}`,
+    `<span class="usage-saving">Économisé — ${formatDuration(billableEquivalent - actuallyPaid)}</span>`,
+  ];
+  // Construit ligne par ligne avec un balisage fixe : seules les durées, que
+  // nous calculons nous-mêmes, varient — aucun texte venu de la tablette n'est
+  // interprété ici.
+  lines.forEach((html) => {
+    const p = document.createElement("p");
+    p.style.margin = "0";
+    p.innerHTML = html;
+    els.usageSummary.appendChild(p);
+  });
+  els.usageSummary.appendChild(box);
+}
+
+async function loadUsage() {
+  els.refreshUsageButton.disabled = true;
+  try {
+    const days = await engine.readUsageDays(CONFIG.deviceDocId, 8);
+    renderUsageSummary(days);
+    renderUsageDays(days);
+  } catch (e) {
+    console.warn("[app] Lecture de l'usage impossible :", e);
+    els.usageSummary.textContent = "Lecture de l'usage impossible.";
+  } finally {
+    els.refreshUsageButton.disabled = false;
+  }
+}
+
+els.refreshUsageButton.addEventListener("click", loadUsage);
+
+async function sendCommand(command, confirmation) {
+  if (!window.confirm(confirmation)) return;
+  els.commandStatus.textContent = "Commande envoyée, en attente de la tablette…";
+  try {
+    await engine.sendDeviceCommand(CONFIG.deviceDocId, command);
+    // La tablette écoute son document en permanence : elle exécute dès qu'elle
+    // reçoit, sans attendre le prochain signe de vie.
+    els.commandStatus.textContent =
+      "Commande transmise. La tablette met quelques secondes à repartir.";
+  } catch (e) {
+    console.warn("[app] Commande non transmise :", e);
+    els.commandStatus.textContent = "Commande non transmise (réseau ?).";
+  }
+}
+
+els.restartAppButton.addEventListener("click", () =>
+  sendCommand("restart-app", "Relancer l'application sur la tablette de Jean ?")
+);
+els.rebootDeviceButton.addEventListener("click", () =>
+  sendCommand("reboot", "Redémarrer complètement la tablette de Jean ? Elle sera indisponible une minute ou deux.")
+);
 
 // --- Moteur de transcription de la tablette, réglé à distance ---
 // Sur l'écran d'accueil et non dans les réglages d'appel : le moteur de la

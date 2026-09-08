@@ -16,6 +16,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.seniorvisio.BuildConfig
 import com.seniorvisio.service.RoomPresenceService
+import java.time.LocalDate
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -56,6 +57,38 @@ class DeviceStatusReporter(private val context: Context) {
             ),
             SetOptions.merge()
         ).addOnFailureListener { e -> Log.e(TAG, "Échec de l'envoi du signe de vie à Firestore", e) }
+        publishUsage()
+    }
+
+    /**
+     * La journée en cours dans son propre document, une par jour (voir
+     * UsageStats). Séparée du document d'appareil pour deux raisons : elle
+     * grossit au fil de la journée, et surtout le PWA doit pouvoir relire les
+     * jours précédents pour tracer la semaine — ce qu'un champ unique écrasé à
+     * chaque envoi ne permettrait pas.
+     */
+    private fun publishUsage() {
+        val today = LocalDate.now()
+        val day = UsageStats.dayAsJson(today)
+        val fields = mutableMapOf<String, Any?>()
+        day.keys().forEach { key -> fields[key] = jsonToFirestore(day.get(key)) }
+        if (fields.isEmpty()) return
+        deviceDoc.collection(USAGE_COLLECTION).document(today.toString())
+            .set(fields, SetOptions.merge())
+            .addOnFailureListener { e -> Log.e(TAG, "Échec de la publication de l'usage", e) }
+    }
+
+    /**
+     * Firestore n'accepte ni JSONObject ni JSONArray : ils passent par des Map
+     * et des List. Conversion récursive, les journées contenant à la fois des
+     * tableaux (les tranches de quart d'heure), des objets (les secondes par
+     * moteur) et une liste d'objets (les appels).
+     */
+    private fun jsonToFirestore(value: Any?): Any? = when (value) {
+        is org.json.JSONObject -> value.keys().asSequence()
+            .associateWith { jsonToFirestore(value.get(it)) }
+        is org.json.JSONArray -> (0 until value.length()).map { jsonToFirestore(value.get(it)) }
+        else -> value
     }
 
 
@@ -167,11 +200,105 @@ class DeviceStatusReporter(private val context: Context) {
 
     private fun handleRemoteUpdate(snapshot: DocumentSnapshot) {
         applyTranscriptionSettings(snapshot)
+        applyRemoteCommand(snapshot)
         val requestedVersion = snapshot.getString(FIELD_REQUESTED_VERSION) ?: return
         val apkUrl = snapshot.getString(FIELD_REQUESTED_APK_URL) ?: return
         if (requestedVersion == BuildConfig.BUILD_REV) return
         Log.i(TAG, "Mise à jour à distance détectée : $requestedVersion (version actuelle ${BuildConfig.BUILD_REV})")
         installUpdate(apkUrl)
+    }
+
+
+    /**
+     * Relance de l'application ou redémarrage de la tablette, demandés depuis
+     * le panneau d'administration.
+     *
+     * Ce sont les deux gestes qu'un proche ou un aidant finit par faire à la
+     * main quand quelque chose s'est bloqué — c'est-à-dire en se déplaçant
+     * jusqu'à la tablette, et en appuyant sur un bouton dont on ne sait pas ce
+     * qu'il interrompt. Pouvoir les faire à distance, c'est éviter le
+     * déplacement ET la coupure sauvage.
+     *
+     * L'identifiant de commande est ce qui empêche la boucle : un champ
+     * "redémarre" resterait vrai après le redémarrage et relancerait
+     * l'appareil indéfiniment. Ici la commande n'est exécutée que si son
+     * identifiant diffère du dernier exécuté, et celui-ci est enregistré
+     * localement AVANT d'agir — un redémarrage n'a pas de suite, il faut donc
+     * que la trace soit déjà écrite quand il arrive.
+     */
+    private fun applyRemoteCommand(snapshot: DocumentSnapshot) {
+        val command = snapshot.getString(FIELD_COMMAND) ?: return
+        val commandId = snapshot.getString(FIELD_COMMAND_ID) ?: return
+        val adminConfig = AdminConfig(context)
+        if (adminConfig.lastExecutedCommandId == commandId) return
+        adminConfig.lastExecutedCommandId = commandId
+
+        Log.i(TAG, "Commande à distance reçue : $command ($commandId)")
+        deviceDoc.set(
+            mapOf(
+                FIELD_LAST_COMMAND to command,
+                FIELD_LAST_COMMAND_AT to FieldValue.serverTimestamp(),
+            ),
+            SetOptions.merge()
+        )
+
+        when (command) {
+            COMMAND_RESTART_APP -> restartApp()
+            COMMAND_REBOOT -> rebootDevice()
+            else -> Log.w(TAG, "Commande à distance inconnue : $command")
+        }
+    }
+
+    /**
+     * Referme le processus après avoir programmé sa réouverture. Tuer sans
+     * programmer suffirait sur le papier — le service permanent est START_STICKY
+     * — mais Android se réserve le droit d'attendre plusieurs minutes avant de
+     * le relancer, et l'écran de Jean resterait noir pendant tout ce temps.
+     */
+    private fun restartApp() {
+        val intent = Intent(context, com.seniorvisio.ui.MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        val pending = PendingIntent.getActivity(
+            context, RESTART_REQUEST_CODE, intent,
+            PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val alarms = context.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
+        alarms?.setExactAndAllowWhileIdle(
+            android.app.AlarmManager.RTC_WAKEUP,
+            System.currentTimeMillis() + RESTART_DELAY_MS,
+            pending
+        )
+        // Laisse partir l'accusé de réception et l'alarme avant de disparaître.
+        retryHandler.postDelayed({ kotlin.system.exitProcess(0) }, 1_000L)
+    }
+
+    /**
+     * Redémarrage complet, réservé au Device Owner — sans ce statut, aucune
+     * application ne peut redémarrer un appareil Android, et il n'y a pas de
+     * contournement. Refusé aussi pendant un appel par le système lui-même.
+     */
+    private fun rebootDevice() {
+        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+        val admin = android.content.ComponentName(
+            context, com.seniorvisio.admin.SeniorVisioDeviceAdminReceiver::class.java
+        )
+        if (dpm == null || !dpm.isDeviceOwnerApp(context.packageName)) {
+            Log.w(TAG, "Redémarrage refusé : la tablette n'est pas en Device Owner")
+            deviceDoc.set(
+                mapOf(FIELD_LAST_COMMAND to "redémarrage impossible (pas Device Owner)"),
+                SetOptions.merge()
+            )
+            return
+        }
+        try {
+            dpm.reboot(admin)
+        } catch (e: Exception) {
+            Log.w(TAG, "Redémarrage refusé par le système", e)
+            deviceDoc.set(
+                mapOf(FIELD_LAST_COMMAND to "redémarrage refusé (${e.message})"),
+                SetOptions.merge()
+            )
+        }
     }
 
     /**
@@ -341,6 +468,9 @@ class DeviceStatusReporter(private val context: Context) {
     companion object {
         private const val TAG = "DeviceStatusReporter"
         private const val DEVICE_DOC_PATH = "devices/jean_tablet"
+
+        /** Une journée d'usage par document (voir publishUsage, UsageStats). */
+        private const val USAGE_COLLECTION = "usage"
         private const val FIELD_APP_VERSION = "appVersion"
         private const val FIELD_BATTERY_PERCENT = "batteryPercent"
         private const val FIELD_COMPANION_APPS = "companionAppVersions"
@@ -360,6 +490,16 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_ADMIN_PIN_FINGERPRINT = "adminPinFingerprint"
         private const val FIELD_ROOM_LISTENING = "roomListening"
         private const val FIELD_TRANSCRIPTION_DIAGNOSTIC = "transcriptionDiagnostic"
+        private const val FIELD_COMMAND = "command"
+        private const val FIELD_COMMAND_ID = "commandId"
+        private const val FIELD_LAST_COMMAND = "lastCommand"
+        private const val FIELD_LAST_COMMAND_AT = "lastCommandAt"
+
+        const val COMMAND_RESTART_APP = "restart-app"
+        const val COMMAND_REBOOT = "reboot"
+
+        private const val RESTART_REQUEST_CODE = 4207
+        private const val RESTART_DELAY_MS = 1_500L
         private const val FIELD_ROOM_WAKE_ENABLED = "roomWakeEnabled"
         private const val FIELD_ROOM_WAKE_THRESHOLD = "roomWakeThreshold"
         private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"

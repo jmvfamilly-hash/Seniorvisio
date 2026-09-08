@@ -80,10 +80,12 @@ class AndroidSpeechSession(
         }
         wanted = true
         consecutiveErrors = 0
+        UsageStats.noteTranscriptionStart(UsageStats.ENGINE_ANDROID)
         handler.post { listen() }
     }
 
     fun stop() {
+        if (wanted) UsageStats.noteTranscriptionStop()
         wanted = false
         handler.removeCallbacksAndMessages(null)
         handler.post {
@@ -184,6 +186,7 @@ class AndroidSpeechSession(
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
                     diagnose("reconnaissance Android : permission micro refusée")
                     wanted = false
+                    UsageStats.noteTranscriptionStop()
                 }
 
                 else -> {
@@ -191,6 +194,7 @@ class AndroidSpeechSession(
                     if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
                         diagnose("reconnaissance Android en échec répété (code $error), écoute arrêtée")
                         wanted = false
+                        UsageStats.noteTranscriptionStop()
                         return
                     }
                     scheduleRestart()

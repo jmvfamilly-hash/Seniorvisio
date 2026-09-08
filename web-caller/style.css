@@ -611,3 +611,59 @@ body.video-mode #localVideo {
   text-align: center;
   font-size: 1.4rem;
 }
+
+/* ---- Statistiques d'utilisation (panneau d'administration) --------------
+   Une barre de 96 tranches par journée : chaque tranche vaut un quart d'heure,
+   son opacité la proportion de ce quart d'heure passée écran allumé. Une
+   journée entière tient ainsi sur une ligne, et sept lignes empilées donnent
+   la semaine d'un coup d'œil — ce qu'aucun total quotidien ne montrerait. */
+.usage-day {
+  margin-top: 12px;
+  text-align: left;
+}
+
+.usage-day-label {
+  font-size: 13px;
+  color: #AAB4C8;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.usage-bar {
+  display: flex;
+  height: 14px;
+  margin-top: 4px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #16233D;
+}
+
+.usage-slot {
+  flex: 1 1 0;
+  background: #2ECC71;
+}
+
+/* Repères horaires sous la barre : sans eux, une bosse d'activité ne se
+   rattache à aucune heure et la courbe ne dit plus rien. */
+.usage-hours {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #7F8C8D;
+  margin-top: 2px;
+}
+
+.usage-figures {
+  text-align: left;
+  font-size: 14px;
+  color: #AAB4C8;
+  margin-top: 12px;
+  line-height: 1.7;
+}
+
+.usage-figures strong { color: #FFFFFF; }
+
+.usage-saving {
+  color: #2ECC71;
+}
