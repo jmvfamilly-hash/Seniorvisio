@@ -1,10 +1,7 @@
 package com.seniorvisio.ui
 
 import android.app.NotificationManager
-import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import android.media.AudioAttributes
@@ -12,7 +9,6 @@ import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
-import android.os.IBinder
 import android.os.Looper
 import android.util.Base64
 import android.util.Log
@@ -29,6 +25,7 @@ import android.widget.TextView
 import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.AlertVolume
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.ScreenTheme
 import com.seniorvisio.core.TranscriptionSource
@@ -105,42 +102,12 @@ class IncomingCallActivity : AppCompatActivity() {
     private var screenIsDark = true
     private var lastInfo: HomeZonesController.InfoSnapshot? = null
 
-    private var roomService: RoomPresenceService? = null
-
-    /**
-     * Pendant la sonnerie, le microphone appartient encore au service d'écoute
-     * de la pièce : la zone 2 continue donc de fonctionner exactement comme sur
-     * l'écran d'accueil, et Jean voit ce qui se dit autour de lui pendant que
-     * la tablette sonne. Le micro ne change de main qu'au décrochage (voir
-     * connectVideoCall), où c'est WebRTC qui le réclame.
-     */
-    private val roomConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            if (isConnected) return
-            val service = (binder as? RoomPresenceService.LocalBinder)?.getService() ?: return
-            roomService = service
-            service.startRoomTranscription(
-                onText = { text, isFinal ->
-                    runOnUiThread { zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal) }
-                },
-            )
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            roomService = null
-        }
-    }
-
-    private var boundToRoomService = false
-
-    /** Rend le micro au moment où WebRTC en a besoin, ou à la fin de l'écran. */
-    private fun stopRoomTranscription() {
-        roomService?.stopRoomTranscription()
-        roomService = null
-        if (!boundToRoomService) return
-        boundToRoomService = false
-        unbindService(roomConnection)
-    }
+    // Cet écran ne se lie plus au service d'écoute de la pièce. Il l'a fait
+    // jusqu'ici pour que la zone 2 continue de suivre la pièce pendant la
+    // sonnerie ; l'écoute est désormais suspendue dès la demande de connexion
+    // (voir onCreate), et il n'y a donc plus rien à afficher là pendant ces
+    // quelques secondes. La zone 3, elle, reste alimentée par le son de
+    // l'appel une fois connecté (voir WebRtcCallEngine).
 
     private val screenStateHandler = Handler(Looper.getMainLooper())
     private val screenStatePublisher = object : Runnable {
@@ -196,6 +163,26 @@ class IncomingCallActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_incoming_call)
         hideNavigationBar()
+
+        // Une demande de connexion, et le micro change de main tout de suite —
+        // pas au décrochage comme auparavant. Deux raisons :
+        //
+        //  - Le moteur de reconnaissance d'Android émet ses sons de début et
+        //    de fin d'énoncé en boucle. Les laisser tourner pendant que la
+        //    tablette sonne, c'est les mélanger à la sonnerie au moment précis
+        //    où Jean doit comprendre qu'on l'appelle.
+        //  - Un seul composant à la fois peut tenir le micro. Le rendre
+        //    maintenant plutôt qu'au décrochage laisse au système tout le
+        //    temps du décompte pour le libérer, au lieu de l'exiger dans la
+        //    seconde où WebRTC le réclame.
+        //
+        // Le prix : la zone 2 ne suit plus la pièce pendant la sonnerie. C'est
+        // assumé — pendant ces quelques secondes, ce qui compte à l'écran est
+        // qui appelle, pas ce qui se dit autour.
+        RoomPresenceService.pauseForCall(this)
+        // Un appel se présente : les alertes retrouvent leur niveau, qu'elles
+        // avaient quitté sur l'écran d'accueil (voir AlertVolume).
+        AlertVolume.normal(this)
         findViewById<TextView>(R.id.textBuildRev).text = BuildConfig.BUILD_REV
         KioskManager.startIfDeviceOwner(this)
 
@@ -379,11 +366,6 @@ class IncomingCallActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         zones.onResume()
-        if (!isConnected && !boundToRoomService) {
-            boundToRoomService = bindService(
-                Intent(this, RoomPresenceService::class.java), roomConnection, Context.BIND_AUTO_CREATE
-            )
-        }
     }
 
     override fun onPause() {
@@ -526,12 +508,9 @@ class IncomingCallActivity : AppCompatActivity() {
         // raccrochait donc côté proche, sans explication.
         if (isConnected) return
         isConnected = true
-        // C'est ici, et pas à l'arrivée de l'appel, que le micro change de
-        // main : pendant toute la sonnerie il reste à l'écoute de la pièce,
-        // pour que la zone 2 continue de fonctionner normalement. WebRTC le
-        // réclame maintenant, et un seul composant à la fois peut le tenir.
-        stopRoomTranscription()
-        RoomPresenceService.pauseForCall(this)
+        // Le micro a déjà changé de main à l'arrivée de l'appel (voir
+        // onCreate) : WebRTC le trouve libre, sans avoir à attendre une
+        // libération dans la seconde.
         // Sans effet dans le cas courant, le fond étant déjà en VIDEO depuis
         // onCreate : conservé pour le chemin où un diaporama s'est intercalé
         // avant la connexion (voir showSlideshowPhoto).
@@ -800,8 +779,11 @@ class IncomingCallActivity : AppCompatActivity() {
         // chauffe/marquage d'écran sinon.
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         screenStateHandler.removeCallbacks(screenStatePublisher)
-        stopRoomTranscription()
         zones.release()
+        // L'écoute de la pièce reprend, et l'écran d'accueil qui réapparaît
+        // rebaissera les alertes (voir MainActivity.onResume) : le volume
+        // n'est pas rétabli ici, sans quoi une rotation d'écran suffirait à le
+        // faire osciller.
         RoomPresenceService.resumeAfterCall(this)
         alertController.cancel()
         if (!callHandled && !isChangingConfigurations) {

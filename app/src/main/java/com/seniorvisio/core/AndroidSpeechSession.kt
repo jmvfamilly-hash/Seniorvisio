@@ -80,18 +80,17 @@ class AndroidSpeechSession(
         }
         wanted = true
         consecutiveErrors = 0
-        // Les bips de début et de fin d'énoncé sont des alertes système, que
-        // ce moteur ne permet pas de couper. Comme il se relance à chaque
-        // silence, ils reviendraient en boucle toute la journée : le volume
-        // des alertes descend le temps de l'écoute (voir AlertVolume).
-        AlertVolume.duck(context)
+        // Les sons de début et de fin d'énoncé sont traités ailleurs : ce
+        // n'est pas l'écoute qui décide du volume des alertes, c'est
+        // l'absence d'appel (voir AlertVolume, MainActivity et
+        // IncomingCallActivity). Les lier à cette session revenait à les
+        // remonter en pleine conversation, où le moteur est justement arrêté.
         UsageStats.noteTranscriptionStart(UsageStats.ENGINE_ANDROID)
         handler.post { listen() }
     }
 
     fun stop() {
         if (wanted) UsageStats.noteTranscriptionStop()
-        AlertVolume.restore(context)
         wanted = false
         handler.removeCallbacksAndMessages(null)
         handler.post {

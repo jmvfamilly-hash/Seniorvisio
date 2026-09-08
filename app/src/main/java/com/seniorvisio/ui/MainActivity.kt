@@ -29,6 +29,7 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.AlertVolume
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.service.CallListenerService
@@ -233,6 +234,13 @@ class MainActivity : AppCompatActivity() {
      */
     override fun onResume() {
         super.onResume()
+        // Cet écran, c'est la définition de « pas en appel » : la tablette y
+        // revient dès qu'une conversation se termine. Les alertes y
+        // descendent au plus bas, ce qui fait taire les sons du moteur de
+        // reconnaissance d'Android sans jamais interrompre l'écoute (voir
+        // AlertVolume). La sonnerie d'appel, elle, est sur le flux alarme et
+        // n'en dépend pas.
+        AlertVolume.quiet(this)
         KioskManager.startIfDeviceOwner(this, MainActivity::class.java)
         zones.onResume()
         screenAwakeHandler.removeCallbacks(screenAwakeTicker)

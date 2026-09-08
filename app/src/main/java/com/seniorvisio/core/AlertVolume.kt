@@ -5,16 +5,22 @@ import android.media.AudioManager
 import android.util.Log
 
 /**
- * Baisse le flux « Notifications » de la tablette pendant que le moteur de
- * reconnaissance d'Android écoute la pièce.
+ * Tient le flux « Notifications » de la tablette au plus bas hors appel, et
+ * lui rend son niveau dès qu'un appel se présente.
  *
- * Ce moteur joue deux bips — un au début de chaque énoncé, un à la fin — et
- * rien dans son interface ne permet de les désactiver. Comme il faut le
- * relancer à chaque silence pour obtenir une écoute continue (voir
- * AndroidSpeechSession), ces deux bips reviennent en boucle toute la journée
- * dans la chambre de Jean.
+ * Ce qu'il s'agit de faire taire : le moteur de reconnaissance d'Android joue
+ * deux sons — un au début de chaque énoncé, un à la fin — qui sont sa
+ * signalétique d'interaction, pas un effet secondaire. Aucun réglage ne les
+ * désactive, et ils sont émis par le processus du service de reconnaissance,
+ * pas par le nôtre. Comme l'écoute permanente n'existe pas dans cette API et
+ * qu'il faut relancer le moteur à chaque silence, ces deux sons reviennent en
+ * boucle toute la journée dans la chambre.
  *
- * Ce sont des alertes système : le seul levier est le volume de ce flux.
+ * La cause première est cette relance, et elle est assumée : ralentir les
+ * relances rendrait la tablette sourde par intermittence, donc lui ferait
+ * manquer des paroles. Ne jamais rater ce qui se dit dans la pièce prime sur
+ * le confort sonore. Le volume est alors le seul levier qui ne coûte aucune
+ * seconde d'écoute.
  *
  * Deux précautions, sans lesquelles le remède serait pire que le mal :
  *
@@ -28,25 +34,27 @@ import android.util.Log
  *    version 7 sans l'autorisation « Ne pas déranger » — autorisation qu'un
  *    Device Owner ne peut pas s'accorder lui-même.
  *
- * Le niveau d'origine est restauré à l'arrêt de l'écoute. Si l'application
- * est tuée entre les deux, il reste bas : conséquence acceptable maintenant
- * que plus rien d'important ne passe par ce flux, et corrigée au prochain
- * changement de moteur.
+ * Le niveau d'origine est écrit sur disque, pas gardé en mémoire. Sans ça, un
+ * redémarrage de l'application pendant que le volume est bas — mise à jour,
+ * processus tué par le système, redémarrage de la tablette — perdrait la
+ * valeur d'origine, et les alertes seraient basses pour toujours sans que
+ * personne sache pourquoi.
  */
 object AlertVolume {
 
-    private var savedLevel: Int? = null
-
-    /** Baisse les alertes au plus bas cran audible, en mémorisant le niveau courant. */
-    fun duck(context: Context) {
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+    /** Hors appel : les alertes descendent au plus bas cran audible. */
+    fun quiet(context: Context) {
+        val audioManager = audioManager(context) ?: return
         try {
             val current = audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
+            // Déjà bas : il n'y a rien à faire, et surtout rien à mémoriser —
+            // écraser le niveau retenu par la valeur basse reviendrait à
+            // oublier définitivement le niveau d'origine.
             if (current <= QUIET_LEVEL) return
-            if (savedLevel == null) savedLevel = current
+            prefs(context).edit().putInt(KEY_SAVED_LEVEL, current).apply()
             audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, QUIET_LEVEL, 0)
         } catch (e: SecurityException) {
-            // Refus du système (politique « Ne pas déranger ») : les bips
+            // Refus du système (politique « Ne pas déranger ») : les sons
             // restent audibles, et on le dit plutôt que de laisser croire que
             // le réglage a pris.
             TranscriptionDiagnostics.record("volume des alertes non modifiable : ${e.message}")
@@ -54,11 +62,13 @@ object AlertVolume {
         }
     }
 
-    /** Rétablit le niveau d'alertes d'avant [duck]. Sans effet si rien n'a été baissé. */
-    fun restore(context: Context) {
-        val level = savedLevel ?: return
-        savedLevel = null
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+    /** Appel en cours ou qui se présente : le niveau d'avant est rétabli. */
+    fun normal(context: Context) {
+        val prefs = prefs(context)
+        val level = prefs.getInt(KEY_SAVED_LEVEL, -1)
+        if (level < 0) return
+        prefs.edit().remove(KEY_SAVED_LEVEL).apply()
+        val audioManager = audioManager(context) ?: return
         try {
             audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, level, 0)
         } catch (e: SecurityException) {
@@ -66,10 +76,18 @@ object AlertVolume {
         }
     }
 
+    private fun audioManager(context: Context): AudioManager? =
+        context.applicationContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+
+    private fun prefs(context: Context) =
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
     /**
      * Le plus bas cran qui reste audible. Voir plus haut : zéro ferait
      * basculer la tablette en mode silencieux, et Android le refuse.
      */
     private const val QUIET_LEVEL = 1
+    private const val PREFS_NAME = "senior_visio_alert_volume"
+    private const val KEY_SAVED_LEVEL = "saved_notification_level"
     private const val TAG = "AlertVolume"
 }
