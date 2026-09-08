@@ -484,19 +484,25 @@ body.video-mode #localVideo {
 
 .slideshow-nav.hidden { display: none; }
 
+/* Dans la fenêtre vidéo, ces boutons se glissent entre la réplique et les
+   textes : compacts, pour ne pas repousser l'image de Jean hors de l'écran
+   d'un téléphone. */
+.slideshow-nav button {
+  margin-top: 0;
+  font-size: 15px;
+  padding: 10px 16px;
+}
+
+#slideshowStopButton {
+  margin-top: 10px;
+  font-size: 14px;
+  padding: 10px 16px;
+}
+
 .slideshow-counter {
   font-variant-numeric: tabular-nums;
   color: #E8EDF5;
 }
-
-.slideshow-preview {
-  display: block;
-  width: 100%;
-  margin-top: 12px;
-  border-radius: 8px;
-}
-
-.slideshow-preview.hidden { display: none; }
 
 .slideshow-status {
   margin: 12px 0 0;

@@ -161,7 +161,6 @@ const els = {
   slideshowPrevButton: document.getElementById("slideshowPrevButton"),
   slideshowNextButton: document.getElementById("slideshowNextButton"),
   slideshowCounter: document.getElementById("slideshowCounter"),
-  slideshowPreview: document.getElementById("slideshowPreview"),
   slideshowStopButton: document.getElementById("slideshowStopButton"),
   slideshowRememberToggle: document.getElementById("slideshowRememberToggle"),
   sameRoomToggle: document.getElementById("sameRoomToggle"),
@@ -1055,12 +1054,10 @@ let slideshowIndex = 0;
 function renderSlideshowState() {
   const hasPhotos = slideshowPhotos.length > 0;
   els.slideshowNav.classList.toggle("hidden", !hasPhotos);
-  els.slideshowPreview.classList.toggle("hidden", !hasPhotos);
   els.slideshowStopButton.classList.toggle("hidden", !hasPhotos);
   if (!hasPhotos) return;
 
   els.slideshowCounter.textContent = `${slideshowIndex + 1} / ${slideshowPhotos.length}`;
-  els.slideshowPreview.src = `data:image/jpeg;base64,${slideshowPhotos[slideshowIndex]}`;
   els.slideshowPrevButton.disabled = slideshowIndex === 0;
   els.slideshowNextButton.disabled = slideshowIndex === slideshowPhotos.length - 1;
 }

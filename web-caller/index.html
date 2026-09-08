@@ -124,6 +124,17 @@
              coupures aux mêmes endroits. Sans ça la réplique serait fidèle du
              contenu mais fausse de la forme, et le proche ne saurait toujours
              pas ce que Jean a réellement sous les yeux. -->
+        <!-- Commandes du diaporama, ici parce que c'est ici qu'on regarde :
+             la réplique au-dessus montre la photo que Jean a réellement sous
+             les yeux, et on passe à la suivante en la voyant. Masquées tant
+             qu'aucune photo n'est chargée (voir renderSlideshowState). -->
+        <div class="slideshow-nav hidden" id="slideshowNav">
+          <button id="slideshowPrevButton" class="secondary">◀ Précédente</button>
+          <span class="slideshow-counter" id="slideshowCounter"></span>
+          <button id="slideshowNextButton" class="secondary">Suivante ▶</button>
+        </div>
+        <button id="slideshowStopButton" class="secondary hidden">⏹️ Arrêter le diaporama (revenir à la vidéo)</button>
+
         <div class="jean-captions">
           <div class="jean-caption hidden" id="jeanRoomBox">
             <span class="jean-caption-label">👂 Dans la pièce</span>
@@ -231,16 +242,13 @@
           <input type="file" id="slideshowInput" accept="image/*" multiple>
         </label>
 
-        <div class="slideshow-nav hidden" id="slideshowNav">
-          <button id="slideshowPrevButton" class="secondary">◀ Précédente</button>
-          <span class="slideshow-counter" id="slideshowCounter"></span>
-          <button id="slideshowNextButton" class="secondary">Suivante ▶</button>
-        </div>
-
-        <img id="slideshowPreview" class="slideshow-preview hidden" alt="Photo en cours chez Jean">
-
-        <button id="slideshowStopButton" class="secondary hidden">Arrêter le diaporama (revenir à la vidéo)</button>
-
+        <!-- Faire défiler les photos et arrêter le diaporama sont passés dans
+             la fenêtre vidéo : on change de photo en regardant la réaction de
+             Jean, pas en tournant le dos à son image. Il ne reste ici que ce
+             qui se fait une fois — choisir les photos, décider de les garder.
+             L'aperçu a disparu avec eux : la réplique de l'écran de Jean, dans
+             la fenêtre vidéo, montre déjà exactement la photo qu'il a sous les
+             yeux, en plus grand et au bon moment. -->
         <label class="slideshow-remember">
           <input type="checkbox" id="slideshowRememberToggle">
           💾 Garder ces photos sur cet appareil pour la prochaine fois
