@@ -44,6 +44,12 @@ class AndroidSpeechSession(
     private val onDiagnostic: (String) -> Unit = {},
 ) {
 
+    /** Vers l'appelant et vers le journal partagé (voir TranscriptionDiagnostics). */
+    private fun diagnose(message: String) {
+        TranscriptionDiagnostics.record(message)
+        onDiagnostic(message)
+    }
+
     private val handler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
 
@@ -65,11 +71,11 @@ class AndroidSpeechSession(
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            onDiagnostic("reconnaissance Android : permission micro refusée")
+            diagnose("reconnaissance Android : permission micro refusée")
             return
         }
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            onDiagnostic("reconnaissance Android indisponible sur cette tablette")
+            diagnose("reconnaissance Android indisponible sur cette tablette")
             return
         }
         wanted = true
@@ -94,7 +100,7 @@ class AndroidSpeechSession(
             createRecognizer()
         } catch (e: Exception) {
             Log.w(TAG, "Création du moteur Android impossible", e)
-            onDiagnostic("reconnaissance Android : ${e.message}")
+            diagnose("reconnaissance Android : ${e.message}")
             wanted = false
             return
         }
@@ -127,13 +133,13 @@ class AndroidSpeechSession(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (!reportedEngine) {
                 reportedEngine = true
-                onDiagnostic("reconnaissance Android sur l'appareil")
+                diagnose("reconnaissance Android sur l'appareil")
             }
             return SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
         }
         if (!reportedEngine) {
             reportedEngine = true
-            onDiagnostic("reconnaissance Android (hors ligne demandée, non garantie sur cette version)")
+            diagnose("reconnaissance Android (hors ligne demandée, non garantie sur cette version)")
         }
         return SpeechRecognizer.createSpeechRecognizer(context)
     }
@@ -176,14 +182,14 @@ class AndroidSpeechSession(
                 // Sans modèle français installé, insister ne sert à rien : ça
                 // se règle sur la tablette, dans les paramètres de Google.
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
-                    onDiagnostic("reconnaissance Android : permission micro refusée")
+                    diagnose("reconnaissance Android : permission micro refusée")
                     wanted = false
                 }
 
                 else -> {
                     consecutiveErrors++
                     if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-                        onDiagnostic("reconnaissance Android en échec répété (code $error), écoute arrêtée")
+                        diagnose("reconnaissance Android en échec répété (code $error), écoute arrêtée")
                         wanted = false
                         return
                     }

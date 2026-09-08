@@ -203,6 +203,7 @@ const els = {
   roomWakeThresholdSlider: document.getElementById("roomWakeThresholdSlider"),
   blockWakeAtNightToggle: document.getElementById("blockWakeAtNightToggle"),
   roomListeningStatus: document.getElementById("roomListeningStatus"),
+  transcriptionDiagnostic: document.getElementById("transcriptionDiagnostic"),
   captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
   captionDebugIndicator: document.getElementById("captionDebugIndicator"),
   // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
@@ -680,6 +681,14 @@ function applyDeviceSettings(data) {
   els.roomListeningStatus.textContent = data.roomListening
     ? `Écoute de la pièce : ${data.roomListening}`
     : "En attente du premier signe de vie de la tablette…";
+
+  // Le diagnostic de transcription ne partait jusqu'ici que dans le document
+  // d'un appel en cours : hors appel — c'est-à-dire quand on règle justement
+  // le moteur de la pièce — il n'allait nulle part, et cet écran restait vide
+  // sans que rien n'indique pourquoi.
+  els.transcriptionDiagnostic.textContent = data.transcriptionDiagnostic
+    ? `🛠️ ${data.transcriptionDiagnostic}`
+    : "";
 
   for (const [elementKey, field] of ENGINE_SELECT_FIELDS) {
     const select = els[elementKey];

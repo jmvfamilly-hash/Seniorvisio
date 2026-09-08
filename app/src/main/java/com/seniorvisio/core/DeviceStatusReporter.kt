@@ -49,6 +49,10 @@ class DeviceStatusReporter(private val context: Context) {
                 FIELD_VOSK_MODEL_STATE to VoskModelProvider.describeState(),
                 FIELD_ADMIN_PIN_FINGERPRINT to adminPinFingerprint(),
                 FIELD_ROOM_LISTENING to describeRoomListening(),
+                // Les mêmes messages que pendant un appel, mais lisibles hors
+                // appel : c'est là qu'on règle le moteur de la pièce, et c'est
+                // là qu'ils manquaient (voir TranscriptionDiagnostics).
+                FIELD_TRANSCRIPTION_DIAGNOSTIC to TranscriptionDiagnostics.describe(),
             ),
             SetOptions.merge()
         ).addOnFailureListener { e -> Log.e(TAG, "Échec de l'envoi du signe de vie à Firestore", e) }
@@ -355,6 +359,7 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_CAPTION_CLEAR_DELAY = "captionClearDelaySeconds"
         private const val FIELD_ADMIN_PIN_FINGERPRINT = "adminPinFingerprint"
         private const val FIELD_ROOM_LISTENING = "roomListening"
+        private const val FIELD_TRANSCRIPTION_DIAGNOSTIC = "transcriptionDiagnostic"
         private const val FIELD_ROOM_WAKE_ENABLED = "roomWakeEnabled"
         private const val FIELD_ROOM_WAKE_THRESHOLD = "roomWakeThreshold"
         private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"

@@ -36,6 +36,17 @@ class TranscriptionEngine(
     private val onDiagnostic: (String) -> Unit = {},
 ) {
 
+    /**
+     * Tout message de diagnostic part vers l'appelant ET dans le journal
+     * partagé (voir TranscriptionDiagnostics). Sans le second, ces messages
+     * n'existaient que le temps d'un appel : hors appel, ils tombaient dans le
+     * vide, alors que c'est précisément là qu'on règle le moteur de la pièce.
+     */
+    private fun diagnose(message: String) {
+        TranscriptionDiagnostics.record(message)
+        onDiagnostic(message)
+    }
+
     private var recognizer: SpeechRecognizer? = null
     private var recognizerKind: TranscriptionEngineChoice? = null
     @Volatile private var activeSource: TranscriptionSource? = null
@@ -67,7 +78,7 @@ class TranscriptionEngine(
      */
     fun feed(source: TranscriptionSource, pcm16: ByteArray, sampleRate: Int, channels: Int) {
         if (reportedSources.add(source)) {
-            onDiagnostic("son ${label(source)} reçu (${sampleRate}Hz, ${channels}ch)")
+            diagnose("son ${label(source)} reçu (${sampleRate}Hz, ${channels}ch)")
         }
         if (source != activeSource) return
 
@@ -97,7 +108,7 @@ class TranscriptionEngine(
                 },
                 onError = { message ->
                     Log.w(TAG, "Transcription ${label(source)} : $message")
-                    onDiagnostic(message)
+                    diagnose(message)
                 },
             )
         } ?: return
@@ -161,18 +172,18 @@ class TranscriptionEngine(
         // explication, c'est une heure perdue à chercher pourquoi.
         var wanted = wanted
         if (wanted == TranscriptionEngineChoice.ANDROID) {
-            onDiagnostic("la reconnaissance Android n'écoute que le micro : impossible sur un appel")
+            diagnose("la reconnaissance Android n'écoute que le micro : impossible sur un appel")
             wanted = if (VoskModelProvider.getModel() != null) TranscriptionEngineChoice.VOSK
             else TranscriptionEngineChoice.ASSEMBLYAI
         }
         if (wanted == TranscriptionEngineChoice.VOSK) {
             if (VoskModelProvider.getModel() != null) return VoskSpeechRecognizer()
-            onDiagnostic("modèle embarqué indisponible (${VoskModelProvider.describeState()}), AssemblyAI en attendant")
+            diagnose("modèle embarqué indisponible (${VoskModelProvider.describeState()}), AssemblyAI en attendant")
         }
 
         val apiKey = AdminConfig(context).assemblyAiApiKey
         if (apiKey.isBlank()) {
-            onDiagnostic("clé API AssemblyAI absente")
+            diagnose("clé API AssemblyAI absente")
             return null
         }
         return AssemblyAiRealtimeTranscriber(apiKey)
