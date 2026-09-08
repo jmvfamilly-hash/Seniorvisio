@@ -1,7 +1,11 @@
 package com.seniorvisio.core
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import kotlin.math.sqrt
 
 /**
  * Le moteur de transcription : une source de son entre, du texte étiqueté par
@@ -49,10 +53,21 @@ class TranscriptionEngine(
 
     private var recognizer: SpeechRecognizer? = null
     private var recognizerKind: TranscriptionEngineChoice? = null
+
+    /**
+     * La source pour laquelle la session en cours a été ouverte. Retenue à
+     * part d'[activeSource], qui peut déjà avoir changé au moment où l'on
+     * ferme (voir setActiveSource) : le texte resté en attente appartient à la
+     * source d'origine, pas à la nouvelle.
+     */
+    private var recognizerSource: TranscriptionSource? = null
     @Volatile private var activeSource: TranscriptionSource? = null
 
     /** Sources dont l'arrivée de son a déjà été signalée, pour ne le dire qu'une fois chacune. */
     private val reportedSources = mutableSetOf<TranscriptionSource>()
+
+    /** Dernier bloc de son contenant autre chose que du silence (voir feed). */
+    private var lastSoundAtMs = 0L
 
     /**
      * Choisit la source à transcrire, ou `null` pour ne rien transcrire du
@@ -94,8 +109,34 @@ class TranscriptionEngine(
         val wanted = resolveEngine(source)
         if (recognizer != null && recognizerKind != wanted && isAvailable(wanted)) stopSession()
 
+        // AssemblyAI facture la durée de connexion, pas les mots : une session
+        // laissée ouverte pendant qu'une pièce est vide, ou pendant qu'un
+        // proche écoute sans parler, coûte exactement le même prix qu'une
+        // conversation. On la ferme donc au bout d'un silence franc et on la
+        // rouvre au premier son suivant.
+        //
+        // La coupure vit ici et non chez l'appelant : le service d'écoute de
+        // la pièce avait bien un garde-fou de ce genre, mais un appel n'en
+        // avait aucun — la session restait ouverte du décrochage au raccroché,
+        // silences compris, c'est-à-dire l'essentiel d'une conversation où
+        // l'on écoute autant qu'on parle.
+        //
+        // Seulement pour le moteur payant : fermer une session embarquée
+        // n'économise rien et lui ferait perdre le contexte de la phrase en
+        // cours pour rien.
+        val now = SystemClock.elapsedRealtime()
+        if (levelOf(pcm16) >= SILENCE_LEVEL) lastSoundAtMs = now
+        val silent = lastSoundAtMs == 0L || now - lastSoundAtMs > BILLED_SILENCE_MS
+        if (silent) {
+            if (recognizerKind == TranscriptionEngineChoice.ASSEMBLYAI) stopSession()
+            // Et surtout ne pas en rouvrir une sur du silence : ce serait
+            // fermer et rouvrir en boucle, en payant chaque ouverture.
+            if (recognizer == null && wanted == TranscriptionEngineChoice.ASSEMBLYAI) return
+        }
+
         val instance = recognizer ?: createRecognizerFor(wanted)?.also { created ->
             recognizer = created
+            recognizerSource = source
             recognizerKind =
                 if (created is VoskSpeechRecognizer) TranscriptionEngineChoice.VOSK
                 else TranscriptionEngineChoice.ASSEMBLYAI
@@ -154,6 +195,27 @@ class TranscriptionEngine(
         return TranscriptionEngineChoice.VOSK
     }
 
+    /**
+     * Niveau sonore du bloc, en valeur efficace sur les échantillons 16 bits.
+     *
+     * Calculé ici plutôt que fourni par l'appelant : les deux sources ne le
+     * mesurent pas de la même façon — le service d'écoute de la pièce le
+     * connaît déjà, une piste audio WebRTC ne le donne pas du tout — et la
+     * décision de couper une session payante doit valoir pour les deux, avec
+     * la même règle.
+     */
+    private fun levelOf(pcm16: ByteArray): Double {
+        val samples = ByteBuffer.wrap(pcm16).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+        val count = samples.remaining()
+        if (count <= 0) return 0.0
+        var sumOfSquares = 0.0
+        for (i in 0 until count) {
+            val value = samples.get(i).toDouble()
+            sumOfSquares += value * value
+        }
+        return sqrt(sumOfSquares / count)
+    }
+
     /** Le moteur voulu peut-il réellement démarrer maintenant ? */
     private fun isAvailable(wanted: TranscriptionEngineChoice): Boolean = when (wanted) {
         TranscriptionEngineChoice.VOSK -> VoskModelProvider.getModel() != null
@@ -196,7 +258,22 @@ class TranscriptionEngine(
     }
 
     private fun stopSession() {
-        if (recognizer != null) UsageStats.noteTranscriptionStop()
+        // Le silence qui précédait la fermeture ne doit pas compter comme du
+        // silence après la réouverture : sans cette remise à zéro, la session
+        // suivante se refermerait au premier bloc reçu.
+        lastSoundAtMs = 0L
+        if (recognizer != null) {
+            UsageStats.noteTranscriptionStop()
+            // Clôt le segment resté en attente. Fermer une session ne produit
+            // aucun texte final : sans ce signal, la phrase en cours resterait
+            // ouverte dans la zone d'affichage et le segment suivant
+            // l'écraserait en croyant la corriger (voir
+            // RollingCaptionZone.submit). Le risque était théorique tant qu'on
+            // ne fermait qu'en fin d'appel ; il ne l'est plus maintenant qu'on
+            // ferme à chaque silence.
+            recognizerSource?.let { onText(it, "", true) }
+        }
+        recognizerSource = null
         recognizer?.stop()
         recognizer = null
         recognizerKind = null
@@ -208,6 +285,22 @@ class TranscriptionEngine(
     }
 
     companion object {
+        /**
+         * Silence au-delà duquel une session payante est fermée. Assez long
+         * pour qu'une respiration, une hésitation ou un « voilà… » suivi d'une
+         * reprise ne coupent pas la connexion — la rouvrir coûte le début de
+         * la phrase suivante, le temps de la poignée de main.
+         */
+        private const val BILLED_SILENCE_MS = 6_000L
+
+        /**
+         * En dessous, on considère qu'il n'y a personne qui parle. Volontairement
+         * bas : mieux vaut garder la connexion ouverte quelques secondes de trop
+         * que couper sur une voix lointaine ou une personne qui parle bas — ce
+         * qui est précisément le cas de Jean.
+         */
+        private const val SILENCE_LEVEL = 300.0
+
         private const val TAG = "TranscriptionEngine"
     }
 }
