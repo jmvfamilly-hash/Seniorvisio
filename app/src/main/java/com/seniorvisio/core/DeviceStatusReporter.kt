@@ -77,9 +77,14 @@ class DeviceStatusReporter(private val context: Context) {
         val status = service.currentStatus()
         val peak = service.consumePeakRms()
         return buildString {
-            append(if (status.capturing) "micro actif" else "micro ARRÊTÉ")
+            append(status.listeningMode)
             status.captureError?.let { append(" ($it)") }
-            append(" — pic ").append(peak).append(" / seuil ").append(status.threshold)
+            // Le moteur d'Android écoute le micro lui-même et ne nous laisse
+            // aucun niveau à mesurer : afficher « pic 0 » laisserait croire à
+            // un micro muet alors que la parole est bien détectée, autrement.
+            if (status.capturing) {
+                append(" — pic ").append(peak).append(" / seuil ").append(status.threshold)
+            }
             if (!status.wakeEnabled) append(" — réveil désactivé")
             if (status.inNightWindow) append(" — réveil bloqué (nuit)")
             append(" — réveils demandés : ").append(status.wakeRequests)
@@ -185,6 +190,12 @@ class DeviceStatusReporter(private val context: Context) {
             if (adminConfig.roomEngine != it) {
                 adminConfig.roomEngine = it
                 Log.i(TAG, "Moteur de la pièce réglé à distance : ${it.remoteValue}")
+                // Contrairement aux deux autres moteurs, celui d'Android change
+                // le mécanisme qui tient le micro (voir
+                // RoomPresenceService.startListening) : il faut donc basculer
+                // tout de suite, sans quoi le réglage n'aurait d'effet qu'au
+                // prochain redémarrage, des heures plus tard.
+                RoomPresenceService.running?.onRoomEngineChanged()
             }
         }
         TranscriptionEngineChoice.fromRemoteValue(snapshot.getString(FIELD_CALL_ENGINE))?.let {

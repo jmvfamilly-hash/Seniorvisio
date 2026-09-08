@@ -140,6 +140,9 @@ class TranscriptionEngine(
     /** Le moteur voulu peut-il réellement démarrer maintenant ? */
     private fun isAvailable(wanted: TranscriptionEngineChoice): Boolean = when (wanted) {
         TranscriptionEngineChoice.VOSK -> VoskModelProvider.getModel() != null
+        // Jamais ici : ce moteur écoute le micro lui-même et ne passe pas par
+        // cette chaîne (voir AndroidSpeechSession, RoomPresenceService).
+        TranscriptionEngineChoice.ANDROID -> false
         else -> AdminConfig(context).assemblyAiApiKey.isNotBlank()
     }
 
@@ -152,6 +155,16 @@ class TranscriptionEngine(
      * téléchargement terminé (voir feed).
      */
     private fun createRecognizerFor(wanted: TranscriptionEngineChoice): SpeechRecognizer? {
+        // La reconnaissance d'Android n'écoute que le micro : on ne peut pas
+        // lui donner le son d'un appel, qui arrive par WebRTC. Le dire plutôt
+        // que de rester muet — un réglage qui ne s'applique pas sans
+        // explication, c'est une heure perdue à chercher pourquoi.
+        var wanted = wanted
+        if (wanted == TranscriptionEngineChoice.ANDROID) {
+            onDiagnostic("la reconnaissance Android n'écoute que le micro : impossible sur un appel")
+            wanted = if (VoskModelProvider.getModel() != null) TranscriptionEngineChoice.VOSK
+            else TranscriptionEngineChoice.ASSEMBLYAI
+        }
         if (wanted == TranscriptionEngineChoice.VOSK) {
             if (VoskModelProvider.getModel() != null) return VoskSpeechRecognizer()
             onDiagnostic("modèle embarqué indisponible (${VoskModelProvider.describeState()}), AssemblyAI en attendant")

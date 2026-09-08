@@ -18,7 +18,9 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.AndroidSpeechSession
 import com.seniorvisio.core.TranscriptionEngine
+import com.seniorvisio.core.TranscriptionEngineChoice
 import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.core.VoskModelProvider
 import com.seniorvisio.ui.MainActivity
@@ -68,6 +70,7 @@ class RoomPresenceService : Service() {
     private var lastLoudAtMs = 0L
 
     private var transcription: TranscriptionEngine? = null
+    private var androidSpeech: AndroidSpeechSession? = null
     private var lastRoomSoundAtMs = 0L
 
     @Volatile private var lastRms = 0
@@ -101,6 +104,8 @@ class RoomPresenceService : Service() {
         val transcribing: Boolean,
         val captureError: String?,
         val voskModel: String,
+        /** Lequel des deux mécanismes tient le micro (voir startListening). */
+        val listeningMode: String,
     )
 
     /**
@@ -128,6 +133,9 @@ class RoomPresenceService : Service() {
         transcribing = transcription?.activeSource() != null,
         captureError = lastCaptureError,
         voskModel = VoskModelProvider.describeState(),
+        listeningMode = if (androidSpeech?.isRunning() == true) "reconnaissance Android"
+        else if (isCapturing) "capture interne"
+        else "aucune écoute",
     )
     private var roomTranscriptionOnText: ((text: String, isFinal: Boolean) -> Unit)? = null
     private var roomTranscriptionOnError: ((String) -> Unit)? = null
@@ -159,15 +167,15 @@ class RoomPresenceService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_PAUSE -> stopCapture()
-            ACTION_RESUME -> startCapture()
-            else -> startCapture()
+            ACTION_PAUSE -> stopListening()
+            ACTION_RESUME -> startListening()
+            else -> startListening()
         }
         return START_STICKY
     }
 
     override fun onDestroy() {
-        stopCapture()
+        stopListening()
         if (running === this) running = null
         super.onDestroy()
     }
@@ -178,6 +186,63 @@ class RoomPresenceService : Service() {
      * qui doit rester disponible même quand le réveil au son est désactivé.
      * Ce réglage ne fait que dispenser ensureAwake() d'agir, plus bas.
      */
+    /**
+     * Démarre l'écoute de la pièce par le mécanisme choisi par
+     * l'administrateur — et c'est le seul endroit qui décide lequel.
+     *
+     * Deux mécanismes exclusifs, parce qu'un seul composant à la fois peut
+     * tenir le micro. Le nôtre (AudioRecord) mesure le niveau sonore et
+     * alimente un moteur qu'on nourrit ; celui d'Android écoute le micro
+     * lui-même et ne nous laisse rien à mesurer — c'est donc lui qui signale
+     * la parole pour le réveil (voir AndroidSpeechSession). Les lancer tous
+     * les deux ferait échouer l'un des deux, au hasard.
+     */
+    private fun startListening() {
+        if (adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID) {
+            stopCapture()
+            startAndroidSpeech()
+        } else {
+            stopAndroidSpeech()
+            startCapture()
+        }
+    }
+
+    private fun startAndroidSpeech() {
+        if (androidSpeech?.isRunning() == true) return
+        val session = AndroidSpeechSession(
+            context = this,
+            onText = { text, isFinal -> roomTranscriptionOnText?.invoke(text, isFinal) },
+            // Ce moteur ne nous donne pas de niveau sonore exploitable, mais il
+            // dit quand quelqu'un se met à parler : c'est tout ce dont le
+            // réveil a besoin, et c'est même plus sûr qu'un seuil à calibrer.
+            onSpeechDetected = {
+                lastLoudAtMs = System.currentTimeMillis()
+                ensureAwake()
+            },
+            onDiagnostic = { message ->
+                lastCaptureError = message
+                roomTranscriptionOnError?.invoke(message)
+            },
+        )
+        androidSpeech = session
+        session.start()
+    }
+
+    private fun stopAndroidSpeech() {
+        androidSpeech?.stop()
+        androidSpeech = null
+    }
+
+    /**
+     * Le moteur de la pièce vient de changer à distance (voir
+     * DeviceStatusReporter) : on bascule de mécanisme sans attendre le
+     * prochain redémarrage, sinon le réglage ne prendrait effet que des heures
+     * plus tard, et personne ne comprendrait pourquoi.
+     */
+    fun onRoomEngineChanged() {
+        startListening()
+    }
+
     private fun startCapture() {
         if (isCapturing) return
         retryHandler.removeCallbacksAndMessages(null)
@@ -257,6 +322,11 @@ class RoomPresenceService : Service() {
         retryHandler.postDelayed({ startCapture() }, delay)
     }
 
+    private fun stopListening() {
+        stopAndroidSpeech()
+        stopCapture()
+    }
+
     private fun stopCapture() {
         retryHandler.removeCallbacksAndMessages(null)
         isCapturing = false
@@ -294,7 +364,7 @@ class RoomPresenceService : Service() {
             onText = { _, text, isFinal -> roomTranscriptionOnText?.invoke(text, isFinal) },
             onDiagnostic = { message -> roomTranscriptionOnError?.invoke(message) },
         )
-        startCapture()
+        startListening()
     }
 
     /** À appeler quand l'écran qui affiche les paroles de la pièce passe en arrière-plan. */

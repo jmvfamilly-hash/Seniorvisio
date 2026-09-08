@@ -19,7 +19,17 @@ enum class TranscriptionEngineChoice(val remoteValue: String, val adminLabel: St
 
     ASSEMBLYAI("assemblyai", "AssemblyAI (en ligne, payant à la durée)"),
 
-    VOSK("vosk", "Vosk (embarqué, gratuit, hors-ligne)");
+    VOSK("vosk", "Vosk (embarqué, gratuit, hors-ligne)"),
+
+    /**
+     * La reconnaissance vocale d'Android lui-même (voir AndroidSpeechSession).
+     * Gratuite et déjà installée, mais avec une contrainte qui n'est pas la
+     * nôtre : son API n'écoute que le micro, on ne peut pas lui donner un flux
+     * audio. Elle ne vaut donc que pour la pièce — un appel arrive par WebRTC,
+     * jamais par le micro. Choisie pour les appels, le moteur le signale et
+     * retombe sur un autre (voir TranscriptionEngine.createRecognizerFor).
+     */
+    ANDROID("android", "Reconnaissance Android (pièce seulement)");
 
     companion object {
         fun fromRemoteValue(value: String?): TranscriptionEngineChoice? =

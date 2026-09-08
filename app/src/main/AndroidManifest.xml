@@ -50,6 +50,15 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="https" />
         </intent>
+
+        <!-- Rend visible le service de reconnaissance vocale d'Android (voir
+             AndroidSpeechSession, TranscriptionLabActivity). Depuis Android 11,
+             une application ne voit pas les autres sans le déclarer :
+             SpeechRecognizer.isRecognitionAvailable renvoyait faux et le
+             moteur restait introuvable, sans erreur ni explication. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
     </queries>
 
     <!-- Nécessaire à la détection/validation d'un portail captif (voir

@@ -341,9 +341,21 @@
           <label for="roomEngineSelect">Paroles dans la pièce</label>
           <select id="roomEngineSelect">
             <option value="auto">Automatique — moteur embarqué</option>
-            <option value="vosk">Forcer le moteur embarqué (gratuit)</option>
+            <option value="vosk">Forcer le moteur embarqué Vosk (gratuit)</option>
+            <option value="android">Reconnaissance Android (gratuite, déjà installée)</option>
             <option value="assemblyai">Forcer AssemblyAI (payant)</option>
           </select>
+
+          <!-- Volontairement absente de la liste des appels juste en dessous :
+               l'API de reconnaissance d'Android n'écoute que le micro, on ne
+               peut pas lui donner le son d'un appel, qui arrive par WebRTC.
+               Proposer un choix qui ne peut pas s'appliquer ferait perdre du
+               temps à celui qui le tenterait. -->
+          <p class="hint">
+            La reconnaissance d'Android ne vaut que pour la pièce, et c'est elle
+            qui prend alors le micro : c'est donc elle qui déclenche le réveil de
+            l'écran, à la parole détectée plutôt qu'au seuil réglé plus haut.
+          </p>
 
           <label for="callEngineSelect">Paroles pendant un appel distant</label>
           <select id="callEngineSelect">
