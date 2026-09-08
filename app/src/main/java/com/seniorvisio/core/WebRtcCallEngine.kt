@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.firebase.firestore.ListenerRegistration
@@ -24,6 +25,7 @@ import org.webrtc.MediaConstraints
 import org.webrtc.MediaStream
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.RTCStatsCollectorCallback
 import org.webrtc.RtpTransceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
@@ -77,6 +79,13 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var connectionLostCb: (() -> Unit)? = null
     private val autoHangupHandler = Handler(Looper.getMainLooper())
     private var autoHangupRunnable: Runnable? = null
+
+    // ---- Chien de garde du flux entrant (voir startMediaWatchdog) ----
+    private val mediaWatchdogHandler = Handler(Looper.getMainLooper())
+    private var mediaWatchdogRunnable: Runnable? = null
+    private var lastInboundBytes = -1L
+    private var lastInboundProgressAtMs = 0L
+    private var hasEverReceivedMedia = false
 
     // ---- Transcription temps réel (voir listenForCaptions/setCaptionsActive) ----
     private var transcriptionOnText: ((source: TranscriptionSource, text: String, isFinal: Boolean) -> Unit)? = null
@@ -174,6 +183,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                     signaling.sendAnswer(id, desc.description)
                     listenForCallerCandidates(id)
                     drainPendingCandidates()
+                    startMediaWatchdog()
                     state = CallState.ACTIVE
                 }),
                 desc
@@ -473,6 +483,96 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         connectionLostCb = callback
     }
 
+
+    /**
+     * Surveille le flux réellement reçu du proche et raccroche tout seul quand
+     * il s'arrête. Jean n'a rien à faire : c'est la règle de tout cet écran, et
+     * jusqu'ici c'était le seul endroit où elle tombait en défaut.
+     *
+     * Le symptôme, constaté en usage réel : le proche ferme l'onglet de son
+     * navigateur sans raccrocher, l'image se fige chez Jean, et la
+     * conversation reste ouverte indéfiniment — micro et caméra engagés — tant
+     * que personne ne touche la tablette.
+     *
+     * Il existait bien une détection, mais fondée sur le seul état ICE (voir
+     * onIceConnectionChange). Un onglet fermé ne prévient personne : aucun
+     * paquet d'adieu n'est envoyé, et la pile WebRTC peut mettre très
+     * longtemps à déclarer le lien mort — parfois jamais, selon le réseau.
+     * L'état ICE dit ce que la pile CROIT de la connexion ; le compteur
+     * d'octets reçus dit ce qui arrive VRAIMENT. C'est cette seconde mesure
+     * qui correspond à ce que Jean voit : une image figée, c'est très
+     * exactement un flux qui ne progresse plus.
+     *
+     * Et comme elle ne mesure que le résultat, elle couvre du même coup tous
+     * les autres cas — navigateur qui plante, téléphone éteint ou en mode
+     * avion, Wi-Fi coupé, application tuée en arrière-plan — sans avoir à les
+     * distinguer ni même à les prévoir.
+     *
+     * Deux délais plutôt qu'un : avant le premier octet, la connexion est
+     * peut-être encore en train de s'établir (échange ICE, traversée de
+     * réseau), ce qui prend parfois une vingtaine de secondes sur une liaison
+     * médiocre — raccrocher là serait raccrocher sur un appel en train de
+     * réussir. Une fois du média reçu, en revanche, une interruption est
+     * franchement anormale et le délai se resserre.
+     */
+    private fun startMediaWatchdog() {
+        if (mediaWatchdogRunnable != null) return
+        lastInboundBytes = -1L
+        hasEverReceivedMedia = false
+        lastInboundProgressAtMs = SystemClock.elapsedRealtime()
+        val runnable = object : Runnable {
+            override fun run() {
+                pollInboundBytes()
+                mediaWatchdogHandler.postDelayed(this, MEDIA_WATCHDOG_TICK_MS)
+            }
+        }
+        mediaWatchdogRunnable = runnable
+        mediaWatchdogHandler.postDelayed(runnable, MEDIA_WATCHDOG_TICK_MS)
+    }
+
+    private fun stopMediaWatchdog() {
+        mediaWatchdogRunnable?.let { mediaWatchdogHandler.removeCallbacks(it) }
+        mediaWatchdogRunnable = null
+    }
+
+    private fun pollInboundBytes() {
+        val pc = peerConnection ?: return
+        pc.getStats(RTCStatsCollectorCallback { report ->
+            var total = 0L
+            report.statsMap.values.forEach { stats ->
+                if (stats.type != "inbound-rtp") return@forEach
+                val received = stats.members["bytesReceived"]
+                // Le SDK remonte ce compteur en BigInteger (il peut dépasser
+                // la taille d'un entier signé sur un très long appel) ; on
+                // accepte tout de même n'importe quel Number, la classe exacte
+                // n'étant pas garantie d'une version de WebRTC à l'autre.
+                total += (received as? Number)?.toLong() ?: 0L
+            }
+            // getStats répond sur le thread de signalisation WebRTC : on
+            // revient sur le thread principal avant de toucher à l'état ou de
+            // raccrocher.
+            mediaWatchdogHandler.post { onInboundBytes(total) }
+        })
+    }
+
+    private fun onInboundBytes(total: Long) {
+        if (mediaWatchdogRunnable == null) return
+        val now = SystemClock.elapsedRealtime()
+        if (total > lastInboundBytes) {
+            lastInboundBytes = total
+            lastInboundProgressAtMs = now
+            if (total > 0) hasEverReceivedMedia = true
+            return
+        }
+        val allowed = if (hasEverReceivedMedia) MEDIA_STALL_TIMEOUT_MS else MEDIA_START_TIMEOUT_MS
+        if (now - lastInboundProgressAtMs < allowed) return
+
+        Log.i(TAG, "Plus rien reçu du proche depuis ${allowed / 1000}s : raccroché automatique")
+        stopMediaWatchdog()
+        hangUp()
+        connectionLostCb?.invoke()
+    }
+
     private fun scheduleAutoHangupOnIceFailure() {
         if (autoHangupRunnable != null) return
         val runnable = Runnable {
@@ -716,6 +816,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
     private fun cleanup() {
         cancelScheduledAutoHangup()
+        stopMediaWatchdog()
         restoreAudio()
         transcription.stop()
         transcriptionOnText = null
@@ -846,6 +947,24 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
          * reprendre avant de considérer l'appel définitivement perdu.
          */
         private const val ICE_FAILURE_GRACE_MS = 8000L
+
+        /** Cadence de relevé du compteur d'octets reçus (voir startMediaWatchdog). */
+        private const val MEDIA_WATCHDOG_TICK_MS = 3_000L
+
+        /**
+         * Silence toléré une fois que du média est arrivé au moins une fois.
+         * Assez long pour laisser passer un changement de réseau côté proche
+         * (le flux reprend souvent après quelques secondes), assez court pour
+         * que Jean ne reste pas devant une image figée.
+         */
+        private const val MEDIA_STALL_TIMEOUT_MS = 12_000L
+
+        /**
+         * Attente avant le tout premier octet : la connexion peut encore être
+         * en train de s'établir. Raccrocher trop tôt ferait échouer les appels
+         * lents plutôt que de fermer les appels morts.
+         */
+        private const val MEDIA_START_TIMEOUT_MS = 30_000L
 
         /**
          * Fraction du volume système maximal utilisée pendant un appel (voir

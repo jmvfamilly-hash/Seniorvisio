@@ -44,6 +44,30 @@ class RealCallEngine extends CallEngine {
       console.error("[RealCallEngine] Firebase non configuré :", e);
       this._available = false;
     }
+
+    // Onglet fermé, navigateur quitté, page rechargée : on tente de clore
+    // l'appel avant de disparaître, pour que Jean ne reste pas devant une
+    // image figée le temps que la tablette s'en aperçoive toute seule.
+    //
+    // Une politesse, jamais une garantie : une page qu'on ferme n'a aucune
+    // certitude de voir sa dernière écriture partir, et un navigateur qui
+    // plante ou un téléphone qui s'éteint n'exécutent plus rien du tout. Ce
+    // qui ferme vraiment l'appel dans tous les cas, c'est la tablette
+    // elle-même, qui raccroche quand plus rien ne lui arrive (voir
+    // WebRtcCallEngine.startMediaWatchdog côté Android). Sans ce filet-là,
+    // ajouter ce gestionnaire donnerait surtout l'illusion d'avoir traité le
+    // problème.
+    //
+    // pagehide plutôt que beforeunload : c'est le seul des deux qui se
+    // déclenche de façon fiable sur mobile. Et seulement quand la page s'en va
+    // pour de bon (persisted vaut false) — mise en cache pour un retour
+    // arrière, elle peut revenir, et raccrocher là couperait un appel bien
+    // vivant.
+    window.addEventListener("pagehide", (event) => {
+      if (event.persisted) return;
+      if (!this._callDocRef) return;
+      this._callDocRef.update({ status: "ended" }).catch(() => {});
+    });
   }
 
   onBlocked(callback) { this._blockedCb = callback; }
