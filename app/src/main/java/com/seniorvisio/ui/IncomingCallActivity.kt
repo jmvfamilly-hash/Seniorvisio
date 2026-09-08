@@ -32,6 +32,7 @@ import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.ScreenTheme
 import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.core.WebRtcCallEngine
+import com.seniorvisio.signaling.CallSignalingClient
 import com.seniorvisio.service.IncomingCallService
 import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.service.TimedCallAlertController
@@ -212,6 +213,7 @@ class IncomingCallActivity : AppCompatActivity() {
             finish()
             return
         }
+        handledCallId = callId
 
         val callerName = intent.getStringExtra("callerName") ?: "un proche"
         val textCallerName = findViewById<TextView>(R.id.textCallerName)
@@ -381,7 +383,20 @@ class IncomingCallActivity : AppCompatActivity() {
      */
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
-        Log.i(TAG, "Second déclenchement ignoré pour un appel déjà affiché")
+        val incomingCallId = intent.getStringExtra(EXTRA_CALL_ID)
+        if (incomingCallId == null || incomingCallId == handledCallId) {
+            Log.i(TAG, "Second déclenchement ignoré pour un appel déjà affiché")
+            return
+        }
+        // Un AUTRE appel, donc un autre proche. Il ne doit normalement plus
+        // arriver jusqu'ici — IncomingCallService le renvoie occupé avant même
+        // d'afficher quoi que ce soit — mais l'ignorer en silence était
+        // précisément le défaut : l'appelant restait sur « Connexion à sa
+        // tablette… » indéfiniment, sans décompte et sans explication, caméra
+        // et micro allumés. Dernier filet, au cas où le service serait
+        // court-circuité.
+        Log.w(TAG, "Appel $incomingCallId reçu pendant $handledCallId : renvoyé occupé")
+        CallSignalingClient().updateStatus(incomingCallId, CallSignalingClient.STATUS_BUSY)
     }
 
     /** Petit son discret au tout début du décompte, pour signaler l'appel sans réveiller toute la maison. */
@@ -743,6 +758,11 @@ class IncomingCallActivity : AppCompatActivity() {
             callHandled = true
             callEngine.hangUp()
         }
+        // La tablette redevient joignable. Pas pendant une rotation, où
+        // l'Activity est détruite et aussitôt recréée : la déclarer libre un
+        // instant renverrait « occupé » à personne, mais laisserait passer un
+        // second appel en plein milieu de la conversation en cours.
+        if (!isChangingConfigurations) handledCallId = null
         super.onDestroy()
     }
 
@@ -756,6 +776,23 @@ class IncomingCallActivity : AppCompatActivity() {
 
         private const val SCREEN_STATE_PUBLISH_MS = 1_000L
         private const val LAG_PUBLISH_THRESHOLD_SECONDS = 0.5f
+
+        /**
+         * L'appel actuellement traité par cet écran, ou null quand aucun appel
+         * n'est en cours. Lu par IncomingCallService avant d'afficher quoi que
+         * ce soit, pour renvoyer « occupé » à un second proche plutôt que de
+         * le laisser attendre dans le vide (voir sa méthode onStartCommand).
+         *
+         * Une variable de classe, ce qui se justifie mal d'ordinaire — mais
+         * l'information vit exactement le temps de cette Activity, qui est en
+         * singleTask (une instance au plus) et dans le même processus que le
+         * service. La faire transiter par Firestore reviendrait à demander au
+         * réseau ce que la mémoire sait déjà, et à retarder d'autant la
+         * réponse au second appelant.
+         */
+        @Volatile
+        var handledCallId: String? = null
+            private set
 
         const val EXTRA_CALL_ID = "extra_call_id"
         const val EXTRA_CALLER_PHOTO_PATH = "extra_caller_photo_path"

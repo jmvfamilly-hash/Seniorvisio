@@ -372,6 +372,14 @@ class CallSignalingClient {
         const val STATUS_RINGING = "ringing"
         const val STATUS_CONNECTED = "connected"
         const val STATUS_BLOCKED = "blocked"
+
+        /**
+         * Un appel arrivé alors qu'une conversation est déjà en cours (voir
+         * IncomingCallService). Distinct de "blocked", qui veut dire que Jean
+         * a refusé : ici il n'a rien refusé du tout, il n'a même pas été
+         * dérangé — et le proche n'a pas à croire qu'on lui a raccroché au nez.
+         */
+        const val STATUS_BUSY = "busy"
         const val STATUS_ENDED = "ended"
     }
 }

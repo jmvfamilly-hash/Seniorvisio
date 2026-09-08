@@ -70,6 +70,7 @@ class RealCallEngine extends CallEngine {
     });
   }
 
+  /** callback(reason) — "blocked" (Jean a refusé) ou "busy" (il est déjà en ligne). */
   onBlocked(callback) { this._blockedCb = callback; }
   onConnected(callback) { this._connectedCb = callback; }
   onEnded(callback) { this._endedCb = callback; }
@@ -375,8 +376,13 @@ class RealCallEngine extends CallEngine {
         this._hasNotifiedConnected = true;
         this._connectedCb && this._connectedCb();
       }
-      if (data.status === "blocked") {
-        this._blockedCb && this._blockedCb();
+      // "blocked" : Jean a refusé l'appel. "busy" : il est déjà en
+      // conversation avec quelqu'un d'autre et n'a même pas été dérangé (voir
+      // IncomingCallService.isBusyWithAnotherCall). Deux situations très
+      // différentes pour l'appelant, d'où la raison transmise au rappel — les
+      // confondre laisserait croire à un refus là où il n'y en a pas.
+      if (data.status === "blocked" || data.status === "busy") {
+        this._blockedCb && this._blockedCb(data.status);
         this._teardown();
       }
       if (data.status === "ended") {

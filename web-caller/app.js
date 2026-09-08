@@ -144,6 +144,7 @@ const els = {
   cancelButton: document.getElementById("cancelButton"),
   forceConnectButton: document.getElementById("forceConnectButton"),
   retryButton: document.getElementById("retryButton"),
+  blockedMessage: document.getElementById("blockedMessage"),
   hangupButton: document.getElementById("hangupButton"),
   paneVideo: document.getElementById("paneVideo"),
   paneSettings: document.getElementById("paneSettings"),
@@ -980,7 +981,17 @@ if (CAREGIVER_MODE) {
   document.getElementById("mirrorHint").textContent = "👆 Ce que Jean lit en ce moment";
 }
 
-engine.onBlocked(() => showState("blocked"));
+// Deux façons de ne pas aboutir, qui n'ont rien à voir l'une avec l'autre :
+// Jean a refusé, ou il était déjà en ligne avec quelqu'un d'autre. Dans le
+// second cas il n'a même pas été dérangé — le dire évite de faire croire à un
+// refus, et évite surtout de rappeler dans la seconde en pensant à une fausse
+// manœuvre.
+engine.onBlocked((reason) => {
+  els.blockedMessage.textContent = reason === "busy"
+    ? "Jean est déjà en communication avec quelqu'un. Réessayez dans quelques minutes."
+    : "Jean a bloqué l'appel.";
+  showState("blocked");
+});
 engine.onConnected(() => showState("connected"));
 engine.onEnded(() => showState("idle"));
 engine.onError((message) => {

@@ -8,6 +8,7 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.signaling.CallSignalingClient
 import com.seniorvisio.ui.IncomingCallActivity
 
 /**
@@ -23,6 +24,28 @@ import com.seniorvisio.ui.IncomingCallActivity
 class IncomingCallService : LifecycleService() {
 
     private lateinit var adminConfig: AdminConfig
+    private val signaling = CallSignalingClient()
+
+    /**
+     * Un appel arrive alors qu'une conversation est déjà en cours avec
+     * quelqu'un d'autre.
+     *
+     * Jean n'en est pas averti, et c'est voulu : il n'a jamais rien à faire, et
+     * lui demander de choisir entre deux appels serait exactement la décision
+     * qu'on lui épargne. C'est donc au second proche d'être renseigné, et
+     * tout de suite — avant même que la notification et l'écran d'appel ne
+     * soient déclenchés, pour ne pas faire clignoter quoi que ce soit chez
+     * Jean ni écraser la photo du premier appelant dans le cache.
+     *
+     * Sans ce renvoi, le second proche restait sur « Connexion à sa
+     * tablette… » indéfiniment : la tablette ignorait son appel en silence,
+     * aucun décompte ne démarrait, rien n'expirait, et sa caméra comme son
+     * micro restaient allumés jusqu'à ce qu'il abandonne de lui-même.
+     */
+    private fun isBusyWithAnotherCall(callId: String): Boolean {
+        val current = IncomingCallActivity.handledCallId ?: return false
+        return current != callId
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -48,7 +71,11 @@ class IncomingCallService : LifecycleService() {
         val callerPhotoPath = intent?.getStringExtra(EXTRA_CALLER_PHOTO_PATH)
         val callId = intent?.getStringExtra(EXTRA_CALL_ID)
         if (callId != null) {
-            launchAlertScreen(callId, callerName, callerPhotoPath, signalReceivedAtMs)
+            if (isBusyWithAnotherCall(callId)) {
+                signaling.updateStatus(callId, CallSignalingClient.STATUS_BUSY)
+            } else {
+                launchAlertScreen(callId, callerName, callerPhotoPath, signalReceivedAtMs)
+            }
         }
         releaseWakeLock()
         // Le rôle de ce service s'arrête ici : IncomingCallActivity gère seule
