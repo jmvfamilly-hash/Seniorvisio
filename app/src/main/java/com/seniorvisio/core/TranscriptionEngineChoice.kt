@@ -10,10 +10,10 @@ package com.seniorvisio.core
 enum class TranscriptionEngineChoice(val remoteValue: String, val adminLabel: String) {
     /**
      * Tout sur le moteur embarqué : gratuit, hors-ligne, et indépendant d'un
-     * service en ligne qui pourrait tomber au mauvais moment. L'appelant peut
-     * demander AssemblyAI pour son appel s'il trouve le texte insuffisant
-     * (voir TranscriptionEngine.setCallEngineOverride) — une dépense décidée
-     * cas par cas, par celui qui lit le texte, plutôt que subie en permanence.
+     * service en ligne qui pourrait tomber au mauvais moment. C'est le défaut ;
+     * l'administrateur reste libre de mettre AssemblyAI sur une source
+     * précise, ce qui se défend sur les appels distants — ponctuels — et
+     * beaucoup moins sur la pièce, écoutée des heures par jour.
      */
     AUTO("auto", "Automatique (tout sur le moteur embarqué)"),
 

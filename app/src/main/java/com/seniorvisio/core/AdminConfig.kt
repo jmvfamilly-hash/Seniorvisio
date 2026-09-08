@@ -93,12 +93,12 @@ class AdminConfig(context: Context) {
 
     // --- Moteur de reconnaissance vocale, réglable séparément par source et
     // modifiable à distance en cours de route (voir DeviceStatusReporter).
-    // AUTO met tout sur le moteur embarqué : gratuit, hors-ligne, et sans
-    // service en ligne qui puisse tomber au mauvais moment. La dépense se
-    // décide alors cas par cas, par l'appelant, pour son appel seulement (voir
-    // TranscriptionEngine.setCallEngineOverride) — plutôt que subie en
-    // permanence. Forcer l'un ou l'autre sert surtout à les comparer sur la
-    // même voix, ce qu'aucun avis a priori ne remplace. ---
+    // Une solution par source, l'une et l'autre choisies par l'administrateur
+    // depuis le PWA — personne d'autre n'en décide. AUTO met tout sur le moteur
+    // embarqué : gratuit, hors-ligne, et sans service en ligne qui puisse
+    // tomber au mauvais moment. Mettre AssemblyAI sur les seuls appels
+    // distants reste raisonnable, sur la pièce beaucoup moins : elle est
+    // écoutée des heures par jour, et la facture suit la durée. ---
     var roomEngine: TranscriptionEngineChoice
         get() = TranscriptionEngineChoice.fromRemoteValue(prefs.getString(KEY_ROOM_ENGINE, null))
             ?: TranscriptionEngineChoice.AUTO

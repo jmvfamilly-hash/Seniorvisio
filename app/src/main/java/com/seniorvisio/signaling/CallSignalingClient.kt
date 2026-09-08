@@ -154,20 +154,6 @@ class CallSignalingClient {
         }
     }
 
-    /**
-     * Le moteur de transcription demandé par l'appelant pour CET appel, quand
-     * le texte du moteur embarqué ne lui suffit pas. Porté par le document
-     * d'appel et non par celui de l'appareil : la demande ne vaut que le temps
-     * de la conversation, et ne doit engager ni la pièce ni l'appel suivant.
-     *
-     * `null` (champ absent ou remis à zéro) rend la main au réglage permanent
-     * de la tablette.
-     */
-    fun listenForCallTranscriptionEngine(callId: String, onEngine: (String?) -> Unit): ListenerRegistration {
-        return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            if (snapshot != null) onEngine(snapshot.getString(FIELD_CALL_ENGINE))
-        }
-    }
 
     /**
      * Active/désactive à distance l'aperçu de sa propre caméra affiché à
@@ -363,7 +349,6 @@ class CallSignalingClient {
         private const val FIELD_ALERT_DURATION = "alertDurationSeconds"
         private const val FIELD_CAPTION_MODE = "captionModeEnabled"
         private const val FIELD_MIC_TO_ROOM = "micToRoom"
-        private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"
         private const val FIELD_FORCE_CONNECT = "forceConnectRequested"
         private const val FIELD_SELF_PREVIEW = "selfPreviewEnabled"
         private const val FIELD_CAPTION_CATCHUP_LAG = "captionCatchUpLagSeconds"

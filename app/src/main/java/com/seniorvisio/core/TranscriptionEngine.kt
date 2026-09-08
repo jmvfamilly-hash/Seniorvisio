@@ -39,7 +39,6 @@ class TranscriptionEngine(
     private var recognizer: SpeechRecognizer? = null
     private var recognizerKind: TranscriptionEngineChoice? = null
     @Volatile private var activeSource: TranscriptionSource? = null
-    @Volatile private var callEngineOverride: TranscriptionEngineChoice? = null
 
     /** Sources dont l'arrivée de son a déjà été signalée, pour ne le dire qu'une fois chacune. */
     private val reportedSources = mutableSetOf<TranscriptionSource>()
@@ -59,24 +58,6 @@ class TranscriptionEngine(
     }
 
     fun activeSource(): TranscriptionSource? = activeSource
-
-    /**
-     * L'appelant demande, pour cet appel-ci, un autre moteur que celui réglé
-     * en permanence — en pratique AssemblyAI quand le texte du moteur embarqué
-     * ne lui suffit pas (voir WebRtcCallEngine.listenForCallTranscriptionEngine).
-     * `null` rend la main au réglage permanent.
-     *
-     * Ne concerne que la source CALL : ce que dit la pièce continue d'être
-     * transcrit par le moteur choisi côté tablette, y compris pendant que le
-     * proche fait transcrire sa propre voix par AssemblyAI.
-     */
-    fun setCallEngineOverride(choice: TranscriptionEngineChoice?) {
-        if (callEngineOverride == choice) return
-        callEngineOverride = choice
-        // La session en cours n'est pas fermée ici : feed() constate le
-        // changement au bloc de son suivant et s'en charge, ce qui évite de
-        // couper une phrase en deux depuis un autre fil d'exécution.
-    }
 
     /**
      * Bloc de son brut (PCM 16 bits) venant de [source]. Ignoré si ce n'est
@@ -126,19 +107,18 @@ class TranscriptionEngine(
     /** Ferme tout : plus aucune source active, plus aucune session ouverte. */
     fun stop() {
         activeSource = null
-        // La demande de l'appelant ne vaut que pour son appel : le suivant
-        // repart du réglage permanent, sans quoi un proche pourrait laisser la
-        // tablette sur un moteur payant à l'insu de tous les autres.
-        callEngineOverride = null
         stopSession()
         reportedSources.clear()
     }
 
     /**
-     * Le choix du moteur découle de la source, exactement comme le choix de
-     * la zone d'affichage : la pièce est écoutée des heures par jour et doit
-     * donc être gratuite, un appel est ponctuel et c'est là que la justesse
-     * du texte se voit le plus (voir SpeechRecognizer).
+     * Le moteur découle de la source, exactement comme la zone d'affichage :
+     * une solution pour la pièce, une pour les appels distants, toutes deux
+     * choisies par l'administrateur (voir AdminConfig.roomEngine/callEngine et
+     * le panneau d'administration du PWA). Personne d'autre n'en décide : un
+     * appelant qui aurait pu basculer sur un service payant le temps de son
+     * appel engageait une dépense que ni Jean ni l'administrateur ne voyaient
+     * passer.
      *
      * Tant que le modèle embarqué n'est pas prêt — il se télécharge une fois,
      * au premier démarrage — la pièce passe par AssemblyAI plutôt que de
@@ -146,18 +126,6 @@ class TranscriptionEngine(
      * fois valent mieux qu'une fonction qui semble cassée.
      */
     private fun resolveEngine(source: TranscriptionSource): TranscriptionEngineChoice {
-        // La demande de l'appelant, valable pour cet appel-ci seulement, passe
-        // avant le réglage permanent : c'est lui qui lit le texte à distance et
-        // qui juge s'il vaut la dépense, et son avis ne doit pas rester en
-        // vigueur pour la pièce ni pour l'appel suivant.
-        // AUTO n'est pas un moteur mais l'absence de choix : reçu comme
-        // demande, il vaut retour au réglage permanent. Sans ce filtre, décocher
-        // la case côté PWA aurait forcé AssemblyAI — exactement l'inverse de ce
-        // que la case annonce.
-        if (source == TranscriptionSource.CALL) {
-            callEngineOverride?.takeIf { it != TranscriptionEngineChoice.AUTO }?.let { return it }
-        }
-
         val adminConfig = AdminConfig(context)
         val choice = when (source) {
             TranscriptionSource.ROOM -> adminConfig.roomEngine

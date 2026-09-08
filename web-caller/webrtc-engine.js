@@ -453,24 +453,6 @@ class RealCallEngine extends CallEngine {
   }
 
   /**
-   * Demande, pour cet appel seulement, un moteur de transcription plus juste
-   * que celui embarqué dans la tablette (voir
-   * WebRtcCallEngine.listenForCallTranscriptionEngine côté Android).
-   *
-   * Écrit dans le document d'appel et non dans celui de l'appareil : la
-   * demande meurt avec la conversation. Un proche ne peut donc pas laisser la
-   * tablette sur un moteur facturé à la durée à l'insu de tous les autres.
-   *
-   * La bascule prend effet en pleine phrase, sans couper l'appel : la tablette
-   * relit ce champ au bloc de son suivant.
-   */
-  async setCallTranscriptionEngine(engine) {
-    if (this._callDocRef) {
-      await this._callDocRef.update({ callTranscriptionEngine: engine }).catch(() => {});
-    }
-  }
-
-  /**
    * Affiche une photo en grand chez Jean, ou termine le diaporama si on
    * passe null (voir WebRtcCallEngine.listenForSlideshowPhoto côté Android).
    *

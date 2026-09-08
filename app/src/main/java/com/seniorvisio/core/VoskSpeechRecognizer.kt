@@ -10,8 +10,8 @@ import org.vosk.Recognizer
  * hors-ligne une fois le modèle en place (voir VoskModelProvider) : c'est ce
  * qui permet d'écouter la pièce toute la journée sans que ça coûte quoi que ce
  * soit, là où un service facturé à la durée reviendrait à une centaine d'euros
- * par mois. L'appelant peut basculer son appel sur AssemblyAI s'il trouve le
- * texte insuffisant (voir TranscriptionEngine.setCallEngineOverride).
+ * par mois. L'administrateur peut basculer une source donnée sur AssemblyAI
+ * s'il juge le texte insuffisant (voir AdminConfig.roomEngine/callEngine).
  *
  * Un moteur neuf par session : l'état de reconnaissance porte le contexte des
  * phrases précédentes et n'a rien à faire d'une conversation à l'autre.

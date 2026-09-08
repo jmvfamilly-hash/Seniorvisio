@@ -183,8 +183,6 @@ const els = {
   adminCancelButton: document.getElementById("adminCancelButton"),
   adminCloseButton: document.getElementById("adminCloseButton"),
   adminLockStatus: document.getElementById("adminLockStatus"),
-  preciseEngineToggle: document.getElementById("preciseEngineToggle"),
-  preciseEngineStatus: document.getElementById("preciseEngineStatus"),
   micToRoomBanner: document.getElementById("micToRoomBanner"),
   micToRoomBackButton: document.getElementById("micToRoomBackButton"),
   callingHint: document.getElementById("callingHint"),
@@ -357,10 +355,6 @@ els.callButton.addEventListener("click", async () => {
   els.micToRoomToggle.checked = false;
   els.micToRoomBanner.classList.add("hidden");
   els.micToRoomStatus.textContent = "";
-  // Jamais mémorisé : c'est une dépense, elle doit être redemandée à chaque
-  // appel plutôt que de se reconduire toute seule.
-  els.preciseEngineToggle.checked = false;
-  els.preciseEngineStatus.textContent = "";
   els.captionOverflowIndicator.classList.add("hidden");
   els.captionDebugIndicator.classList.add("hidden");
   // La réplique de l'écran de Jean repart vide : les textes du dernier appel
@@ -961,20 +955,6 @@ function setMicToRoom(enabled) {
 }
 
 els.micToRoomToggle.addEventListener("change", () => setMicToRoom(els.micToRoomToggle.checked));
-
-// La transcription tourne par défaut sur le moteur embarqué de la tablette :
-// gratuit, hors-ligne, et il écoute la pièce toute la journée sans que ça
-// coûte quoi que ce soit. AssemblyAI est plus juste mais facturé à la durée —
-// la dépense se décide donc ici, appel par appel, par celui qui voit le texte
-// que Jean est en train de lire, et elle s'arrête en raccrochant (le champ vit
-// dans le document d'appel, voir setCallTranscriptionEngine).
-els.preciseEngineToggle.addEventListener("change", () => {
-  const precise = els.preciseEngineToggle.checked;
-  engine.setCallTranscriptionEngine(precise ? "assemblyai" : "auto");
-  els.preciseEngineStatus.textContent = precise
-    ? "Vos paroles passent par un service en ligne payant, le temps de cet appel."
-    : "";
-});
 els.micToRoomBackButton.addEventListener("click", () => setMicToRoom(false));
 
 els.hangupButton.addEventListener("click", async () => {

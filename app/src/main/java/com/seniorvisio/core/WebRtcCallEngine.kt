@@ -71,7 +71,6 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var volumeListener: ListenerRegistration? = null
     private var captionModeListener: ListenerRegistration? = null
     private var micToRoomListener: ListenerRegistration? = null
-    private var callEngineListener: ListenerRegistration? = null
     private var selfPreviewListener: ListenerRegistration? = null
     private var forceConnectListener: ListenerRegistration? = null
     private var remoteEndedListener: ListenerRegistration? = null
@@ -328,26 +327,6 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         micToRoomListener = signaling.listenForMicToRoom(id, onEnabled)
     }
 
-    /**
-     * Écoute le moteur de transcription demandé par l'appelant pour cet appel.
-     * Tout passe par défaut par le moteur embarqué, qui ne coûte rien ; le
-     * proche peut basculer sa propre voix sur AssemblyAI depuis le PWA s'il
-     * juge le texte insuffisant. La dépense est ainsi décidée au cas par cas,
-     * par celui qui lit ce que Jean lit, et elle s'arrête avec l'appel.
-     *
-     * Rien à démarrer ni à arrêter ici : le moteur constate le changement au
-     * bloc de son suivant et referme sa session de lui-même (voir
-     * TranscriptionEngine.feed). La bascule se produit donc en pleine phrase,
-     * sans coupure de l'appel.
-     */
-    fun listenForCallTranscriptionEngine(onChanged: (TranscriptionEngineChoice?) -> Unit = {}) {
-        val id = callId ?: return
-        callEngineListener = signaling.listenForCallTranscriptionEngine(id) { value ->
-            val choice = TranscriptionEngineChoice.fromRemoteValue(value)
-            transcription.setCallEngineOverride(choice)
-            onChanged(choice)
-        }
-    }
 
     /**
      * Applique le niveau de volume choisi à distance par l'appelant depuis le
@@ -757,8 +736,6 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         captionModeListener = null
         micToRoomListener?.remove()
         micToRoomListener = null
-        callEngineListener?.remove()
-        callEngineListener = null
         selfPreviewListener?.remove()
         selfPreviewListener = null
         forceConnectListener?.remove()

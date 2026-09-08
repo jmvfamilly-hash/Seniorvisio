@@ -637,11 +637,6 @@ class IncomingCallActivity : AppCompatActivity() {
             }
         }
 
-        // Rien à faire du résultat côté écran : le moteur applique la demande
-        // lui-même, et Jean ne doit surtout pas voir passer une mention de
-        // moteur ou de coût. C'est une affaire entre l'appelant et la facture.
-        callEngine.listenForCallTranscriptionEngine()
-
         // Bascule de la transcription vers le microphone de la tablette : Jean
         // lit alors ce que dit quelqu'un présent dans sa pièce plutôt que son
         // correspondant. La zone d'appel n'est pas masquée, elle perd
