@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.res.Configuration
 import android.graphics.BitmapFactory
+import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
@@ -423,12 +424,33 @@ class IncomingCallActivity : AppCompatActivity() {
         CallSignalingClient().updateStatus(incomingCallId, CallSignalingClient.STATUS_BUSY)
     }
 
-    /** Petit son discret au tout début du décompte, pour signaler l'appel sans réveiller toute la maison. */
+    /**
+     * Petit son discret au tout début du décompte, pour signaler l'appel sans
+     * réveiller toute la maison.
+     *
+     * Le son reste celui des notifications — discret, c'est le but — mais il
+     * est joué sur le flux ALARME et non sur celui des notifications. La
+     * distinction n'a l'air de rien et décide pourtant si un appel arrive :
+     *
+     *  - Le moteur de reconnaissance d'Android émet des bips d'alerte en
+     *    boucle qu'on ne peut faire taire qu'en baissant ce flux (voir
+     *    AlertVolume). Laisser la sonnerie dessus, c'était choisir entre des
+     *    bips toute la journée et des appels muets.
+     *  - Le flux alarme ignore le mode silencieux. Un appel qui n'émet aucun
+     *    son parce que la tablette a été mise en silencieux par une fausse
+     *    manœuvre est exactement le genre de panne que Jean ne peut ni
+     *    constater ni signaler.
+     */
     private fun playDiscreetAlertSound() {
         try {
             val soundUri = RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_NOTIFICATION)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            RingtoneManager.getRingtone(this, soundUri)?.play()
+            val ringtone = RingtoneManager.getRingtone(this, soundUri) ?: return
+            ringtone.audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            ringtone.play()
         } catch (_: Exception) {
             // Pas de son système configuré : pas bloquant, le décompte visuel suffit.
         }
