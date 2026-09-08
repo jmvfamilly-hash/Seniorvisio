@@ -286,6 +286,35 @@ function applyScreenLayout(layout) {
   });
 }
 
+
+// Repère de silence inséré par la tablette dans le fil de la parole (voir
+// SILENCE_MARKER dans RollingCaptionZone.kt). Doit rester identique des deux
+// côtés : c'est la seule chose qui les relie.
+const SILENCE_MARKER = "<silence>";
+
+/**
+ * Pose le texte de Jean dans la réplique, les marques de silence dans le même
+ * style que chez lui — plus petites et en italique. La réplique est censée
+ * montrer ce qu'il voit, et le rythme de la parole en fait partie.
+ *
+ * Construit nœud par nœud plutôt qu'en innerHTML : ce texte sort d'un moteur
+ * de reconnaissance vocale, personne ne garantit qu'il ne contiendra jamais
+ * quelque chose ressemblant à une balise.
+ */
+function renderJeanText(element, text) {
+  element.textContent = "";
+  if (!text) return;
+  text.split(SILENCE_MARKER).forEach((part, index) => {
+    if (index > 0) {
+      const mark = document.createElement("em");
+      mark.className = "silence-mark";
+      mark.textContent = SILENCE_MARKER;
+      element.appendChild(mark);
+    }
+    if (part) element.appendChild(document.createTextNode(part));
+  });
+}
+
 /**
  * Affiche dans la réplique exactement le texte que Jean a sous les yeux, au
  * moment où il l'a — pas ce que le proche vient de dire, qui a toujours de
@@ -294,7 +323,7 @@ function applyScreenLayout(layout) {
 function applyScreenState(state) {
   const setZone = (zoneName, textElement, text) => {
     const zone = els.jeanZones.querySelector(`[data-zone="${zoneName}"]`);
-    textElement.textContent = text || "";
+    renderJeanText(textElement, text);
     if (zone) zone.classList.toggle("hidden", !text);
   };
   setZone("ROOM", els.jeanRoomText, state.roomText);

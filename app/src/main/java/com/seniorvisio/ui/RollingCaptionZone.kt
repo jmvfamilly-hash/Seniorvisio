@@ -1,8 +1,14 @@
 package com.seniorvisio.ui
 
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
 import android.util.TypedValue
 import android.view.View
 import android.widget.ScrollView
@@ -64,6 +70,9 @@ class RollingCaptionZone(
      */
     private var pending = ""
 
+    /** Quand du texte est arrivé pour la dernière fois, pour mesurer les silences. */
+    private var lastTextAtMs = 0L
+
     private var visibleLines = DEFAULT_VISIBLE_LINES
     private var clearDelayMs = DEFAULT_CLEAR_DELAY_MS
     private var maxScrollSpeedPxPerSec = DEFAULT_SCROLL_SPEED_DP_PER_SEC * scrollView.resources.displayMetrics.density
@@ -122,14 +131,18 @@ class RollingCaptionZone(
         // à réarmer — sans quoi la zone ne disparaîtrait plus jamais.
         if (phrase.isEmpty() && (!isFinal || pending.isEmpty())) return
 
-        if (phrase.isNotEmpty()) pending = phrase
+        if (phrase.isNotEmpty()) {
+            noteSilenceBefore()
+            pending = phrase
+        }
+        lastTextAtMs = SystemClock.elapsedRealtime()
         if (isFinal) {
             committed = join(committed, pending)
             pending = ""
         }
 
         textView.alpha = 1f
-        textView.text = renderedText()
+        textView.text = styledText()
         reveal()
 
         handler.removeCallbacks(clearRunnable)
@@ -150,6 +163,7 @@ class RollingCaptionZone(
         if (committed.isEmpty() && pending.isEmpty()) return
         committed = ""
         pending = ""
+        lastTextAtMs = 0L
         textView.animate().alpha(0f).setDuration(FADE_MS).withEndAction {
             textView.text = ""
             textView.alpha = 1f
@@ -158,7 +172,56 @@ class RollingCaptionZone(
         hide()
     }
 
+    /**
+     * Marque le silence qui précède un nouveau segment. Ne se déclenche qu'au
+     * premier mot d'un segment : pendant la dictée, les textes se suivent de
+     * quelques dizaines de millisecondes et il n'y a évidemment rien à
+     * signaler.
+     *
+     * L'intérêt n'est pas de faire joli : sans repère, deux phrases dites à
+     * une minute d'intervalle se lisent comme une seule, et Jean croit à un
+     * enchaînement là où il y a eu une pause. Il lit un texte qui remplace
+     * l'écoute — le rythme de la parole en fait partie.
+     */
+    private fun noteSilenceBefore() {
+        if (pending.isNotEmpty()) return
+        if (committed.isEmpty()) return
+        if (lastTextAtMs == 0L) return
+        val silenceMs = SystemClock.elapsedRealtime() - lastTextAtMs
+        committed = when {
+            // Pause franche : la reprise mérite sa propre ligne, sinon elle se
+            // colle à la phrase d'avant et le repère ne sert plus à rien.
+            silenceMs >= LONG_SILENCE_MS -> "$committed $SILENCE_MARKER\n"
+            silenceMs >= SHORT_SILENCE_MS -> "$committed $SILENCE_MARKER"
+            else -> return
+        }
+    }
+
     private fun renderedText(): String = join(committed, pending)
+
+    /**
+     * Le texte tel qu'il s'affiche : les marques de silence en plus petit et
+     * en italique, pour qu'elles se lisent comme une indication et non comme
+     * un mot prononcé. Les styles sont recalculés à chaque rendu plutôt que
+     * portés par le tampon, qui reste ainsi du texte simple — c'est ce qui
+     * permet à la purge des lignes déjà lues de couper au caractère près (voir
+     * trimTextAlreadyScrolledPast) et au miroir du PWA de recevoir la même
+     * chose sans avoir à comprendre nos styles.
+     */
+    private fun styledText(): CharSequence {
+        val full = renderedText()
+        if (!full.contains(SILENCE_MARKER)) return full
+
+        val styled = SpannableStringBuilder(full)
+        var from = full.indexOf(SILENCE_MARKER)
+        while (from >= 0) {
+            val to = from + SILENCE_MARKER.length
+            styled.setSpan(RelativeSizeSpan(SILENCE_TEXT_SCALE), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            styled.setSpan(StyleSpan(Typeface.ITALIC), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            from = full.indexOf(SILENCE_MARKER, to)
+        }
+        return styled
+    }
 
     /**
      * Les segments se suivent séparés d'une simple espace, et c'est le retour
@@ -170,6 +233,10 @@ class RollingCaptionZone(
     private fun join(head: String, tail: String): String = when {
         head.isEmpty() -> tail
         tail.isEmpty() -> head
+        // Après une marque de silence longue, la reprise commence déjà une
+        // nouvelle ligne : y ajouter une espace la décalerait d'un cran vers
+        // la droite, comme un alinéa involontaire.
+        head.endsWith("\n") -> head + tail
         else -> "$head $tail"
     }
 
@@ -295,7 +362,7 @@ class RollingCaptionZone(
         if (cutAt <= 0 || cutAt > committed.length) return
 
         committed = committed.substring(cutAt)
-        textView.text = renderedText()
+        textView.text = styledText()
         scrollAnimator.shiftBy(-removedPx)
     }
 
@@ -349,6 +416,25 @@ class RollingCaptionZone(
 
         /** Intervalle de nouvelle vérification quand l'effacement attend la fin du défilement. */
         private const val RECHECK_DELAY_MS = 500L
+
+        /**
+         * Le repère inséré dans le fil de la parole. Volontairement sans
+         * espace à l'intérieur : le texte ne peut donc pas être coupé en son
+         * milieu par un retour à la ligne, ce qui laisserait un fragment sans
+         * style à l'écran et déjouerait la purge du tampon.
+         */
+        private const val SILENCE_MARKER = "<silence>"
+
+        /**
+         * Deux secondes : une respiration entre deux phrases n'est pas un
+         * silence, une pause qu'on remarquerait en écoutant, si. Six secondes :
+         * là, l'échange s'est arrêté, la reprise repart à la ligne.
+         */
+        private const val SHORT_SILENCE_MS = 2_000L
+        private const val LONG_SILENCE_MS = 6_000L
+
+        /** Assez petit pour ne pas se confondre avec un mot dit, assez grand pour rester lisible de loin. */
+        private const val SILENCE_TEXT_SCALE = 0.55f
 
         /** Bornes de sécurité : une zone très plate ou très haute ne doit produire ni texte illisible ni texte absurde. */
         private const val MIN_TEXT_SIZE_PX = 18f

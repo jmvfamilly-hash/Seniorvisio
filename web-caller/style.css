@@ -266,6 +266,21 @@ video {
   line-height: 1.3;
   max-height: 100%;
   overflow: hidden;
+  /* Les retours à la ligne que la tablette insère après un long silence
+     doivent se voir ici aussi, sinon la réplique montre un enchaînement là où
+     Jean voit une reprise. pre-wrap et non pre : le texte doit continuer à se
+     replier tout seul en fin de ligne. */
+  white-space: pre-wrap;
+}
+
+/* Le repère de silence, dans le même esprit que chez Jean (voir
+   RollingCaptionZone) : plus petit et en italique, pour se lire comme une
+   indication de rythme et non comme un mot prononcé. */
+.jean-zone-text .silence-mark {
+  font-size: 0.55em;
+  font-weight: normal;
+  font-style: italic;
+  opacity: 0.75;
 }
 
 .jean-info-top {
