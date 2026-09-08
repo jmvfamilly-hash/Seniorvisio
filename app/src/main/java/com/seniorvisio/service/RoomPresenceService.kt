@@ -67,7 +67,13 @@ class RoomPresenceService : Service() {
     private var captureThread: Thread? = null
     @Volatile private var isCapturing = false
     private var wakeLock: PowerManager.WakeLock? = null
-    private var lastLoudAtMs = 0L
+
+    /**
+     * Écrit depuis le fil de capture (handleLevel) et depuis le fil principal
+     * (moteur Android), lu par le chien de garde de silence : volatile, sinon
+     * rien ne garantit que la valeur écrite d'un côté soit vue de l'autre.
+     */
+    @Volatile private var lastLoudAtMs = 0L
 
     private var transcription: TranscriptionEngine? = null
     private var androidSpeech: AndroidSpeechSession? = null
@@ -80,6 +86,42 @@ class RoomPresenceService : Service() {
     private var lastWakeRequestAtMs = 0L
     private var captureRetries = 0
     private val retryHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Séparé de retryHandler, qui se fait vider entièrement
+     * (removeCallbacksAndMessages) à chaque arrêt de capture : le chien de
+     * garde qui rend la tablette à sa veille ne doit pas disparaître avec.
+     */
+    private val wakeHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Rend la main à la veille quand le silence dure. Armé à la prise du
+     * verrou de réveil, il se relance tant que le verrou est tenu.
+     *
+     * Existe parce que ce relâchement ne peut pas dépendre du mécanisme
+     * d'écoute. Il était jusqu'ici dans handleLevel, c'est-à-dire dans la
+     * boucle de capture AudioRecord — donc nulle part quand l'écoute passait
+     * par le moteur de reconnaissance d'Android, qui tient le micro lui-même
+     * et ne nous fait traverser aucune boucle. Résultat : le premier mot
+     * prononcé prenait un verrou d'écran allumé de trente minutes que plus
+     * rien ne venait relâcher, et le suivant en reprenait un. La tablette ne
+     * s'endormait plus jamais.
+     *
+     * Le verrou expire de lui-même au bout de MAX_WAKE_LOCK_MS, ce qui a
+     * probablement évité une tablette allumée en continu jusqu'à épuisement —
+     * mais un filet de sécurité de trente minutes n'est pas une politique de
+     * veille.
+     */
+    private val silenceWatchdog = object : Runnable {
+        override fun run() {
+            if (wakeLock?.isHeld != true) return
+            if (System.currentTimeMillis() - lastLoudAtMs > SILENCE_HOLD_MS) {
+                releaseWakeLockIfHeld()
+                return
+            }
+            wakeHandler.postDelayed(this, SILENCE_WATCHDOG_TICK_MS)
+        }
+    }
 
     /**
      * Photographie de ce que fait réellement le service, affichée en direct
@@ -426,13 +468,14 @@ class RoomPresenceService : Service() {
     private fun handleLevel(rms: Double) {
         lastRms = rms.toInt()
         if (lastRms > peakRmsSinceReport) peakRmsSinceReport = lastRms
-        val now = System.currentTimeMillis()
         if (rms >= adminConfig.roomWakeSensitivityThreshold) {
-            lastLoudAtMs = now
+            lastLoudAtMs = System.currentTimeMillis()
             ensureAwake()
-        } else if (now - lastLoudAtMs > SILENCE_HOLD_MS) {
-            releaseWakeLockIfHeld()
         }
+        // Le relâchement n'est plus ici : il appartient au chien de garde de
+        // silence, qui vaut pour les deux mécanismes d'écoute (voir
+        // silenceWatchdog). Le laisser dans cette boucle revenait à ne rendre
+        // la tablette à sa veille que sur l'un des deux.
     }
 
     /**
@@ -478,6 +521,8 @@ class RoomPresenceService : Service() {
             // (voir handleLevel) : jamais un écran forcé allumé indéfiniment.
             lock.acquire(MAX_WAKE_LOCK_MS)
             wakeLock = lock
+            wakeHandler.removeCallbacks(silenceWatchdog)
+            wakeHandler.postDelayed(silenceWatchdog, SILENCE_WATCHDOG_TICK_MS)
         }
 
         // Écran déjà allumé : rien à faire de plus, et surtout ne pas ramener
@@ -505,6 +550,7 @@ class RoomPresenceService : Service() {
     }
 
     private fun releaseWakeLockIfHeld() {
+        wakeHandler.removeCallbacks(silenceWatchdog)
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
     }
@@ -532,6 +578,14 @@ class RoomPresenceService : Service() {
         private const val CHANNEL_ID = "senior_visio_room_presence"
         private const val SAMPLE_RATE_HZ = 16_000
         private const val SILENCE_HOLD_MS = 3_000L
+
+        /**
+         * Cadence du chien de garde de silence. Une seconde : assez fin pour
+         * que la veille reprenne à peu près quand elle le doit, assez lâche
+         * pour ne rien coûter — et il ne tourne que tant que le verrou est
+         * effectivement tenu, donc jamais sur une pièce vide.
+         */
+        private const val SILENCE_WATCHDOG_TICK_MS = 1_000L
 
         /**
          * Durée de maintien de la session AssemblyAI après le dernier son
