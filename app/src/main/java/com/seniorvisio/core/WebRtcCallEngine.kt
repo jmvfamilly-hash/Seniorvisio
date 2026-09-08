@@ -446,6 +446,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         infoMoment: String?,
         infoWeather: String?,
         infoDate: String?,
+        captionCharsPerLine: Int,
+        captionLines: Int,
     ) {
         val id = callId ?: return
         signaling.publishScreenLayout(id, aspectRatio, zoneOrder, isDark, infoMoment, infoWeather, infoDate)

@@ -127,6 +127,16 @@ class HomeZonesController(
     }
 
     /** Réglages d'affichage communs aux deux zones — elles obéissent aux mêmes règles. */
+    /**
+     * Géométrie des zones de texte telle qu'elle est réellement rendue, pour
+     * que le PWA puisse en reproduire les coupures de ligne (voir
+     * RollingCaptionZone.charsPerLine). Les deux zones partagent les mêmes
+     * réglages : mesurer l'une suffit.
+     */
+    fun captionCharsPerLine(): Int = roomZone.charsPerLine()
+
+    fun captionLines(): Int = roomZone.visibleLines()
+
     fun setVisibleLines(lines: Int) {
         roomZone.setVisibleLines(lines)
         callZone.setVisibleLines(lines)

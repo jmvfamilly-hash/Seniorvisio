@@ -247,6 +247,33 @@ class RollingCaptionZone(
      */
     fun displayedText(): String? = renderedText().ifEmpty { null }
 
+    /**
+     * Combien de caractères tiennent sur une ligne de cette zone, à la taille
+     * de police effectivement appliquée.
+     *
+     * Mesuré et non calculé : la taille de police découle elle-même de la
+     * hauteur réelle de la zone (voir fitTextToVisibleLines), et la largeur
+     * moyenne d'un caractère dépend de la fonte. Cette valeur est publiée vers
+     * le PWA pour qu'il puisse afficher au proche un pavé de texte qui coupe
+     * ses lignes aux mêmes endroits que chez Jean — sans quoi la « même chose
+     * au même moment » serait vraie du contenu mais fausse de la forme, et le
+     * proche ne saurait pas ce que Jean a réellement sous les yeux.
+     */
+    fun charsPerLine(): Int {
+        val width = scrollView.width - textView.paddingLeft - textView.paddingRight
+        if (width <= 0) return 0
+        // Un échantillon de lettres courantes plutôt qu'un seul caractère : en
+        // fonte proportionnelle, un « i » et un « m » n'ont rien à voir, et
+        // mesurer l'un ou l'autre donnerait le double ou la moitié.
+        val sample = "abcdefghijklmnopqrstuvwxyz eaisnrtolu"
+        val average = textView.paint.measureText(sample) / sample.length
+        if (average <= 0f) return 0
+        return (width / average).toInt().coerceAtLeast(1)
+    }
+
+    /** Le nombre de lignes visibles effectivement appliqué (voir setVisibleLines). */
+    fun visibleLines(): Int = visibleLines
+
     /** Vrai tant que quelque chose est affiché — donc tant qu'il reste à lire. */
     fun hasText(): Boolean = committed.isNotEmpty() || pending.isNotEmpty()
 

@@ -221,6 +221,8 @@ const els = {
   jeanDate: document.getElementById("jeanDate"),
   jeanRoomText: document.getElementById("jeanRoomText"),
   jeanCallText: document.getElementById("jeanCallText"),
+  jeanRoomBox: document.getElementById("jeanRoomBox"),
+  jeanCallBox: document.getElementById("jeanCallBox"),
 };
 
 let statsInterval = null;
@@ -295,6 +297,32 @@ function applyScreenLayout(layout) {
     const zone = els.jeanZones.querySelector(`[data-zone="${zoneName}"]`);
     if (zone) els.jeanZones.appendChild(zone);
   });
+
+  applyCaptionGeometry(layout);
+}
+
+/**
+ * Donne aux deux pavés de texte la géométrie réelle mesurée chez Jean : autant
+ * de caractères par ligne, autant de lignes.
+ *
+ * L'unité `ch` vaut la largeur du chiffre zéro de la fonte courante : en fonte
+ * à chasse fixe — celle imposée à ces pavés — c'est exactement la largeur d'un
+ * caractère quelconque, donc `Nch` tient N caractères, ni plus ni moins. C'est
+ * ce qui fait couper les lignes aux mêmes endroits que sur la tablette.
+ *
+ * Sans valeur publiée (tablette d'une version antérieure), on ne force rien :
+ * le pavé reprend la largeur disponible, ce qui reste lisible même si les
+ * coupures ne correspondent plus.
+ */
+function applyCaptionGeometry(layout) {
+  const chars = Number(layout.captionCharsPerLine);
+  const lines = Number(layout.captionLines);
+  [els.jeanRoomText, els.jeanCallText].forEach((element) => {
+    element.style.width = Number.isFinite(chars) && chars > 0 ? `${chars}ch` : "";
+    // Une hauteur fixée en lignes, et le débordement masqué comme chez Jean :
+    // sa zone ne grandit pas non plus, elle fait défiler.
+    element.style.height = Number.isFinite(lines) && lines > 0 ? `${lines * 1.35}em` : "";
+  });
 }
 
 
@@ -332,13 +360,18 @@ function renderJeanText(element, text) {
  * l'avance (voir PacedCaptionZone côté tablette).
  */
 function applyScreenState(state) {
-  const setZone = (zoneName, textElement, text) => {
-    const zone = els.jeanZones.querySelector(`[data-zone="${zoneName}"]`);
+  const setCaption = (box, textElement, text) => {
     renderJeanText(textElement, text);
-    if (zone) zone.classList.toggle("hidden", !text);
+    // La fin du texte, pas le début : la zone de Jean défile et lui montre ce
+    // qu'il est en train de lire. Afficher le haut du tampon montrerait ce
+    // qu'il a lu il y a une minute.
+    textElement.scrollTop = textElement.scrollHeight;
+    // Un pavé vide disparaît, exactement comme la zone chez Jean : garder un
+    // cadre vide donnerait à croire que quelque chose est affiché là-bas.
+    box.classList.toggle("hidden", !text);
   };
-  setZone("ROOM", els.jeanRoomText, state.roomText);
-  setZone("CALL", els.jeanCallText, state.callText);
+  setCaption(els.jeanRoomBox, els.jeanRoomText, state.roomText);
+  setCaption(els.jeanCallBox, els.jeanCallText, state.callText);
 
   // En dessous d'une demi-seconde, l'écart ne se voit pas : le signaler
   // ferait clignoter un avertissement en permanence pendant une conversation

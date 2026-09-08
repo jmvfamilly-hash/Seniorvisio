@@ -109,17 +109,31 @@
               <p class="jean-info-date" id="jeanDate"></p>
             </div>
 
-            <div class="jean-zone jean-zone-text hidden" data-zone="ROOM">
-              <p id="jeanRoomText"></p>
-            </div>
-
-            <div class="jean-zone jean-zone-text hidden" data-zone="CALL">
-              <p id="jeanCallText"></p>
-            </div>
           </div>
         </div>
 
-        <p class="hint" id="mirrorHint">👆 Exactement ce que Jean a sous les yeux en ce moment</p>
+        <p class="hint" id="mirrorHint">👆 L'image que Jean a sous les yeux en ce moment</p>
+
+        <!-- Le texte transcrit sous l'image, et non par-dessus comme chez
+             Jean. Chez lui la superposition est nécessaire, sa dalle n'a
+             qu'un écran ; ici elle ne ferait que masquer la vidéo qu'on
+             regarde, sur un téléphone où la place manque déjà.
+             Les deux pavés sont dimensionnés à la géométrie réelle mesurée
+             chez Jean (voir RollingCaptionZone.charsPerLine) : même nombre de
+             caractères par ligne, même nombre de lignes, donc les mêmes
+             coupures aux mêmes endroits. Sans ça la réplique serait fidèle du
+             contenu mais fausse de la forme, et le proche ne saurait toujours
+             pas ce que Jean a réellement sous les yeux. -->
+        <div class="jean-captions">
+          <div class="jean-caption hidden" id="jeanRoomBox">
+            <span class="jean-caption-label">👂 Dans la pièce</span>
+            <p class="jean-caption-text" id="jeanRoomText"></p>
+          </div>
+          <div class="jean-caption hidden" id="jeanCallBox">
+            <span class="jean-caption-label">💬 L'appel</span>
+            <p class="jean-caption-text" id="jeanCallText"></p>
+          </div>
+        </div>
 
         <!-- Rappel permanent tant que la transcription écoute la pièce : sans
              lui, l'appelant parle dans le vide sans comprendre pourquoi rien

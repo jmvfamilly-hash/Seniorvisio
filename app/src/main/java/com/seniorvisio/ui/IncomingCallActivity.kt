@@ -715,6 +715,8 @@ class IncomingCallActivity : AppCompatActivity() {
             infoMoment = info?.moment,
             infoWeather = info?.weather,
             infoDate = info?.date,
+            captionCharsPerLine = zones.captionCharsPerLine(),
+            captionLines = zones.captionLines(),
         )
     }
 

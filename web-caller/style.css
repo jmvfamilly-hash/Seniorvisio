@@ -276,6 +276,7 @@ video {
 /* Le repère de silence, dans le même esprit que chez Jean (voir
    RollingCaptionZone) : plus petit et en italique, pour se lire comme une
    indication de rythme et non comme un mot prononcé. */
+.jean-caption-text .silence-mark,
 .jean-zone-text .silence-mark {
   font-size: 0.55em;
   font-weight: normal;
@@ -666,4 +667,53 @@ body.video-mode #localVideo {
 
 .usage-saving {
   color: #2ECC71;
+}
+
+/* ---- Le texte de Jean, sous l'image et non par-dessus -------------------
+   Chez lui la superposition est nécessaire : sa tablette n'a qu'un écran, et
+   le texte doit tenir sur la vidéo. Ici elle ne ferait que masquer l'image
+   qu'on est venu regarder, sur un téléphone où la place manque déjà.
+
+   Les deux pavés sont dimensionnés par le JS à la géométrie réelle mesurée
+   chez Jean (voir applyCaptionGeometry) : autant de caractères par ligne,
+   autant de lignes. */
+.jean-captions {
+  margin-top: 4px;
+}
+
+.jean-caption {
+  text-align: left;
+  margin-top: 10px;
+}
+
+.jean-caption.hidden { display: none; }
+
+.jean-caption-label {
+  font-size: 12px;
+  color: #7F8C8D;
+}
+
+/* Chasse fixe, et c'est tout l'intérêt : l'unité `ch` du JS vaut alors
+   exactement la largeur d'un caractère, donc « 38ch » tient trente-huit
+   caractères, ni plus ni moins. En fonte proportionnelle, la même largeur
+   tiendrait deux fois plus de « i » que de « m » et les lignes ne se
+   couperaient plus au même endroit que chez Jean. */
+.jean-caption-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 15px;
+  line-height: 1.35;
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  box-sizing: content-box;
+  background: #16233D;
+  border-radius: 8px;
+  color: #FFFFFF;
+  /* Les retours à la ligne insérés après un long silence doivent se voir,
+     et le texte doit continuer à se replier tout seul en fin de ligne. */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  /* La zone ne grandit pas, exactement comme chez Jean : elle défile. On
+     montre la fin, c'est-à-dire ce qu'il est en train de lire. */
+  overflow: hidden;
+  max-width: 100%;
 }

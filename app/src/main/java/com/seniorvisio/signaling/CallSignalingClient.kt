@@ -256,10 +256,17 @@ class CallSignalingClient {
         infoMoment: String?,
         infoWeather: String?,
         infoDate: String?,
+        captionCharsPerLine: Int,
+        captionLines: Int,
     ) {
         callDoc(callId).update(
             mapOf(
                 FIELD_SCREEN_ASPECT_RATIO to aspectRatio,
+                // Géométrie réelle des zones de texte, mesurée chez Jean : le
+                // PWA en a besoin pour couper ses lignes aux mêmes endroits
+                // (voir RollingCaptionZone.charsPerLine).
+                FIELD_CAPTION_CHARS_PER_LINE to captionCharsPerLine,
+                FIELD_CAPTION_LINES to captionLines,
                 FIELD_SCREEN_ZONE_ORDER to zoneOrder,
                 FIELD_SCREEN_IS_DARK to isDark,
                 FIELD_SCREEN_INFO_MOMENT to infoMoment,
@@ -355,6 +362,8 @@ class CallSignalingClient {
         private const val FIELD_DISPLAYED_ROOM_TEXT = "displayedRoomText"
         private const val FIELD_DISPLAYED_CALL_TEXT = "displayedCallText"
         private const val FIELD_SCREEN_ASPECT_RATIO = "screenAspectRatio"
+        private const val FIELD_CAPTION_CHARS_PER_LINE = "captionCharsPerLine"
+        private const val FIELD_CAPTION_LINES = "captionLines"
         private const val FIELD_SCREEN_ZONE_ORDER = "screenZoneOrder"
         private const val FIELD_SCREEN_IS_DARK = "screenIsDark"
         private const val FIELD_SCREEN_INFO_MOMENT = "screenInfoMoment"
