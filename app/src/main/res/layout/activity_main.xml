@@ -23,19 +23,11 @@
 
     <include layout="@layout/view_home_zones" />
 
-    <!-- QR code à scanner par un soignant/visiteur présent dans la pièce :
-         son téléphone ouvre le PWA en mode soignant (voir MainActivity.
-         showCaregiverQrCode). Toucher la vignette explique la fonction à qui
-         la découvre sans savoir ce que c'est. -->
-    <ImageView
-        android:id="@+id/imageCaregiverQr"
-        android:layout_width="110dp"
-        android:layout_height="110dp"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="12dp"
-        android:clickable="true"
-        android:focusable="true"
-        android:contentDescription="QR code à scanner pour parler à Jean" />
+    <!-- Le QR code soignant a quitté cet écran : il est passé dans les
+         réglages admin (voir AdminSettingsActivity). L'écran de Jean n'affiche
+         que ce qui le concerne — la date, la météo, le moment de la journée et
+         ce qui se dit autour de lui. Un carré noir et blanc qui ne lui sert à
+         rien n'y avait pas sa place. -->
 
     <!-- Version affichée en permanence, discrètement, pour vérifier quel APK
          tourne réellement sur la tablette sans la brancher (voir

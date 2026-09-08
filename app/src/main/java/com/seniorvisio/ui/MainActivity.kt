@@ -7,8 +7,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
-import android.graphics.Bitmap
-import android.graphics.Color
 import android.text.InputType
 import android.net.Uri
 import android.os.Build
@@ -21,15 +19,12 @@ import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.view.WindowManager
-import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.qrcode.QRCodeWriter
 import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.admin.AdminSettingsActivity
@@ -165,20 +160,6 @@ class MainActivity : AppCompatActivity() {
             },
         )
 
-        val imageQr = findViewById<ImageView>(R.id.imageCaregiverQr)
-        // Touché plutôt que scanné : c'est le geste naturel de quelqu'un qui
-        // découvre un code sans savoir à quoi il sert. On lui explique.
-        imageQr.setOnClickListener { showCaregiverHelp() }
-        // Appui long : labo d'étude comparant les moteurs de transcription
-        // (voir TranscriptionLabActivity). Il vivait sur la carte "Voir ce qui
-        // se dit", disparue de cet écran ; il se rattache ici plutôt que de
-        // devenir inaccessible, sans gêner l'usage normal de la vignette.
-        imageQr.setOnLongClickListener {
-            startActivity(Intent(this, TranscriptionLabActivity::class.java))
-            true
-        }
-        showCaregiverQrCode()
-
         permissionLauncher.launch(
             arrayOf(
                 Manifest.permission.CAMERA,
@@ -297,52 +278,6 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    /**
-     * Génère et affiche le QR code que scanne un soignant présent dans la
-     * pièce. Généré à la volée plutôt que stocké en image : l'adresse peut
-     * changer (déploiement du PWA ailleurs) sans avoir à refabriquer un
-     * fichier, et rien ne peut se désynchroniser entre l'image et l'adresse
-     * réelle.
-     *
-     * Dessiné en noir sur blanc et non aux couleurs de l'écran : les
-     * applications d'appareil photo reconnaissent nettement mieux un QR code
-     * franchement contrasté, surtout photographié de biais dans une chambre
-     * mal éclairée. C'est aussi pour ça qu'il ne suit pas la palette
-     * clair/sombre du reste de l'écran (voir ScreenTheme).
-     */
-    private fun showCaregiverQrCode() {
-        val imageQr = findViewById<ImageView>(R.id.imageCaregiverQr)
-        try {
-            val size = 480
-            val matrix = QRCodeWriter().encode(CAREGIVER_URL, BarcodeFormat.QR_CODE, size, size)
-            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
-            for (x in 0 until size) {
-                for (y in 0 until size) {
-                    bitmap.setPixel(x, y, if (matrix.get(x, y)) Color.BLACK else Color.WHITE)
-                }
-            }
-            imageQr.setImageBitmap(bitmap)
-        } catch (e: Exception) {
-            // Un QR code illisible vaut mieux qu'un écran d'accueil qui plante :
-            // le reste (horloge, sous-titres) doit rester utilisable.
-            Log.e(TAG, "Génération du QR code soignant impossible", e)
-        }
-    }
-
-    /**
-     * Explique la fonction à qui touche le QR code sans savoir ce que c'est —
-     * cas le plus probable pour un soignant qui entre dans la chambre. Trois
-     * étapes imagées (voir dialog_caregiver_help.xml) plutôt qu'un texte à
-     * lire debout.
-     */
-    private fun showCaregiverHelp() {
-        val content = layoutInflater.inflate(R.layout.dialog_caregiver_help, null)
-        AlertDialog.Builder(this)
-            .setView(content)
-            .setPositiveButton("J'ai compris", null)
-            .show()
-    }
-
     private fun promptAdminPin() {
         val input = android.widget.EditText(this).apply {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
@@ -428,6 +363,5 @@ class MainActivity : AppCompatActivity() {
          * immédiate sans décompte ni photo, son de la tablette coupé,
          * sous-titres activés d'office (voir web-caller/app.js).
          */
-        private const val CAREGIVER_URL = "https://jmvfamilly-hash.github.io/Seniorvisio/?soignant=1"
     }
 }

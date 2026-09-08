@@ -14,18 +14,23 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.text.InputType
 import android.webkit.WebView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.seniorvisio.BuildConfig
@@ -35,6 +40,7 @@ import com.seniorvisio.core.HomeZone
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.WifiConfigurator
 import com.seniorvisio.service.RoomPresenceService
+import com.seniorvisio.ui.TranscriptionLabActivity
 
 /**
  * Écran de réglages admin minimal : PIN d'accès et durée du décompte
@@ -230,6 +236,19 @@ class AdminSettingsActivity : AppCompatActivity() {
             }
         }
 
+        showCaregiverQrCode()
+        // Touché plutôt que scanné : c'est le geste de quelqu'un qui découvre
+        // un code sans savoir à quoi il sert. On lui montre l'explication
+        // qu'il faudra donner au soignant.
+        findViewById<ImageView>(R.id.imageCaregiverQr).setOnClickListener { showCaregiverHelp() }
+
+        // Le labo de comparaison des moteurs vivait sur un appui long du QR
+        // code, sur l'écran d'accueil. Le QR code parti, il devient un bouton
+        // franc plutôt qu'un geste caché que personne ne retrouve.
+        findViewById<Button>(R.id.buttonTranscriptionLab).setOnClickListener {
+            startActivity(Intent(this, TranscriptionLabActivity::class.java))
+        }
+
         findViewById<Button>(R.id.buttonPickWifiNetwork).setOnClickListener { pickWifiNetwork() }
         findViewById<Button>(R.id.buttonOpenBrowser).setOnClickListener { openBrowserForNetworkLogin() }
 
@@ -278,6 +297,56 @@ class AdminSettingsActivity : AppCompatActivity() {
                 .setNegativeButton("Annuler", null)
                 .show()
         }
+    }
+
+
+    /**
+     * Génère et affiche le QR code que scanne un soignant présent dans la
+     * pièce : son téléphone ouvre le PWA en mode soignant, et sa parole
+     * s'écrit alors en grand sur la tablette.
+     *
+     * Ici, dans les réglages, et non plus sur l'écran d'accueil : ce carré
+     * noir et blanc ne sert à rien à Jean, dont l'écran ne doit montrer que ce
+     * qui le concerne. Il se montre une fois à qui en a besoin.
+     *
+     * Généré à la volée plutôt que stocké en image : l'adresse peut changer
+     * (déploiement du PWA ailleurs) sans avoir à refabriquer un fichier, et
+     * rien ne peut se désynchroniser entre l'image et l'adresse réelle.
+     *
+     * Dessiné en noir sur blanc : les applications d'appareil photo
+     * reconnaissent nettement mieux un QR code franchement contrasté, surtout
+     * photographié de biais dans une chambre mal éclairée.
+     */
+    private fun showCaregiverQrCode() {
+        val imageQr = findViewById<ImageView>(R.id.imageCaregiverQr)
+        try {
+            val size = 480
+            val matrix = QRCodeWriter().encode(CAREGIVER_URL, BarcodeFormat.QR_CODE, size, size)
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
+            for (x in 0 until size) {
+                for (y in 0 until size) {
+                    bitmap.setPixel(x, y, if (matrix.get(x, y)) Color.BLACK else Color.WHITE)
+                }
+            }
+            imageQr.setImageBitmap(bitmap)
+        } catch (e: Exception) {
+            // Un QR code manquant ne doit pas emporter tout l'écran de
+            // réglages : le Wi-Fi et le PIN restent utilisables.
+            android.util.Log.e("AdminSettings", "Génération du QR code soignant impossible", e)
+        }
+    }
+
+    /**
+     * L'explication à montrer au soignant en même temps que le code : trois
+     * étapes imagées plutôt qu'un texte à lire debout (voir
+     * dialog_caregiver_help.xml).
+     */
+    private fun showCaregiverHelp() {
+        val content = layoutInflater.inflate(R.layout.dialog_caregiver_help, null)
+        AlertDialog.Builder(this)
+            .setView(content)
+            .setPositiveButton("J'ai compris", null)
+            .show()
     }
 
     private fun launchWifiQrScan() {
@@ -405,6 +474,13 @@ class AdminSettingsActivity : AppCompatActivity() {
     private fun textBrowserAccessStatus() = findViewById<TextView>(R.id.textBrowserAccessStatus)
 
     companion object {
+        /**
+         * Adresse du PWA en mode soignant, encodée dans le QR code ci-dessus.
+         * Doit rester alignée sur le déploiement réel (voir
+         * .github/workflows/deploy-web-caller.yml).
+         */
+        private const val CAREGIVER_URL = "https://jmvfamilly-hash.github.io/Seniorvisio/?soignant=1"
+
         private const val STATUS_REFRESH_MS = 500L
     }
 }
