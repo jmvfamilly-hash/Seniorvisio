@@ -1,0 +1,45 @@
+# Publie firestore.rules vers Firebase.
+#
+# Le fichier vit dans le dépôt, mais Firestore ne le lit pas depuis là : tant
+# qu'il n'est pas publié, la base applique l'ancienne version. Une règle
+# ajoutée au dépôt et jamais déployée ne se voit pas — les écritures qu'elle
+# devait autoriser sont simplement refusées, en silence, sans erreur nulle
+# part. C'est exactement ce qui est arrivé aux journées d'usage de la tablette
+# (devices/{id}/usage/{jour}) : les règles Firestore ne descendant pas dans les
+# sous-collections, il en fallait une nouvelle, et le panneau d'administration
+# affichait une semaine vide sans que rien n'indique pourquoi.
+#
+# Automatisé pour cette raison : un déploiement qu'il faut penser à faire à la
+# main dans une console web est un déploiement qu'on oublie, et dont l'oubli
+# ne se manifeste que par une fonctionnalité muette.
+#
+# Même compte de service que les Cloud Functions (secret FIREBASE_SERVICE_ACCOUNT).
+name: Deploy Firestore rules
+
+on:
+  push:
+    paths:
+      - 'firestore.rules'
+      - 'firebase.json'
+      - '.github/workflows/deploy-firestore-rules.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Write service account key
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
+
+      - name: Deploy Firestore rules
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+        run: npx firebase-tools deploy --only firestore:rules --project seniorvisio --non-interactive --force
