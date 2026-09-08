@@ -194,12 +194,17 @@ class IncomingCallActivity : AppCompatActivity() {
             .cancel(IncomingCallService.CALL_NOTIFICATION_ID)
 
         setContentView(R.layout.activity_incoming_call)
+        hideNavigationBar()
         findViewById<TextView>(R.id.textBuildRev).text = BuildConfig.BUILD_REV
         KioskManager.startIfDeviceOwner(this)
 
         // Les trois zones sont en place dès la sonnerie, pas seulement une
-        // fois connecté : la date et la météo n'ont pas de raison de
-        // disparaître parce que le téléphone sonne.
+        // fois connecté — mais la zone d'information, elle, s'efface tout de
+        // suite (voir setBackground juste après) : dès qu'un appel se
+        // présente, l'écran ne doit plus montrer qu'une chose, qui appelle.
+        // La date et la météo sont un repère d'écran au repos, et les laisser
+        // au-dessus de la photo du proche et du décompte ajoute à lire là où
+        // il faut au contraire que tout soit évident d'un coup d'œil.
         zones = HomeZonesController(
             root = findViewById(R.id.callRoot),
             onPalette = { palette ->
@@ -216,6 +221,10 @@ class IncomingCallActivity : AppCompatActivity() {
             lastInfo = snapshot
             publishScreenLayout()
         }
+        // Sans fondu : l'écran n'est pas encore visible, un fondu commencerait
+        // par afficher le bandeau. La place reste réservée, les zones 2 et 3
+        // ne bougent donc pas quand la vidéo prend le relais.
+        zones.setBackground(HomeZonesController.Background.VIDEO, animate = false)
 
         val callId = intent.getStringExtra(EXTRA_CALL_ID)
         if (callId == null) {
@@ -381,6 +390,12 @@ class IncomingCallActivity : AppCompatActivity() {
         zones.onPause()
     }
 
+    /** Voir MainActivity.onWindowFocusChanged — même raison. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideNavigationBar()
+    }
+
     /**
      * Avec singleTask (voir AndroidManifest), un second déclenchement pour le
      * même appel (notification plein écran + startActivity explicite, voir
@@ -495,8 +510,9 @@ class IncomingCallActivity : AppCompatActivity() {
         // réclame maintenant, et un seul composant à la fois peut le tenir.
         stopRoomTranscription()
         RoomPresenceService.pauseForCall(this)
-        // Le fond n'est plus uni : la date et la météo s'effacent en fondu et
-        // laissent la place à la vidéo (voir HomeZonesController.setBackground).
+        // Sans effet dans le cas courant, le fond étant déjà en VIDEO depuis
+        // onCreate : conservé pour le chemin où un diaporama s'est intercalé
+        // avant la connexion (voir showSlideshowPhoto).
         zones.setBackground(HomeZonesController.Background.VIDEO)
         findViewById<View>(R.id.alertContent).visibility = View.GONE
         // La photo et son voile sont des calques plein écran, frères de

@@ -143,6 +143,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        hideNavigationBar()
         applyWakeOnSoundRequest(intent)
 
         val textBuildRev = findViewById<TextView>(R.id.textBuildRev)
@@ -236,6 +237,17 @@ class MainActivity : AppCompatActivity() {
         zones.onResume()
         screenAwakeHandler.removeCallbacks(screenAwakeTicker)
         screenAwakeHandler.post(screenAwakeTicker)
+    }
+
+    /**
+     * Android réaffiche les barres système à chaque reprise de focus (retour
+     * d'une boîte de dialogue, d'un écran admin, du menu Marche/Arrêt) :
+     * sans ce rappel, la barre de navigation revient définitivement à la
+     * première interruption venue. Voir hideNavigationBar.
+     */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideNavigationBar()
     }
 
     /**

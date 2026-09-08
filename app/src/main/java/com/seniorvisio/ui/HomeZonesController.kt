@@ -173,12 +173,22 @@ class HomeZonesController(
      * visage du proche ou sur une photo de famille. Sa place reste réservée
      * (invisible, pas retirée) pour que les deux zones de texte ne bougent
      * pas d'un pixel au passage.
+     *
+     * @param animate à passer à false quand l'état est fixé avant même que
+     *   l'écran soit visible (voir IncomingCallActivity, qui masque le
+     *   bandeau dès la sonnerie) : un fondu partirait alors d'un bandeau
+     *   affiché une demi-seconde, ce que personne n'a demandé à voir.
      */
-    fun setBackground(background: Background) {
+    fun setBackground(background: Background, animate: Boolean = true) {
         if (currentBackground == background) return
         currentBackground = background
         val visible = background == Background.SOLID
         zoneInfo.animate().cancel()
+        if (!animate) {
+            zoneInfo.alpha = if (visible) 1f else 0f
+            zoneInfo.visibility = if (visible) View.VISIBLE else View.INVISIBLE
+            return
+        }
         if (visible) zoneInfo.visibility = View.VISIBLE
         zoneInfo.animate().alpha(if (visible) 1f else 0f).setDuration(FADE_MS)
             .withEndAction { if (!visible) zoneInfo.visibility = View.INVISIBLE }
