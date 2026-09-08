@@ -446,19 +446,31 @@ class RoomPresenceService : Service() {
      * AssemblyAI est facturé à la durée de connexion : laisser la session
      * ouverte en permanence sur une tablette allumée 24h/24 coûterait une
      * centaine d'euros par mois pour transcrire, l'essentiel du temps, une
-     * pièce vide. Le seuil réutilisé est celui du réveil au son, déjà réglé
-     * sur place pour cette pièce et ce microphone (voir AdminConfig) — une
-     * seule sensibilité à ajuster, pas deux qui se contredisent.
+     * pièce vide.
+     *
+     * Le seuil employé ici n'est PLUS celui du réveil au son. Il l'a été, au
+     * nom d'« une seule sensibilité à ajuster, pas deux qui se
+     * contredisent » — et c'était une erreur de raisonnement : les deux
+     * réglages ne répondent pas à la même question. Le réveil demande « ce
+     * bruit mérite-t-il d'allumer l'écran ? », et sa réponse doit être assez
+     * exigeante pour ignorer un clavier à deux mètres. La transcription
+     * demande « y a-t-il quelque chose à écrire ? », et sa réponse doit être
+     * la plus généreuse possible.
+     *
+     * Les avoir confondus avait une conséquence qu'on ne pouvait pas voir
+     * tant que le seuil restait bas : monter la sensibilité du réveil coupait
+     * l'attaque de chaque phrase, toujours plus faible que son milieu.
+     * Plusieurs mots perdus à chaque prise de parole, et un réglage censé ne
+     * concerner que l'écran.
      *
      * Le maintien de quelques secondes après le dernier son évite de couper
-     * la session entre deux phrases d'une même conversation, ce qui ferait
-     * perdre le début de la phrase suivante le temps de rétablir la connexion.
+     * la session entre deux phrases d'une même conversation.
      */
     private fun feedRoomTranscription(buffer: ShortArray, length: Int, rms: Double) {
         val engine = transcription ?: return
 
         val now = System.currentTimeMillis()
-        if (rms >= adminConfig.roomWakeSensitivityThreshold) lastRoomSoundAtMs = now
+        if (rms >= SPEECH_FLOOR_RMS) lastRoomSoundAtMs = now
         // Silence prolongé : on rend la source inactive, ce qui ferme la
         // session AssemblyAI. Elle se rouvrira au premier son suivant.
         val someoneIsSpeaking = now - lastRoomSoundAtMs <= TRANSCRIPTION_HOLD_MS
@@ -617,6 +629,20 @@ class RoomPresenceService : Service() {
          * connexion coûte le début de la phrase suivante.
          */
         private const val TRANSCRIPTION_HOLD_MS = 8_000L
+
+        /**
+         * En dessous, on considère qu'il n'y a rien à écrire. Fixe et bas,
+         * volontairement : c'est un plancher de présence de son, pas un
+         * réglage de confort. Il vaut le seuil de silence du moteur lui-même
+         * (voir TranscriptionEngine.SILENCE_LEVEL) pour que les deux étages de
+         * la chaîne prennent la même décision — deux planchers différents, et
+         * l'un des deux couperait ce que l'autre laisse passer.
+         *
+         * Ne pas remonter cette valeur pour régler des réveils intempestifs :
+         * c'est le curseur de sensibilité qui sert à ça, et c'est précisément
+         * de les avoir confondus que venait la perte des débuts de phrase.
+         */
+        private const val SPEECH_FLOOR_RMS = 300.0
         private const val MAX_WAKE_LOCK_MS = 30 * 60 * 1000L
         private const val CAPTURE_RETRY_DELAY_MS = 2_000L
 

@@ -69,6 +69,40 @@ class TranscriptionEngine(
     /** Dernier bloc de son contenant autre chose que du silence (voir feed). */
     private var lastSoundAtMs = 0L
 
+    /** Un bloc de son conservé en réserve, avec ce qu'il faut pour le rejouer tel quel. */
+    private class Block(
+        val pcm16: ByteArray,
+        val sampleRate: Int,
+        val channels: Int,
+        val atMs: Long,
+    )
+
+    /**
+     * Les dernières secondes de son, conservées en permanence — y compris
+     * pendant qu'aucune session n'est ouverte — et rejouées en tête dès qu'une
+     * session s'ouvre.
+     *
+     * Sans ça, le début de chaque prise de parole après un silence était
+     * perdu, et pas pour une seule raison : le temps que le niveau franchisse
+     * le plancher de silence, puis le temps d'établir la connexion et de
+     * démarrer la session côté service. Trois ou quatre mots à chaque fois,
+     * systématiquement les premiers — c'est-à-dire ceux qui disent de quoi on
+     * parle.
+     *
+     * Deux secondes suffisent largement pour couvrir l'attaque d'une phrase et
+     * une poignée de main réseau, et coûtent environ 64 ko de mémoire à 16 kHz
+     * en mono. C'est le prix le plus bas auquel on pouvait garder l'économie
+     * de connexion sans qu'elle se paie en mots perdus.
+     */
+    private val preRoll = ArrayDeque<Block>()
+
+    /**
+     * Quand la dernière session s'est fermée. Seul le son postérieur est
+     * rejoué : rejouer ce qui a déjà été envoyé à la session précédente
+     * ferait réapparaître à l'écran des mots déjà lus.
+     */
+    private var lastSessionEndAtMs = 0L
+
     /**
      * Choisit la source à transcrire, ou `null` pour ne rien transcrire du
      * tout. Le son des autres sources continue d'arriver mais est ignoré (voir
@@ -125,6 +159,10 @@ class TranscriptionEngine(
         // n'économise rien et lui ferait perdre le contexte de la phrase en
         // cours pour rien.
         val now = SystemClock.elapsedRealtime()
+        // Mis en réserve AVANT toute décision de couper : c'est précisément le
+        // son que les gardes ci-dessous laisseraient tomber qu'il faut pouvoir
+        // rejouer (voir preRoll).
+        remember(Block(pcm16, sampleRate, channels, now))
         if (levelOf(pcm16) >= SILENCE_LEVEL) lastSoundAtMs = now
         val silent = lastSoundAtMs == 0L || now - lastSoundAtMs > BILLED_SILENCE_MS
         if (silent) {
@@ -134,32 +172,68 @@ class TranscriptionEngine(
             if (recognizer == null && wanted == TranscriptionEngineChoice.ASSEMBLYAI) return
         }
 
-        val instance = recognizer ?: createRecognizerFor(wanted)?.also { created ->
-            recognizer = created
-            recognizerSource = source
-            recognizerKind =
-                if (created is VoskSpeechRecognizer) TranscriptionEngineChoice.VOSK
-                else TranscriptionEngineChoice.ASSEMBLYAI
-            // La session, et non la parole : AssemblyAI facture la durée de
-            // connexion, pas le nombre de mots (voir UsageStats).
-            UsageStats.noteTranscriptionStart(
-                if (recognizerKind == TranscriptionEngineChoice.VOSK) UsageStats.ENGINE_VOSK
-                else UsageStats.ENGINE_ASSEMBLYAI
-            )
-            created.start(
-                onText = { text, isFinal ->
-                    // La source peut avoir changé pendant que ce texte
-                    // arrivait : on l'étiquette avec celle qui l'a réellement
-                    // produit, pas avec celle qui est active maintenant.
-                    onText(source, text, isFinal)
-                },
-                onError = { message ->
-                    Log.w(TAG, "Transcription ${label(source)} : $message")
-                    diagnose(message)
-                },
-            )
-        } ?: return
-        instance.accept(pcm16, sampleRate, channels)
+        val running = recognizer
+        if (running != null) {
+            running.accept(pcm16, sampleRate, channels)
+            return
+        }
+
+        val created = createRecognizerFor(wanted) ?: return
+        recognizer = created
+        recognizerSource = source
+        recognizerKind =
+            if (created is VoskSpeechRecognizer) TranscriptionEngineChoice.VOSK
+            else TranscriptionEngineChoice.ASSEMBLYAI
+        // La session, et non la parole : AssemblyAI facture la durée de
+        // connexion, pas le nombre de mots (voir UsageStats).
+        UsageStats.noteTranscriptionStart(
+            if (recognizerKind == TranscriptionEngineChoice.VOSK) UsageStats.ENGINE_VOSK
+            else UsageStats.ENGINE_ASSEMBLYAI
+        )
+        created.start(
+            onText = { text, isFinal ->
+                // La source peut avoir changé pendant que ce texte arrivait :
+                // on l'étiquette avec celle qui l'a réellement produit, pas
+                // avec celle qui est active maintenant.
+                onText(source, text, isFinal)
+            },
+            onError = { message ->
+                Log.w(TAG, "Transcription ${label(source)} : $message")
+                diagnose(message)
+            },
+        )
+        // Le son des dernières secondes part en premier : c'est le début de la
+        // phrase, dit pendant que la session était encore fermée. La réserve
+        // contient déjà le bloc courant, ajouté plus haut — il ne faut donc
+        // surtout pas le renvoyer derrière.
+        flushPreRollInto(created)
+    }
+
+    /** Conserve le bloc et jette ce qui dépasse la fenêtre (voir preRoll). */
+    private fun remember(block: Block) {
+        preRoll.addLast(block)
+        while (preRoll.size > 1 && block.atMs - preRoll.first().atMs > PRE_ROLL_MS) {
+            preRoll.removeFirst()
+        }
+    }
+
+    /**
+     * Rejoue la réserve dans une session qui vient de s'ouvrir, puis la vide :
+     * ce son est désormais parti, le renvoyer plus tard le ferait transcrire
+     * deux fois.
+     *
+     * Seuls les blocs postérieurs à la fermeture de la session précédente sont
+     * rejoués. Sans cette borne, fermer et rouvrir coup sur coup — un
+     * changement de moteur, un changement de source — renverrait du son déjà
+     * transcrit, et Jean verrait revenir des mots qu'il vient de lire.
+     */
+    private fun flushPreRollInto(recognizer: SpeechRecognizer) {
+        preRoll.forEach { block ->
+            if (block.atMs >= lastSessionEndAtMs) {
+                recognizer.accept(block.pcm16, block.sampleRate, block.channels)
+            }
+        }
+        preRoll.clear()
     }
 
     /** Ferme tout : plus aucune source active, plus aucune session ouverte. */
@@ -262,6 +336,10 @@ class TranscriptionEngine(
         // silence après la réouverture : sans cette remise à zéro, la session
         // suivante se refermerait au premier bloc reçu.
         lastSoundAtMs = 0L
+        // Borne de ce qui sera rejoué à la prochaine ouverture (voir
+        // flushPreRollInto) : tout ce qui précède a déjà été envoyé à la
+        // session qu'on ferme ici.
+        if (recognizer != null) lastSessionEndAtMs = SystemClock.elapsedRealtime()
         if (recognizer != null) {
             UsageStats.noteTranscriptionStop()
             // Clôt le segment resté en attente. Fermer une session ne produit
@@ -300,6 +378,15 @@ class TranscriptionEngine(
          * qui est précisément le cas de Jean.
          */
         private const val SILENCE_LEVEL = 300.0
+
+        /**
+         * Durée de son gardée en réserve pour être rejouée à l'ouverture d'une
+         * session (voir preRoll). Deux secondes couvrent largement l'attaque
+         * d'une phrase — toujours plus faible que son milieu, donc sous le
+         * plancher de silence pendant un instant — et le temps d'établir une
+         * connexion. Environ 64 ko à 16 kHz en mono.
+         */
+        private const val PRE_ROLL_MS = 2_000L
 
         private const val TAG = "TranscriptionEngine"
     }
