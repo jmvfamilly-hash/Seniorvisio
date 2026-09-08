@@ -71,6 +71,7 @@ class RoomPresenceService : Service() {
     private var lastRoomSoundAtMs = 0L
 
     @Volatile private var lastRms = 0
+    @Volatile private var peakRmsSinceReport = 0
     @Volatile private var lastCaptureError: String? = null
     @Volatile private var wakeRequests = 0
     private var lastWakeRequestAtMs = 0L
@@ -102,6 +103,18 @@ class RoomPresenceService : Service() {
         val voskModel: String,
     )
 
+    /**
+     * Le plus fort niveau mesuré depuis la dernière lecture, puis remis à zéro.
+     * C'est celui-là qu'il faut comparer au seuil, pas le niveau instantané :
+     * entre deux signes de vie il se passe cinq minutes, et l'instant précis
+     * où l'on regarde a toutes les chances d'être un instant de silence.
+     */
+    fun consumePeakRms(): Int {
+        val peak = peakRmsSinceReport
+        peakRmsSinceReport = 0
+        return peak
+    }
+
     fun currentStatus() = Status(
         capturing = isCapturing,
         lastRms = lastRms,
@@ -126,6 +139,7 @@ class RoomPresenceService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        running = this
         adminConfig = AdminConfig(this)
         startForeground(FOREGROUND_ID, buildForegroundNotification())
         // Le modèle de reconnaissance embarqué se télécharge une seule fois
@@ -154,6 +168,7 @@ class RoomPresenceService : Service() {
 
     override fun onDestroy() {
         stopCapture()
+        if (running === this) running = null
         super.onDestroy()
     }
 
@@ -220,14 +235,26 @@ class RoomPresenceService : Service() {
      * redémarrage de la tablette, sans le moindre signe extérieur.
      */
     private fun scheduleCaptureRetry() {
-        if (captureRetries >= MAX_CAPTURE_RETRIES) {
-            lastCaptureError = "micro indisponible après $MAX_CAPTURE_RETRIES tentatives"
-            Log.w(TAG, "Micro toujours indisponible, abandon de la capture")
-            return
-        }
         captureRetries++
-        lastCaptureError = "micro occupé, nouvelle tentative ($captureRetries/$MAX_CAPTURE_RETRIES)"
-        retryHandler.postDelayed({ startCapture() }, CAPTURE_RETRY_DELAY_MS)
+        // Jamais d'abandon définitif. La version précédente s'arrêtait au bout
+        // de quinze tentatives, soit trente secondes : passé ce délai, la
+        // tablette ne réessayait plus jamais de prendre le micro. L'écoute de
+        // la pièce ET le réveil au son étaient alors morts jusqu'au prochain
+        // redémarrage, sans rien à l'écran pour le dire — il suffisait d'un
+        // appel dont WebRTC tardait à relâcher le micro pour perdre la
+        // fonction principale de l'appareil pour la journée.
+        //
+        // Une tablette dont le métier est d'écouter ne doit jamais renoncer à
+        // écouter. L'espacement grandit pour ne pas marteler le système quand
+        // l'indisponibilité dure (micro physiquement occupé, permission
+        // retirée), mais il ne s'arrête pas.
+        val delay = (CAPTURE_RETRY_DELAY_MS shl (captureRetries - 1).coerceAtMost(5))
+            .coerceAtMost(CAPTURE_RETRY_MAX_DELAY_MS)
+        lastCaptureError = "micro occupé, nouvelle tentative n°$captureRetries dans ${delay / 1000}s"
+        if (captureRetries == 1 || captureRetries % 10 == 0) {
+            Log.w(TAG, "Micro indisponible, tentative $captureRetries (nouvel essai dans ${delay / 1000}s)")
+        }
+        retryHandler.postDelayed({ startCapture() }, delay)
     }
 
     private fun stopCapture() {
@@ -328,6 +355,7 @@ class RoomPresenceService : Service() {
      */
     private fun handleLevel(rms: Double) {
         lastRms = rms.toInt()
+        if (lastRms > peakRmsSinceReport) peakRmsSinceReport = lastRms
         val now = System.currentTimeMillis()
         if (rms >= adminConfig.roomWakeSensitivityThreshold) {
             lastLoudAtMs = now
@@ -445,12 +473,32 @@ class RoomPresenceService : Service() {
         private const val TRANSCRIPTION_HOLD_MS = 8_000L
         private const val MAX_WAKE_LOCK_MS = 30 * 60 * 1000L
         private const val CAPTURE_RETRY_DELAY_MS = 2_000L
-        private const val MAX_CAPTURE_RETRIES = 15
+
+        /** Plafond de l'espacement entre deux tentatives : on insiste sans marteler. */
+        private const val CAPTURE_RETRY_MAX_DELAY_MS = 60_000L
 
         /** Un seul rallumage d'écran demandé par intervalle : le son arrive par blocs, plusieurs fois par seconde. */
         private const val WAKE_REQUEST_MIN_INTERVAL_MS = 5_000L
         private const val ACTION_PAUSE = "com.seniorvisio.action.PAUSE_ROOM_PRESENCE"
         private const val ACTION_RESUME = "com.seniorvisio.action.RESUME_ROOM_PRESENCE"
+
+        /**
+         * Le service en cours d'exécution, ou null s'il n'a pas démarré.
+         *
+         * Lu par DeviceStatusReporter pour joindre l'état de l'écoute au signe
+         * de vie : sans ça, le réveil au son ne se diagnostique qu'en marchant
+         * jusqu'à la tablette et en entrant le code admin — exactement ce qu'on
+         * ne peut pas faire quand on est à l'autre bout du pays et qu'on
+         * constate que plus rien ne s'affiche chez Jean.
+         *
+         * Une référence statique vers un Service, ce qui se discute — mais
+         * celui-ci est un foreground service permanent et unique, qui vit aussi
+         * longtemps que le processus : il n'y a rien à fuiter qui ne soit déjà
+         * là pour la durée.
+         */
+        @Volatile
+        var running: RoomPresenceService? = null
+            private set
 
         /** Suspend l'écoute le temps d'un vrai appel (voir IncomingCallActivity) : le micro ne peut servir qu'à un composant à la fois. */
         fun pauseForCall(context: Context) {

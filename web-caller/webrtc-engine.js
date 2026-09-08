@@ -100,6 +100,20 @@ class RealCallEngine extends CallEngine {
    */
   onScreenLayout(callback) { this._screenLayoutCb = callback; }
 
+  /**
+   * callback(message) — diagnostic de la transcription publié par la tablette
+   * (voir TranscriptionEngine.onDiagnostic côté Android) : arrivée effective
+   * du son et à quelle fréquence, moteur retenu, repli, clé API manquante,
+   * connexion perdue.
+   *
+   * Ce canal existait des deux côtés mais personne ne s'y abonnait ici : les
+   * messages arrivaient dans le document d'appel et étaient jetés. Quand la
+   * transcription restait muette, il n'y avait donc aucune explication nulle
+   * part — ni à l'écran, ni pour le proche, ni pour qui viendrait regarder
+   * après coup.
+   */
+  onCaptionDebug(callback) { this._captionDebugCb = callback; }
+
   async startCall(targetId, callerName, initialSettings = {}) {
     // Capturé au tout début : si cancelCall() est appelé pendant que cette
     // fonction attend encore (caméra, création de l'offre, écriture

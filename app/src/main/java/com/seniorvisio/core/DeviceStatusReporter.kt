@@ -15,6 +15,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.seniorvisio.BuildConfig
+import com.seniorvisio.service.RoomPresenceService
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -47,11 +48,43 @@ class DeviceStatusReporter(private val context: Context) {
                 // proche qui vient de demander le grand modèle.
                 FIELD_VOSK_MODEL_STATE to VoskModelProvider.describeState(),
                 FIELD_ADMIN_PIN_FINGERPRINT to adminPinFingerprint(),
+                FIELD_ROOM_LISTENING to describeRoomListening(),
             ),
             SetOptions.merge()
         ).addOnFailureListener { e -> Log.e(TAG, "Échec de l'envoi du signe de vie à Firestore", e) }
     }
 
+
+
+    /**
+     * État de l'écoute de la pièce en une phrase, jointe au signe de vie.
+     *
+     * Le réveil au son est la fonction qui échoue le plus silencieusement de
+     * toute l'application : quand il ne marche plus, rien ne l'annonce, et les
+     * trois causes possibles — capture morte, seuil trop haut, blocage
+     * nocturne — sont indiscernables de l'extérieur. Jusqu'ici il fallait
+     * marcher jusqu'à la tablette et entrer le code admin pour les départager.
+     *
+     * Le niveau remonté est le PIC depuis le dernier signe de vie, pas le
+     * niveau instantané : cinq minutes séparent deux envois, et l'instant
+     * précis où l'on mesure a toutes les chances d'être un instant de silence.
+     * Comparé au seuil, ce pic dit tout de suite si le son de la pièce
+     * atteint, ou non, de quoi réveiller l'écran.
+     */
+    private fun describeRoomListening(): String {
+        val service = RoomPresenceService.running
+            ?: return "service d'écoute non démarré"
+        val status = service.currentStatus()
+        val peak = service.consumePeakRms()
+        return buildString {
+            append(if (status.capturing) "micro actif" else "micro ARRÊTÉ")
+            status.captureError?.let { append(" ($it)") }
+            append(" — pic ").append(peak).append(" / seuil ").append(status.threshold)
+            if (!status.wakeEnabled) append(" — réveil désactivé")
+            if (status.inNightWindow) append(" — réveil bloqué (nuit)")
+            append(" — réveils demandés : ").append(status.wakeRequests)
+        }
+    }
 
     /**
      * Empreinte du code d'accès admin de la tablette, republiée avec le signe
@@ -160,6 +193,16 @@ class DeviceStatusReporter(private val context: Context) {
                 Log.i(TAG, "Moteur des appels réglé à distance : ${it.remoteValue}")
             }
         }
+        snapshot.getBoolean(FIELD_ROOM_WAKE_ENABLED)?.let {
+            adminConfig.roomWakeEnabled = it
+        }
+        snapshot.getLong(FIELD_ROOM_WAKE_THRESHOLD)?.let {
+            if (it > 0) adminConfig.roomWakeSensitivityThreshold = it.toInt()
+        }
+        snapshot.getBoolean(FIELD_BLOCK_WAKE_AT_NIGHT)?.let {
+            adminConfig.blockWakeAtNight = it
+        }
+
         snapshot.getLong(FIELD_CAPTION_VISIBLE_LINES)?.let {
             adminConfig.captionVisibleLines = it.toInt()
         }
@@ -300,6 +343,10 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_CAPTION_SCROLL_SPEED = "captionScrollSpeedDp"
         private const val FIELD_CAPTION_CLEAR_DELAY = "captionClearDelaySeconds"
         private const val FIELD_ADMIN_PIN_FINGERPRINT = "adminPinFingerprint"
+        private const val FIELD_ROOM_LISTENING = "roomListening"
+        private const val FIELD_ROOM_WAKE_ENABLED = "roomWakeEnabled"
+        private const val FIELD_ROOM_WAKE_THRESHOLD = "roomWakeThreshold"
+        private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"
 
         private const val LISTENER_RETRY_DELAY_MS = 60_000L
     }

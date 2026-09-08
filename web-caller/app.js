@@ -199,6 +199,10 @@ const els = {
   callEngineSelect: document.getElementById("callEngineSelect"),
   voskModelSelect: document.getElementById("voskModelSelect"),
   engineStatus: document.getElementById("engineStatus"),
+  roomWakeEnabledToggle: document.getElementById("roomWakeEnabledToggle"),
+  roomWakeThresholdSlider: document.getElementById("roomWakeThresholdSlider"),
+  blockWakeAtNightToggle: document.getElementById("blockWakeAtNightToggle"),
+  roomListeningStatus: document.getElementById("roomListeningStatus"),
   captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
   captionDebugIndicator: document.getElementById("captionDebugIndicator"),
   // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
@@ -437,6 +441,15 @@ els.tabletMicMuteToggle.addEventListener("change", () => {
   engine.setTabletMicMuted(els.tabletMicMuteToggle.checked);
 });
 
+// Sans cet abonnement, les messages de diagnostic publiés par la tablette
+// étaient reçus dans le document d'appel puis jetés : une transcription muette
+// n'avait donc aucune explication nulle part. C'est ici qu'on apprend si le son
+// arrive, quel moteur a été retenu, et pourquoi il n'écrit rien.
+engine.onCaptionDebug((message) => {
+  els.captionDebugIndicator.textContent = `🛠️ ${message}`;
+  els.captionDebugIndicator.classList.remove("hidden");
+});
+
 engine.onScreenState(applyScreenState);
 engine.onScreenLayout(applyScreenLayout);
 
@@ -453,7 +466,23 @@ const ADMIN_SLIDER_FIELDS = [
   ["captionLinesSlider", "captionVisibleLines"],
   ["scrollSpeedSlider", "captionScrollSpeedDp"],
   ["captionClearDelaySlider", "captionClearDelaySeconds"],
+  ["roomWakeThresholdSlider", "roomWakeThreshold"],
 ];
+
+// Mêmes réglages d'appareil, mais en tout ou rien.
+const ADMIN_TOGGLE_FIELDS = [
+  ["roomWakeEnabledToggle", "roomWakeEnabled"],
+  ["blockWakeAtNightToggle", "blockWakeAtNight"],
+];
+
+for (const [elementKey, field] of ADMIN_TOGGLE_FIELDS) {
+  els[elementKey].addEventListener("change", () => {
+    if (!deviceSettingsLoaded) return;
+    engine
+      .setDeviceSetting(CONFIG.deviceDocId, field, els[elementKey].checked)
+      .catch((e) => console.warn("[app] Réglage tablette non transmis :", e));
+  });
+}
 
 const adminSliderDebounce = {};
 for (const [elementKey, field] of ADMIN_SLIDER_FIELDS) {
@@ -637,6 +666,20 @@ function applyDeviceSettings(data) {
     const value = Number(data[field]);
     if (Number.isFinite(value) && value > 0) els[elementKey].value = value;
   }
+  for (const [elementKey, field] of ADMIN_TOGGLE_FIELDS) {
+    // Ces deux-là sont vrais par défaut côté tablette (voir AdminConfig) :
+    // un champ absent veut donc dire « jamais réglé d'ici », pas « désactivé ».
+    if (typeof data[field] === "boolean") els[elementKey].checked = data[field];
+  }
+  els.roomWakeEnabledToggle.checked = data.roomWakeEnabled !== false;
+
+  // Le seuil ne se règle pas sans voir le niveau qu'il doit dépasser : la
+  // tablette republie avec son signe de vie le pic mesuré depuis le précédent,
+  // l'état de la capture et le blocage nocturne (voir
+  // DeviceStatusReporter.describeRoomListening).
+  els.roomListeningStatus.textContent = data.roomListening
+    ? `Écoute de la pièce : ${data.roomListening}`
+    : "En attente du premier signe de vie de la tablette…";
 
   for (const [elementKey, field] of ENGINE_SELECT_FIELDS) {
     const select = els[elementKey];

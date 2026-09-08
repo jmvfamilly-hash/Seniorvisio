@@ -296,6 +296,39 @@
             <input type="range" id="captionClearDelaySlider" min="1" max="60" value="30" step="1">
           </div>
 
+          <h3 class="admin-section">Réveil au son</h3>
+          <p class="hint">
+            La tablette allume son écran quand elle entend du bruit dans la
+            pièce. Le seuil dépend du micro et de l'acoustique : trop haut,
+            l'écran ne s'allume jamais ; trop bas, il s'allume pour rien.
+          </p>
+
+          <div class="caption-control">
+            <label>
+              <input type="checkbox" id="roomWakeEnabledToggle">
+              👂 Réveiller l'écran au bruit de la pièce
+            </label>
+          </div>
+
+          <div class="volume-control">
+            <label for="roomWakeThresholdSlider">🔉 Seuil de déclenchement</label>
+            <input type="range" id="roomWakeThresholdSlider" min="200" max="5000" value="1000" step="100">
+          </div>
+
+          <div class="caption-control">
+            <label>
+              <input type="checkbox" id="blockWakeAtNightToggle">
+              🌙 Ne pas réveiller l'écran la nuit (22h–7h)
+            </label>
+          </div>
+
+          <!-- Le seuil ne se règle pas à l'aveugle : sans le niveau réellement
+               mesuré en face, on ne peut pas distinguer « le son n'atteint pas
+               le seuil » de « la capture ne tourne plus ». -->
+          <p class="hint" id="roomListeningStatus">
+            En attente du premier signe de vie de la tablette…
+          </p>
+
           <h3 class="admin-section">Moteur de transcription</h3>
           <p class="hint">
             Une solution par source. Tout passe par défaut par le moteur
