@@ -1,0 +1,69 @@
+# Pose une étiquette de version sur un commit.
+#
+# Existe parce qu'une session de développement ne peut pas le faire : ses
+# identifiants n'acceptent que les références de branche, et refusent les
+# références d'étiquette (403). L'intégration continue, elle, dispose du droit
+# d'écriture sur le dépôt — c'est déjà par là que passent les publications
+# d'APK, qui créent une étiquette à chaque compilation.
+#
+# Le message de l'étiquette vient d'un fichier versionné plutôt que d'un champ
+# de formulaire : une description de version se relit, se corrige et se
+# compare comme du code. Elle reste consultable dans le dépôt même par
+# quelqu'un qui ne sait pas lire une étiquette Git.
+name: Tag candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Nom de l'étiquette"
+        required: false
+        default: candidat_premiere_installation
+      notes:
+        description: "Fichier contenant la description de la version"
+        required: false
+        default: docs/CANDIDAT_PREMIERE_INSTALLATION.md
+      commit:
+        description: "Commit à étiqueter (vide = tête de la branche choisie)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Historique complet : sans lui, étiqueter un commit autre que la
+          # tête échoue, le dépôt superficiel ne le contenant pas.
+          fetch-depth: 0
+
+      - name: Create annotated tag
+        env:
+          TAG: ${{ inputs.tag || 'candidat_premiere_installation' }}
+          NOTES: ${{ inputs.notes || 'docs/CANDIDAT_PREMIERE_INSTALLATION.md' }}
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          TARGET="${COMMIT:-$GITHUB_SHA}"
+          if [ ! -f "$NOTES" ]; then
+            echo "Fichier de description introuvable : $NOTES" >&2
+            exit 1
+          fi
+          # Refus explicite plutôt que déplacement silencieux : une étiquette
+          # de version qui bouge fait mentir tout ce qui la cite, à commencer
+          # par les liens d'APK déjà distribués.
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "L'étiquette $TAG existe déjà, sur $(git rev-list -n 1 "$TAG")." >&2
+            echo "Choisir un autre nom plutôt que de la déplacer." >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$TARGET" -F "$NOTES"
+          git push origin "refs/tags/$TAG"
+          echo "Étiquette $TAG posée sur $(git rev-list -n 1 "$TAG")"
