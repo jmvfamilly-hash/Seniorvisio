@@ -419,6 +419,27 @@
                pièce, et c'est ici qu'ils manquaient. -->
           <p class="hint" id="transcriptionDiagnostic"></p>
 
+          <h3 class="admin-section">Plafond des services payants</h3>
+          <p class="hint">
+            Garde-fou de dernier recours : aucune détection de voix ne
+            distingue une conversation d'une télévision laissée allumée. Une
+            fois le plafond atteint dans le mois, le moteur embarqué prend le
+            relais — la transcription continue, elle ne coûte simplement plus
+            rien. Zéro heure veut dire sans limite.
+          </p>
+
+          <p class="hint" id="paidUsage"></p>
+
+          <div class="volume-control">
+            <label for="quotaAssemblyaiSlider">💳 AssemblyAI — plafond mensuel</label>
+            <input type="range" id="quotaAssemblyaiSlider" min="0" max="100" value="10" step="1" data-unit=" h/mois">
+          </div>
+
+          <div class="volume-control">
+            <label for="quotaGladiaSlider">💳 Gladia — plafond mensuel</label>
+            <input type="range" id="quotaGladiaSlider" min="0" max="100" value="10" step="1" data-unit=" h/mois">
+          </div>
+
           <h3 class="admin-section">Utilisation</h3>
           <p class="hint">
             Ce que la tablette a réellement fait. Mis à jour à chaque signe de

@@ -203,6 +203,9 @@ const els = {
   blockWakeAtNightToggle: document.getElementById("blockWakeAtNightToggle"),
   roomListeningStatus: document.getElementById("roomListeningStatus"),
   transcriptionDiagnostic: document.getElementById("transcriptionDiagnostic"),
+  paidUsage: document.getElementById("paidUsage"),
+  quotaAssemblyaiSlider: document.getElementById("quotaAssemblyaiSlider"),
+  quotaGladiaSlider: document.getElementById("quotaGladiaSlider"),
   refreshUsageButton: document.getElementById("refreshUsageButton"),
   usageSummary: document.getElementById("usageSummary"),
   usageDays: document.getElementById("usageDays"),
@@ -509,6 +512,11 @@ const ADMIN_SLIDER_FIELDS = [
   ["scrollSpeedSlider", "captionScrollSpeedDp"],
   ["captionClearDelaySlider", "captionClearDelaySeconds"],
   ["roomWakeThresholdSlider", "roomWakeThreshold"],
+  // Plafonds mensuels des services payants. Le champ porte le nom du moteur
+  // pour que l'ajout d'un troisième service n'oblige pas à inventer une
+  // nouvelle convention (voir DeviceStatusReporter, FIELD_QUOTA_PREFIX).
+  ["quotaAssemblyaiSlider", "quotaHours_assemblyai"],
+  ["quotaGladiaSlider", "quotaHours_gladia"],
 ];
 
 // Mêmes réglages d'appareil, mais en tout ou rien.
@@ -913,7 +921,12 @@ function applyDeviceSettings(data) {
   // administrer, et l'affichage doit dire l'état de la tablette.
   for (const [elementKey, field] of ADMIN_SLIDER_FIELDS) {
     const value = Number(data[field]);
-    if (Number.isFinite(value) && value > 0) els[elementKey].value = value;
+    // Zéro accepté, contrairement aux autres curseurs : sur un plafond, il
+    // veut dire « sans limite » et non « jamais réglé ». Le refuser ferait
+    // revenir le curseur à dix heures à chaque signe de vie, en écrasant
+    // silencieusement le choix de l'administrateur.
+    const floor = field.startsWith("quotaHours_") ? 0 : 1;
+    if (Number.isFinite(value) && value >= floor) els[elementKey].value = value;
   }
   // Affecter .value par programme ne déclenche aucun événement « input » :
   // sans ce rappel, le curseur bougerait en affichant l'ancien nombre, ce qui
@@ -938,6 +951,7 @@ function applyDeviceSettings(data) {
   // d'un appel en cours : hors appel — c'est-à-dire quand on règle justement
   // le moteur de la pièce — il n'allait nulle part, et cet écran restait vide
   // sans que rien n'indique pourquoi.
+  els.paidUsage.textContent = data.paidUsage ? `💳 Ce mois-ci : ${data.paidUsage}` : "";
   lastDeviceDiagnostic = data.transcriptionDiagnostic || "";
   renderTranscriptionDiagnostic();
 

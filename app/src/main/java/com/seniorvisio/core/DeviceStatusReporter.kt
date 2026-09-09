@@ -54,6 +54,7 @@ class DeviceStatusReporter(private val context: Context) {
                 // appel : c'est là qu'on règle le moteur de la pièce, et c'est
                 // là qu'ils manquaient (voir TranscriptionDiagnostics).
                 FIELD_TRANSCRIPTION_DIAGNOSTIC to TranscriptionDiagnostics.describe(),
+                FIELD_PAID_USAGE to describePaidUsage(),
             ),
             SetOptions.merge()
         ).addOnFailureListener { e -> Log.e(TAG, "Échec de l'envoi du signe de vie à Firestore", e) }
@@ -94,6 +95,30 @@ class DeviceStatusReporter(private val context: Context) {
 
 
     /**
+     * Ce que chaque service payant a consommé ce mois-ci, face à son plafond.
+     *
+     * Publié avec le signe de vie parce qu'un plafond invisible ne rassure
+     * personne : sans ce chiffre, l'administrateur n'a le choix qu'entre faire
+     * confiance et aller voir la facture. C'est aussi la seule façon de
+     * constater qu'un moteur s'est mis en repli parce qu'il a atteint sa
+     * limite, plutôt que de croire à une panne.
+     */
+    private fun describePaidUsage(): String {
+        val adminConfig = AdminConfig(context)
+        return TranscriptionEngineChoice.entries
+            .filter { it.billedByDuration }
+            .joinToString(" · ") { engine ->
+                val usedHours = UsageStats.monthlySecondsFor(UsageStats.engineFor(engine)) / 3600.0
+                val quota = adminConfig.monthlyQuotaHours(engine)
+                val limit = if (quota <= 0) "sans limite" else "${quota}h"
+                "${engine.adminLabel.substringBefore(" (")} ${format1(usedHours.toFloat())}h / $limit"
+            }
+    }
+
+    /** Une décimale suffit : c'est un repère de réglage, pas une mesure de laboratoire. */
+    private fun format1(value: Float): String = String.format(java.util.Locale.FRANCE, "%.1f", value)
+
+    /**
      * État de l'écoute de la pièce en une phrase, jointe au signe de vie.
      *
      * Le réveil au son est la fonction qui échoue le plus silencieusement de
@@ -108,9 +133,6 @@ class DeviceStatusReporter(private val context: Context) {
      * Comparé au seuil, ce pic dit tout de suite si le son de la pièce
      * atteint, ou non, de quoi réveiller l'écran.
      */
-    /** Une décimale suffit : c'est un repère de réglage, pas une mesure de laboratoire. */
-    private fun format1(value: Float): String = String.format(java.util.Locale.FRANCE, "%.1f", value)
-
     private fun describeRoomListening(): String {
         val service = RoomPresenceService.running
             ?: return "service d'écoute non démarré"
@@ -355,6 +377,15 @@ class DeviceStatusReporter(private val context: Context) {
             adminConfig.blockWakeAtNight = it
         }
 
+        // Plafonds mensuels, réglables à distance comme le reste : c'est
+        // l'administrateur qui décide ce qu'il accepte de dépenser, et il n'a
+        // pas à se déplacer jusqu'à la tablette pour le dire.
+        TranscriptionEngineChoice.entries.filter { it.billedByDuration }.forEach { engine ->
+            snapshot.getLong(FIELD_QUOTA_PREFIX + engine.remoteValue)?.let {
+                adminConfig.setMonthlyQuotaHours(engine, it.toInt())
+            }
+        }
+
         snapshot.getLong(FIELD_CAPTION_VISIBLE_LINES)?.let {
             adminConfig.captionVisibleLines = it.toInt()
         }
@@ -500,6 +531,10 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_ADMIN_PIN_FINGERPRINT = "adminPinFingerprint"
         private const val FIELD_ROOM_LISTENING = "roomListening"
         private const val FIELD_TRANSCRIPTION_DIAGNOSTIC = "transcriptionDiagnostic"
+        private const val FIELD_PAID_USAGE = "paidUsage"
+
+        /** Suffixé du nom du moteur : « quotaHours_gladia », « quotaHours_assemblyai ». */
+        private const val FIELD_QUOTA_PREFIX = "quotaHours_"
         private const val FIELD_COMMAND = "command"
         private const val FIELD_COMMAND_ID = "commandId"
         private const val FIELD_LAST_COMMAND = "lastCommand"

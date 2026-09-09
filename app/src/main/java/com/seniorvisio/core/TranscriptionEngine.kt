@@ -288,8 +288,36 @@ class TranscriptionEngine(
         return sqrt(sumOfSquares / count)
     }
 
+    /**
+     * Le plafond mensuel de ce moteur payant est-il atteint ?
+     *
+     * Le garde-fou de dernier recours. Aucun portier de voix ne distingue une
+     * conversation d'une télévision laissée allumée : sans plafond, le pire
+     * cas d'un service facturé à la durée est une facture qui court des
+     * semaines sans que personne ne s'en aperçoive, rien à l'écran de Jean
+     * n'en disant quoi que ce soit.
+     *
+     * Ne concerne que les moteurs facturés : plafonner un moteur embarqué
+     * reviendrait à rendre la tablette muette pour économiser zéro euro.
+     */
+    private fun quotaExhausted(wanted: TranscriptionEngineChoice): Boolean {
+        if (!wanted.billedByDuration) return false
+        val quotaHours = AdminConfig(context).monthlyQuotaHours(wanted)
+        if (quotaHours <= 0) return false
+        val used = UsageStats.monthlySecondsFor(UsageStats.engineFor(wanted))
+        return used >= quotaHours * 3600
+    }
+
     /** Le moteur voulu peut-il réellement démarrer maintenant ? */
-    private fun isAvailable(wanted: TranscriptionEngineChoice): Boolean = when (wanted) {
+    private fun isAvailable(wanted: TranscriptionEngineChoice): Boolean = when {
+        // Plafond atteint : le moteur est indisponible, exactement comme s'il
+        // n'avait pas de clé. C'est ce qui empêche la bascule de le rouvrir en
+        // boucle une fois le quota épuisé.
+        quotaExhausted(wanted) -> false
+        else -> isConfigured(wanted)
+    }
+
+    private fun isConfigured(wanted: TranscriptionEngineChoice): Boolean = when (wanted) {
         TranscriptionEngineChoice.VOSK -> VoskModelProvider.getModel() != null
         TranscriptionEngineChoice.GLADIA -> AdminConfig(context).gladiaApiKey.isNotBlank()
         // Jamais ici : ce moteur écoute le micro lui-même et ne passe pas par
@@ -307,11 +335,20 @@ class TranscriptionEngine(
      * téléchargement terminé (voir feed).
      */
     private fun createRecognizerFor(wanted: TranscriptionEngineChoice): SpeechRecognizer? {
+        // Plafond atteint : repli sur le moteur embarqué plutôt que silence.
+        // Une tablette qui cesse d'afficher du texte sans rien expliquer est
+        // indiscernable d'une tablette en panne — et c'est Jean qui en paierait
+        // le prix, pas la facture.
+        var wanted = wanted
+        if (quotaExhausted(wanted)) {
+            val used = UsageStats.monthlySecondsFor(UsageStats.engineFor(wanted)) / 3600
+            diagnose("plafond mensuel ${wanted.adminLabel} atteint (${used}h) : moteur embarqué en relais")
+            wanted = TranscriptionEngineChoice.VOSK
+        }
         // La reconnaissance d'Android n'écoute que le micro : on ne peut pas
         // lui donner le son d'un appel, qui arrive par WebRTC. Le dire plutôt
         // que de rester muet — un réglage qui ne s'applique pas sans
         // explication, c'est une heure perdue à chercher pourquoi.
-        var wanted = wanted
         if (wanted == TranscriptionEngineChoice.ANDROID) {
             diagnose("la reconnaissance Android n'écoute que le micro : impossible sur un appel")
             wanted = if (VoskModelProvider.getModel() != null) TranscriptionEngineChoice.VOSK

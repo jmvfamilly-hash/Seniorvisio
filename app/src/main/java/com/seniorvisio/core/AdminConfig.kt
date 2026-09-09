@@ -87,6 +87,30 @@ class AdminConfig(context: Context) {
             ?: BuildConfig.GLADIA_API_KEY_DEFAULT
         set(value) = prefs.edit().putString(KEY_GLADIA_API_KEY, value).apply()
 
+    /**
+     * Plafond mensuel d'écoute d'un service payant, en heures. Zéro veut dire
+     * sans limite.
+     *
+     * Un garde-fou et non un réglage de confort. Aucun portier de voix, aussi
+     * bon soit-il, ne distingue une conversation d'une télévision laissée
+     * allumée : le pire cas d'un service facturé à la durée est donc une
+     * facture qui court des semaines sans que personne ne s'en aperçoive,
+     * puisque rien à l'écran de Jean n'en dit rien. Un plafond borne ce pire
+     * cas de façon absolue, quelle que soit la qualité de la détection en
+     * amont.
+     *
+     * Dix heures par défaut, ce qui correspond au palier gratuit courant de
+     * ces services. À relever en connaissance de cause depuis le panneau
+     * d'administration si l'usage réel le justifie — le panneau « Utilisation »
+     * dit ce qui a été consommé.
+     */
+    fun monthlyQuotaHours(engine: TranscriptionEngineChoice): Int =
+        prefs.getInt(KEY_QUOTA_PREFIX + engine.remoteValue, DEFAULT_QUOTA_HOURS)
+
+    fun setMonthlyQuotaHours(engine: TranscriptionEngineChoice, hours: Int) {
+        prefs.edit().putInt(KEY_QUOTA_PREFIX + engine.remoteValue, hours.coerceAtLeast(0)).apply()
+    }
+
     // --- Ordre d'empilement des trois zones de l'écran de Jean (voir
     // HomeZonesController) : de haut en bas. Stocké comme la liste des zones
     // séparées par des virgules plutôt qu'un simple numéro de permutation, pour
@@ -202,6 +226,10 @@ class AdminConfig(context: Context) {
         private const val KEY_ADMIN_PIN = "admin_pin"
         private const val KEY_ASSEMBLYAI_API_KEY = "assemblyai_api_key"
         private const val KEY_GLADIA_API_KEY = "gladia_api_key"
+        private const val KEY_QUOTA_PREFIX = "monthly_quota_hours_"
+
+        /** Palier gratuit courant de ces services. Voir monthlyQuotaHours. */
+        const val DEFAULT_QUOTA_HOURS = 10
         private const val KEY_ZONE_ORDER = "zone_order"
         private const val KEY_ROOM_ENGINE = "room_engine"
         private const val KEY_CALL_ENGINE = "call_engine"

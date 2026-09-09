@@ -192,9 +192,50 @@ object UsageStats {
             // réellement assurées. C'est la seule mesure qui permette de dire
             // ce que le moteur embarqué fait économiser.
             day.put(FIELD_BILLABLE_EQUIVALENT, day.optInt(FIELD_BILLABLE_EQUIVALENT) + seconds)
+            // Cumul du mois, tenu à part des journées.
+            //
+            // Il ne peut pas se déduire d'elles : seules huit journées sont
+            // conservées, et un plafond mensuel a besoin du mois entier. Un
+            // compteur séparé, jamais reconstruit, est aussi ce qui garantit
+            // qu'une purge de l'historique ne remette pas le quota à zéro —
+            // sans quoi le garde-fou s'ouvrirait tout seul au pire moment.
+            val monthKey = KEY_MONTH_PREFIX + date.year + "-" + "%02d".format(date.monthValue) + "_" + engine
+            prefs.edit().putInt(monthKey, prefs.getInt(monthKey, 0) + seconds).apply()
         }
 
         writeDay(key, day)
+    }
+
+    /**
+     * Secondes déjà consommées ce mois-ci par un moteur donné. C'est cette
+     * valeur que le plafond compare à son quota (voir
+     * TranscriptionEngine.quotaExhausted).
+     */
+    @Synchronized
+    fun monthlySecondsFor(engine: String, date: LocalDate = LocalDate.now()): Int {
+        if (!ready()) return 0
+        val monthKey = KEY_MONTH_PREFIX + date.year + "-" + "%02d".format(date.monthValue) + "_" + engine
+        return prefs.getInt(monthKey, 0)
+    }
+
+    /**
+     * Efface les cumuls des mois révolus. Le mois en cours et le précédent
+     * sont gardés : le second sert à répondre « et le mois dernier ? » sans
+     * avoir à conserver une année entière de compteurs.
+     */
+    @Synchronized
+    fun pruneOldMonths(today: LocalDate = LocalDate.now()) {
+        if (!ready()) return
+        val keep = setOf(
+            "${today.year}-${"%02d".format(today.monthValue)}",
+            today.minusMonths(1).let { "${it.year}-${"%02d".format(it.monthValue)}" },
+        )
+        val editor = prefs.edit()
+        prefs.all.keys
+            .filter { it.startsWith(KEY_MONTH_PREFIX) }
+            .filterNot { key -> keep.any { key.startsWith(KEY_MONTH_PREFIX + it) } }
+            .forEach { editor.remove(it) }
+        editor.apply()
     }
 
     // ---- Lecture ----
@@ -258,6 +299,7 @@ object UsageStats {
     const val FIELD_CALLS = "calls"
 
     private const val KEY_DAY_PREFIX = "day_"
+    private const val KEY_MONTH_PREFIX = "month_"
     private const val KEY_LAST_FLUSH = "last_flush_at"
     private const val KEY_SCREEN_ON = "screen_on"
     private const val KEY_ENGINE = "engine"

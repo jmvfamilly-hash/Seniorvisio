@@ -61,6 +61,10 @@ class CallListenerService : LifecycleService() {
             // d'état, jamais les longues plages sans le moindre événement.
             UsageStats.flush()
             UsageStats.pruneOldDays()
+            // Même rythme, même raison : sans purge, les cumuls mensuels
+            // s'accumuleraient indéfiniment sur une tablette qui tourne des
+            // années. Le mois en cours et le précédent sont conservés.
+            UsageStats.pruneOldMonths()
             statusReporter.reportHeartbeat()
             heartbeatHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
         }
