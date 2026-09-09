@@ -1,4 +1,4 @@
-# Pose une étiquette de version sur un commit.
+# Pose une étiquette de version sur le commit qui la demande.
 #
 # Existe parce qu'une session de développement ne peut pas le faire : ses
 # identifiants n'acceptent que les références de branche, et refusent les
@@ -6,27 +6,27 @@
 # d'écriture sur le dépôt — c'est déjà par là que passent les publications
 # d'APK, qui créent une étiquette à chaque compilation.
 #
-# Le message de l'étiquette vient d'un fichier versionné plutôt que d'un champ
-# de formulaire : une description de version se relit, se corrige et se
-# compare comme du code. Elle reste consultable dans le dépôt même par
-# quelqu'un qui ne sait pas lire une étiquette Git.
+# Déclenché par la modification d'un fichier et non à la main : GitHub
+# n'accepte un déclenchement manuel que si le workflow figure sur la branche
+# par défaut du dépôt, ce qui n'est le cas d'aucun travail en cours. Un
+# déclenchement par poussée, lui, lit le workflow sur la branche poussée et
+# fonctionne donc partout.
+#
+# Demander une étiquette consiste donc à écrire son nom dans
+# docs/VERSION_CANDIDATE et à pousser. Le commit étiqueté est celui-là même,
+# ce qui a une propriété utile : la version porte sa propre description, on ne
+# peut pas étiqueter un code en décrivant l'autre.
+#
+# Le message vient d'un fichier versionné plutôt que d'un champ de formulaire :
+# une description de version se relit, se corrige et se compare comme du code,
+# et reste consultable par quelqu'un qui ne sait pas lire une étiquette Git.
 name: Tag candidate
 
 on:
+  push:
+    paths:
+      - 'docs/VERSION_CANDIDATE'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Nom de l'étiquette"
-        required: false
-        default: candidat_premiere_installation
-      notes:
-        description: "Fichier contenant la description de la version"
-        required: false
-        default: docs/CANDIDAT_PREMIERE_INSTALLATION.md
-      commit:
-        description: "Commit à étiqueter (vide = tête de la branche choisie)"
-        required: false
-        default: ""
 
 permissions:
   contents: write
@@ -44,21 +44,32 @@ jobs:
 
       - name: Create annotated tag
         env:
-          TAG: ${{ inputs.tag || 'candidat_premiere_installation' }}
-          NOTES: ${{ inputs.notes || 'docs/CANDIDAT_PREMIERE_INSTALLATION.md' }}
-          COMMIT: ${{ inputs.commit }}
+          REQUEST: docs/VERSION_CANDIDATE
+          NOTES: docs/CANDIDAT_PREMIERE_INSTALLATION.md
         run: |
           set -euo pipefail
-          TARGET="${COMMIT:-$GITHUB_SHA}"
+          TAG="$(tr -d '[:space:]' < "$REQUEST")"
+          if [ -z "$TAG" ]; then
+            echo "Aucun nom d'étiquette dans $REQUEST : rien à faire."
+            exit 0
+          fi
           if [ ! -f "$NOTES" ]; then
             echo "Fichier de description introuvable : $NOTES" >&2
             exit 1
           fi
-          # Refus explicite plutôt que déplacement silencieux : une étiquette
-          # de version qui bouge fait mentir tout ce qui la cite, à commencer
-          # par les liens d'APK déjà distribués.
+          TARGET="$GITHUB_SHA"
+          # Déjà posée au bon endroit : succès sans rien faire, pour qu'une
+          # remise en marche du workflow ne vire pas au rouge sans raison.
+          # Posée ailleurs : refus franc. Une étiquette de version qui se
+          # déplace fait mentir tout ce qui la cite, à commencer par les liens
+          # d'APK déjà distribués.
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-            echo "L'étiquette $TAG existe déjà, sur $(git rev-list -n 1 "$TAG")." >&2
+            EXISTING="$(git rev-list -n 1 "$TAG")"
+            if [ "$EXISTING" = "$TARGET" ]; then
+              echo "L'étiquette $TAG est déjà posée sur $TARGET."
+              exit 0
+            fi
+            echo "L'étiquette $TAG existe déjà, sur $EXISTING." >&2
             echo "Choisir un autre nom plutôt que de la déplacer." >&2
             exit 1
           fi
