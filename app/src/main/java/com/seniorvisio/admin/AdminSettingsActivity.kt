@@ -161,6 +161,7 @@ class AdminSettingsActivity : AppCompatActivity() {
         val buttonSave = findViewById<Button>(R.id.buttonSaveAdminSettings)
 
         val inputAssemblyAiKey = findViewById<EditText>(R.id.inputAssemblyAiKey)
+        val inputGladiaKey = findViewById<EditText>(R.id.inputGladiaKey)
         val checkboxRoomWakeEnabled = findViewById<CheckBox>(R.id.checkboxRoomWakeEnabled)
         val checkboxBlockWakeAtNight = findViewById<CheckBox>(R.id.checkboxBlockWakeAtNight)
         val inputNightStartHour = findViewById<EditText>(R.id.inputNightStartHour)
@@ -170,6 +171,7 @@ class AdminSettingsActivity : AppCompatActivity() {
         inputCountdown.setText(adminConfig.countdownSeconds.toString())
         inputPin.setText(adminConfig.adminPin)
         inputAssemblyAiKey.setText(adminConfig.assemblyAiApiKey)
+        inputGladiaKey.setText(adminConfig.gladiaApiKey)
         checkboxRoomWakeEnabled.isChecked = adminConfig.roomWakeEnabled
         checkboxBlockWakeAtNight.isChecked = adminConfig.blockWakeAtNight
         inputNightStartHour.setText(adminConfig.nightStartHour.toString())
@@ -197,6 +199,7 @@ class AdminSettingsActivity : AppCompatActivity() {
             adminConfig.countdownSeconds = seconds
             adminConfig.adminPin = inputPin.text.toString().ifBlank { adminConfig.adminPin }
             adminConfig.assemblyAiApiKey = inputAssemblyAiKey.text.toString().trim()
+            adminConfig.gladiaApiKey = inputGladiaKey.text.toString().trim()
             adminConfig.zoneOrder = zoneOrders[spinnerZoneOrder.selectedItemPosition]
             adminConfig.roomWakeEnabled = checkboxRoomWakeEnabled.isChecked
             adminConfig.blockWakeAtNight = checkboxBlockWakeAtNight.isChecked
@@ -281,10 +284,15 @@ class AdminSettingsActivity : AppCompatActivity() {
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             )
+            inputGladiaKey.inputType = plainOrPassword(
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            )
             // setInputType ramène sinon le curseur au tout début du champ.
             inputPin.setSelection(inputPin.text.length)
             inputWifiPassword.setSelection(inputWifiPassword.text.length)
             inputAssemblyAiKey.setSelection(inputAssemblyAiKey.text.length)
+            inputGladiaKey.setSelection(inputGladiaKey.text.length)
         }
     }
 

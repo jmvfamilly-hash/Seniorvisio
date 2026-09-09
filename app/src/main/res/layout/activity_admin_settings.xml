@@ -193,6 +193,24 @@
         android:layout_height="wrap_content"
         android:inputType="textPassword" />
 
+    <!-- Second service payant (voir GladiaStreamingTranscriber). Champ
+         distinct et non partagé : deux comptes chez deux fournisseurs, et une
+         clé envoyée au mauvais service ne se manifesterait que par un refus
+         d'authentification, difficile à relier à sa cause. -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Clé API Gladia"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/inputGladiaKey"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textPassword" />
+
     <!-- État en direct de la surveillance du son (voir
          RoomPresenceService.currentStatus). Le seuil de déclenchement dépend
          du microphone et de l'acoustique de la pièce : sans voir le niveau

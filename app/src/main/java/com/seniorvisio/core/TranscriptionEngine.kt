@@ -166,10 +166,10 @@ class TranscriptionEngine(
         if (levelOf(pcm16) >= SILENCE_LEVEL) lastSoundAtMs = now
         val silent = lastSoundAtMs == 0L || now - lastSoundAtMs > BILLED_SILENCE_MS
         if (silent) {
-            if (recognizerKind == TranscriptionEngineChoice.ASSEMBLYAI) stopSession()
+            if (recognizerKind?.billedByDuration == true) stopSession()
             // Et surtout ne pas en rouvrir une sur du silence : ce serait
             // fermer et rouvrir en boucle, en payant chaque ouverture.
-            if (recognizer == null && wanted == TranscriptionEngineChoice.ASSEMBLYAI) return
+            if (recognizer == null && wanted.billedByDuration) return
         }
 
         val running = recognizer
@@ -291,6 +291,7 @@ class TranscriptionEngine(
     /** Le moteur voulu peut-il réellement démarrer maintenant ? */
     private fun isAvailable(wanted: TranscriptionEngineChoice): Boolean = when (wanted) {
         TranscriptionEngineChoice.VOSK -> VoskModelProvider.getModel() != null
+        TranscriptionEngineChoice.GLADIA -> AdminConfig(context).gladiaApiKey.isNotBlank()
         // Jamais ici : ce moteur écoute le micro lui-même et ne passe pas par
         // cette chaîne (voir AndroidSpeechSession, RoomPresenceService).
         TranscriptionEngineChoice.ANDROID -> false
@@ -319,6 +320,15 @@ class TranscriptionEngine(
         if (wanted == TranscriptionEngineChoice.VOSK) {
             if (VoskModelProvider.getModel() != null) return buffered(VoskSpeechRecognizer())
             diagnose("modèle embarqué indisponible (${VoskModelProvider.describeState()}), AssemblyAI en attendant")
+        }
+
+        if (wanted == TranscriptionEngineChoice.GLADIA) {
+            val gladiaKey = AdminConfig(context).gladiaApiKey
+            if (gladiaKey.isBlank()) {
+                diagnose("clé API Gladia absente")
+                return null
+            }
+            return buffered(GladiaStreamingTranscriber(gladiaKey))
         }
 
         val apiKey = AdminConfig(context).assemblyAiApiKey

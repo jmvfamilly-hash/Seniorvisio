@@ -74,6 +74,19 @@ class AdminConfig(context: Context) {
             ?: BuildConfig.ASSEMBLYAI_API_KEY_DEFAULT
         set(value) = prefs.edit().putString(KEY_ASSEMBLYAI_API_KEY, value).apply()
 
+    /**
+     * Clé du second service payant. Séparée de celle d'AssemblyAI, et non
+     * partagée : ce sont deux comptes chez deux fournisseurs, et confondre
+     * les deux champs ferait envoyer une clé au mauvais service — dont le
+     * seul symptôme serait un refus d'authentification difficile à relier à
+     * sa cause.
+     */
+    var gladiaApiKey: String
+        get() = prefs.getString(KEY_GLADIA_API_KEY, "")
+            ?.takeIf { it.isNotBlank() }
+            ?: BuildConfig.GLADIA_API_KEY_DEFAULT
+        set(value) = prefs.edit().putString(KEY_GLADIA_API_KEY, value).apply()
+
     // --- Ordre d'empilement des trois zones de l'écran de Jean (voir
     // HomeZonesController) : de haut en bas. Stocké comme la liste des zones
     // séparées par des virgules plutôt qu'un simple numéro de permutation, pour
@@ -188,6 +201,7 @@ class AdminConfig(context: Context) {
         private const val KEY_BLOCKING_ENABLED = "blocking_enabled"
         private const val KEY_ADMIN_PIN = "admin_pin"
         private const val KEY_ASSEMBLYAI_API_KEY = "assemblyai_api_key"
+        private const val KEY_GLADIA_API_KEY = "gladia_api_key"
         private const val KEY_ZONE_ORDER = "zone_order"
         private const val KEY_ROOM_ENGINE = "room_engine"
         private const val KEY_CALL_ENGINE = "call_engine"

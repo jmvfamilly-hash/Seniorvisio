@@ -37,6 +37,7 @@ object UsageStats {
     const val ENGINE_ASSEMBLYAI = "assemblyai"
     const val ENGINE_VOSK = "vosk"
     const val ENGINE_ANDROID = "android"
+    const val ENGINE_GLADIA = "gladia"
 
     /**
      * Le nom de compteur d'un moteur donné.
@@ -52,6 +53,7 @@ object UsageStats {
         TranscriptionEngineChoice.ASSEMBLYAI -> ENGINE_ASSEMBLYAI
         TranscriptionEngineChoice.VOSK -> ENGINE_VOSK
         TranscriptionEngineChoice.ANDROID -> ENGINE_ANDROID
+        TranscriptionEngineChoice.GLADIA -> ENGINE_GLADIA
         TranscriptionEngineChoice.AUTO -> ENGINE_VOSK
     }
 

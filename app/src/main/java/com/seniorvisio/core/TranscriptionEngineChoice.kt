@@ -7,7 +7,20 @@ package com.seniorvisio.core
  * la seule façon de comparer honnêtement deux moteurs, en les faisant écouter
  * la même voix dans la même pièce à quelques secondes d'intervalle.
  */
-enum class TranscriptionEngineChoice(val remoteValue: String, val adminLabel: String) {
+enum class TranscriptionEngineChoice(
+    val remoteValue: String,
+    val adminLabel: String,
+    /**
+     * Facturé au temps de connexion, et non aux mots.
+     *
+     * Déclaré ici plutôt que testé moteur par moteur : la coupure des sessions
+     * au silence, qui est ce qui empêche la facture d'enfler pendant qu'une
+     * pièce est vide, ne visait qu'AssemblyAI nommément. Un second service
+     * payant y aurait échappé en silence — et le seul symptôme aurait été une
+     * facture, un mois plus tard.
+     */
+    val billedByDuration: Boolean = false,
+) {
     /**
      * Tout sur le moteur embarqué : gratuit, hors-ligne, et indépendant d'un
      * service en ligne qui pourrait tomber au mauvais moment. C'est le défaut ;
@@ -17,7 +30,18 @@ enum class TranscriptionEngineChoice(val remoteValue: String, val adminLabel: St
      */
     AUTO("auto", "Automatique (tout sur le moteur embarqué)"),
 
-    ASSEMBLYAI("assemblyai", "AssemblyAI (en ligne, payant à la durée)"),
+    ASSEMBLYAI("assemblyai", "AssemblyAI (en ligne, payant à la durée)", billedByDuration = true),
+
+    /**
+     * Alternative à AssemblyAI, pas son remplaçant (voir
+     * GladiaStreamingTranscriber). Les deux se règlent séparément pour la
+     * pièce et pour les appels : c'est la seule façon de les comparer
+     * honnêtement, sur la même voix dans la même pièce à quelques minutes
+     * d'intervalle. Même nature de coût, donc même prudence — un service
+     * facturé à la durée n'a rien à faire sur une pièce écoutée toute la
+     * journée sans qu'on l'ait décidé.
+     */
+    GLADIA("gladia", "Gladia (en ligne, payant à la durée)", billedByDuration = true),
 
     VOSK("vosk", "Vosk (embarqué, gratuit, hors-ligne)"),
 
