@@ -42,7 +42,17 @@ class GladiaStreamingTranscriber(private val apiKey: String) : SpeechRecognizer 
 
     override val engine = TranscriptionEngineChoice.GLADIA
 
-    private var webSocket: WebSocket? = null
+    /**
+     * Volatile, et c'est indispensable ici alors que ça ne l'était pas pour
+     * AssemblyAI. Là-bas, la connexion est créée dans start(), donc AVANT que
+     * le fil qui vide la file d'attente ne soit démarré — et démarrer un fil
+     * garantit à lui seul qu'il voie tout ce qui précède. Ici la connexion
+     * n'existe qu'après un aller-retour HTTP, sur un troisième fil, sans
+     * aucun lien de synchronisation avec celui qui envoie le son : sans
+     * volatile, ce dernier peut ne jamais voir la connexion apparaître et
+     * jeter tout le son en silence, indéfiniment.
+     */
+    @Volatile private var webSocket: WebSocket? = null
     private val pendingAudio = java.io.ByteArrayOutputStream()
 
     /** Vrai dès stop() : empêche une connexion encore en vol de s'ouvrir dans le vide. */
@@ -120,6 +130,12 @@ class GladiaStreamingTranscriber(private val apiKey: String) : SpeechRecognizer 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.i(TAG, "Connexion Gladia temps réel établie")
+                // Publié dans le diagnostic consultable à distance, et pas
+                // seulement dans le journal système auquel personne n'a accès :
+                // « la session ne s'ouvre pas » et « elle s'ouvre mais reste
+                // muette » se ressemblent exactement vues de l'écran de Jean,
+                // et ne se corrigent pas du tout de la même façon.
+                TranscriptionDiagnostics.record("Gladia : session ouverte")
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -149,17 +165,38 @@ class GladiaStreamingTranscriber(private val apiKey: String) : SpeechRecognizer 
         })
     }
 
+    /**
+     * Le son est mis en réserve dès le premier bloc, y compris avant que la
+     * connexion existe.
+     *
+     * Il était jusqu'ici purement et simplement jeté tant que la connexion
+     * n'était pas ouverte — soit pendant tout l'aller-retour HTTP qui la
+     * négocie. Quelques centaines de millisecondes à chaque ouverture, et la
+     * session se rouvre à chaque silence un peu franc pour ne pas facturer le
+     * vide : c'est le début de chaque prise de parole qui disparaissait.
+     *
+     * La réserve d'avant-connexion est plafonnée et ne garde que le son le
+     * plus récent : si la connexion n'arrive jamais, mieux vaut perdre du son
+     * ancien que remplir la mémoire d'une tablette allumée en permanence.
+     */
     override fun accept(pcm16: ByteArray, sampleRate: Int, channels: Int) {
-        val socket = webSocket ?: return
         val converted = Pcm16.toBytes(Pcm16.toMono16k(pcm16, sampleRate, channels))
         val chunk = synchronized(pendingAudio) {
             pendingAudio.write(converted)
+            if (webSocket == null) {
+                if (pendingAudio.size() > PRE_CONNECT_MAX_BYTES) {
+                    val kept = pendingAudio.toByteArray()
+                    pendingAudio.reset()
+                    pendingAudio.write(kept, kept.size - PRE_CONNECT_MAX_BYTES, PRE_CONNECT_MAX_BYTES)
+                }
+                return
+            }
             if (pendingAudio.size() < MIN_CHUNK_BYTES) return
             val bytes = pendingAudio.toByteArray()
             pendingAudio.reset()
             bytes
         }
-        socket.send(Buffer().write(chunk).readByteString())
+        webSocket?.send(Buffer().write(chunk).readByteString())
     }
 
     override fun stop() {
@@ -185,5 +222,13 @@ class GladiaStreamingTranscriber(private val apiKey: String) : SpeechRecognizer 
          * de millisecondes, bien trop courts pour être envoyés tels quels.
          */
         const val MIN_CHUNK_BYTES = 3_200
+
+        /**
+         * Deux secondes à 16 kHz mono 16 bits : de quoi couvrir la
+         * négociation de session sans perdre le début d'une phrase, et pas
+         * plus, faute de quoi une connexion qui n'aboutit jamais ferait
+         * gonfler la mémoire sans fin.
+         */
+        const val PRE_CONNECT_MAX_BYTES = 64_000
     }
 }
