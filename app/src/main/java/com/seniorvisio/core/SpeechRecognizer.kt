@@ -21,6 +21,20 @@ package com.seniorvisio.core
 interface SpeechRecognizer {
 
     /**
+     * Lequel des moteurs est réellement derrière.
+     *
+     * Déclaré plutôt que déduit du type. La déduction (`if (x is
+     * VoskSpeechRecognizer)`) marchait tant qu'aucune enveloppe ne s'intercalait
+     * et qu'il n'y avait que deux moteurs ; elle devient fausse dès qu'on
+     * interpose une file d'attente (voir BufferedSpeechRecognizer) et
+     * silencieusement fausse au troisième moteur, qui tomberait dans le
+     * « sinon ». Les conséquences ne se voient pas tout de suite : du temps
+     * embarqué compté comme du temps facturé, et la coupure des sessions
+     * payantes appliquée à un moteur gratuit.
+     */
+    val engine: TranscriptionEngineChoice
+
+    /**
      * Ouvre une session. `onText` reçoit le texte au fil de l'eau, `isFinal`
      * distinguant une version encore révisable d'une phrase close. `onError`
      * remonte ce qui empêche la transcription de fonctionner, pour affichage

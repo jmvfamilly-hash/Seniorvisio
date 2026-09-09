@@ -18,6 +18,9 @@ import org.vosk.Recognizer
  */
 class VoskSpeechRecognizer : SpeechRecognizer {
 
+    override val engine = TranscriptionEngineChoice.VOSK
+
+
     private var recognizer: Recognizer? = null
     private var onText: ((String, Boolean) -> Unit)? = null
     private var onError: ((String) -> Unit)? = null

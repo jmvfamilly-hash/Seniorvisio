@@ -33,6 +33,9 @@ import java.util.concurrent.TimeUnit
  */
 class AssemblyAiRealtimeTranscriber(private val apiKey: String) : SpeechRecognizer {
 
+    override val engine = TranscriptionEngineChoice.ASSEMBLYAI
+
+
     private var webSocket: WebSocket? = null
     private val pendingAudio = java.io.ByteArrayOutputStream()
     private val client = OkHttpClient.Builder()

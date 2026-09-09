@@ -181,15 +181,13 @@ class TranscriptionEngine(
         val created = createRecognizerFor(wanted) ?: return
         recognizer = created
         recognizerSource = source
-        recognizerKind =
-            if (created is VoskSpeechRecognizer) TranscriptionEngineChoice.VOSK
-            else TranscriptionEngineChoice.ASSEMBLYAI
+        // Ce que le moteur déclare être, et non ce que son type laisse deviner :
+        // une enveloppe s'intercale désormais (voir buffered), et un troisième
+        // moteur tomberait silencieusement dans le mauvais cas.
+        recognizerKind = created.engine
         // La session, et non la parole : AssemblyAI facture la durée de
         // connexion, pas le nombre de mots (voir UsageStats).
-        UsageStats.noteTranscriptionStart(
-            if (recognizerKind == TranscriptionEngineChoice.VOSK) UsageStats.ENGINE_VOSK
-            else UsageStats.ENGINE_ASSEMBLYAI
-        )
+        UsageStats.noteTranscriptionStart(UsageStats.engineFor(created.engine))
         created.start(
             onText = { text, isFinal ->
                 // La source peut avoir changé pendant que ce texte arrivait :
@@ -319,7 +317,7 @@ class TranscriptionEngine(
             else TranscriptionEngineChoice.ASSEMBLYAI
         }
         if (wanted == TranscriptionEngineChoice.VOSK) {
-            if (VoskModelProvider.getModel() != null) return VoskSpeechRecognizer()
+            if (VoskModelProvider.getModel() != null) return buffered(VoskSpeechRecognizer())
             diagnose("modèle embarqué indisponible (${VoskModelProvider.describeState()}), AssemblyAI en attendant")
         }
 
@@ -328,8 +326,21 @@ class TranscriptionEngine(
             diagnose("clé API AssemblyAI absente")
             return null
         }
-        return AssemblyAiRealtimeTranscriber(apiKey)
+        return buffered(AssemblyAiRealtimeTranscriber(apiKey))
     }
+
+    /**
+     * Interpose une file d'attente entre le fil qui capte le son et le moteur
+     * (voir BufferedSpeechRecognizer).
+     *
+     * Appliqué ici, à la création, plutôt que dans chaque moteur : ils ont
+     * tous le même problème — ré-échantillonnage et écriture réseau exécutés
+     * sur un fil temps réel dont le seul travail est de livrer le bloc suivant
+     * à l'heure — et la logique d'AssemblyAI a déjà divergé une fois d'avoir
+     * été recopiée à deux endroits.
+     */
+    private fun buffered(recognizer: SpeechRecognizer): SpeechRecognizer =
+        BufferedSpeechRecognizer(recognizer, onDiagnostic = { diagnose(it) })
 
     private fun stopSession() {
         // Le silence qui précédait la fermeture ne doit pas compter comme du
