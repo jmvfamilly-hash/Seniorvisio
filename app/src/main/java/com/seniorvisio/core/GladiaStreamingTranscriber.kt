@@ -58,6 +58,19 @@ class GladiaStreamingTranscriber(private val apiKey: String) : SpeechRecognizer 
     /** Vrai dès stop() : empêche une connexion encore en vol de s'ouvrir dans le vide. */
     @Volatile private var stopped = false
 
+    // --- De quoi savoir ce qui se passe quand rien ne s'affiche -------------
+    // Une session qui s'ouvre et reste muette a au moins quatre causes très
+    // différentes : le son ne part pas, il part mais le service se tait, le
+    // service répond une erreur, ou il répond des transcriptions dans une
+    // forme que ce fichier ne sait pas lire. Vues de l'écran de Jean, elles
+    // sont rigoureusement identiques — et ne se corrigent pas du tout de la
+    // même façon. Ces quatre compteurs les séparent.
+    @Volatile private var chunksSent = 0
+    @Volatile private var messagesReceived = 0
+    @Volatile private var transcriptsRead = 0
+    private var reportedFirstChunk = false
+    private var reportedFirstMessage = false
+
     private val client = OkHttpClient.Builder()
         // Connexion longue durée : pas de délai de lecture, sans quoi OkHttp
         // couperait au premier silence prolongé entre deux phrases.
@@ -139,15 +152,40 @@ class GladiaStreamingTranscriber(private val apiKey: String) : SpeechRecognizer 
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                messagesReceived++
+                Log.d(TAG, "Message Gladia : ${text.take(LOG_EXCERPT)}")
+                // Le tout premier message est publié tel quel dans le
+                // diagnostic. C'est ce qui permet de constater la forme réelle
+                // au lieu de la supposer : la documentation de référence n'est
+                // pas toujours atteignable, et une forme devinée qui ne
+                // correspond pas se traduit par un écran vide, sans erreur.
+                if (!reportedFirstMessage) {
+                    reportedFirstMessage = true
+                    TranscriptionDiagnostics.record("Gladia 1er message : ${text.take(DIAGNOSTIC_EXCERPT)}")
+                }
                 try {
                     val json = JSONObject(text)
-                    if (json.optString("type") != "transcript") return
+                    val type = json.optString("type")
+                    // Tout ce qui ressemble à un refus est remonté. Sans ça, un
+                    // service qui explique poliment ce qui ne va pas — format
+                    // audio refusé, session expirée, quota dépassé — voyait son
+                    // message jeté au motif qu'il n'était pas une
+                    // transcription.
+                    if (type.contains("error", ignoreCase = true) || json.has("error")) {
+                        TranscriptionDiagnostics.record("Gladia refuse : ${text.take(DIAGNOSTIC_EXCERPT)}")
+                        onError("Gladia : ${text.take(DIAGNOSTIC_EXCERPT)}")
+                        return
+                    }
+                    if (type != "transcript") return
                     val data = json.optJSONObject("data") ?: return
                     val utterance = data.optJSONObject("utterance")?.optString("text").orEmpty()
                     // is_final distingue les versions successives d'un même
                     // énoncé de celle qui le clôt — exactement ce dont la zone
                     // d'affichage a besoin (voir RollingCaptionZone.submit).
-                    if (utterance.isNotBlank()) onText(utterance, data.optBoolean("is_final", false))
+                    if (utterance.isNotBlank()) {
+                        transcriptsRead++
+                        onText(utterance, data.optBoolean("is_final", false))
+                    }
                 } catch (e: Exception) {
                     Log.w(TAG, "Message Gladia illisible : $text", e)
                 }
@@ -197,10 +235,22 @@ class GladiaStreamingTranscriber(private val apiKey: String) : SpeechRecognizer 
             bytes
         }
         webSocket?.send(Buffer().write(chunk).readByteString())
+        chunksSent++
+        if (!reportedFirstChunk) {
+            reportedFirstChunk = true
+            TranscriptionDiagnostics.record("Gladia : audio envoyé")
+        }
     }
 
     override fun stop() {
         stopped = true
+        // Le bilan de la session, lisible à distance après coup. C'est lui qui
+        // répond à « rien ne s'affiche, pourquoi » : zéro envoi accuse la
+        // chaîne audio, des envois sans message accusent le service, des
+        // messages sans transcription accusent la lecture faite ici.
+        TranscriptionDiagnostics.record(
+            "Gladia bilan : $chunksSent envois, $messagesReceived messages, $transcriptsRead transcriptions"
+        )
         // Annonce la fin plutôt que de couper net : sans elle, le service
         // garde la session ouverte le temps de son propre délai d'expiration,
         // et la facture jusque-là.
@@ -230,5 +280,9 @@ class GladiaStreamingTranscriber(private val apiKey: String) : SpeechRecognizer 
          * gonfler la mémoire sans fin.
          */
         const val PRE_CONNECT_MAX_BYTES = 64_000
+
+        /** Assez pour reconnaître une forme de message, assez peu pour ne pas noyer l'écran. */
+        const val DIAGNOSTIC_EXCERPT = 180
+        const val LOG_EXCERPT = 400
     }
 }
