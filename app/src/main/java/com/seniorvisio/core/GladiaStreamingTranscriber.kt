@@ -68,6 +68,13 @@ class GladiaStreamingTranscriber(private val apiKey: String) : SpeechRecognizer 
     @Volatile private var chunksSent = 0
     @Volatile private var messagesReceived = 0
     @Volatile private var transcriptsRead = 0
+    /**
+     * Énoncés écartés comme inventés (voir SpeechHallucinations). Compté et
+     * publié, parce qu'un filtre invisible qui se tromperait ferait passer la
+     * transcription pour défaillante sans que rien ne le désigne — un chiffre
+     * anormalement haut ici accuse le filtre, pas le service.
+     */
+    @Volatile private var hallucinationsDropped = 0
     private var reportedFirstChunk = false
     private var reportedFirstMessage = false
 
@@ -183,6 +190,18 @@ class GladiaStreamingTranscriber(private val apiKey: String) : SpeechRecognizer 
                     // énoncé de celle qui le clôt — exactement ce dont la zone
                     // d'affichage a besoin (voir RollingCaptionZone.submit).
                     if (utterance.isNotBlank()) {
+                        // Le modèle invente du texte sur du silence, et
+                        // toujours le même : « Merci. » avant tout (voir
+                        // SpeechHallucinations). Écarté avant d'être compté
+                        // comme une transcription — c'en est le contraire.
+                        // Appliqué aux versions provisoires comme aux
+                        // définitives : ne filtrer que les secondes laisserait
+                        // le mot apparaître à l'écran puis disparaître, ce qui
+                        // se remarque encore plus.
+                        if (SpeechHallucinations.isPureHallucination(utterance)) {
+                            hallucinationsDropped++
+                            return
+                        }
                         transcriptsRead++
                         onText(utterance, data.optBoolean("is_final", false))
                     }
@@ -249,7 +268,8 @@ class GladiaStreamingTranscriber(private val apiKey: String) : SpeechRecognizer 
         // chaîne audio, des envois sans message accusent le service, des
         // messages sans transcription accusent la lecture faite ici.
         TranscriptionDiagnostics.record(
-            "Gladia bilan : $chunksSent envois, $messagesReceived messages, $transcriptsRead transcriptions"
+            "Gladia bilan : $chunksSent envois, $messagesReceived messages, " +
+                "$transcriptsRead transcriptions, $hallucinationsDropped inventés écartés"
         )
         // Annonce la fin plutôt que de couper net : sans elle, le service
         // garde la session ouverte le temps de son propre délai d'expiration,
