@@ -19,6 +19,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.AndroidSpeechSession
+import com.seniorvisio.core.RoomVoiceGate
 import com.seniorvisio.core.TranscriptionEngine
 import com.seniorvisio.core.TranscriptionEngineChoice
 import com.seniorvisio.core.TranscriptionSource
@@ -76,6 +77,7 @@ class RoomPresenceService : Service() {
     @Volatile private var lastLoudAtMs = 0L
 
     private var transcription: TranscriptionEngine? = null
+    private var voiceGate: RoomVoiceGate? = null
     private var androidSpeech: AndroidSpeechSession? = null
     private var lastRoomSoundAtMs = 0L
 
@@ -158,6 +160,13 @@ class RoomPresenceService : Service() {
          */
         val androidLevelDb: Float? = null,
         val androidThresholdDb: Float? = null,
+
+        /**
+         * Part du temps jugée vocale par le portier depuis la dernière
+         * lecture, en pourcentage. Nulle quand le portier ne tourne pas — ce
+         * qui est le cas dès que la pièce est sur un moteur gratuit.
+         */
+        val voiceSharePercent: Int? = null,
     )
 
     /**
@@ -190,6 +199,7 @@ class RoomPresenceService : Service() {
         else "aucune écoute",
         androidLevelDb = androidSpeech?.takeIf { it.isRunning() }?.lastLevelDb(),
         androidThresholdDb = androidSpeech?.takeIf { it.isRunning() }?.wakeThresholdDb(),
+        voiceSharePercent = voiceGate?.consumeVoiceShare(),
     )
 
     /**
@@ -240,6 +250,8 @@ class RoomPresenceService : Service() {
 
     override fun onDestroy() {
         stopListening()
+        voiceGate?.close()
+        voiceGate = null
         if (running === this) running = null
         super.onDestroy()
     }
@@ -470,7 +482,20 @@ class RoomPresenceService : Service() {
         val engine = transcription ?: return
 
         val now = System.currentTimeMillis()
-        if (rms >= SPEECH_FLOOR_RMS) lastRoomSoundAtMs = now
+
+        // Le portier de voix ne sert — et ne tourne — que pour un moteur
+        // facturé à la durée. Sur un moteur embarqué il n'économiserait rien
+        // et coûterait un petit réseau de neurones toutes les 32 ms, sur une
+        // tablette qui écoute toute la journée.
+        val gated = adminConfig.roomEngine.billedByDuration && adminConfig.voiceGateEnabled
+        val gate = if (gated) ensureVoiceGate() else null
+        gate?.accept(buffer, length)
+
+        // Voix pour un service payant, simple présence de son sinon. C'est
+        // toute la différence : un aspirateur franchit un plancher de niveau,
+        // il ne franchit pas une détection de parole.
+        val heard = if (gate != null) gate.isVoiceActive() else rms >= SPEECH_FLOOR_RMS
+        if (heard) lastRoomSoundAtMs = now
         // Silence prolongé : on rend la source inactive, ce qui ferme la
         // session AssemblyAI. Elle se rouvrira au premier son suivant.
         val someoneIsSpeaking = now - lastRoomSoundAtMs <= TRANSCRIPTION_HOLD_MS
@@ -481,6 +506,12 @@ class RoomPresenceService : Service() {
         val byteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         for (i in 0 until length) byteBuffer.putShort(buffer[i])
         engine.feed(TranscriptionSource.ROOM, bytes, SAMPLE_RATE_HZ, 1)
+    }
+
+    /** Chargé à la première utilisation : inutile de payer le modèle si aucun moteur payant n'écoute. */
+    private fun ensureVoiceGate(): RoomVoiceGate {
+        voiceGate?.let { return it }
+        return RoomVoiceGate(this).also { voiceGate = it }
     }
 
     private fun computeRms(buffer: ShortArray, length: Int): Double {

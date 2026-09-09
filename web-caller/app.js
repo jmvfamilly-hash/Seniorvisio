@@ -204,6 +204,7 @@ const els = {
   roomListeningStatus: document.getElementById("roomListeningStatus"),
   transcriptionDiagnostic: document.getElementById("transcriptionDiagnostic"),
   paidUsage: document.getElementById("paidUsage"),
+  voiceGateToggle: document.getElementById("voiceGateToggle"),
   quotaAssemblyaiSlider: document.getElementById("quotaAssemblyaiSlider"),
   quotaGladiaSlider: document.getElementById("quotaGladiaSlider"),
   refreshUsageButton: document.getElementById("refreshUsageButton"),
@@ -523,6 +524,7 @@ const ADMIN_SLIDER_FIELDS = [
 const ADMIN_TOGGLE_FIELDS = [
   ["roomWakeEnabledToggle", "roomWakeEnabled"],
   ["blockWakeAtNightToggle", "blockWakeAtNight"],
+  ["voiceGateToggle", "voiceGateEnabled"],
 ];
 
 for (const [elementKey, field] of ADMIN_TOGGLE_FIELDS) {
@@ -938,6 +940,9 @@ function applyDeviceSettings(data) {
     if (typeof data[field] === "boolean") els[elementKey].checked = data[field];
   }
   els.roomWakeEnabledToggle.checked = data.roomWakeEnabled !== false;
+  // Vrai par défaut côté tablette : un champ absent veut dire « jamais réglé
+  // d'ici », pas « désactivé ».
+  els.voiceGateToggle.checked = data.voiceGateEnabled !== false;
 
   // Le seuil ne se règle pas sans voir le niveau qu'il doit dépasser : la
   // tablette republie avec son signe de vie le pic mesuré depuis le précédent,

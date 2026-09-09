@@ -154,6 +154,11 @@ class DeviceStatusReporter(private val context: Context) {
                 append(" — pic ").append(format1(androidPeak))
                 append(" dB / seuil ").append(format1(androidThreshold)).append(" dB")
             }
+            // Le portier de voix, quand il tourne. Sans ce chiffre, un
+            // portier trop sévère ferait passer la transcription pour cassée
+            // sans que rien ne le désigne — et on chercherait la panne du
+            // mauvais côté.
+            status.voiceSharePercent?.let { append(" — voix ").append(it).append("%") }
             if (!status.wakeEnabled) append(" — réveil désactivé")
             if (status.inNightWindow) append(" — réveil bloqué (nuit)")
             append(" — réveils demandés : ").append(status.wakeRequests)
@@ -373,6 +378,9 @@ class DeviceStatusReporter(private val context: Context) {
         snapshot.getLong(FIELD_ROOM_WAKE_THRESHOLD)?.let {
             if (it > 0) adminConfig.roomWakeSensitivityThreshold = it.toInt()
         }
+        snapshot.getBoolean(FIELD_VOICE_GATE_ENABLED)?.let {
+            adminConfig.voiceGateEnabled = it
+        }
         snapshot.getBoolean(FIELD_BLOCK_WAKE_AT_NIGHT)?.let {
             adminConfig.blockWakeAtNight = it
         }
@@ -548,6 +556,7 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_ROOM_WAKE_ENABLED = "roomWakeEnabled"
         private const val FIELD_ROOM_WAKE_THRESHOLD = "roomWakeThreshold"
         private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"
+        private const val FIELD_VOICE_GATE_ENABLED = "voiceGateEnabled"
 
         private const val LISTENER_RETRY_DELAY_MS = 60_000L
     }

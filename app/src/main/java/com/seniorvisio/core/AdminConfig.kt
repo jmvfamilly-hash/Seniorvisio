@@ -107,6 +107,20 @@ class AdminConfig(context: Context) {
     fun monthlyQuotaHours(engine: TranscriptionEngineChoice): Int =
         prefs.getInt(KEY_QUOTA_PREFIX + engine.remoteValue, DEFAULT_QUOTA_HOURS)
 
+    /**
+     * Le portier de voix filtre-t-il l'ouverture des sessions payantes ?
+     *
+     * Activé par défaut, mais débrayable : un portier trop sévère se
+     * manifesterait par une transcription qui « ne marche plus », sans que
+     * rien ne le désigne. Pouvoir le couper d'un geste, à distance, est ce qui
+     * permet de trancher en trente secondes entre « le portier est trop dur »
+     * et « le moteur est en panne » — deux diagnostics qu'on ne peut pas
+     * départager autrement.
+     */
+    var voiceGateEnabled: Boolean
+        get() = prefs.getBoolean(KEY_VOICE_GATE_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_VOICE_GATE_ENABLED, value).apply()
+
     fun setMonthlyQuotaHours(engine: TranscriptionEngineChoice, hours: Int) {
         prefs.edit().putInt(KEY_QUOTA_PREFIX + engine.remoteValue, hours.coerceAtLeast(0)).apply()
     }
@@ -227,6 +241,7 @@ class AdminConfig(context: Context) {
         private const val KEY_ASSEMBLYAI_API_KEY = "assemblyai_api_key"
         private const val KEY_GLADIA_API_KEY = "gladia_api_key"
         private const val KEY_QUOTA_PREFIX = "monthly_quota_hours_"
+        private const val KEY_VOICE_GATE_ENABLED = "voice_gate_enabled"
 
         /** Palier gratuit courant de ces services. Voir monthlyQuotaHours. */
         const val DEFAULT_QUOTA_HOURS = 10

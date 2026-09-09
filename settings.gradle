@@ -10,6 +10,16 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Uniquement pour la détection d'activité vocale (voir RoomVoiceGate) :
+        // la bibliothèque n'est pas publiée sur Maven Central. Dépôt volontairement
+        // restreint à ce seul groupe — JitPack compile à la demande n'importe quel
+        // dépôt public, et l'ouvrir en grand reviendrait à accepter que n'importe
+        // quelle dépendance mal orthographiée y soit cherchée et éventuellement
+        // trouvée.
+        maven {
+            url 'https://jitpack.io'
+            content { includeGroupByRegex 'com\\.github\\.gkonovalov.*' }
+        }
     }
 }
 rootProject.name = "SeniorVisio"
