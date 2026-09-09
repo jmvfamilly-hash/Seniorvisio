@@ -246,11 +246,29 @@ class RollingCaptionZone(
      * mot, qui ferait lire une pause là où il n'y en a pas eu.
      */
     private fun adoptPending(phrase: String) {
-        if (pendingMarks.isNotEmpty() && !phrase.startsWith(pending)) {
-            pendingMarks.clear()
+        if (pendingMarks.isNotEmpty()) {
+            // Ne garder que les repères posés dans la partie du texte que le
+            // moteur n'a pas retouchée.
+            //
+            // La version précédente exigeait que le nouveau texte commence
+            // exactement par l'ancien, et jetait sinon TOUS les repères. Trop
+            // strict : un moteur qui reprend la parole après une pause corrige
+            // volontiers une majuscule ou un mot en amont, et il suffisait
+            // d'un caractère changé pour que le silence ne soit jamais
+            // signalé. Or un repère posé au début d'une phrase reste juste
+            // même si la fin a été révisée.
+            val stable = commonPrefixLength(pending, phrase)
+            pendingMarks.retainAll { it.offset <= stable }
         }
         pending = phrase
-        pendingMarks.retainAll { it.offset <= phrase.length }
+    }
+
+    /** Nombre de caractères de tête identiques entre les deux textes. */
+    private fun commonPrefixLength(before: String, after: String): Int {
+        val max = minOf(before.length, after.length)
+        var index = 0
+        while (index < max && before[index] == after[index]) index++
+        return index
     }
 
     /** Le segment en cours, repères de silence insérés à leur place. */

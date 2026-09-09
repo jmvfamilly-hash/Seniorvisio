@@ -448,18 +448,23 @@ class AndroidSpeechSession(
 
         /**
          * Silence toléré avant que le moteur ne déclare l'énoncé terminé.
-         * Dix secondes : une pause de réflexion, une hésitation, un « voilà… »
-         * suivi d'une reprise ne doivent pas couper l'écoute, puisque chaque
-         * coupure coûte une relance et une couture pendant laquelle des mots
-         * se perdent.
          *
-         * Contrepartie assumée : le texte définitif d'une phrase arrive
-         * d'autant plus tard. L'affichage n'attend pas pour autant — les
-         * résultats partiels continuent d'arriver et la zone les montre au fil
-         * de l'eau (voir RollingCaptionZone) — mais la clôture du segment, et
-         * donc le repère de silence qui la suit, se décalent.
+         * Trois secondes, et non dix comme essayé d'abord. Assez pour qu'une
+         * hésitation ou un « voilà… » suivi d'une reprise ne coupe pas
+         * l'écoute — chaque coupure coûtant une relance, et chaque relance une
+         * couture où des mots se perdent — mais pas au point d'empêcher le
+         * moteur de conclure aux vraies pauses.
+         *
+         * Dix secondes se sont révélées trop longues, pour une raison qui
+         * n'apparaît qu'à l'usage : un énoncé qui ne se clôt jamais n'est
+         * jamais versé dans le texte acquis, et c'est le texte acquis, et lui
+         * seul, que la purge des lignes déjà lues sait retirer (voir
+         * RollingCaptionZone.trimTextAlreadyScrolledPast, qui refuse
+         * volontairement de toucher au segment en cours puisqu'il est encore
+         * réécrit). L'affichage grossissait donc sans jamais pouvoir être
+         * allégé.
          */
-        const val SILENCE_TOLERANCE_MS = 10_000
+        const val SILENCE_TOLERANCE_MS = 3_000
 
         /**
          * Durée de la coupure autour du démarrage d'un énoncé. Assez pour
