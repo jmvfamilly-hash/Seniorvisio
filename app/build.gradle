@@ -122,7 +122,19 @@ dependencies {
     // franchissent sans peine un seuil de niveau sonore ; ils ne franchissent
     // pas celui-ci. Modèle d'environ deux mégaoctets, exécuté par ONNX Runtime
     // Mobile, sous licence MIT.
-    implementation 'com.github.gkonovalov.android-vad:silero:2.0.10'
+    //
+    // Version 2.0.8 et non la dernière : la 2.0.10 est compilée avec Kotlin
+    // 2.2, que le compilateur 1.9 de ce projet ne sait pas lire. L'ajouter
+    // cassait la compilation du module ENTIER — y compris des fichiers
+    // intouchés — avec des erreurs « Class 'kotlin.Unit' was compiled with an
+    // incompatible version of Kotlin » qui ne désignent jamais la vraie
+    // cause. La 2.0.8 est compilée en 1.9.21.
+    //
+    // À revoir le jour où ce projet passera à Kotlin 2 : une montée de version
+    // du compilateur touche tout ce que Jean utilise, elle mérite d'être faite
+    // et vérifiée pour elle-même, pas en passager clandestin d'une
+    // fonctionnalité.
+    implementation 'com.github.gkonovalov.android-vad:silero:2.0.8'
 
     implementation 'com.alphacephei:vosk-android:0.3.47'
     implementation 'net.java.dev.jna:jna:5.13.0@aar'
