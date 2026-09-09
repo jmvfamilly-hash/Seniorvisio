@@ -100,16 +100,12 @@
           <video id="remoteVideo" autoplay playsinline></video>
           <img id="jeanSlideshow" class="jean-slideshow hidden" alt="Photo affichée chez Jean">
 
-          <div id="jeanZones" class="jean-zones">
-            <div class="jean-zone jean-zone-info" data-zone="INFO">
-              <p class="jean-info-top">
-                <span id="jeanMoment"></span>
-                <span id="jeanWeather"></span>
-              </p>
-              <p class="jean-info-date" id="jeanDate"></p>
-            </div>
-
-          </div>
+          <!-- Plus de zone d'information ici. Elle répliquait la date, la
+               météo et le moment de la journée affichés chez Jean — sauf que
+               son écran ne les montre plus dès qu'un appel se présente (voir
+               IncomingCallActivity). La réplique montrait donc quelque chose
+               que Jean n'a pas sous les yeux, ce qui est exactement ce
+               qu'elle est censée éviter. -->
         </div>
 
         <p class="hint" id="mirrorHint">👆 L'image que Jean a sous les yeux en ce moment</p>
@@ -171,7 +167,6 @@
 
       <!-- ================= FENÊTRE RÉGLAGES ================= -->
       <section id="paneSettings" class="pane hidden">
-        <button class="secondary pane-back" data-back-to-video>◀ Revenir à la vidéo</button>
         <h2 class="pane-title">Réglages de l'appel</h2>
 
         <div class="volume-control">
@@ -227,6 +222,13 @@
         <!-- Rappelée pendant l'appel, pas seulement avant : le réflexe de
              baisser le téléphone pour parler à la personne revient vite. -->
         <p class="caregiver-only caregiver-hint" id="caregiverCallHint"></p>
+
+        <!-- En bas, et non en tête. Un bouton de retour posé avant le
+             formulaire oblige à remonter toute la page pour repartir : on
+             descend pour régler, et on se retrouve loin du seul chemin de
+             sortie. À la fin, il tombe sous le pouce à l'endroit exact où
+             l'on finit de lire. -->
+        <button class="secondary pane-back" data-back-to-video>◀ Revenir à la vidéo</button>
       </section>
 
       <!-- ================= FENÊTRE PHOTOS =================
@@ -234,7 +236,6 @@
            voit en grand sans rien manipuler, et lit ses commentaires dans la
            zone prévue pour ça. -->
       <section id="paneSlideshow" class="pane hidden">
-        <button class="secondary pane-back" data-back-to-video>◀ Revenir à la vidéo</button>
         <h2 class="pane-title">🖼️ Regarder des photos avec Jean</h2>
 
         <label class="slideshow-pick">
@@ -255,6 +256,9 @@
         </label>
 
         <p class="slideshow-status" id="slideshowStatus"></p>
+
+        <!-- Voir la fenêtre des réglages : même raison, même place. -->
+        <button class="secondary pane-back" data-back-to-video>◀ Revenir à la vidéo</button>
       </section>
 
     </div>

@@ -213,11 +213,7 @@ const els = {
   captionDebugIndicator: document.getElementById("captionDebugIndicator"),
   // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
   jeanScreen: document.getElementById("jeanScreen"),
-  jeanZones: document.getElementById("jeanZones"),
   jeanSlideshow: document.getElementById("jeanSlideshow"),
-  jeanMoment: document.getElementById("jeanMoment"),
-  jeanWeather: document.getElementById("jeanWeather"),
-  jeanDate: document.getElementById("jeanDate"),
   jeanRoomText: document.getElementById("jeanRoomText"),
   jeanCallText: document.getElementById("jeanCallText"),
   jeanRoomBox: document.getElementById("jeanRoomBox"),
@@ -286,16 +282,18 @@ function applyScreenLayout(layout) {
   }
   els.jeanScreen.classList.toggle("jean-dark", layout.isDark);
   els.jeanScreen.classList.toggle("jean-light", !layout.isDark);
-  els.jeanMoment.textContent = layout.infoMoment;
-  els.jeanWeather.textContent = layout.infoWeather;
-  els.jeanDate.textContent = layout.infoDate;
 
-  // Réordonne les zones sans les recréer : leur contenu et leur état
-  // d'affichage survivent au changement.
-  layout.zoneOrder.split(",").forEach((zoneName) => {
-    const zone = els.jeanZones.querySelector(`[data-zone="${zoneName}"]`);
-    if (zone) els.jeanZones.appendChild(zone);
-  });
+  // La date, la météo et le moment de la journée ne sont plus répliqués :
+  // l'écran de Jean cesse de les afficher dès qu'un appel se présente (voir
+  // IncomingCallActivity), et une réplique qui montre ce qu'il n'a pas sous
+  // les yeux ne réplique rien. La tablette continue de les publier — son
+  // écran d'accueil les affiche toujours — simplement, cet écran-ci les
+  // ignore.
+  //
+  // Le réordonnancement des zones disparaît avec elles : les deux pavés de
+  // texte sont passés sous la vidéo et portent chacun son étiquette, il n'y
+  // avait plus que la zone d'information à réordonner, seule dans son
+  // conteneur.
 
   applyCaptionGeometry(layout);
 }
