@@ -102,12 +102,6 @@ class AdminSettingsActivity : AppCompatActivity() {
             if (level != null && threshold != null) {
                 appendLine("Niveau mesuré : %.1f dB  (seuil %.1f dB)".format(level, threshold))
                 appendLine(if (level >= threshold) "  → au-dessus du seuil" else "  → sous le seuil")
-                // Chaque relance est une couture pendant laquelle plus rien
-                // n'est écouté : c'est le chiffre à regarder quand des mots
-                // manquent en début de phrase.
-                status.androidRestartsPerMinute?.let {
-                    appendLine("Relances du moteur : $it/min")
-                }
             } else {
                 appendLine("Niveau mesuré : ${status.lastRms}  (seuil ${status.threshold})")
                 appendLine(if (status.lastRms >= status.threshold) "  → au-dessus du seuil" else "  → sous le seuil")

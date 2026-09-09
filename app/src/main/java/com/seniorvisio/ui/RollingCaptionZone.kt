@@ -131,24 +131,14 @@ class RollingCaptionZone(
         // à réarmer — sans quoi la zone ne disparaîtrait plus jamais.
         if (phrase.isEmpty() && (!isFinal || pending.isEmpty())) return
 
-        // Le texte a-t-il réellement avancé ? Un moteur renvoie souvent son
-        // résultat final à l'identique du dernier partiel, parfois longtemps
-        // après que la personne s'est tue — dix secondes plus tard avec la
-        // tolérance de silence en vigueur. Rafraîchir l'horodatage sur un
-        // message qui n'apporte aucun mot faisait mesurer les silences depuis
-        // l'instant où le moteur a bien voulu conclure, et non depuis celui où
-        // la parole s'est arrêtée : une pause de douze secondes se dégradait
-        // en repère court.
-        val advanced = phrase.isNotEmpty() && phrase != pending
         if (phrase.isNotEmpty()) {
             noteSilenceBefore()
-            adoptPending(phrase)
+            pending = phrase
         }
-        if (advanced) lastTextAtMs = SystemClock.elapsedRealtime()
+        lastTextAtMs = SystemClock.elapsedRealtime()
         if (isFinal) {
-            committed = join(committed, markedPending())
+            committed = join(committed, pending)
             pending = ""
-            pendingMarks.clear()
         }
 
         textView.alpha = 1f
@@ -173,7 +163,6 @@ class RollingCaptionZone(
         if (committed.isEmpty() && pending.isEmpty()) return
         committed = ""
         pending = ""
-        pendingMarks.clear()
         lastTextAtMs = 0L
         textView.animate().alpha(0f).setDuration(FADE_MS).withEndAction {
             textView.text = ""
@@ -184,111 +173,31 @@ class RollingCaptionZone(
     }
 
     /**
-     * Marque le silence qui vient de s'écouler, qu'un segment se soit clos ou
-     * non.
+     * Marque le silence qui précède un nouveau segment. Ne se déclenche qu'au
+     * premier mot d'un segment : pendant la dictée, les textes se suivent de
+     * quelques dizaines de millisecondes et il n'y a évidemment rien à
+     * signaler.
      *
      * L'intérêt n'est pas de faire joli : sans repère, deux phrases dites à
      * une minute d'intervalle se lisent comme une seule, et Jean croit à un
      * enchaînement là où il y a eu une pause. Il lit un texte qui remplace
      * l'écoute — le rythme de la parole en fait partie.
-     *
-     * Ne dépendait autrefois que de la segmentation du moteur : le repère ne
-     * se posait qu'au premier mot d'un nouveau segment. Deux fonctions
-     * différentes accrochées au même signal, et les repères ont disparu le
-     * jour où l'on a demandé au moteur de reconnaissance d'Android de tolérer
-     * dix secondes de silence sans clore d'énoncé. Ce que Jean lit comme le
-     * rythme de la parole n'a pas à dépendre de la façon dont un moteur
-     * découpe ses phrases.
      */
     private fun noteSilenceBefore() {
+        if (pending.isNotEmpty()) return
+        if (committed.isEmpty()) return
         if (lastTextAtMs == 0L) return
-        if (committed.isEmpty() && pending.isEmpty()) return
         val silenceMs = SystemClock.elapsedRealtime() - lastTextAtMs
-        val marker = when {
+        committed = when {
             // Pause franche : la reprise mérite sa propre ligne, sinon elle se
             // colle à la phrase d'avant et le repère ne sert plus à rien.
-            silenceMs >= LONG_SILENCE_MS -> "$SILENCE_MARKER\n"
-            silenceMs >= SHORT_SILENCE_MS -> SILENCE_MARKER
+            silenceMs >= LONG_SILENCE_MS -> "$committed $SILENCE_MARKER\n"
+            silenceMs >= SHORT_SILENCE_MS -> "$committed $SILENCE_MARKER"
             else -> return
         }
-        if (pending.isEmpty()) {
-            // Entre deux segments : le repère se pose définitivement, le texte
-            // qui précède ne bougera plus.
-            committed = "$committed $marker"
-        } else {
-            // À l'intérieur d'un segment encore ouvert. On ne peut pas clore
-            // celui-ci pour poser le repère : les résultats partiels de
-            // certains moteurs contiennent toute la phrase en cours et la
-            // révisent, si bien que valider maintenant ferait répéter au
-            // partiel suivant ce qu'on vient de valider. Le repère est donc
-            // retenu à sa position et inséré à l'affichage (voir
-            // markedPending).
-            pendingMarks.add(Mark(pending.length, marker))
-        }
     }
 
-    /**
-     * Un repère de silence en attente, avec sa place dans le segment encore
-     * ouvert. Voir noteSilenceBefore.
-     */
-    private class Mark(val offset: Int, val marker: String)
-
-    private val pendingMarks = mutableListOf<Mark>()
-
-    /**
-     * Remplace le segment en cours par le texte qui vient d'arriver, en
-     * décidant du sort des repères déjà posés dedans.
-     *
-     * Un moteur peut réviser ce qu'il a compris : le nouveau texte n'est alors
-     * pas une simple continuation de l'ancien, et une position mémorisée ne
-     * désigne plus le même endroit. Dans ce cas les repères sont abandonnés.
-     * Mieux vaut un silence non signalé qu'un repère planté au milieu d'un
-     * mot, qui ferait lire une pause là où il n'y en a pas eu.
-     */
-    private fun adoptPending(phrase: String) {
-        if (pendingMarks.isNotEmpty()) {
-            // Ne garder que les repères posés dans la partie du texte que le
-            // moteur n'a pas retouchée.
-            //
-            // La version précédente exigeait que le nouveau texte commence
-            // exactement par l'ancien, et jetait sinon TOUS les repères. Trop
-            // strict : un moteur qui reprend la parole après une pause corrige
-            // volontiers une majuscule ou un mot en amont, et il suffisait
-            // d'un caractère changé pour que le silence ne soit jamais
-            // signalé. Or un repère posé au début d'une phrase reste juste
-            // même si la fin a été révisée.
-            val stable = commonPrefixLength(pending, phrase)
-            pendingMarks.retainAll { it.offset <= stable }
-        }
-        pending = phrase
-    }
-
-    /** Nombre de caractères de tête identiques entre les deux textes. */
-    private fun commonPrefixLength(before: String, after: String): Int {
-        val max = minOf(before.length, after.length)
-        var index = 0
-        while (index < max && before[index] == after[index]) index++
-        return index
-    }
-
-    /** Le segment en cours, repères de silence insérés à leur place. */
-    private fun markedPending(): String {
-        if (pendingMarks.isEmpty()) return pending
-        val builder = StringBuilder()
-        var from = 0
-        pendingMarks.sortedBy { it.offset }.forEach { mark ->
-            val to = mark.offset.coerceIn(from, pending.length)
-            builder.append(pending, from, to)
-            if (builder.isNotEmpty() && !builder.endsWith("\n")) builder.append(' ')
-            builder.append(mark.marker)
-            if (!mark.marker.endsWith("\n")) builder.append(' ')
-            from = to
-        }
-        builder.append(pending, from, pending.length)
-        return builder.toString()
-    }
-
-    private fun renderedText(): String = join(committed, markedPending())
+    private fun renderedText(): String = join(committed, pending)
 
     /**
      * Le texte tel qu'il s'affiche : les marques de silence en plus petit et
