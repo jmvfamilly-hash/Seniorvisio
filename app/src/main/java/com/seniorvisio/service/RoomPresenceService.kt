@@ -158,6 +158,14 @@ class RoomPresenceService : Service() {
          */
         val androidLevelDb: Float? = null,
         val androidThresholdDb: Float? = null,
+
+        /**
+         * Relances du moteur d'Android sur la dernière minute. C'est la mesure
+         * qui dit si ce moteur va bien : chaque relance est une couture où la
+         * parole n'est pas écoutée, et un son de démarrage de plus. Nulle
+         * quand ce n'est pas lui qui écoute.
+         */
+        val androidRestartsPerMinute: Int? = null,
     )
 
     /**
@@ -190,6 +198,7 @@ class RoomPresenceService : Service() {
         else "aucune écoute",
         androidLevelDb = androidSpeech?.takeIf { it.isRunning() }?.lastLevelDb(),
         androidThresholdDb = androidSpeech?.takeIf { it.isRunning() }?.wakeThresholdDb(),
+        androidRestartsPerMinute = androidSpeech?.takeIf { it.isRunning() }?.restartsPerMinute(),
     )
 
     /**

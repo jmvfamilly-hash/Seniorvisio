@@ -131,6 +131,16 @@ class DeviceStatusReporter(private val context: Context) {
             } else if (androidPeak != null && androidThreshold != null) {
                 append(" — pic ").append(format1(androidPeak))
                 append(" dB / seuil ").append(format1(androidThreshold)).append(" dB")
+                // Ce moteur ne sait écouter qu'un énoncé à la fois et doit être
+                // relancé sans cesse. Chaque relance est une couture pendant
+                // laquelle plus rien n'est écouté — c'est là que des mots se
+                // perdent — et un son de démarrage de plus. Le chiffre est donc
+                // le meilleur indicateur de santé de ce mode : quelques
+                // relances par minute est normal, plusieurs dizaines signale
+                // que le moteur coupe au moindre silence.
+                status.androidRestartsPerMinute?.let {
+                    append(" — ").append(it).append(" relances/min")
+                }
             }
             if (!status.wakeEnabled) append(" — réveil désactivé")
             if (status.inNightWindow) append(" — réveil bloqué (nuit)")

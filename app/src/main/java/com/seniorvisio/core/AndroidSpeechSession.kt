@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -92,8 +93,69 @@ class AndroidSpeechSession(
     private var wanted = false
     private var consecutiveErrors = 0
     private var reportedEngine = false
+    private var earconsMuted = false
+
+    /**
+     * Vrai entre le démarrage effectif d'un énoncé et l'événement qui le clôt.
+     * Distinct de [wanted], qui dit ce qu'on veut et non ce qui se passe :
+     * confondre les deux revenait à ne pas savoir si le moteur écoute
+     * réellement à cet instant.
+     */
+    private var listening = false
+
+    /**
+     * Vrai tant qu'une relance est déjà programmée.
+     *
+     * Sans ce garde-fou, plusieurs callbacks pouvaient en programmer chacun
+     * une pour le même énoncé — onResults puis onError, par exemple. Aucune
+     * instance concurrente n'en résultait, listen() détruisant la précédente
+     * avant d'en créer une, mais on payait un cycle de démarrage entier pour
+     * rien : une paire de bips de plus, et une couture de plus pendant
+     * laquelle rien n'est écouté. C'est exactement là que des mots se
+     * perdent.
+     */
+    private var restartPending = false
+
+    /**
+     * Objet unique, et non une lambda créée à chaque fois : c'est ce qui
+     * permet de retirer une relance encore en attente (voir stop()).
+     */
+    private val restartRunnable = Runnable {
+        restartPending = false
+        listen()
+    }
+
+    /** Même raison que restartRunnable : un objet unique se retire du handler. */
+    private val unmuteRunnable = Runnable { unmuteEarcons() }
+
+    /**
+     * Horodatage des relances de la dernière minute. Le nombre de relances
+     * par minute est la mesure qui dit si ce moteur va bien : c'est lui qui
+     * commande à la fois la fréquence des bips et le nombre de coutures où
+     * la parole n'est pas écoutée. Sans ce chiffre, « ça coupe moins »
+     * resterait une impression invérifiable.
+     */
+    private val restartTimes = ArrayDeque<Long>()
 
     fun isRunning(): Boolean = wanted
+
+    /** Relances observées sur la dernière minute glissante (voir restartTimes). */
+    fun restartsPerMinute(): Int {
+        pruneRestartTimes(System.currentTimeMillis())
+        return restartTimes.size
+    }
+
+    private fun noteRestart() {
+        val now = System.currentTimeMillis()
+        restartTimes.addLast(now)
+        pruneRestartTimes(now)
+    }
+
+    private fun pruneRestartTimes(now: Long) {
+        while (restartTimes.isNotEmpty() && now - restartTimes.first() > 60_000L) {
+            restartTimes.removeFirst()
+        }
+    }
 
     /**
      * Démarre l'écoute continue. Le moteur d'Android, lui, ne sait écouter
@@ -127,7 +189,13 @@ class AndroidSpeechSession(
     fun stop() {
         if (wanted) UsageStats.noteTranscriptionStop()
         wanted = false
+        listening = false
+        restartPending = false
         handler.removeCallbacksAndMessages(null)
+        // Sans ça, un arrêt tombant dans la fenêtre de coupure laisserait les
+        // flux muets indéfiniment — le rétablissement était programmé sur un
+        // handler qu'on vient de vider.
+        unmuteEarcons()
         handler.post {
             recognizer?.destroy()
             recognizer = null
@@ -137,6 +205,7 @@ class AndroidSpeechSession(
     private fun listen() {
         if (!wanted) return
         recognizer?.destroy()
+        listening = false
 
         val instance = try {
             createRecognizer()
@@ -156,12 +225,96 @@ class AndroidSpeechSession(
             // autres moteurs : sans ça, rien n'apparaît avant le silence final.
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            // Une seule hypothèse. Les suivantes ne sont jamais lues — on
+            // n'affiche que la meilleure — et les demander revient à faire
+            // travailler le moteur pour du texte qu'on jette.
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            // Le cœur du correctif. Par défaut ce moteur clôt l'énoncé au
+            // premier silence un peu net, c'est-à-dire entre deux phrases
+            // d'une même conversation, voire au milieu d'une phrase de
+            // quelqu'un qui cherche son mot. Chaque clôture coûte une relance,
+            // et chaque relance une couture pendant laquelle plus rien n'est
+            // écouté : ce sont les mots mangés en début de reprise.
+            //
+            // Ces deux réglages ne sont pas garantis — la documentation les
+            // donne pour indicatifs, et certains moteurs les ignorent ou les
+            // plafonnent. Leur effet réel se lira dans le nombre de relances
+            // par minute publié au diagnostic (voir restartsPerMinute).
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+                SILENCE_TOLERANCE_MS
+            )
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                SILENCE_TOLERANCE_MS
+            )
         }
         try {
+            // Le son de démarrage est joué par le service de reconnaissance au
+            // moment précis de cet appel : on coupe juste avant, on rétablit
+            // peu après (voir muteEarcons).
+            muteEarcons()
             instance.startListening(intent)
+            listening = true
+            noteRestart()
         } catch (e: Exception) {
             Log.w(TAG, "Démarrage de l'écoute Android impossible", e)
+            unmuteEarcons()
             scheduleRestart()
+        }
+    }
+
+    /**
+     * Coupe brièvement les flux multimédia et système autour du démarrage d'un
+     * énoncé, pour avaler le son que le service de reconnaissance joue à ce
+     * moment-là.
+     *
+     * Complément, et non remplacement, du volume d'alertes tenu bas hors appel
+     * (voir AlertVolume) : ce sont deux flux différents, et le diagnostic de
+     * terrain désignait les alertes. On agit ici sur les deux autres, au cas
+     * où l'appareil y jouerait aussi quelque chose.
+     *
+     * Deux limites à connaître. Cette fenêtre ne peut pas couvrir le son de
+     * FIN d'énoncé, qui survient bien plus tard et à un instant qu'on ne
+     * connaît pas. Et ces flux ne sont pas ceux de la sonnerie d'appel (flux
+     * alarme) ni de la conversation (flux appel), qui restent donc intacts.
+     */
+    private fun muteEarcons() {
+        handler.removeCallbacks(unmuteRunnable)
+        // Déjà coupé : on se contente de repousser le rétablissement. Android
+        // compte les coupures par client — deux ADJUST_MUTE de suite
+        // demanderaient deux ADJUST_UNMUTE, et le flux resterait muet.
+        if (earconsMuted) {
+            handler.postDelayed(unmuteRunnable, EARCON_MUTE_MS)
+            return
+        }
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        // Posé avant d'agir, et non après : si la coupure du second flux
+        // échoue, le premier doit quand même être rétabli. Un drapeau posé en
+        // fin de bloc laissait le son coupé pour de bon.
+        earconsMuted = true
+        try {
+            EARCON_STREAMS.forEach {
+                audioManager.adjustStreamVolume(it, AudioManager.ADJUST_MUTE, 0)
+            }
+        } catch (e: SecurityException) {
+            // Refus du système : on n'insiste pas, les sons resteront audibles.
+            Log.w(TAG, "Coupure des sons de démarrage refusée", e)
+        }
+        handler.postDelayed(unmuteRunnable, EARCON_MUTE_MS)
+    }
+
+    private fun unmuteEarcons() {
+        if (!earconsMuted) return
+        earconsMuted = false
+        handler.removeCallbacks(unmuteRunnable)
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        try {
+            EARCON_STREAMS.forEach {
+                audioManager.adjustStreamVolume(it, AudioManager.ADJUST_UNMUTE, 0)
+            }
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Rétablissement des sons refusé", e)
         }
     }
 
@@ -227,12 +380,14 @@ class AndroidSpeechSession(
         }
 
         override fun onResults(results: Bundle?) {
+            listening = false
             firstResult(results)?.let { onText(it, true) }
             // Fin d'énoncé, pas fin d'écoute : on relance aussitôt.
             scheduleRestart(immediate = true)
         }
 
         override fun onError(error: Int) {
+            listening = false
             when (error) {
                 // Silence ou phrase incomprise : le cas ordinaire d'une pièce
                 // vide. On relance sans compter ça comme un échec, sinon la
@@ -275,9 +430,13 @@ class AndroidSpeechSession(
      */
     private fun scheduleRestart(immediate: Boolean = false) {
         if (!wanted) return
+        // Une seule relance en vol à la fois. Voir restartPending : c'est le
+        // correctif de la couture qui mangeait des mots.
+        if (restartPending) return
+        restartPending = true
         val delay = if (immediate) RESTART_DELAY_MS
         else (RESTART_DELAY_MS shl consecutiveErrors.coerceAtMost(6)).coerceAtMost(MAX_RESTART_DELAY_MS)
-        handler.postDelayed({ listen() }, delay)
+        handler.postDelayed(restartRunnable, delay)
     }
 
     private companion object {
@@ -286,6 +445,36 @@ class AndroidSpeechSession(
         const val RESTART_DELAY_MS = 300L
         const val MAX_RESTART_DELAY_MS = 30_000L
         const val MAX_CONSECUTIVE_ERRORS = 8
+
+        /**
+         * Silence toléré avant que le moteur ne déclare l'énoncé terminé.
+         * Dix secondes : une pause de réflexion, une hésitation, un « voilà… »
+         * suivi d'une reprise ne doivent pas couper l'écoute, puisque chaque
+         * coupure coûte une relance et une couture pendant laquelle des mots
+         * se perdent.
+         *
+         * Contrepartie assumée : le texte définitif d'une phrase arrive
+         * d'autant plus tard. L'affichage n'attend pas pour autant — les
+         * résultats partiels continuent d'arriver et la zone les montre au fil
+         * de l'eau (voir RollingCaptionZone) — mais la clôture du segment, et
+         * donc le repère de silence qui la suit, se décalent.
+         */
+        const val SILENCE_TOLERANCE_MS = 10_000
+
+        /**
+         * Durée de la coupure autour du démarrage d'un énoncé. Assez pour
+         * avaler le son de démarrage, assez court pour ne pas retenir le son
+         * de la tablette de façon perceptible.
+         */
+        const val EARCON_MUTE_MS = 400L
+
+        /**
+         * Volontairement ni le flux d'alertes — traité ailleurs, et dont la
+         * mise à zéro ferait basculer la tablette en silencieux, ce qu'Android
+         * refuse sans autorisation « Ne pas déranger » — ni le flux alarme, qui
+         * porte la sonnerie d'appel, ni celui de la conversation.
+         */
+        val EARCON_STREAMS = intArrayOf(AudioManager.STREAM_MUSIC, AudioManager.STREAM_SYSTEM)
 
         /** Bornes du curseur de sensibilité, côté administration (voir index.html). */
         const val RMS_SCALE_MIN = 500f
