@@ -210,7 +210,6 @@ const els = {
   rebootDeviceButton: document.getElementById("rebootDeviceButton"),
   commandStatus: document.getElementById("commandStatus"),
   captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
-  captionDebugIndicator: document.getElementById("captionDebugIndicator"),
   // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
   jeanScreen: document.getElementById("jeanScreen"),
   jeanSlideshow: document.getElementById("jeanSlideshow"),
@@ -398,7 +397,6 @@ els.callButton.addEventListener("click", async () => {
   els.micToRoomBanner.classList.add("hidden");
   els.micToRoomStatus.textContent = "";
   els.captionOverflowIndicator.classList.add("hidden");
-  els.captionDebugIndicator.classList.add("hidden");
   // La réplique de l'écran de Jean repart vide : les textes du dernier appel
   // ne doivent pas réapparaître le temps que la tablette publie les siens.
   applyScreenState({ roomText: null, callText: null, lagSeconds: 0 });
@@ -482,9 +480,16 @@ els.tabletMicMuteToggle.addEventListener("change", () => {
 // étaient reçus dans le document d'appel puis jetés : une transcription muette
 // n'avait donc aucune explication nulle part. C'est ici qu'on apprend si le son
 // arrive, quel moteur a été retenu, et pourquoi il n'écrit rien.
+// Diagnostic de l'appel en cours : conservé ici, affiché dans le panneau
+// d'administration et non sur l'écran vidéo. Il arrive souvent alors que le
+// panneau est fermé — d'où la mémorisation, sans quoi l'information la plus
+// utile serait précisément celle qu'on aurait manquée en ne regardant pas au
+// bon moment.
+let lastCallDiagnostic = "";
+
 engine.onCaptionDebug((message) => {
-  els.captionDebugIndicator.textContent = `🛠️ ${message}`;
-  els.captionDebugIndicator.classList.remove("hidden");
+  lastCallDiagnostic = message;
+  renderTranscriptionDiagnostic();
 });
 
 engine.onScreenState(applyScreenState);
@@ -636,6 +641,24 @@ async function sha256Hex(text) {
   const bytes = new TextEncoder().encode(text);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Les deux sources de diagnostic dans un seul bloc, côté administration.
+ *
+ * L'une vient du signe de vie de la tablette — toutes les cinq minutes, valable
+ * hors appel — l'autre du document de l'appel en cours, immédiate mais
+ * limitée à sa durée. Les afficher au même endroit évite d'avoir à savoir
+ * laquelle regarder ; les distinguer évite de croire qu'un message d'il y a
+ * cinq minutes décrit l'appel en cours.
+ */
+let lastDeviceDiagnostic = "";
+
+function renderTranscriptionDiagnostic() {
+  const lines = [];
+  if (lastCallDiagnostic) lines.push(`🛠️ Appel en cours : ${lastCallDiagnostic}`);
+  if (lastDeviceDiagnostic) lines.push(`🛠️ Tablette : ${lastDeviceDiagnostic}`);
+  els.transcriptionDiagnostic.textContent = lines.join("\n");
 }
 
 function openAdmin() {
@@ -915,9 +938,8 @@ function applyDeviceSettings(data) {
   // d'un appel en cours : hors appel — c'est-à-dire quand on règle justement
   // le moteur de la pièce — il n'allait nulle part, et cet écran restait vide
   // sans que rien n'indique pourquoi.
-  els.transcriptionDiagnostic.textContent = data.transcriptionDiagnostic
-    ? `🛠️ ${data.transcriptionDiagnostic}`
-    : "";
+  lastDeviceDiagnostic = data.transcriptionDiagnostic || "";
+  renderTranscriptionDiagnostic();
 
   for (const [elementKey, field] of ENGINE_SELECT_FIELDS) {
     const select = els[elementKey];

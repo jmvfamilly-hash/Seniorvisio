@@ -156,7 +156,12 @@
              côté tablette (voir WebRtcCallEngine.attachTranscriptionSink),
              tant qu'elle n'est pas confirmée fiable en usage réel — seul
              moyen de savoir où ça bloque sans accès au journal système. -->
-        <p class="hint hidden" id="captionDebugIndicator"></p>
+        <!-- Le diagnostic de transcription a quitté cet écran pour le
+             panneau d'administration. Il tient parfois plusieurs lignes — le
+             premier message brut d'un service, un bilan de session — et
+             repoussait alors la vidéo hors de l'écran, au moment précis où
+             le proche regarde le visage de Jean. Un outil de mise au point
+             n'a pas à disputer sa place à ce qui fait l'objet de l'appel. -->
 
         <div class="pane-actions">
           <button id="openSettingsButton" class="secondary">⚙️ Réglages</button>

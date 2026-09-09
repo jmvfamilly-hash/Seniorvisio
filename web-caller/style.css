@@ -20,6 +20,16 @@ h1 { font-size: 28px; margin-bottom: 32px; }
 
 .state.hidden { display: none; }
 
+/* Le diagnostic arrive parfois en plusieurs lignes — message brut d'un
+   service, bilan de session — et porte des identifiants sans espaces qui
+   déborderaient sinon de la feuille. Il vit dans le panneau d'administration,
+   où la place ne dispute rien à personne. */
+#transcriptionDiagnostic {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
 button {
   font-size: 20px;
   padding: 16px 32px;
