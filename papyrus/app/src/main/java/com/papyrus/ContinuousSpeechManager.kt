@@ -168,6 +168,29 @@ class ContinuousSpeechManager(
     /** Lignes réellement figées pendant cette session. */
     private var sessionCommits = 0
 
+    // --- Mode segmenté, à l'essai -------------------------------------------
+    //
+    // EXTRA_SEGMENTED_SESSION (Android 13) demande au moteur de rendre ses
+    // résultats par segments PENDANT une session, via onSegmentResults — c'est
+    // exactement ce que le découpage par le contenu reconstruit à la main. S'il
+    // fonctionne, le moteur déclare lui-même ses frontières au lieu qu'on les
+    // devine.
+    //
+    // Mis à l'essai UNE SESSION SUR DEUX plutôt qu'activé d'emblée. Les deux
+    // modes se retrouvent ainsi dans la même trace, sur la même voix et dans la
+    // même pièce, à quelques secondes d'intervalle : c'est la seule comparaison
+    // qui vaille, et c'est celle qu'on s'est imposée pour les moteurs de
+    // transcription comme pour ceux de locuteur.
+    //
+    // Deux raisons de ne rien retirer en attendant. La documentation prévient
+    // que « selon l'implémentation, cette valeur peut n'avoir aucun effet » —
+    // un extra ignoré ne produit aucune erreur, et le silence ressemblerait à
+    // un succès. Et déléguer les frontières revient à s'en remettre au
+    // détecteur de voix du moteur, que la trace montre clignotant toutes les
+    // six dixièmes de seconde : il pourrait découper bien plus mal que nous.
+    private var segmentedRequested = false
+    private var sessionSegments = 0
+
     /**
      * Le bilan a-t-il déjà été émis pour cette session ?
      *
@@ -226,6 +249,15 @@ class ContinuousSpeechManager(
     }
 
     private fun beginListening() {
+        // Une session sur deux en mode segmenté, pour que la trace contienne
+        // les deux comportements côte à côte. Décidé avant la construction de
+        // l'intention, jamais après : le mode doit figurer dans la ligne de
+        // démarrage, faute de quoi on ne saurait pas à quel régime rattacher ce
+        // qui suit.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            segmentedRequested = !segmentedRequested
+        }
+
         // Sorties silencieuses tracées : sans ça, une écoute qui ne redémarre
         // jamais ne laisse aucune trace du tout — ni erreur, ni session. C'est
         // le mode de panne le plus difficile à diagnostiquer, parce que le
@@ -254,6 +286,33 @@ class ContinuousSpeechManager(
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+
+            if (segmentedRequested) {
+                // La valeur de cet extra est le NOM d'un autre extra, qui
+                // définit la fin de la session. Trois sont admis ; deux ne
+                // conviennent pas ici — l'un suppose un fichier audio, l'autre
+                // s'en remet à la détection de silence que la trace a montrée
+                // défaillante. Reste la durée, qui est prévisible.
+                //
+                // Ironie mesurée : c'est l'extra même qui avait gelé le texte
+                // pendant soixante secondes. Mal employé il imposait une durée
+                // minimale sans rien rendre en chemin ; ici il borne une
+                // session dont les segments tombent au fil de l'eau.
+                //
+                // Volontairement plus court que la clôture forcée, pour que les
+                // deux ne se disputent pas la fin de session — et si le mode
+                // segmenté est ignoré, la dégradation est bornée : une session
+                // de quinze secondes, que le découpage par le contenu alimente
+                // de toute façon.
+                putExtra(
+                    RecognizerIntent.EXTRA_SEGMENTED_SESSION,
+                    RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
+                )
+                putExtra(
+                    RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
+                    SEGMENTED_SESSION_MS,
+                )
+            }
             // Consignes de durée de silence. Le moteur les traite comme des
             // souhaits et non comme des ordres — la documentation le dit, et
             // les appareils le confirment. Elles sont posées quand même : là
@@ -276,14 +335,17 @@ class ContinuousSpeechManager(
             // la session précédente est le temps mort qu'on cherche à mesurer.
             SpeechTrace.record(
                 "APP → startListening",
-                "session n°$sessionCount — silence ${SILENCE_COMPLETE_MS}/${SILENCE_POSSIBLY_COMPLETE_MS} ms, " +
-                    "hors-ligne demandé, aucune durée minimale imposée",
+                "session n°$sessionCount — " +
+                    (if (segmentedRequested) "MODE SEGMENTÉ demandé (${SEGMENTED_SESSION_MS} ms) — "
+                    else "mode classique — ") +
+                    "silence ${SILENCE_COMPLETE_MS}/${SILENCE_POSSIBLY_COMPLETE_MS} ms, hors-ligne demandé",
             )
             firstPartialLogged = false
             peakRmsSinceLog = -120f
             sessionStartedAtMs = android.os.SystemClock.elapsedRealtime()
             sessionPartials = 0
             sessionCommits = 0
+            sessionSegments = 0
             sessionMaxRms = -120f
             sessionSummarised = false
             handler.removeCallbacks(sessionCap)
@@ -536,6 +598,37 @@ class ContinuousSpeechManager(
         // Le moteur signale la fin de la parole avant de rendre son résultat.
         // Rien à faire ici : onResults ou onError suit immédiatement, et agir
         // aux deux endroits relancerait deux sessions concurrentes.
+        /**
+         * Un segment est prêt : le moteur déclare lui-même une frontière
+         * d'énoncé, ce que le reste de cette classe passe son temps à deviner.
+         *
+         * Rappel ajouté en Android 13, doté d'une implémentation vide par
+         * défaut : le redéfinir ne coûte rien sur les versions antérieures, où
+         * il ne sera simplement jamais appelé.
+         */
+        override fun onSegmentResults(segmentResults: Bundle) {
+            sessionSegments++
+            SpeechTrace.recordResults("API onSegmentResults", segmentResults)
+            val text = firstResult(segmentResults) ?: lastPartial
+            if (text.isNotBlank()) {
+                SpeechTrace.record("APP segment", "frontière déclarée par le moteur")
+                commit(text)
+            }
+        }
+
+        /**
+         * Fin d'une session segmentée. Prend la place d'onResults dans ce mode,
+         * sans qu'on sache si les deux se déclenchent ou non — d'où le passage
+         * par les mêmes gardes que partout ailleurs, qui tolèrent les deux.
+         */
+        override fun onEndOfSegmentedSession() {
+            listening = false
+            SpeechTrace.record("API onEndOfSegmentedSession", "$sessionSegments segment(s) reçu(s)")
+            commit(lastPartial)
+            endSession("fin de session segmentée, $sessionSegments segment(s)")
+            scheduleRestart(0L)
+        }
+
         override fun onEndOfSpeech() {
             SpeechTrace.record("API onEndOfSpeech", "fin de parole détectée")
             // Ne fige rien par lui-même : la trace montre qu'il se déclenche
@@ -595,8 +688,9 @@ class ContinuousSpeechManager(
             "APP bilan session n°$sessionCount",
             String.format(
                 java.util.Locale.FRANCE,
-                "%.1f s, %d partiels, %d ligne(s) figée(s), pic %.1f dB — fin : %s",
-                duration, sessionPartials, sessionCommits, sessionMaxRms, outcome,
+                "%s — %.1f s, %d partiels, %d segment(s), %d ligne(s) figée(s), pic %.1f dB — fin : %s",
+                if (segmentedRequested) "SEGMENTÉ" else "classique",
+                duration, sessionPartials, sessionSegments, sessionCommits, sessionMaxRms, outcome,
             ),
         )
     }
@@ -728,5 +822,12 @@ class ContinuousSpeechManager(
          * intermédiaires, mesuré à un toutes les six dixièmes de seconde.
          */
         const val IDLE_COMMIT_MS = 2_000L
+
+        /**
+         * Durée d'une session en mode segmenté. Quinze secondes, soit moins que
+         * la clôture forcée : les deux mécanismes ne doivent pas se disputer la
+         * fin de session, et le moteur doit disposer de sa propre marge.
+         */
+        const val SEGMENTED_SESSION_MS = 15_000
     }
 }
