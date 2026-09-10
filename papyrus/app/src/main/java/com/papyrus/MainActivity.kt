@@ -35,12 +35,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -135,9 +132,35 @@ private fun PapyrusScreen() {
         }
     }
 
-    /** Les énoncés clos, un par session du moteur. */
+    /**
+     * Les énoncés FIGÉS, et eux seuls. C'est tout ce que l'écran montre.
+     *
+     * ═══ Pourquoi la version en cours de dictée a disparu de l'écran ═══
+     *
+     * Elle était affichée en encre claire, et elle bougeait sans arrêt : la
+     * trace compte deux cent quatre-vingt-trois révisions en cent trente-cinq
+     * secondes, soit deux par seconde. Le moteur ne construit pas sa phrase
+     * mot après mot comme on l'écrirait ; il rend une hypothèse entière,
+     * l'allonge, la raccourcit, la réécrit. À l'écran, cela donne un texte qui
+     * frétille — illisible pendant qu'il bouge, et surtout impossible à lire
+     * en diagonale, puisque ce qu'on vient de lire peut avoir changé.
+     *
+     * N'afficher que le figé rend l'écran immobile entre deux lignes. Le texte
+     * n'apparaît qu'une fois, et il ne bouge plus jamais.
+     *
+     * LE PRIX EST UN DÉLAI, et il est réel : une phrase ne s'inscrit qu'au
+     * moment où elle est figée — sur rupture de contenu, ou après deux
+     * secondes sans évolution. Deux à six secondes en pratique, d'après les
+     * intervalles entre lignes de la trace. Pendant ce temps l'écran ne montre
+     * rien de la phrase en cours, alors qu'il en montrait une ébauche avant.
+     * C'est l'échange demandé : de la stabilité contre de l'immédiateté.
+     *
+     * Et un bénéfice moins visible : l'écran ne se recompose plus que
+     * vingt-quatre fois au lieu de deux cent quatre-vingt-trois. Le défilement
+     * automatique, qui était relancé à chaque révision et donc constamment
+     * interrompu en cours d'animation, ne l'est plus qu'à chaque ligne.
+     */
     val segments = remember { mutableStateListOf<String>() }
-    var partial by remember { mutableStateOf("") }
     var diagnostic by remember { mutableStateOf("") }
 
     DisposableEffect(granted) {
@@ -146,16 +169,19 @@ private fun PapyrusScreen() {
         val manager = ContinuousSpeechManager(
             context = context,
             onPartial = {
-                // Remplacement, jamais ajout — et c'est désormais écrit dans la
-                // trace plutôt qu'à déduire du code. La relation entre l'ancien
-                // et le nouveau texte est notée en amont (voir « tampon
-                // partiel ») ; ici on note ce que l'écran affiche réellement.
-                partial = it
-                SpeechTrace.record("ÉCRAN partiel affiché", "${it.length} car.")
+                // REÇU MAIS PAS AFFICHÉ. Les révisions restent journalisées —
+                // elles sont l'objet même de ce banc d'essai, et le découpage
+                // par le contenu se juge sur elles — mais elles ne touchent
+                // plus aucun état de composition, donc plus l'écran.
+                //
+                // La distinction est notée dans le libellé plutôt que laissée
+                // à deviner : une trace qui dirait encore « partiel affiché »
+                // mentirait sur ce que l'écran a montré, et c'est précisément
+                // la question à laquelle ce journal doit répondre.
+                SpeechTrace.record("APP partiel reçu (non affiché)", "${it.length} car.")
             },
             onFinal = { text ->
                 segments.add(text)
-                partial = ""
                 // Le tampon ne grandit pas sans fin : une observation peut
                 // durer des heures, et rien ne sert de garder ce qui est sorti
                 // de l'écran depuis longtemps.
@@ -185,7 +211,7 @@ private fun PapyrusScreen() {
     }
 
     val scroll = rememberScrollState()
-    val text = renderTranscript(segments.toList(), partial)
+    val text = renderTranscript(segments.toList())
 
     // Du texte ACQUIS peut-il disparaître de l'écran ? C'est la seule forme de
     // perte qui compte : la ligne en cours, elle, est faite pour être remplacée.
@@ -319,28 +345,17 @@ private fun PapyrusScreen() {
  * manquer — et c'est tout l'objet de ce banc d'essai que de rendre ces endroits
  * repérables à l'œil.
  *
- * L'énoncé en cours de dictée occupe sa propre ligne, en encre plus claire : il
- * est encore susceptible d'être révisé par le moteur, et le distinguer évite de
- * prendre une hésitation de machine pour une hésitation de la personne.
+ * L'énoncé en cours de dictée n'y figure plus. Il occupait une ligne en encre
+ * claire et se révisait deux fois par seconde ; l'écran ne montre désormais que
+ * ce qui ne bougera plus. Voir le commentaire sur `segments` pour ce que cela
+ * coûte et ce que cela rapporte.
  */
 @Composable
-private fun renderTranscript(segments: List<String>, partial: String): AnnotatedString =
+private fun renderTranscript(segments: List<String>): AnnotatedString =
     buildAnnotatedString {
         segments.forEachIndexed { index, segment ->
             if (index > 0) append('\n')
             append(segment)
-        }
-        if (partial.isNotEmpty()) {
-            if (segments.isNotEmpty()) append('\n')
-            // Reconnaissable SEULE, et pas seulement par contraste avec le
-            // texte acquis : tant que rien n'est figé au-dessus, une simple
-            // nuance de gris n'est comparable à rien et ne se perçoit pas.
-            // D'où trois marques cumulées — un signe en tête, l'italique, et
-            // une encre plus claire — dont chacune suffirait.
-            withStyle(SpanStyle(color = PendingInk, fontStyle = FontStyle.Italic)) {
-                append(PENDING_MARK)
-                append(partial)
-            }
         }
     }
 
@@ -355,16 +370,10 @@ private val ParchmentEdge = Color(0x146B5A3E)
 
 private val Ink = Color(0xFF3A2C1C)
 
-/**
- * L'énoncé en cours, encore révisable par le moteur. Nettement plus clair qu'au
- * premier essai : à 60 % d'opacité la différence ne se voyait pas, surtout
- * quand cette ligne était seule à l'écran.
- */
-private val PendingInk = Color(0x6B3A2C1C)
-
-/** En tête de la ligne en cours. Une plume qui écrit encore. */
-private const val PENDING_MARK = "✎ "
-
+// L'encre claire et la marque de plume de l'énoncé en cours ont été retirées
+// avec lui. Elles ne sont pas conservées « au cas où » : une constante que
+// personne n'utilise est du code mort, et l'historique du dépôt les rendra
+// bien mieux que ce fichier si l'affichage des révisions revient un jour.
 
 private val FadedInk = Color(0x553A2C1C)
 
