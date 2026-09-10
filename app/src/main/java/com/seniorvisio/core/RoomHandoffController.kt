@@ -60,8 +60,15 @@ class RoomHandoffController(
     /** Quand on est revenu pour la dernière fois, pour ne pas repartir aussitôt. */
     private var lastReturnAtMs = 0L
 
-    /** Dernière raison d'agir ou de ne pas agir, publiée au diagnostic. */
-    @Volatile var lastDecision: String = "inactif"
+    /**
+     * Dernière raison d'agir ou de ne pas agir, publiée au diagnostic.
+     *
+     * Sa valeur de départ dit ce qu'elle est réellement — armé, mais rien
+     * entendu encore. Elle valait « inactif », ce qui se confondait mot pour
+     * mot avec l'option coupée : deux situations opposées, à corriger de deux
+     * façons différentes, et rigoureusement indiscernables à la lecture.
+     */
+    @Volatile var lastDecision: String = "armée, aucune voix entendue depuis le démarrage"
         private set
 
     private var handoffCount = 0
@@ -122,7 +129,7 @@ class RoomHandoffController(
      * causes se corrigent différemment.
      */
     private fun refuseReason(): String? {
-        if (!adminConfig.roomHandoffEnabled) return "inactif"
+        if (!adminConfig.roomHandoffEnabled) return "désactivée"
         if (!CompanionApps.isTranscriptionInstalled(context)) {
             return "Transcription instantanée absente de cette tablette"
         }
@@ -142,6 +149,25 @@ class RoomHandoffController(
             return "retour récent, pause de ${(RETURN_COOLDOWN_MS - sinceReturn) / 1000}s"
         }
         return null
+    }
+
+    /**
+     * Bascule immédiatement, sans consulter aucune condition. Rend le message
+     * d'échec, ou null si c'est parti.
+     *
+     * Réservé au bouton de test de l'écran d'administration. Il sépare deux
+     * questions que le comportement normal mêle : « la bascule fonctionne-t-elle
+     * sur cette tablette » et « le déclencheur part-il ». Sans ce partage, un
+     * mode qui ne bascule pas a six causes possibles et rien pour les
+     * départager.
+     */
+    fun forceHandOff(): String? {
+        if (active) return "déjà basculé"
+        if (!CompanionApps.isTranscriptionInstalled(context)) {
+            return "Transcription instantanée introuvable sur cette tablette"
+        }
+        handOff()
+        return if (active) null else lastDecision
     }
 
     private fun handOff() {
@@ -259,6 +285,13 @@ class RoomHandoffController(
         when {
             !adminConfig.roomHandoffEnabled -> {
                 append("désactivée")
+                return@buildString
+            }
+            // Vérifié tout de suite, et non à la première voix : une
+            // application absente est un blocage permanent, et attendre une
+            // voix pour le dire laisse croire que le déclencheur ne part pas.
+            !CompanionApps.isTranscriptionInstalled(context) -> {
+                append("Transcription instantanée introuvable sur cette tablette")
                 return@buildString
             }
             active -> append(

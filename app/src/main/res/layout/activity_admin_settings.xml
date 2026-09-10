@@ -452,5 +452,15 @@
         android:layout_marginTop="8dp"
         android:text="Autoriser le bandeau de retour" />
 
+    <!-- Sépare « la bascule fonctionne-t-elle sur cette tablette » de « le
+         déclencheur part-il ». Sans ce partage, un mode qui ne bascule pas a
+         six causes possibles et rien pour les départager. -->
+    <Button
+        android:id="@+id/buttonTestHandoff"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Tester la bascule maintenant" />
+
 </LinearLayout>
 </ScrollView>

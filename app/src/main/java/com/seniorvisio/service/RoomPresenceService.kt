@@ -774,9 +774,22 @@ class RoomPresenceService : Service() {
     /** Ce que fait la bascule, en une phrase, pour l'écran admin et le signe de vie. */
     fun describeHandoff(): String = when {
         !adminConfig.roomHandoffEnabled -> "désactivée"
+        // Capture arrêtée : le déclencheur n'est jamais consulté. C'est le cas
+        // du moteur d'Android, qui tient le micro lui-même — la bascule est
+        // alors structurellement impossible, et le dire vaut mieux que de
+        // laisser chercher.
+        adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID ->
+            "impossible : la reconnaissance Android tient le micro, aucun son à analyser"
+        !isCapturing && !micYieldedToCompanion -> "capture micro arrêtée, rien à analyser"
         handoffUnavailableReason != null -> handoffUnavailableReason!!
         else -> ensureHandoff().describe()
     }
+
+    /**
+     * Bascule sur commande, sans condition, depuis l'écran d'administration.
+     * Rend le message d'échec, ou null si c'est parti.
+     */
+    fun testHandoff(): String? = ensureHandoff().forceHandOff()
 
     /**
      * Construit le portier, ou le reconstruit si le moteur, la signature ou le

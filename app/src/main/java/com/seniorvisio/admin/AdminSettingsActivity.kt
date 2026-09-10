@@ -347,6 +347,18 @@ class AdminSettingsActivity : AppCompatActivity() {
             }
         }
 
+        findViewById<Button>(R.id.buttonTestHandoff).setOnClickListener {
+            val service = roomService
+            if (service == null) {
+                Toast.makeText(this, "Service d'écoute non joignable", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val failure = service.testHandoff()
+            if (failure != null) {
+                Toast.makeText(this, "Bascule impossible : $failure", Toast.LENGTH_LONG).show()
+            }
+        }
+
         findViewById<Button>(R.id.buttonForgetJeanVoice).setOnClickListener {
             roomService?.forgetVoiceSignature()
             Toast.makeText(this, "Voix oubliée : tout s'affiche de nouveau en clair", Toast.LENGTH_SHORT).show()
