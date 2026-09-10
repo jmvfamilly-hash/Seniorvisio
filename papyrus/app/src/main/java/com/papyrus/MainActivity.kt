@@ -11,9 +11,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -49,13 +51,20 @@ import androidx.core.view.WindowInsetsControllerCompat
 /**
  * Banc d'essai de l'écoute continue, indépendant de Senior Visio.
  *
- * Un fond, un texte, un défilement. Rien à toucher : ni bouton, ni barre, ni
- * réglage. L'écoute démarre seule et ne s'arrête qu'avec l'écran.
+ * Un fond, un texte, un défilement. L'écoute démarre seule et ne s'arrête
+ * qu'avec l'écran.
  *
  * Ce dépouillement n'est pas de l'esthétique : il s'agit d'observer un seul
  * phénomène — les coupures de la reconnaissance continue (voir
  * ContinuousSpeechManager) — et tout élément d'interface supplémentaire serait
  * une variable de plus dans une mesure qui en compte déjà trop.
+ *
+ * UNE SEULE EXCEPTION, en bas d'écran : le délai de figeage. Il déroge à la
+ * règle pour une raison qui la respecte — c'est le seul réglage dont la bonne
+ * valeur ne se déduit d'aucune mesure. Combien de temps attendre avant
+ * d'inscrire une phrase relève du confort de lecture, et le confort de lecture
+ * ne se juge qu'en parlant, la main sur le bouton. Le mettre à l'écran, c'est
+ * pouvoir le trancher en une minute au lieu d'une série de compilations.
  */
 class MainActivity : ComponentActivity() {
 
@@ -163,10 +172,17 @@ private fun PapyrusScreen() {
     val segments = remember { mutableStateListOf<String>() }
     var diagnostic by remember { mutableStateOf("") }
 
+    // Le gestionnaire est retenu ici parce que le réglage du bas doit pouvoir
+    // l'atteindre. Nul par construction tant que le microphone n'est pas
+    // accordé : sans écoute, il n'y a rien à régler, et le bas de l'écran le
+    // montre en n'affichant pas la ligne.
+    var manager by remember { mutableStateOf<ContinuousSpeechManager?>(null) }
+    var idleCommitMs by remember { mutableStateOf(0L) }
+
     DisposableEffect(granted) {
         if (!granted) return@DisposableEffect onDispose { }
         SpeechTrace.record("ÉCRAN écoute", "démarrage du gestionnaire")
-        val manager = ContinuousSpeechManager(
+        val speech = ContinuousSpeechManager(
             context = context,
             onPartial = {
                 // REÇU MAIS PAS AFFICHÉ. Les révisions restent journalisées —
@@ -203,10 +219,13 @@ private fun PapyrusScreen() {
                 SpeechTrace.record("ÉCRAN diagnostic", it)
             },
         )
-        manager.start()
+        speech.start()
+        manager = speech
+        idleCommitMs = speech.idleCommitMs
         onDispose {
             SpeechTrace.record("ÉCRAN écoute", "arrêt du gestionnaire")
-            manager.stop()
+            speech.stop()
+            manager = null
         }
     }
 
@@ -306,18 +325,47 @@ private fun PapyrusScreen() {
             )
         }
 
-        // Une seule ligne de service, en bas et très effacée : elle dit quel
-        // moteur travaille et ce qui l'empêche. Sans elle, un modèle de langue
-        // absent produit un écran vide — indiscernable d'un micro muet ou d'une
-        // permission refusée.
-        if (diagnostic.isNotEmpty()) {
-            BasicText(
-                text = diagnostic,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(horizontal = 40.dp, vertical = 12.dp),
-                style = TextStyle(color = FadedInk, fontSize = 13.sp),
-            )
+        // La ligne de service, en bas et très effacée : le réglage du délai de
+        // figeage, puis ce qui empêche le moteur de travailler. Sans ce second
+        // message, un modèle de langue absent produit un écran vide,
+        // indiscernable d'un micro muet ou d'une permission refusée.
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(horizontal = 40.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            manager?.let { speech ->
+                // Les deux boutons sont volontairement plus grands que leur
+                // texte : à cette taille de caractère, une zone tactile
+                // ajustée au glyphe se rate une fois sur deux, et le geste
+                // doit rester possible sans regarder — puisqu'on est en train
+                // de parler pour juger de l'effet.
+                BasicText(
+                    text = "−",
+                    modifier = Modifier
+                        .clickable { idleCommitMs = speech.adjustIdleCommit(-speech.idleCommitStepMs) }
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    style = TextStyle(color = FadedInk, fontSize = 20.sp),
+                )
+                BasicText(
+                    text = "figeage ${idleCommitMs} ms",
+                    style = TextStyle(color = FadedInk, fontSize = 13.sp),
+                )
+                BasicText(
+                    text = "+",
+                    modifier = Modifier
+                        .clickable { idleCommitMs = speech.adjustIdleCommit(speech.idleCommitStepMs) }
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    style = TextStyle(color = FadedInk, fontSize = 20.sp),
+                )
+            }
+            if (diagnostic.isNotEmpty()) {
+                BasicText(
+                    text = if (manager != null) "  ·  $diagnostic" else diagnostic,
+                    style = TextStyle(color = FadedInk, fontSize = 13.sp),
+                )
+            }
         }
 
         // Le seul mode d'emploi de l'application, et il tient en une ligne.

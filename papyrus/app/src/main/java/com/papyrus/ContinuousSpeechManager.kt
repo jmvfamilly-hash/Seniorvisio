@@ -82,6 +82,71 @@ class ContinuousSpeechManager(
         private set
 
     /**
+     * Délai sans évolution au terme duquel la ligne en cours est figée.
+     *
+     * Réglable depuis l'écran, et c'est tout l'objet de la manœuvre : deux
+     * secondes rendaient l'affichage stable mais l'attente trop longue, et
+     * personne ne peut dire au jugé ce qui est confortable. Le curseur est donc
+     * sous la main pendant qu'on parle.
+     *
+     * ═══ Ce que le réglage rencontre ═══
+     *
+     * Les résultats du moteur n'arrivent pas régulièrement mais PAR RAFALES :
+     * dans la trace mesurée, 57 % des écarts entre deux résultats sont
+     * inférieurs à 50 ms, puis vient un trou d'environ 630 ms. Autrement dit
+     * 42 % des écarts dépassent 300 ms.
+     *
+     * Un délai court fige donc une ligne après presque chaque rafale, ce qui
+     * est exactement l'effet recherché — un affichage qui suit la parole — mais
+     * n'a de sens qu'accompagné du retranchement décrit sous
+     * [committedPrefix]. Sans lui, le moteur continuant d'allonger la MÊME
+     * hypothèse, l'écran afficherait « il y a des » puis « il y a des
+     * problème » : le même texte deux fois.
+     */
+    @Volatile var idleCommitMs = DEFAULT_IDLE_COMMIT_MS
+        private set
+
+    /**
+     * Modifie le délai d'un cran et rend la valeur retenue.
+     *
+     * Le bornage vit ici et non dans l'écran : c'est cette classe qui sait ce
+     * qu'un délai de dix millisecondes ferait à sa minuterie, et un écran qui
+     * calculerait lui-même les bornes finirait tôt ou tard par diverger de ce
+     * que le gestionnaire accepte.
+     *
+     * Sans effet sur la minuterie DÉJÀ armée : le prochain résultat du moteur
+     * la réarmera à la nouvelle valeur, et il arrive dans la demi-seconde. Le
+     * réglage se juge donc en parlant, ce qui est bien l'intention.
+     */
+    fun adjustIdleCommit(deltaMs: Long): Long {
+        idleCommitMs = (idleCommitMs + deltaMs)
+            .coerceIn(MIN_IDLE_COMMIT_MS, MAX_IDLE_COMMIT_MS)
+        SpeechTrace.record("ÉCRAN délai de figeage", "réglé à ${idleCommitMs} ms")
+        return idleCommitMs
+    }
+
+    /** Un cran de réglage, pour l'écran qui n'a pas à connaître le pas. */
+    val idleCommitStepMs: Long get() = IDLE_COMMIT_STEP_MS
+
+    /**
+     * La part de l'hypothèse EN COURS du moteur déjà figée à l'écran.
+     *
+     * Un figeage par inactivité ne met pas fin à l'énoncé du moteur : celui-ci
+     * poursuit la même hypothèse et la rend en entier à chaque fois, début
+     * compris. Ce champ retient ce début pour le retrancher de la suite, de
+     * sorte qu'une ligne figée ne réapparaisse pas à l'intérieur de la
+     * suivante.
+     *
+     * C'est ce qui fait la différence entre un délai court utilisable et un
+     * délai court qui bégaie. Vidé dès que le moteur change d'énoncé, puisque
+     * la nouvelle hypothèse ne contient alors plus rien de ce qui a été figé.
+     */
+    private var committedPrefix = ""
+
+    /** La dernière hypothèse ENTIÈRE du moteur, retranchement non appliqué. */
+    private var lastRawHypothesis = ""
+
+    /**
      * Le dernier texte partiel de la session en cours.
      *
      * Conservé parce qu'une session ne rend pas toujours de résultat final :
@@ -121,8 +186,14 @@ class ContinuousSpeechManager(
      */
     private val idleCommit = Runnable {
         if (lastPartial.isEmpty()) return@Runnable
-        SpeechTrace.record("APP inactivité", "texte figé faute d'évolution")
+        SpeechTrace.record("APP inactivité", "texte figé après ${idleCommitMs} ms sans évolution")
         commit(lastPartial)
+        // L'énoncé du moteur, lui, n'est pas terminé : il rendra la même
+        // hypothèse allongée, début compris. Ce début vient d'être figé, on le
+        // retranche donc de tout ce qui suivra — sans quoi il se réafficherait
+        // à l'intérieur de la ligne suivante.
+        committedPrefix = lastRawHypothesis
+        SpeechTrace.record("APP retranchement", "${committedPrefix.length} car. déjà acquis de cet énoncé")
     }
 
     private val restart = Runnable {
@@ -330,6 +401,8 @@ class ContinuousSpeechManager(
             sessionStartedAtMs = android.os.SystemClock.elapsedRealtime()
             sessionPartials = 0
             sessionCommits = 0
+            committedPrefix = ""
+            lastRawHypothesis = ""
             sessionFirstTextMs = -1L
             sessionMaxRms = -120f
             sessionSummarised = false
@@ -414,7 +487,7 @@ class ContinuousSpeechManager(
             firstResult(partialResults)?.let {
                 sessionPartials++
                 handler.removeCallbacks(idleCommit)
-                handler.postDelayed(idleCommit, IDLE_COMMIT_MS)
+                handler.postDelayed(idleCommit, idleCommitMs)
                 // La question posée par le diagnostic — le tampon est-il
                 // prolongé au lieu d'être remplacé ? — se règle par une mesure
                 // plutôt que par une lecture du code. Ce qui est noté ici est
@@ -426,7 +499,40 @@ class ContinuousSpeechManager(
                 // espace en tête — était classé comme une réécriture, ce qui
                 // aurait fait couper la phrase en deux.
                 val previous = lastPartial.trim()
-                val current = it.trim()
+
+                // ═══ Retranchement de ce qui est déjà acquis ═══
+                //
+                // Le moteur rend son hypothèse ENTIÈRE à chaque fois. Après un
+                // figeage par inactivité, il n'a pas pour autant terminé son
+                // énoncé : il reprend au début et allonge. Sans retrancher ce
+                // début, l'écran montrerait « il y a des » puis, en dessous,
+                // « il y a des problème ».
+                //
+                // Le retranchement ne s'applique que si l'hypothèse commence
+                // toujours par ce qui a été figé. Si le moteur a réécrit son
+                // début, elle ne le contient plus, et la conserver ferait
+                // perdre du texte : on repart alors de l'hypothèse entière,
+                // quitte à répéter — répéter se voit et se corrige, perdre
+                // ne se voit pas.
+                val raw = it.trim()
+                lastRawHypothesis = raw
+                val current = when {
+                    committedPrefix.isEmpty() -> raw
+                    raw.startsWith(committedPrefix) -> raw.removePrefix(committedPrefix).trim()
+                    else -> {
+                        SpeechTrace.record(
+                            "APP retranchement abandonné",
+                            "le moteur a réécrit le début déjà figé — hypothèse reprise entière",
+                        )
+                        committedPrefix = ""
+                        raw
+                    }
+                }
+
+                // Le moteur redit exactement ce qui vient d'être figé, sans
+                // rien y ajouter. Rien à afficher, et surtout pas une ligne
+                // vide : on attend la suite.
+                if (current.isEmpty()) return@let
 
                 // Écho d'une ligne qu'on vient de figer. Le moteur répète
                 // volontiers le même texte — la trace en montre plusieurs
@@ -693,6 +799,10 @@ class ContinuousSpeechManager(
     private fun commit(text: String) {
         handler.removeCallbacks(idleCommit)
         endOfSpeechSeen = false
+        // Par défaut un figeage clôt l'énoncé : plus rien à retrancher. Le
+        // figeage par inactivité est la seule exception, et il repose le
+        // retranchement lui-même juste après cet appel.
+        committedPrefix = ""
         val hadPartial = lastPartial
         lastPartial = ""
         val trimmed = text.trim()
@@ -849,17 +959,31 @@ class ContinuousSpeechManager(
         const val RMS_SAMPLE_MS = 250L
 
         /**
-         * Sans évolution du texte pendant ce délai, on le fige.
+         * Valeur de départ du délai de figeage, réglable ensuite depuis
+         * l'écran (voir [idleCommitMs]).
          *
-         * Nécessaire parce que le dernier énoncé avant un vrai silence n'est
-         * remplacé par rien : sans cette minuterie il resterait indéfiniment en
-         * italique, ni acquis ni effacé — et la session, qui ne se termine pas
+         * Ce délai existe parce que le dernier énoncé avant un vrai silence
+         * n'est remplacé par rien : sans lui il resterait indéfiniment en
+         * attente, ni acquis ni effacé — et la session, qui ne se termine pas
          * d'elle-même sur cet appareil, ne viendrait pas le sauver.
          *
-         * Deux secondes : au-delà du rythme normal des résultats
-         * intermédiaires, mesuré à un toutes les six dixièmes de seconde.
+         * Trois cents millisecondes, contre deux secondes auparavant. Le
+         * choix vient de l'usage et non de la mesure : deux secondes rendaient
+         * l'écran stable mais l'attente sensible, une phrase restant invisible
+         * le temps qu'on en dise une autre.
+         *
+         * La mesure, elle, dit ce que ce seuil rencontre : les résultats
+         * arrivent par rafales séparées d'environ 630 ms, et 42 % des écarts
+         * dépassent déjà 300 ms. Une ligne sera donc figée après presque
+         * chaque rafale. C'est voulu — mais cela n'aurait produit que des
+         * répétitions sans le retranchement mis en place avec ce réglage.
          */
-        const val IDLE_COMMIT_MS = 2_000L
+        const val DEFAULT_IDLE_COMMIT_MS = 300L
+
+        /** Bornes du réglage à l'écran, et pas de sa course. */
+        const val MIN_IDLE_COMMIT_MS = 100L
+        const val MAX_IDLE_COMMIT_MS = 3_000L
+        const val IDLE_COMMIT_STEP_MS = 100L
 
     }
 }
