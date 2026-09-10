@@ -250,6 +250,14 @@ video {
   opacity: 0.75;
 }
 
+/* Les paroles de Jean lui-même, en retrait comme sur sa tablette (voir
+   JEAN_TEXT_ALPHA dans RollingCaptionZone). Il sait ce qu'il vient de dire ;
+   la place appartient à ce qu'il a besoin de lire. Atténué par l'opacité et
+   non par la taille, pour que ça reste déchiffrable s'il le cherche. */
+.jean-caption-text .jean-own-speech {
+  opacity: 0.45;
+}
+
 #mirrorHint {
   margin-top: 8px;
   margin-bottom: 12px;

@@ -370,5 +370,45 @@
         android:layout_marginTop="24dp"
         android:text="Labo de comparaison des moteurs" />
 
+    <!-- Apprentissage de la voix de Jean, pour atténuer ses propres paroles
+         dans la transcription de la pièce (voir RoomSpeakerGate). Sur la
+         tablette et non dans le PWA : il faut être dans la pièce avec lui pour
+         le faire parler. -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:textStyle="bold"
+        android:text="Voix de Jean" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textSize="13sp"
+        android:text="Ses propres paroles s'affichent en retrait, pour laisser la place à celles qu'il a besoin de lire. Faites-le parler normalement pendant vingt secondes, sans que personne d'autre ne parle." />
+
+    <TextView
+        android:id="@+id/textVoiceEnrollmentState"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="13sp"
+        android:text="" />
+
+    <Button
+        android:id="@+id/buttonLearnJeanVoice"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Apprendre la voix de Jean (20 s)" />
+
+    <Button
+        android:id="@+id/buttonForgetJeanVoice"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Oublier la voix enregistrée" />
+
 </LinearLayout>
 </ScrollView>

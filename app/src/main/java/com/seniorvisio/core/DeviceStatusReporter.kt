@@ -159,6 +159,16 @@ class DeviceStatusReporter(private val context: Context) {
             // sans que rien ne le désigne — et on chercherait la panne du
             // mauvais côté.
             status.voiceSharePercent?.let { append(" — voix ").append(it).append("%") }
+            // La reconnaissance du locuteur : ce qu'elle fait, et surtout ce
+            // qu'elle mesure. Les deux nombres sont ce sur quoi le seuil doit
+            // se régler — faire parler Jean puis un proche et lire les
+            // ressemblances dit où placer la limite, là où une valeur devinée
+            // ne peut que se tromper.
+            append(" — locuteur : ").append(status.speakerMode)
+            status.jeanSimilarityPercent?.let { append(", ressemblance ").append(it).append("%") }
+            status.jeanSharePercent?.let { append(", attribué à Jean ").append(it).append("%") }
+            status.enrollmentProgressPercent?.let { append(", apprentissage ").append(it).append("%") }
+            status.enrollmentResult?.let { append(" (").append(it).append(")") }
             if (!status.wakeEnabled) append(" — réveil désactivé")
             if (status.inNightWindow) append(" — réveil bloqué (nuit)")
             append(" — réveils demandés : ").append(status.wakeRequests)
@@ -381,6 +391,16 @@ class DeviceStatusReporter(private val context: Context) {
         snapshot.getBoolean(FIELD_VOICE_GATE_ENABLED)?.let {
             adminConfig.voiceGateEnabled = it
         }
+        // Atténuation des paroles de Jean. Réglable à distance, mais la voix
+        // elle-même ne s'apprend que depuis la tablette : il faut être dans la
+        // pièce avec lui pour la lui faire dire (voir
+        // RoomPresenceService.startVoiceEnrollment).
+        snapshot.getBoolean(FIELD_DIM_JEAN_SPEECH)?.let {
+            adminConfig.dimJeanSpeech = it
+        }
+        snapshot.getLong(FIELD_JEAN_VOICE_THRESHOLD)?.let {
+            if (it > 0) adminConfig.jeanVoiceThresholdPercent = it.toInt()
+        }
         snapshot.getBoolean(FIELD_BLOCK_WAKE_AT_NIGHT)?.let {
             adminConfig.blockWakeAtNight = it
         }
@@ -557,6 +577,8 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_ROOM_WAKE_THRESHOLD = "roomWakeThreshold"
         private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"
         private const val FIELD_VOICE_GATE_ENABLED = "voiceGateEnabled"
+        private const val FIELD_DIM_JEAN_SPEECH = "dimJeanSpeech"
+        private const val FIELD_JEAN_VOICE_THRESHOLD = "jeanVoiceThreshold"
 
         private const val LISTENER_RETRY_DELAY_MS = 60_000L
     }

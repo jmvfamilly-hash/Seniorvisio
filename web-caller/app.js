@@ -205,6 +205,8 @@ const els = {
   transcriptionDiagnostic: document.getElementById("transcriptionDiagnostic"),
   paidUsage: document.getElementById("paidUsage"),
   voiceGateToggle: document.getElementById("voiceGateToggle"),
+  dimJeanSpeechToggle: document.getElementById("dimJeanSpeechToggle"),
+  jeanVoiceThresholdSlider: document.getElementById("jeanVoiceThresholdSlider"),
   quotaAssemblyaiSlider: document.getElementById("quotaAssemblyaiSlider"),
   quotaGladiaSlider: document.getElementById("quotaGladiaSlider"),
   refreshUsageButton: document.getElementById("refreshUsageButton"),
@@ -331,6 +333,13 @@ function applyCaptionGeometry(layout) {
 // côtés : c'est la seule chose qui les relie.
 const SILENCE_MARKER = "<silence>";
 
+// Repères encadrant une parole attribuée à Jean (voir JEAN_OPEN/JEAN_CLOSE dans
+// RollingCaptionZone.kt). Contrairement au repère de silence, ils ne
+// s'affichent pas : ils commandent un style. La réplique doit montrer ce que
+// Jean a sous les yeux, et le retrait de ses propres paroles en fait partie.
+const JEAN_OPEN = "<jean>";
+const JEAN_CLOSE = "</jean>";
+
 /**
  * Pose le texte de Jean dans la réplique, les marques de silence dans le même
  * style que chez lui — plus petites et en italique. La réplique est censée
@@ -343,15 +352,57 @@ const SILENCE_MARKER = "<silence>";
 function renderJeanText(element, text) {
   element.textContent = "";
   if (!text) return;
-  text.split(SILENCE_MARKER).forEach((part, index) => {
-    if (index > 0) {
+
+  // Le texte se lit d'un bout à l'autre, en tenant à jour la seule chose qui
+  // change : si l'on est ou non à l'intérieur d'une parole de Jean. Un
+  // découpage par repère ne suffirait pas — il y en a maintenant trois sortes,
+  // dont deux qui s'apparient.
+  // Une fermeture qui arrive avant toute ouverture signifie que la tablette a
+  // coupé son tampon au milieu d'une parole de Jean (voir
+  // trimTextAlreadyScrolledPast) : elle commençait avant ce qu'il en reste. Le
+  // même raisonnement est tenu chez Jean, et les deux doivent aboutir au même
+  // rendu — c'est toute la promesse de la réplique.
+  const firstOpen = text.indexOf(JEAN_OPEN);
+  const firstClose = text.indexOf(JEAN_CLOSE);
+  let inJean = firstClose >= 0 && (firstOpen < 0 || firstClose < firstOpen);
+  let buffer = "";
+
+  const flush = () => {
+    if (!buffer) return;
+    if (inJean) {
+      const dim = document.createElement("span");
+      dim.className = "jean-own-speech";
+      dim.textContent = buffer;
+      element.appendChild(dim);
+    } else {
+      element.appendChild(document.createTextNode(buffer));
+    }
+    buffer = "";
+  };
+
+  let index = 0;
+  while (index < text.length) {
+    if (text.startsWith(JEAN_OPEN, index)) {
+      flush();
+      inJean = true;
+      index += JEAN_OPEN.length;
+    } else if (text.startsWith(JEAN_CLOSE, index)) {
+      flush();
+      inJean = false;
+      index += JEAN_CLOSE.length;
+    } else if (text.startsWith(SILENCE_MARKER, index)) {
+      flush();
       const mark = document.createElement("em");
       mark.className = "silence-mark";
       mark.textContent = SILENCE_MARKER;
       element.appendChild(mark);
+      index += SILENCE_MARKER.length;
+    } else {
+      buffer += text[index];
+      index += 1;
     }
-    if (part) element.appendChild(document.createTextNode(part));
-  });
+  }
+  flush();
 }
 
 /**
@@ -518,6 +569,9 @@ const ADMIN_SLIDER_FIELDS = [
   // nouvelle convention (voir DeviceStatusReporter, FIELD_QUOTA_PREFIX).
   ["quotaAssemblyaiSlider", "quotaHours_assemblyai"],
   ["quotaGladiaSlider", "quotaHours_gladia"],
+  // Ressemblance exigée pour attribuer une parole à Jean (voir
+  // AdminConfig.jeanVoiceThresholdPercent).
+  ["jeanVoiceThresholdSlider", "jeanVoiceThreshold"],
 ];
 
 // Mêmes réglages d'appareil, mais en tout ou rien.
@@ -525,6 +579,7 @@ const ADMIN_TOGGLE_FIELDS = [
   ["roomWakeEnabledToggle", "roomWakeEnabled"],
   ["blockWakeAtNightToggle", "blockWakeAtNight"],
   ["voiceGateToggle", "voiceGateEnabled"],
+  ["dimJeanSpeechToggle", "dimJeanSpeech"],
 ];
 
 for (const [elementKey, field] of ADMIN_TOGGLE_FIELDS) {
@@ -943,6 +998,7 @@ function applyDeviceSettings(data) {
   // Vrai par défaut côté tablette : un champ absent veut dire « jamais réglé
   // d'ici », pas « désactivé ».
   els.voiceGateToggle.checked = data.voiceGateEnabled !== false;
+  els.dimJeanSpeechToggle.checked = data.dimJeanSpeech !== false;
 
   // Le seuil ne se règle pas sans voir le niveau qu'il doit dépasser : la
   // tablette republie avec son signe de vie le pic mesuré depuis le précédent,

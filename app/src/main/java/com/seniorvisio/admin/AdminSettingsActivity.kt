@@ -116,6 +116,30 @@ class AdminSettingsActivity : AppCompatActivity() {
             appendLine("Transcription en cours : ${if (status.transcribing) "oui" else "non"}")
             append("Modèle hors-ligne (pièce) : ${status.voskModel}")
         }
+        refreshVoiceEnrollmentState(status)
+    }
+
+    /**
+     * L'état de la reconnaissance du locuteur, rafraîchi au même rythme que le
+     * reste.
+     *
+     * Pendant l'apprentissage, l'avancement doit se voir : vingt secondes
+     * pendant lesquelles rien ne bouge à l'écran sont vingt secondes pendant
+     * lesquelles on ne sait pas si la tablette écoute ou si le bouton n'a rien
+     * fait — et on relance, ce qui recommence tout.
+     */
+    private fun refreshVoiceEnrollmentState(status: RoomPresenceService.Status) {
+        val view = findViewById<TextView>(R.id.textVoiceEnrollmentState)
+        val progress = status.enrollmentProgressPercent
+        view.text = buildString {
+            if (progress != null) {
+                append("Apprentissage en cours… $progress %  — faites parler Jean")
+                return@buildString
+            }
+            append(status.speakerMode)
+            status.jeanSimilarityPercent?.let { append("\nDernière ressemblance mesurée : $it %") }
+            status.enrollmentResult?.let { append("\n$it") }
+        }
     }
 
     override fun onStart() {
@@ -262,6 +286,30 @@ class AdminSettingsActivity : AppCompatActivity() {
         // franc plutôt qu'un geste caché que personne ne retrouve.
         findViewById<Button>(R.id.buttonTranscriptionLab).setOnClickListener {
             startActivity(Intent(this, TranscriptionLabActivity::class.java))
+        }
+
+        // Apprentissage de la voix de Jean. Sur la tablette et non dans le PWA :
+        // il faut être dans la pièce avec lui pour le faire parler.
+        findViewById<Button>(R.id.buttonLearnJeanVoice).setOnClickListener {
+            val service = roomService
+            if (service == null) {
+                Toast.makeText(this, "Service d'écoute non joignable", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            // Le moteur d'Android tient le microphone lui-même et ne nous
+            // laisse aucun son : le dire avant plutôt que de laisser tourner
+            // vingt secondes pour rien et conclure à une panne.
+            if (!service.currentStatus().canRecogniseSpeaker) {
+                Toast.makeText(this, "Impossible avec la reconnaissance Android : elle tient le micro. Changez le moteur de la pièce.", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            service.startVoiceEnrollment()
+            Toast.makeText(this, "Faites parler Jean pendant vingt secondes", Toast.LENGTH_LONG).show()
+        }
+
+        findViewById<Button>(R.id.buttonForgetJeanVoice).setOnClickListener {
+            roomService?.forgetVoiceSignature()
+            Toast.makeText(this, "Voix oubliée : tout s'affiche de nouveau en clair", Toast.LENGTH_SHORT).show()
         }
 
         findViewById<Button>(R.id.buttonPickWifiNetwork).setOnClickListener { pickWifiNetwork() }

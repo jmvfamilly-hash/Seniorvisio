@@ -211,6 +211,54 @@ class AdminConfig(context: Context) {
         get() = prefs.getInt(KEY_ROOM_WAKE_THRESHOLD, 3000)
         set(value) = prefs.edit().putInt(KEY_ROOM_WAKE_THRESHOLD, value).apply()
 
+    // --- Atténuation des paroles de Jean dans la transcription de la pièce
+    // (voir RoomSpeakerGate). Volontairement sans aucun lien avec le portier de
+    // voix payant : celui-ci ne tourne que sur un moteur facturé à la durée,
+    // donc jamais dans la configuration courante, et s'y raccrocher aurait
+    // livré une fonction qui ne s'active pas. ---
+
+    /**
+     * La signature vocale de Jean, apprise une fois (voir
+     * RoomPresenceService.startVoiceEnrollment). Chaîne vide tant qu'elle n'a
+     * pas été enregistrée, auquel cas l'atténuation ne peut évidemment rien
+     * faire et se tait plutôt que de deviner.
+     */
+    var jeanVoiceSignature: String
+        get() = prefs.getString(KEY_JEAN_VOICE_SIGNATURE, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_JEAN_VOICE_SIGNATURE, value).apply()
+
+    /**
+     * Atténue-t-on à l'écran les paroles attribuées à Jean ?
+     *
+     * Sans effet tant qu'aucune signature n'a été enregistrée. Débrayable à
+     * distance : une reconnaissance qui se tromperait ferait passer l'écran
+     * pour défaillant, et pouvoir la couper en trente secondes est ce qui
+     * permet de trancher entre « la reconnaissance se trompe » et « la
+     * transcription est en panne ».
+     */
+    var dimJeanSpeech: Boolean
+        get() = prefs.getBoolean(KEY_DIM_JEAN_SPEECH, true)
+        set(value) = prefs.edit().putBoolean(KEY_DIM_JEAN_SPEECH, value).apply()
+
+    /**
+     * Ressemblance minimale, en pourcentage, pour attribuer une prise de parole
+     * à Jean.
+     *
+     * Volontairement haut. Le coût d'une erreur n'est pas symétrique :
+     * afficher normalement une phrase de Jean ne coûte que quelques mots de
+     * place, tandis qu'atténuer celle d'un proche retire à Jean précisément ce
+     * qu'il a besoin de lire. Un seuil élevé penche du bon côté.
+     *
+     * Réglable à distance parce qu'il dépend de la voix de Jean, de celles de
+     * ses proches et de l'acoustique de la pièce — trois choses qu'aucune
+     * valeur écrite d'avance ne peut deviner. Le diagnostic publie la
+     * ressemblance réellement mesurée, qui est ce sur quoi le réglage doit
+     * s'appuyer.
+     */
+    var jeanVoiceThresholdPercent: Int
+        get() = prefs.getInt(KEY_JEAN_VOICE_THRESHOLD, DEFAULT_JEAN_VOICE_THRESHOLD)
+        set(value) = prefs.edit().putInt(KEY_JEAN_VOICE_THRESHOLD, value.coerceIn(30, 95)).apply()
+
     fun isCurrentlyNightWindow(hourNow: Int): Boolean {
         return if (nightStartHour <= nightEndHour) {
             hourNow in nightStartHour until nightEndHour
@@ -255,5 +303,16 @@ class AdminConfig(context: Context) {
         private const val KEY_LAST_COMMAND_ID = "last_command_id"
         private const val KEY_ROOM_WAKE_ENABLED = "room_wake_enabled"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
+        private const val KEY_JEAN_VOICE_SIGNATURE = "jean_voice_signature"
+        private const val KEY_DIM_JEAN_SPEECH = "dim_jean_speech"
+        private const val KEY_JEAN_VOICE_THRESHOLD = "jean_voice_threshold"
+
+        /**
+         * 72 % : au-dessus de ce que mesure une voix masculine proche mais
+         * différente, en dessous de ce que mesure Jean parlant plus bas ou
+         * enrhumé. La marge est étroite de ce côté-là, large de l'autre — une
+         * voix de femme ou d'enfant tombe très en dessous.
+         */
+        const val DEFAULT_JEAN_VOICE_THRESHOLD = 72
     }
 }

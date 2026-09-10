@@ -432,6 +432,42 @@
             concerne ni le réveil de l'écran, ni les moteurs gratuits.
           </p>
 
+          <div class="caption-control">
+            <label>
+              <input type="checkbox" id="dimJeanSpeechToggle">
+              🔉 Mettre en retrait les paroles de Jean
+            </label>
+          </div>
+          <p class="hint">
+            Jean sait ce qu'il vient de dire : ses propres phrases s'affichent
+            atténuées pour laisser la place à celles qu'il a besoin de lire.
+            Sans effet tant que sa voix n'a pas été apprise, ce qui se fait
+            depuis l'écran d'administration de la tablette — il faut être dans
+            la pièce avec lui. Impossible avec la reconnaissance Android, qui
+            garde le micro pour elle.
+          </p>
+
+          <div class="caption-control">
+            <label for="jeanVoiceThresholdSlider">
+              Ressemblance exigée pour reconnaître Jean
+            </label>
+            <!-- Valeur de départ identique au défaut de la tablette (voir
+                 AdminConfig.DEFAULT_JEAN_VOICE_THRESHOLD) : sans elle, le
+                 curseur se placerait au milieu de sa course et afficherait un
+                 réglage que la tablette n'applique pas. -->
+            <input type="range" id="jeanVoiceThresholdSlider"
+                   min="30" max="95" step="1" value="72" data-unit=" %">
+          </div>
+          <p class="hint">
+            Plus haut, moins de phrases sont attribuées à Jean : on préfère
+            afficher une de ses phrases en clair qu'atténuer celle d'un proche.
+            Le diagnostic ci-dessus publie la ressemblance réellement mesurée —
+            faites parler Jean, puis quelqu'un d'autre, et placez la limite
+            entre les deux nombres. Une voix de femme ou d'enfant tombe très
+            bas ; celle d'un fils peut être proche de celle de son père, et
+            c'est le cas où ce réglage compte vraiment.
+          </p>
+
           <h3 class="admin-section">Plafond des services payants</h3>
           <p class="hint">
             Garde-fou de dernier recours : aucune détection de voix ne

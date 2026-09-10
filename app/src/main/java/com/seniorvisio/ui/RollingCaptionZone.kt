@@ -1,5 +1,6 @@
 package com.seniorvisio.ui
 
+import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
@@ -7,6 +8,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
 import android.util.TypedValue
@@ -125,7 +127,7 @@ class RollingCaptionZone(
      * de même fermer celui en attente, sinon le segment suivant l'écraserait
      * en croyant le corriger.
      */
-    fun submit(text: String, isFinal: Boolean) {
+    fun submit(text: String, isFinal: Boolean, fromJean: Boolean = false) {
         val phrase = text.trim()
         // Silence pur : rien à afficher, et surtout pas de délai d'effacement
         // à réarmer — sans quoi la zone ne disparaîtrait plus jamais.
@@ -133,7 +135,11 @@ class RollingCaptionZone(
 
         if (phrase.isNotEmpty()) {
             noteSilenceBefore()
-            pending = phrase
+            // Les paroles de Jean sont encadrées de repères dans le tampon,
+            // exactement comme les silences, et transformées en style au
+            // moment du rendu. Le tampon reste ainsi du texte simple, ce dont
+            // dépendent la purge des lignes lues et le miroir du PWA.
+            pending = if (fromJean) "$JEAN_OPEN$phrase$JEAN_CLOSE" else phrase
         }
         lastTextAtMs = SystemClock.elapsedRealtime()
         if (isFinal) {
@@ -210,17 +216,117 @@ class RollingCaptionZone(
      */
     private fun styledText(): CharSequence {
         val full = renderedText()
-        if (!full.contains(SILENCE_MARKER)) return full
+        if (!full.contains(SILENCE_MARKER) && !full.contains(JEAN_OPEN) && !full.contains(JEAN_CLOSE)) {
+            return full
+        }
 
-        val styled = SpannableStringBuilder(full)
-        var from = full.indexOf(SILENCE_MARKER)
+        // Les repères de Jean sont retirés du texte affiché — contrairement à
+        // ceux de silence, qui sont une indication destinée à être lue. On note
+        // au passage les portions qu'ils encadraient.
+        val styled = SpannableStringBuilder()
+        val dimmed = mutableListOf<IntRange>()
+        var inJean = false
+        var openedAt = 0
+        var index = 0
+        while (index < full.length) {
+            when {
+                full.startsWith(JEAN_OPEN, index) -> {
+                    inJean = true
+                    openedAt = styled.length
+                    index += JEAN_OPEN.length
+                }
+                full.startsWith(JEAN_CLOSE, index) -> {
+                    // Fermeture sans ouverture : le tampon a été coupé au
+                    // milieu d'une portion (voir trimTextAlreadyScrolledPast),
+                    // qui commençait donc avant ce qu'il en reste. Tolérée
+                    // plutôt qu'ignorée — l'ignorer laisserait le début de la
+                    // phrase de Jean affiché en clair, à l'envers de ce qu'on
+                    // cherche.
+                    dimmed += (if (inJean) openedAt else 0) until styled.length
+                    inJean = false
+                    index += JEAN_CLOSE.length
+                }
+                else -> {
+                    styled.append(full[index])
+                    index++
+                }
+            }
+        }
+        // Ouverture sans fermeture : c'est le cas normal du segment en cours de
+        // dictée, pas encore clos.
+        if (inJean) dimmed += openedAt until styled.length
+
+        val rendered = styled.toString()
+        var from = rendered.indexOf(SILENCE_MARKER)
         while (from >= 0) {
             val to = from + SILENCE_MARKER.length
             styled.setSpan(RelativeSizeSpan(SILENCE_TEXT_SCALE), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             styled.setSpan(StyleSpan(Typeface.ITALIC), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            from = full.indexOf(SILENCE_MARKER, to)
+            from = rendered.indexOf(SILENCE_MARKER, to)
+        }
+
+        // Atténué par la couleur, pas par la taille : le texte de Jean doit
+        // rester lisible s'il le cherche du regard — il peut vouloir vérifier
+        // ce que la tablette a compris de ce qu'il vient de dire — mais
+        // s'effacer devant celui qu'il a besoin de lire. Une taille réduite,
+        // elle, le rendrait illisible de son fauteuil.
+        val dimColour = dimmedColour()
+        dimmed.forEach { range ->
+            if (range.isEmpty()) return@forEach
+            styled.setSpan(
+                ForegroundColorSpan(dimColour),
+                range.first,
+                range.last + 1,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
         }
         return styled
+    }
+
+    /**
+     * La couleur du texte en cours, rendue transparente. Dérivée de la couleur
+     * effective plutôt que fixée : la palette change avec le thème clair ou
+     * sombre de la tablette (voir ScreenTheme, applyColors), et une couleur
+     * grise écrite en dur deviendrait illisible sur l'un des deux fonds.
+     */
+    private fun dimmedColour(): Int {
+        val colour = textView.currentTextColor
+        return Color.argb(
+            (Color.alpha(colour) * JEAN_TEXT_ALPHA).toInt(),
+            Color.red(colour),
+            Color.green(colour),
+            Color.blue(colour),
+        )
+    }
+
+    /**
+     * Convertit une position dans le texte affiché en position dans le tampon.
+     *
+     * Nécessaire depuis que les repères de Jean sont retirés à l'affichage :
+     * les deux textes n'ont plus la même longueur, et couper le tampon à une
+     * position mesurée sur l'affichage y retirerait quelques caractères de
+     * trop — c'est-à-dire des mots que Jean n'a pas lus.
+     */
+    private fun bufferIndexOf(displayIndex: Int): Int {
+        val full = renderedText()
+        var display = 0
+        var buffer = 0
+        while (buffer < full.length && display < displayIndex) {
+            val marker = HIDDEN_MARKERS.firstOrNull { full.startsWith(it, buffer) }
+            if (marker != null) {
+                buffer += marker.length
+            } else {
+                buffer++
+                display++
+            }
+        }
+        // Les repères qui suivent immédiatement la coupe partent avec elle :
+        // les laisser en tête du tampon y abandonnerait une balise seule.
+        while (buffer < full.length) {
+            val marker = HIDDEN_MARKERS.firstOrNull { full.startsWith(it, buffer) } ?: break
+            buffer += marker.length
+        }
+        return buffer
     }
 
     /**
@@ -383,7 +489,9 @@ class RollingCaptionZone(
         if (lastHiddenLine < 0) return
 
         val removedPx = layout.getLineBottom(lastHiddenLine)
-        val cutAt = layout.getLineStart(lastHiddenLine + 1)
+        // Mesurée sur l'affichage, d'où les repères de Jean ont été retirés :
+        // il faut la ramener dans le tampon avant de couper quoi que ce soit.
+        val cutAt = bufferIndexOf(layout.getLineStart(lastHiddenLine + 1))
         // La coupe doit rester dans le texte acquis : le segment en cours est
         // encore réécrit à chaque bloc de son, on n'y touche pas.
         if (cutAt <= 0 || cutAt > committed.length) return
@@ -462,6 +570,29 @@ class RollingCaptionZone(
 
         /** Assez petit pour ne pas se confondre avec un mot dit, assez grand pour rester lisible de loin. */
         private const val SILENCE_TEXT_SCALE = 0.55f
+
+        /**
+         * Les repères encadrant une parole attribuée à Jean (voir
+         * RoomSpeakerGate). Retirés à l'affichage, contrairement à celui de
+         * silence : Jean n'a pas à lire une balise. Ils voyagent en revanche
+         * jusqu'au miroir du PWA, qui les traite de la même façon — le texte du
+         * tampon est ce que les deux côtés se partagent, et il doit rester du
+         * texte simple.
+         *
+         * Sans espace à l'intérieur, pour la même raison que le repère de
+         * silence : un retour à la ligne au milieu d'une balise en laisserait
+         * un fragment à l'écran.
+         */
+        private const val JEAN_OPEN = "<jean>"
+        private const val JEAN_CLOSE = "</jean>"
+        private val HIDDEN_MARKERS = listOf(JEAN_OPEN, JEAN_CLOSE)
+
+        /**
+         * Opacité du texte attribué à Jean. 45 % : nettement en retrait du flot
+         * normal au premier coup d'œil, mais encore déchiffrable s'il veut
+         * vérifier ce que la tablette a compris de ce qu'il vient de dire.
+         */
+        private const val JEAN_TEXT_ALPHA = 0.45f
 
         /** Bornes de sécurité : une zone très plate ou très haute ne doit produire ni texte illisible ni texte absurde. */
         private const val MIN_TEXT_SIZE_PX = 18f

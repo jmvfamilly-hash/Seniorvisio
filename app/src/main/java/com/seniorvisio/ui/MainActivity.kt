@@ -75,8 +75,10 @@ class MainActivity : AppCompatActivity() {
             // Argument nommé, pas un lambda en fin d'appel : celui-ci se
             // rattacherait au DERNIER paramètre (onError), pas à onText.
             service.startRoomTranscription(
-                onText = { text, isFinal ->
-                    runOnUiThread { zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal) }
+                onText = { text, isFinal, fromJean ->
+                    runOnUiThread {
+                        zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal, fromJean)
+                    }
                 },
             )
         }

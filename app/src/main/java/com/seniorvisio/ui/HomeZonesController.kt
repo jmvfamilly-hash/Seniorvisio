@@ -116,8 +116,17 @@ class HomeZonesController(
     }
 
     /** Nouveau texte transcrit : il va dans la zone que sa source désigne. */
-    fun submitTranscription(source: TranscriptionSource, text: String, isFinal: Boolean) {
-        zoneFor(source).submit(text, isFinal)
+    /**
+     * `fromJean` n'a de sens que pour la pièce : dans un appel, la source est
+     * la voix du proche à l'autre bout, jamais celle de Jean.
+     */
+    fun submitTranscription(
+        source: TranscriptionSource,
+        text: String,
+        isFinal: Boolean,
+        fromJean: Boolean = false,
+    ) {
+        zoneFor(source).submit(text, isFinal, fromJean)
     }
 
     /** Vide les deux zones de texte immédiatement (fin d'appel, sortie d'écran). */
