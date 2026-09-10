@@ -95,6 +95,29 @@ class ContinuousSpeechManager(
 
     private val restart = Runnable { beginListening() }
 
+    /**
+     * Referme une session qui dépasse la durée raisonnable. Voir MAX_SESSION_MS.
+     */
+    private val sessionCap = Runnable {
+        if (!listening) return@Runnable
+        SpeechTrace.record("APP session trop longue", "clôture forcée après ${MAX_SESSION_MS} ms")
+        try {
+            recognizer?.stopListening()
+        } catch (e: Exception) {
+            Log.w(TAG, "Clôture forcée impossible", e)
+        }
+    }
+
+    // --- Niveau sonore, échantillonné ---------------------------------------
+    // Sans lui, une session sans texte a deux explications opposées : la pièce
+    // était silencieuse, ou la parole n'a pas été captée. La trace relevée sur
+    // l'appareil montre deux sessions entières sans un mot, et rien ne permet
+    // aujourd'hui de dire laquelle des deux s'est produite.
+    private var lastRmsLogAtMs = 0L
+    private var peakRmsSinceLog = -120f
+    private var firstPartialLogged = false
+    private var readyAtMs = 0L
+
     fun start() {
         if (wanted) return
         wanted = true
@@ -106,6 +129,7 @@ class ContinuousSpeechManager(
     fun stop() {
         wanted = false
         handler.removeCallbacks(restart)
+        handler.removeCallbacks(sessionCap)
         listening = false
         SpeechTrace.record("APP stop()", "écoute arrêtée")
         destroyRecognizer()
@@ -160,9 +184,14 @@ class ContinuousSpeechManager(
             // les appareils le confirment. Elles sont posées quand même : là
             // où elles sont suivies, elles rallongent la session et espacent
             // donc les coutures.
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_HINT_MS)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_HINT_MS)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, MINIMUM_SPEECH_MS)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_COMPLETE_MS)
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                SILENCE_POSSIBLY_COMPLETE_MS,
+            )
+            // EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS n'est plus posé, et son
+            // absence est le correctif principal — voir le commentaire de
+            // SILENCE_COMPLETE_MS.
         }
 
         try {
@@ -170,7 +199,15 @@ class ContinuousSpeechManager(
             sessionCount++
             // LA MAIN PASSE AU MOTEUR. L'écart entre cette ligne et la fin de
             // la session précédente est le temps mort qu'on cherche à mesurer.
-            SpeechTrace.record("APP → startListening", "session n°$sessionCount")
+            SpeechTrace.record(
+                "APP → startListening",
+                "session n°$sessionCount — silence ${SILENCE_COMPLETE_MS}/${SILENCE_POSSIBLY_COMPLETE_MS} ms, " +
+                    "hors-ligne demandé, aucune durée minimale imposée",
+            )
+            firstPartialLogged = false
+            peakRmsSinceLog = -120f
+            handler.removeCallbacks(sessionCap)
+            handler.postDelayed(sessionCap, MAX_SESSION_MS)
             instance.startListening(intent)
         } catch (e: Exception) {
             Log.w(TAG, "Démarrage de l'écoute impossible", e)
@@ -209,6 +246,7 @@ class ContinuousSpeechManager(
      * certains appareils, par une exception sur d'autres.
      */
     private fun scheduleRestart(delayMs: Long) {
+        handler.removeCallbacks(sessionCap)
         if (!wanted) return
         handler.removeCallbacks(restart)
         handler.postDelayed(restart, delayMs)
@@ -225,6 +263,7 @@ class ContinuousSpeechManager(
         override fun onReadyForSpeech(params: Bundle?) {
             // LA MAIN EST AU MOTEUR, et il écoute vraiment : entre
             // startListening et ici, il ne captait pas encore.
+            readyAtMs = android.os.SystemClock.elapsedRealtime()
             SpeechTrace.record("API onReadyForSpeech", "le moteur écoute")
             // Une session s'est ouverte pour de bon : la précédente n'a donc
             // pas échoué, quoi qu'ait dit la dernière erreur.
@@ -233,6 +272,14 @@ class ContinuousSpeechManager(
 
         override fun onPartialResults(partialResults: Bundle?) {
             SpeechTrace.recordResults("API onPartialResults", partialResults)
+            if (!firstPartialLogged && firstResult(partialResults) != null) {
+                firstPartialLogged = true
+                val delay = android.os.SystemClock.elapsedRealtime() - readyAtMs
+                // Le délai entre « le moteur écoute » et le premier mot lisible
+                // est la seconde source possible de mots perdus, distincte du
+                // temps mort entre sessions — lequel s'est révélé négligeable.
+                SpeechTrace.record("APP 1er texte après", "$delay ms d'écoute")
+            }
             firstResult(partialResults)?.let {
                 lastPartial = it
                 onPartial(it)
@@ -301,7 +348,19 @@ class ContinuousSpeechManager(
         override fun onBeginningOfSpeech() {
             SpeechTrace.record("API onBeginningOfSpeech", "début de parole détecté")
         }
-        override fun onRmsChanged(rmsdB: Float) = Unit
+        override fun onRmsChanged(rmsdB: Float) {
+            // Échantillonné : ce rappel arrive une dizaine de fois par seconde,
+            // et tout journaliser rendrait la trace illisible. C'est le PIC de
+            // l'intervalle qui est retenu, pas la dernière valeur : entre deux
+            // relevés, ce qui compte est de savoir si quelque chose a été
+            // entendu, pas ce qu'il en restait à la fin.
+            if (rmsdB > peakRmsSinceLog) peakRmsSinceLog = rmsdB
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (now - lastRmsLogAtMs < RMS_SAMPLE_MS) return
+            lastRmsLogAtMs = now
+            SpeechTrace.record("API onRmsChanged", "pic %.1f dB".format(peakRmsSinceLog))
+            peakRmsSinceLog = -120f
+        }
         override fun onBufferReceived(buffer: ByteArray?) = Unit
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
     }
@@ -356,11 +415,45 @@ class ContinuousSpeechManager(
         const val MAX_RESTART_DELAY_MS = 8_000L
 
         /**
-         * Silences suggérés au moteur, volontairement longs : plus la session
-         * dure, moins il y a de coutures. Suggérés seulement — voir le
-         * commentaire à leur pose.
+         * Silences au terme desquels le moteur clôt son énoncé.
+         *
+         * ═══ Ces valeurs sortent d'une mesure, et corrigent une erreur ═══
+         *
+         * La version précédente demandait dix secondes de silence, et surtout
+         * posait EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS à soixante secondes.
+         * Cet extra signifie « n'arrête pas d'enregistrer avant ce délai » : le
+         * moteur était donc contraint de tenir chaque session une minute
+         * entière. La trace relevée sur l'appareil le montre sans ambiguïté —
+         * sessions de 60,8 s et 60,6 s avant le moindre résultat.
+         *
+         * Le raisonnement qui avait conduit là — « plus la session dure, moins
+         * il y a de coutures » — était juste à l'envers. Une session longue,
+         * c'est un texte figé une minute trop tard, et surtout un résultat
+         * partiel qui accumule TOUT ce qui a été dit depuis son début : la même
+         * phrase répétée deux fois s'affichait deux fois à la suite, ce qui
+         * ressemblait à un défaut de notre tampon alors que la concaténation se
+         * faisait à l'intérieur du moteur.
+         *
+         * Une seconde et demie ferme l'énoncé sur une vraie fin de phrase sans
+         * couper une hésitation. La relance ne coûte rien : mesurée à 3 et 9
+         * millisecondes sur cet appareil.
          */
-        const val SILENCE_HINT_MS = 10_000
-        const val MINIMUM_SPEECH_MS = 60_000
+        const val SILENCE_COMPLETE_MS = 1_500
+        const val SILENCE_POSSIBLY_COMPLETE_MS = 1_000
+
+        /**
+         * Au-delà, on referme la session nous-mêmes.
+         *
+         * Filet contre la pathologie ci-dessus : rien ne garantit qu'un autre
+         * appareil, ou une autre version du moteur, respecte les consignes de
+         * silence. Une session qui ne se termine jamais est indiscernable d'un
+         * moteur en panne, et le texte reste bloqué en attente pendant ce
+         * temps. stopListening() et non cancel() : le premier réclame le
+         * résultat de ce qui a été entendu, le second le jetterait.
+         */
+        const val MAX_SESSION_MS = 20_000L
+
+        /** Une mesure de niveau par quart de seconde : assez pour distinguer un silence d'une voix faible, sans noyer la trace. */
+        const val RMS_SAMPLE_MS = 250L
     }
 }
