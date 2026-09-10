@@ -301,6 +301,36 @@ class AdminConfig(context: Context) {
             .apply()
     }
 
+    // --- Bascule automatique vers « Transcription instantanée » de Google dès
+    // qu'une voix est entendue dans la pièce (voir RoomHandoffController). ---
+
+    /**
+     * Le mode est-il actif ? **Faux par défaut**, et c'est délibéré : désactivé,
+     * tout se comporte exactement comme avant, transcription intégrée comprise.
+     * Ce mode change ce que Jean a sous les yeux — l'écran d'une autre
+     * application — et une bascule de cette ampleur ne s'active pas toute seule.
+     */
+    var roomHandoffEnabled: Boolean
+        get() = prefs.getBoolean(KEY_ROOM_HANDOFF_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_ROOM_HANDOFF_ENABLED, value).apply()
+
+    /**
+     * Au bout de combien de minutes on ramène l'écran de Jean tout seul.
+     *
+     * Une durée, et non un retour au silence — qui serait pourtant le bon
+     * critère. Pendant que Transcription instantanée écoute, elle tient le
+     * microphone : Senior Visio est **sourd** et ne peut pas savoir que la
+     * pièce s'est vidée. C'est la même exclusivité du micro qui régit tout le
+     * reste de cette application, et aucune ruse ne la contourne — sauf à
+     * reprendre le micro, c'est-à-dire à casser exactement ce qu'on est venu
+     * chercher.
+     *
+     * Zéro : pas de retour minuté, les autres chemins subsistent.
+     */
+    var roomHandoffReturnMinutes: Int
+        get() = prefs.getInt(KEY_ROOM_HANDOFF_RETURN_MINUTES, DEFAULT_HANDOFF_RETURN_MINUTES)
+        set(value) = prefs.edit().putInt(KEY_ROOM_HANDOFF_RETURN_MINUTES, value.coerceIn(0, 120)).apply()
+
     fun isCurrentlyNightWindow(hourNow: Int): Boolean {
         return if (nightStartHour <= nightEndHour) {
             hourNow in nightStartHour until nightEndHour
@@ -346,6 +376,16 @@ class AdminConfig(context: Context) {
         private const val KEY_ROOM_WAKE_ENABLED = "room_wake_enabled"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
         private const val KEY_DIM_JEAN_SPEECH = "dim_jean_speech"
+        private const val KEY_ROOM_HANDOFF_ENABLED = "room_handoff_enabled"
+        private const val KEY_ROOM_HANDOFF_RETURN_MINUTES = "room_handoff_return_minutes"
+
+        /**
+         * Dix minutes : assez pour une visite qui s'installe, assez peu pour
+         * que la tablette ne reste pas indéfiniment sur l'écran d'une autre
+         * application après le départ du visiteur — auquel cas Jean ne verrait
+         * plus ni l'heure, ni la météo, ni ses photos.
+         */
+        const val DEFAULT_HANDOFF_RETURN_MINUTES = 10
         private const val KEY_SPEAKER_ENGINE = "speaker_engine"
         private const val KEY_PICOVOICE_ACCESS_KEY = "picovoice_access_key"
 

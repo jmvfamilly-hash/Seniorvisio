@@ -169,6 +169,11 @@ class DeviceStatusReporter(private val context: Context) {
             status.jeanSharePercent?.let { append(", attribué à Jean ").append(it).append("%") }
             status.enrollmentProgressPercent?.let { append(", apprentissage ").append(it).append("%") }
             status.enrollmentResult?.let { append(" (").append(it).append(")") }
+            // La bascule vers Transcription instantanée : ce qu'elle fait, ou
+            // ce qui l'en empêche. Les causes de refus — application absente,
+            // fenêtre de nuit, pause après un retour — se ressemblent toutes
+            // vues de loin : un mode qui ne bascule pas.
+            append(" — bascule : ").append(service.describeHandoff())
             if (!status.wakeEnabled) append(" — réveil désactivé")
             if (status.inNightWindow) append(" — réveil bloqué (nuit)")
             append(" — réveils demandés : ").append(status.wakeRequests)
@@ -398,6 +403,12 @@ class DeviceStatusReporter(private val context: Context) {
         snapshot.getBoolean(FIELD_DIM_JEAN_SPEECH)?.let {
             adminConfig.dimJeanSpeech = it
         }
+        snapshot.getBoolean(FIELD_ROOM_HANDOFF_ENABLED)?.let {
+            adminConfig.roomHandoffEnabled = it
+        }
+        snapshot.getLong(FIELD_ROOM_HANDOFF_RETURN_MINUTES)?.let {
+            adminConfig.roomHandoffReturnMinutes = it.toInt()
+        }
         // Moteur de reconnaissance de locuteur, et son seuil — lequel est propre
         // à chaque moteur : les deux rendent un nombre entre 0 et 1, mais l'un
         // sort d'un réseau de neurones et l'autre d'une moyenne pondérée. Un
@@ -591,6 +602,8 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"
         private const val FIELD_VOICE_GATE_ENABLED = "voiceGateEnabled"
         private const val FIELD_DIM_JEAN_SPEECH = "dimJeanSpeech"
+        private const val FIELD_ROOM_HANDOFF_ENABLED = "roomHandoffEnabled"
+        private const val FIELD_ROOM_HANDOFF_RETURN_MINUTES = "roomHandoffReturnMinutes"
         private const val FIELD_SPEAKER_ENGINE = "speakerEngine"
         // Pas de champ pour la clé Picovoice : comme les deux clés de
         // transcription, elle se saisit sur la tablette ou vient d'un secret

@@ -206,6 +206,8 @@ const els = {
   paidUsage: document.getElementById("paidUsage"),
   voiceGateToggle: document.getElementById("voiceGateToggle"),
   dimJeanSpeechToggle: document.getElementById("dimJeanSpeechToggle"),
+  roomHandoffToggle: document.getElementById("roomHandoffToggle"),
+  handoffReturnSlider: document.getElementById("handoffReturnSlider"),
   speakerEngineSelect: document.getElementById("speakerEngineSelect"),
   thresholdEmbeddedSlider: document.getElementById("thresholdEmbeddedSlider"),
   thresholdPicovoiceSlider: document.getElementById("thresholdPicovoiceSlider"),
@@ -577,6 +579,9 @@ const ADMIN_SLIDER_FIELDS = [
   // SpeakerEngineChoice).
   ["thresholdEmbeddedSlider", "jeanVoiceThreshold_embedded"],
   ["thresholdPicovoiceSlider", "jeanVoiceThreshold_picovoice"],
+  // Zéro est légitime ici — « pas de retour minuté » — comme pour les
+  // plafonds mensuels.
+  ["handoffReturnSlider", "roomHandoffReturnMinutes"],
 ];
 
 // Mêmes réglages d'appareil, mais en tout ou rien.
@@ -585,6 +590,7 @@ const ADMIN_TOGGLE_FIELDS = [
   ["blockWakeAtNightToggle", "blockWakeAtNight"],
   ["voiceGateToggle", "voiceGateEnabled"],
   ["dimJeanSpeechToggle", "dimJeanSpeech"],
+  ["roomHandoffToggle", "roomHandoffEnabled"],
 ];
 
 for (const [elementKey, field] of ADMIN_TOGGLE_FIELDS) {
@@ -988,7 +994,8 @@ function applyDeviceSettings(data) {
     // veut dire « sans limite » et non « jamais réglé ». Le refuser ferait
     // revenir le curseur à dix heures à chaque signe de vie, en écrasant
     // silencieusement le choix de l'administrateur.
-    const floor = field.startsWith("quotaHours_") ? 0 : 1;
+    const floor =
+      field.startsWith("quotaHours_") || field === "roomHandoffReturnMinutes" ? 0 : 1;
     if (Number.isFinite(value) && value >= floor) els[elementKey].value = value;
   }
   // Affecter .value par programme ne déclenche aucun événement « input » :
@@ -1005,6 +1012,9 @@ function applyDeviceSettings(data) {
   // d'ici », pas « désactivé ».
   els.voiceGateToggle.checked = data.voiceGateEnabled !== false;
   els.dimJeanSpeechToggle.checked = data.dimJeanSpeech !== false;
+  // Faux par défaut côté tablette, contrairement aux autres : ce mode
+  // change ce que Jean a sous les yeux, il ne s'arme pas tout seul.
+  els.roomHandoffToggle.checked = data.roomHandoffEnabled === true;
 
   // Le seuil ne se règle pas sans voir le niveau qu'il doit dépasser : la
   // tablette republie avec son signe de vie le pic mesuré depuis le précédent,

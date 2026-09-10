@@ -494,6 +494,48 @@
             d'autre, et placez la limite entre les deux nombres.
           </p>
 
+          <div class="caption-control">
+            <label>
+              <input type="checkbox" id="roomHandoffToggle">
+              🔀 Basculer vers Transcription instantanée quand une voix se fait entendre
+            </label>
+          </div>
+          <p class="hint">
+            L'écran de Jean passe automatiquement à l'application de Google, qui
+            transcrit <strong>en continu</strong> — ce qu'aucune application
+            tierce ne peut faire, l'interface publique d'Android ne transcrivant
+            qu'un énoncé à la fois avant de s'arrêter. C'est ce temps mort qui
+            coupe les phrases et mange les premiers mots.
+          </p>
+          <p class="hint">
+            Déclenché sur de la <em>voix</em>, jamais sur un bruit : un
+            aspirateur ne doit pas changer l'écran. Un appel entrant repasse
+            par-dessus. <strong>Aucun service payant n'est ouvert pour la pièce
+            dans ce mode</strong>, il devient inutile puisque c'est Google qui
+            transcrit.
+          </p>
+          <p class="hint">
+            Retour par le bandeau en bas de l'écran, par le bouton Accueil, à
+            l'extinction de l'écran, ou après la durée ci-dessous. Il n'y a
+            <strong>pas</strong> de retour au silence : pendant la bascule
+            l'application de Google tient le micro, la tablette est sourde et ne
+            peut pas savoir que la pièce s'est vidée. Le bandeau demande une
+            autorisation à donner une fois depuis l'écran d'administration de la
+            tablette.
+          </p>
+
+          <div class="caption-control">
+            <label for="handoffReturnSlider">Retour automatique après</label>
+            <input type="range" id="handoffReturnSlider"
+                   min="0" max="60" step="1" value="10" data-unit=" min">
+          </div>
+          <p class="hint">
+            Zéro : pas de retour minuté, les autres chemins subsistent. Après un
+            retour, deux minutes s'écoulent avant qu'une nouvelle bascule soit
+            possible — sans quoi un mot prononcé renverrait Jean aussitôt sur
+            l'autre écran, et il ne pourrait jamais récupérer le sien.
+          </p>
+
           <h3 class="admin-section">Plafond des services payants</h3>
           <p class="hint">
             Garde-fou de dernier recours : aucune détection de voix ne

@@ -37,6 +37,13 @@
          permission QUERY_ALL_PACKAGES, disproportionnée et restreinte par
          Google Play. À compléter pour chaque nouvelle application compagne
          (voir CompanionApps.kt, actuellement vide). -->
+    <!-- Bandeau de retour affiché par-dessus Transcription instantanée (voir
+         ReturnBannerOverlay). Sans lui, le seul chemin de retour serait le
+         bouton Accueil — que Jean n'a aucune raison de connaître. Cette
+         autorisation ne s'accorde pas toute seule : elle se donne une fois
+         depuis les Réglages, et le mode fonctionne sans elle, en dégradé. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <queries>
         <!-- Détecte le ou les navigateurs installés (voir
              AdminSettingsActivity.resolveBrowsers, KioskManager.
@@ -59,6 +66,14 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
+
+        <!-- « Transcription instantanée » de Google (voir CompanionApps). Sans
+             cette déclaration, getLaunchIntentForPackage rend null pour un
+             paquet pourtant installé — indiscernable d'un paquet absent, et
+             sans erreur pour le dire : constaté en test réel. Déclaration
+             ciblée plutôt que la permission QUERY_ALL_PACKAGES, disproportionnée
+             et restreinte par Google Play. -->
+        <package android:name="com.google.audio.hearing.visualization.accessibility.scribe" />
     </queries>
 
     <!-- Nécessaire à la détection/validation d'un portail captif (voir

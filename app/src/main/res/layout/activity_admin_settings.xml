@@ -426,5 +426,31 @@
         android:layout_marginTop="4dp"
         android:text="Oublier la voix enregistrée" />
 
+    <!-- Bascule automatique vers « Transcription instantanée » de Google (voir
+         RoomHandoffController). Le bandeau de retour a besoin d'une
+         autorisation qui ne s'accorde ni par le code ni par un propriétaire
+         d'appareil : elle se donne ici, une fois. -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:textStyle="bold"
+        android:text="Bascule vers Transcription instantanée" />
+
+    <TextView
+        android:id="@+id/textHandoffState"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textSize="13sp"
+        android:text="" />
+
+    <Button
+        android:id="@+id/buttonOverlayPermission"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Autoriser le bandeau de retour" />
+
 </LinearLayout>
 </ScrollView>
