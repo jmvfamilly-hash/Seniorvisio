@@ -93,7 +93,10 @@ class ContinuousSpeechManager(
      */
     private var lastPartial = ""
 
-    private val restart = Runnable { beginListening() }
+    private val restart = Runnable {
+        SpeechTrace.record("APP relance exécutée", "")
+        beginListening()
+    }
 
     /**
      * Referme une session qui dépasse la durée raisonnable. Voir MAX_SESSION_MS.
@@ -101,6 +104,7 @@ class ContinuousSpeechManager(
     private val sessionCap = Runnable {
         if (!listening) return@Runnable
         SpeechTrace.record("APP session trop longue", "clôture forcée après ${MAX_SESSION_MS} ms")
+        endSession("clôture forcée")
         try {
             recognizer?.stopListening()
         } catch (e: Exception) {
@@ -117,6 +121,17 @@ class ContinuousSpeechManager(
     private var peakRmsSinceLog = -120f
     private var firstPartialLogged = false
     private var readyAtMs = 0L
+
+    // --- Bilan par session --------------------------------------------------
+    // Une session s'étale sur des dizaines de lignes de trace. Le bilan les
+    // résume en une seule, et c'est celle qu'on lit d'abord : durée, nombre de
+    // résultats intermédiaires, pic sonore atteint, et texte produit ou non.
+    // Une session sans texte AVEC un pic sonore élevé et une session sans texte
+    // dans le silence sont deux diagnostics opposés, et cette ligne les sépare
+    // sans avoir à parcourir tout ce qui précède.
+    private var sessionStartedAtMs = 0L
+    private var sessionPartials = 0
+    private var sessionMaxRms = -120f
 
     fun start() {
         if (wanted) return
@@ -165,9 +180,23 @@ class ContinuousSpeechManager(
     }
 
     private fun beginListening() {
-        if (!wanted || listening) return
+        // Sorties silencieuses tracées : sans ça, une écoute qui ne redémarre
+        // jamais ne laisse aucune trace du tout — ni erreur, ni session. C'est
+        // le mode de panne le plus difficile à diagnostiquer, parce que le
+        // journal s'arrête net sans rien dire.
+        if (!wanted) {
+            SpeechTrace.record("APP beginListening", "REFUSÉ : écoute non demandée")
+            return
+        }
+        if (listening) {
+            SpeechTrace.record("APP beginListening", "REFUSÉ : une session est déjà ouverte")
+            return
+        }
 
-        val instance = recognizer ?: createRecognizer() ?: return
+        val instance = recognizer ?: createRecognizer() ?: run {
+            SpeechTrace.record("APP beginListening", "REFUSÉ : aucun moteur construit")
+            return
+        }
         recognizer = instance
 
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -206,6 +235,9 @@ class ContinuousSpeechManager(
             )
             firstPartialLogged = false
             peakRmsSinceLog = -120f
+            sessionStartedAtMs = android.os.SystemClock.elapsedRealtime()
+            sessionPartials = 0
+            sessionMaxRms = -120f
             handler.removeCallbacks(sessionCap)
             handler.postDelayed(sessionCap, MAX_SESSION_MS)
             instance.startListening(intent)
@@ -247,7 +279,10 @@ class ContinuousSpeechManager(
      */
     private fun scheduleRestart(delayMs: Long) {
         handler.removeCallbacks(sessionCap)
-        if (!wanted) return
+        if (!wanted) {
+            SpeechTrace.record("APP relance", "ABANDONNÉE : écoute non demandée")
+            return
+        }
         handler.removeCallbacks(restart)
         handler.postDelayed(restart, delayMs)
         SpeechTrace.record("APP relance dans", "${delayMs} ms")
@@ -281,6 +316,21 @@ class ContinuousSpeechManager(
                 SpeechTrace.record("APP 1er texte après", "$delay ms d'écoute")
             }
             firstResult(partialResults)?.let {
+                sessionPartials++
+                // La question posée par le diagnostic — le tampon est-il
+                // prolongé au lieu d'être remplacé ? — se règle par une mesure
+                // plutôt que par une lecture du code. Ce qui est noté ici est
+                // la RELATION entre l'ancien texte et le nouveau : le moteur
+                // prolonge-t-il sa transcription, la réécrit-il autrement, ou
+                // la raccourcit-il ? Le troisième cas est le seul inquiétant.
+                val relation = when {
+                    lastPartial.isEmpty() -> "premier"
+                    it == lastPartial -> "identique"
+                    it.startsWith(lastPartial) -> "prolongé (+${it.length - lastPartial.length} car.)"
+                    lastPartial.startsWith(it) -> "RACCOURCI (-${lastPartial.length - it.length} car.)"
+                    else -> "RÉÉCRIT (${lastPartial.length} → ${it.length} car.)"
+                }
+                SpeechTrace.record("APP tampon partiel", "$relation")
                 lastPartial = it
                 onPartial(it)
             }
@@ -290,6 +340,7 @@ class ContinuousSpeechManager(
             listening = false
             // LA MAIN REVIENT À L'APPLICATION.
             SpeechTrace.recordResults("API onResults", results)
+            endSession(if (firstResult(results) != null) "texte rendu" else "AUCUN TEXTE rendu")
             // À défaut de résultat final, le dernier partiel fait foi : il a
             // été affiché, il a donc été lu, et le faire disparaître serait
             // pire que de le figer tel quel.
@@ -304,6 +355,7 @@ class ContinuousSpeechManager(
             listening = false
             // LA MAIN REVIENT À L'APPLICATION, sans résultat.
             SpeechTrace.record("API onError", "${describeError(error)} (code $error)")
+            endSession("erreur : ${describeError(error)}")
             when (error) {
                 // Les deux façons de dire « personne n'a parlé ». Ce sont les
                 // erreurs les plus fréquentes en écoute continue, et de loin :
@@ -355,14 +407,23 @@ class ContinuousSpeechManager(
             // relevés, ce qui compte est de savoir si quelque chose a été
             // entendu, pas ce qu'il en restait à la fin.
             if (rmsdB > peakRmsSinceLog) peakRmsSinceLog = rmsdB
+            if (rmsdB > sessionMaxRms) sessionMaxRms = rmsdB
             val now = android.os.SystemClock.elapsedRealtime()
             if (now - lastRmsLogAtMs < RMS_SAMPLE_MS) return
             lastRmsLogAtMs = now
             SpeechTrace.record("API onRmsChanged", "pic %.1f dB".format(peakRmsSinceLog))
             peakRmsSinceLog = -120f
         }
-        override fun onBufferReceived(buffer: ByteArray?) = Unit
-        override fun onEvent(eventType: Int, params: Bundle?) = Unit
+        // Ces deux-là sont presque toujours muets, et c'est précisément
+        // pourquoi ils sont tracés : le jour où l'un d'eux parle, il faut le
+        // savoir plutôt que de le découvrir en relisant la documentation.
+        override fun onBufferReceived(buffer: ByteArray?) {
+            SpeechTrace.record("API onBufferReceived", "${buffer?.size ?: 0} octets")
+        }
+
+        override fun onEvent(eventType: Int, params: Bundle?) {
+            SpeechTrace.record("API onEvent", "type $eventType")
+        }
     }
 
     /**
@@ -370,6 +431,26 @@ class ContinuousSpeechManager(
      * termine — résultat, silence, erreur — il passe par ici : c'est la seule
      * façon de garantir qu'aucun texte affiché ne disparaisse jamais.
      */
+    /**
+     * Résume la session qui s'achève, en une ligne lisible seule.
+     *
+     * Appelé sur TOUS les chemins de fin — résultat, erreur, clôture forcée —
+     * pour qu'aucune session ne s'achève sans bilan. Une session manquante dans
+     * le récapitulatif signifierait alors quelque chose, au lieu de se
+     * confondre avec un oubli d'instrumentation.
+     */
+    private fun endSession(outcome: String) {
+        val duration = (android.os.SystemClock.elapsedRealtime() - sessionStartedAtMs) / 1000.0
+        SpeechTrace.record(
+            "APP bilan session n°$sessionCount",
+            String.format(
+                java.util.Locale.FRANCE,
+                "%.1f s, %d partiels, pic %.1f dB → %s",
+                duration, sessionPartials, sessionMaxRms, outcome,
+            ),
+        )
+    }
+
     private fun commit(text: String) {
         val hadPartial = lastPartial
         lastPartial = ""

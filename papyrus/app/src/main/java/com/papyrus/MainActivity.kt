@@ -78,7 +78,31 @@ class MainActivity : ComponentActivity() {
             hide(WindowInsetsCompat.Type.systemBars())
         }
 
+        SpeechTrace.record("ÉCRAN onCreate", "démarrage de l'application")
         setContent { PapyrusScreen() }
+    }
+
+    // Le cycle de vie est tracé parce qu'il commande l'écoute : c'est la
+    // disparition de cet écran qui relâche le microphone. Une transcription qui
+    // s'arrête a alors deux causes très différentes — le moteur a lâché, ou le
+    // système a mis l'application en arrière-plan — et rien ne les distinguait.
+    override fun onStart() {
+        super.onStart()
+        SpeechTrace.record("ÉCRAN onStart", "")
+    }
+
+    override fun onStop() {
+        super.onStop()
+        SpeechTrace.record("ÉCRAN onStop", "écran quitté")
+        // La trace est écrite ici plutôt qu'au seul appui long : une
+        // application tuée en arrière-plan emporterait sinon tout ce qu'elle a
+        // observé, et c'est précisément ce qu'on cherchait à comprendre.
+        SpeechTrace.writeTo(this)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        SpeechTrace.record("ÉCRAN onDestroy", "")
     }
 }
 
@@ -94,12 +118,20 @@ private fun PapyrusScreen() {
     }
     val requestPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted = it }
+    ) {
+        granted = it
+        SpeechTrace.record("ÉCRAN permission", if (it) "ACCORDÉE" else "REFUSÉE")
+    }
 
     // Demandée au démarrage, sans écran d'accueil ni bouton : l'application n'a
     // rien d'autre à faire, et un refus se lit dans le texte affiché.
     LaunchedEffect(Unit) {
-        if (!granted) requestPermission.launch(Manifest.permission.RECORD_AUDIO)
+        if (granted) {
+            SpeechTrace.record("ÉCRAN permission", "déjà accordée")
+        } else {
+            SpeechTrace.record("ÉCRAN permission", "demandée")
+            requestPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
     }
 
     /** Les énoncés clos, un par session du moteur. */
@@ -109,35 +141,77 @@ private fun PapyrusScreen() {
 
     DisposableEffect(granted) {
         if (!granted) return@DisposableEffect onDispose { }
+        SpeechTrace.record("ÉCRAN écoute", "démarrage du gestionnaire")
         val manager = ContinuousSpeechManager(
             context = context,
-            onPartial = { partial = it },
+            onPartial = {
+                // Remplacement, jamais ajout — et c'est désormais écrit dans la
+                // trace plutôt qu'à déduire du code. La relation entre l'ancien
+                // et le nouveau texte est notée en amont (voir « tampon
+                // partiel ») ; ici on note ce que l'écran affiche réellement.
+                partial = it
+                SpeechTrace.record("ÉCRAN partiel affiché", "${it.length} car.")
+            },
             onFinal = { text ->
                 segments.add(text)
                 partial = ""
                 // Le tampon ne grandit pas sans fin : une observation peut
                 // durer des heures, et rien ne sert de garder ce qui est sorti
                 // de l'écran depuis longtemps.
-                while (segments.size > MAX_SEGMENTS) segments.removeAt(0)
+                var purged = 0
+                while (segments.size > MAX_SEGMENTS) {
+                    segments.removeAt(0)
+                    purged++
+                }
+                SpeechTrace.record(
+                    "ÉCRAN ligne ajoutée",
+                    "${segments.size} lignes à l'écran" +
+                        (if (purged > 0) ", $purged purgée(s) en tête" else "") +
+                        " — « $text »",
+                )
             },
             onRestart = { },
-            onDiagnostic = { diagnostic = it },
+            onDiagnostic = {
+                diagnostic = it
+                SpeechTrace.record("ÉCRAN diagnostic", it)
+            },
         )
         manager.start()
-        onDispose { manager.stop() }
+        onDispose {
+            SpeechTrace.record("ÉCRAN écoute", "arrêt du gestionnaire")
+            manager.stop()
+        }
     }
 
     val scroll = rememberScrollState()
     val text = renderTranscript(segments.toList(), partial)
 
-    // Défilement vers le bas à chaque mot : c'est la dernière ligne qui compte,
-    // et personne ne fera défiler à la main.
-    LaunchedEffect(text) { scroll.animateScrollTo(scroll.maxValue) }
+    // LE POINT DÉCISIF. Du texte déjà affiché peut-il disparaître de l'écran ?
+    // C'est la question restée ouverte, et elle se tranche par une mesure :
+    // toute diminution de la longueur affichée est signalée, avec de quoi
+    // remonter à ce qui l'a causée sur les lignes précédentes de la trace.
+    //
+    // Un raccourcissement n'est pas toujours fautif — la purge des lignes les
+    // plus anciennes en produit un, et une ligne figée plus courte que le
+    // partiel qui la précédait aussi. La trace les distingue en nommant chacun.
+    var lastLength by remember { mutableStateOf(0) }
+    LaunchedEffect(text) {
+        val length = text.length
+        if (length < lastLength) {
+            SpeechTrace.record(
+                "ÉCRAN TEXTE RACCOURCI",
+                "$lastLength → $length car. (${lastLength - length} perdus)",
+            )
+        }
+        lastLength = length
+        scroll.animateScrollTo(scroll.maxValue)
+    }
 
     // Appui long n'importe où : la trace part vers le sélecteur de partage.
     // Un geste plutôt qu'un bouton — l'écran doit rester nu, et personne ne
     // découvrira ce geste par hasard.
     val shareTrace = {
+        SpeechTrace.record("ÉCRAN partage", "trace demandée")
         val file = SpeechTrace.writeTo(context)
         if (file != null) {
             try {

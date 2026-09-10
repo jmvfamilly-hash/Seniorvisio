@@ -35,8 +35,13 @@ import java.util.Locale
  */
 object SpeechTrace {
 
-    /** Assez pour une heure d'observation soutenue, borné pour ne pas manger la mémoire. */
-    private const val MAX_ENTRIES = 6_000
+    /**
+     * Le niveau sonore écrit à lui seul quatre lignes par seconde. À six mille
+     * entrées, un quart d'heure d'observation suffisait à chasser du journal
+     * les lignes qu'on cherche — celles des sessions, rares et décisives. Vingt
+     * mille tiennent plus d'une heure et pèsent environ un mégaoctet et demi.
+     */
+    private const val MAX_ENTRIES = 20_000
 
     private const val TAG = "SpeechTrace"
     private const val FILE_NAME = "papyrus-trace.txt"
@@ -111,13 +116,34 @@ object SpeechTrace {
         appendLine()
         appendLine("Colonnes : [temps depuis le démarrage, écart avec la ligne précédente] origine  contenu")
         appendLine()
-        appendLine("Ce qu'il faut y chercher :")
-        appendLine("  · l'écart entre « onResults / onError » et le « startListening » suivant :")
-        appendLine("    c'est le temps pendant lequel le moteur n'écoute pas, donc les mots perdus ;")
-        appendLine("  · un « onResults AUCUN TEXTE » après des onPartialResults fournis :")
-        appendLine("    la session s'est close sans rien rendre, le dernier partiel fait alors foi ;")
-        appendLine("  · les variantes d'un même résultat : elles expliquent qu'une phrase")
-        appendLine("    semble se remplacer par une autre plutôt que se corriger.")
+        appendLine("Origines : API = rappel du moteur · APP = décision de l'application")
+        appendLine("           ÉCRAN = ce qui est réellement affiché")
+        appendLine()
+        appendLine("Les lignes à chercher en premier, dans cet ordre :")
+        appendLine()
+        appendLine("  « APP bilan session »   une ligne par session : durée, nombre de partiels,")
+        appendLine("                          pic sonore, et texte produit ou non. Commencer par là :")
+        appendLine("                          une session sans texte AVEC un pic élevé et une session")
+        appendLine("                          sans texte dans le silence sont deux pannes opposées.")
+        appendLine()
+        appendLine("  « ÉCRAN TEXTE RACCOURCI »  du texte a disparu de l'écran. Les lignes juste")
+        appendLine("                          au-dessus en disent la cause — purge d'ancienneté,")
+        appendLine("                          ligne figée plus courte que son partiel, ou défaut.")
+        appendLine()
+        appendLine("  « APP tampon partiel »  la relation entre l'ancien texte et le nouveau :")
+        appendLine("                          prolongé, réécrit, ou RACCOURCI. Le troisième cas est")
+        appendLine("                          le seul inquiétant.")
+        appendLine()
+        appendLine("  « REFUSÉ » / « ABANDONNÉE »  une relance qui n'a pas eu lieu. Sans ces lignes,")
+        appendLine("                          une écoute qui ne repart jamais ne laisse aucune trace")
+        appendLine("                          du tout : le journal s'arrête net sans rien dire.")
+        appendLine()
+        appendLine("  l'écart entre « API onResults / onError » et le « APP → startListening »")
+        appendLine("                          suivant : le temps pendant lequel le moteur n'écoute")
+        appendLine("                          pas. Mesuré à 3 et 9 ms sur cet appareil — négligeable.")
+        appendLine()
+        appendLine("  « API onRmsChanged »    pic sonore par quart de seconde. C'est lui qui sépare")
+        appendLine("                          un vrai silence d'une parole non captée.")
         appendLine()
         appendLine("─".repeat(78))
         appendLine()
