@@ -165,6 +165,19 @@ class ContinuousSpeechManager(
     private var sessionPartials = 0
     private var sessionMaxRms = -120f
 
+    /** Lignes réellement figées pendant cette session. */
+    private var sessionCommits = 0
+
+    /**
+     * Le bilan a-t-il déjà été émis pour cette session ?
+     *
+     * La clôture forcée en émettait un, puis le onResults qu'elle provoque en
+     * émettait un second : deux bilans pour une session, aux chiffres
+     * légèrement différents, ce qui donnait l'impression de deux sessions
+     * imbriquées.
+     */
+    private var sessionSummarised = false
+
     fun start() {
         if (wanted) return
         wanted = true
@@ -270,7 +283,9 @@ class ContinuousSpeechManager(
             peakRmsSinceLog = -120f
             sessionStartedAtMs = android.os.SystemClock.elapsedRealtime()
             sessionPartials = 0
+            sessionCommits = 0
             sessionMaxRms = -120f
+            sessionSummarised = false
             handler.removeCallbacks(sessionCap)
             handler.postDelayed(sessionCap, MAX_SESSION_MS)
             instance.startListening(intent)
@@ -402,6 +417,21 @@ class ContinuousSpeechManager(
                 if (!continues && endOfSpeechSeen) {
                     SpeechTrace.record("APP nouvel énoncé", "le précédent est figé avant remplacement")
                     commit(lastPartial)
+                } else if (!continues) {
+                    // LE SEUL CHEMIN DE PERTE QUI SUBSISTE, et il est le prix
+                    // du garde-fou : un texte discordant sans fin de parole
+                    // préalable est traité comme une correction du moteur, donc
+                    // remplacé sans être figé. Si c'était en réalité un nouvel
+                    // énoncé, il est perdu.
+                    //
+                    // Nommé plutôt que laissé invisible : c'est ce qu'il faudra
+                    // compter pour savoir si la condition sur la fin de parole
+                    // est trop stricte, et c'est la seule mesure qui puisse le
+                    // dire.
+                    SpeechTrace.record(
+                        "APP texte remplacé sans figer",
+                        "« $previous » → « $current » (aucune fin de parole entre les deux)",
+                    )
                 }
 
                 lastPartial = it
@@ -414,7 +444,15 @@ class ContinuousSpeechManager(
             listening = false
             // LA MAIN REVIENT À L'APPLICATION.
             SpeechTrace.recordResults("API onResults", results)
-            endSession(if (firstResult(results) != null) "texte rendu" else "AUCUN TEXTE rendu")
+            // « l'API ne rend rien » et « la session n'a rien produit » sont
+            // deux choses différentes depuis que les lignes sont figées en
+            // cours de route. Le libellé précédent les confondait, et laissait
+            // croire à une session stérile alors qu'elle avait produit huit
+            // lignes.
+            endSession(
+                if (firstResult(results) != null) "l'API rend un texte final"
+                else "l'API ne rend aucun texte final"
+            )
             // À défaut de résultat final, le dernier partiel fait foi : il a
             // été affiché, il a donc été lu, et le faire disparaître serait
             // pire que de le figer tel quel.
@@ -519,13 +557,15 @@ class ContinuousSpeechManager(
      * confondre avec un oubli d'instrumentation.
      */
     private fun endSession(outcome: String) {
+        if (sessionSummarised) return
+        sessionSummarised = true
         val duration = (android.os.SystemClock.elapsedRealtime() - sessionStartedAtMs) / 1000.0
         SpeechTrace.record(
             "APP bilan session n°$sessionCount",
             String.format(
                 java.util.Locale.FRANCE,
-                "%.1f s, %d partiels, pic %.1f dB → %s",
-                duration, sessionPartials, sessionMaxRms, outcome,
+                "%.1f s, %d partiels, %d ligne(s) figée(s), pic %.1f dB — fin : %s",
+                duration, sessionPartials, sessionCommits, sessionMaxRms, outcome,
             ),
         )
     }
@@ -551,6 +591,7 @@ class ContinuousSpeechManager(
             return
         }
         lastCommitted = trimmed
+        sessionCommits++
         SpeechTrace.record("APP commit", "ligne figée : « $trimmed »")
         onFinal(trimmed)
     }

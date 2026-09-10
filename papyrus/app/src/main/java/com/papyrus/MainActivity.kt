@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -186,26 +187,39 @@ private fun PapyrusScreen() {
     val scroll = rememberScrollState()
     val text = renderTranscript(segments.toList(), partial)
 
-    // LE POINT DÉCISIF. Du texte déjà affiché peut-il disparaître de l'écran ?
-    // C'est la question restée ouverte, et elle se tranche par une mesure :
-    // toute diminution de la longueur affichée est signalée, avec de quoi
-    // remonter à ce qui l'a causée sur les lignes précédentes de la trace.
+    // Du texte ACQUIS peut-il disparaître de l'écran ? C'est la seule forme de
+    // perte qui compte : la ligne en cours, elle, est faite pour être remplacée.
     //
-    // Un raccourcissement n'est pas toujours fautif — la purge des lignes les
-    // plus anciennes en produit un, et une ligne figée plus courte que le
-    // partiel qui la précédait aussi. La trace les distingue en nommant chacun.
-    var lastLength by remember { mutableStateOf(0) }
-    LaunchedEffect(text) {
-        val length = text.length
-        if (length < lastLength) {
+    // Deux corrections par rapport à la version précédente, qui signalait treize
+    // pertes dont aucune n'en était une.
+    //
+    // On ne mesure plus que les lignes acquises, sans la ligne en cours ni sa
+    // marque de plume. Douze des treize signalements venaient de la disparition
+    // de cette marque au moment où une ligne passe d'« en cours » à « acquise » :
+    // deux caractères, comptés comme une perte de texte.
+    //
+    // Et la mesure sort du LaunchedEffect. Celui-ci appelle une animation de
+    // défilement, donc il suspend ; quand le texte change à nouveau avant la
+    // fin, l'effet est annulé AVANT d'avoir enregistré la longueur, et la
+    // comparaison suivante se fait contre une valeur périmée. C'est ce qui a
+    // produit le treizième signalement, à vingt caractères. SideEffect
+    // s'exécute après chaque composition effectivement affichée, sans jamais
+    // être annulé — c'est exactement « ce que l'écran a montré ».
+    val committedLength = remember { intArrayOf(0) }
+    val committedChars = segments.sumOf { it.length }
+    SideEffect {
+        if (committedChars < committedLength[0]) {
             SpeechTrace.record(
-                "ÉCRAN TEXTE RACCOURCI",
-                "$lastLength → $length car. (${lastLength - length} perdus)",
+                "ÉCRAN LIGNES ACQUISES PERDUES",
+                "${committedLength[0]} → $committedChars car. — vérifier la purge juste au-dessus",
             )
         }
-        lastLength = length
-        scroll.animateScrollTo(scroll.maxValue)
+        committedLength[0] = committedChars
     }
+
+    // Défilement vers le bas à chaque mot : c'est la dernière ligne qui compte,
+    // et personne ne fera défiler à la main.
+    LaunchedEffect(text) { scroll.animateScrollTo(scroll.maxValue) }
 
     // Appui long n'importe où : la trace part vers le sélecteur de partage.
     // Un geste plutôt qu'un bouton — l'écran doit rester nu, et personne ne
