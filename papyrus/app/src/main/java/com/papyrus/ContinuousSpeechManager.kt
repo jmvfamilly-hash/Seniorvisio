@@ -81,6 +81,18 @@ class ContinuousSpeechManager(
     var sessionCount = 0
         private set
 
+    /**
+     * Le dernier texte partiel de la session en cours.
+     *
+     * Conservé parce qu'une session ne rend pas toujours de résultat final :
+     * onResults peut arriver vide, et ERROR_NO_MATCH tomber après plusieurs
+     * secondes de dictée parfaitement lisible. Sans cette copie, ce qui avait
+     * été affiché disparaissait — la session suivante écrasant le texte partiel
+     * par le sien, plus court. C'est ainsi que de la parole se perd, pas
+     * seulement de l'affichage.
+     */
+    private var lastPartial = ""
+
     private val restart = Runnable { beginListening() }
 
     fun start() {
@@ -208,12 +220,18 @@ class ContinuousSpeechManager(
         }
 
         override fun onPartialResults(partialResults: Bundle?) {
-            firstResult(partialResults)?.let(onPartial)
+            firstResult(partialResults)?.let {
+                lastPartial = it
+                onPartial(it)
+            }
         }
 
         override fun onResults(results: Bundle?) {
             listening = false
-            firstResult(results)?.let(onFinal)
+            // À défaut de résultat final, le dernier partiel fait foi : il a
+            // été affiché, il a donc été lu, et le faire disparaître serait
+            // pire que de le figer tel quel.
+            commit(firstResult(results) ?: lastPartial)
             // Sans délai : c'est le cas normal, et chaque milliseconde ici est
             // un mot que le moteur n'entend pas. Passer par le fil principal
             // suffit à laisser la session précédente se refermer.
@@ -228,12 +246,19 @@ class ContinuousSpeechManager(
                 // les compter comme des pannes ferait grandir la temporisation
                 // jusqu'à l'arrêt, dans une pièce simplement silencieuse.
                 SpeechRecognizer.ERROR_NO_MATCH,
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> scheduleRestart(0L)
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                    // « Rien compris » arrive aussi APRÈS plusieurs secondes de
+                    // dictée déjà affichée. Le partiel est alors tout ce qui
+                    // reste de ces mots-là.
+                    commit(lastPartial)
+                    scheduleRestart(0L)
+                }
 
                 // L'instance ne sort pas seule de cet état : la relancer rend
                 // la même erreur indéfiniment.
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
                 SpeechRecognizer.ERROR_CLIENT -> {
+                    commit(lastPartial)
                     consecutiveErrors++
                     destroyRecognizer()
                     onDiagnostic("Moteur reconstruit (${describeError(error)})")
@@ -241,6 +266,7 @@ class ContinuousSpeechManager(
                 }
 
                 else -> {
+                    commit(lastPartial)
                     consecutiveErrors++
                     onDiagnostic(describeError(error))
                     scheduleRestart(backoffMs())
@@ -257,6 +283,18 @@ class ContinuousSpeechManager(
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
+    }
+
+    /**
+     * Clôt l'énoncé en cours. Quel que soit le chemin par lequel une session se
+     * termine — résultat, silence, erreur — il passe par ici : c'est la seule
+     * façon de garantir qu'aucun texte affiché ne disparaisse jamais.
+     */
+    private fun commit(text: String) {
+        lastPartial = ""
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
+        onFinal(trimmed)
     }
 
     private fun firstResult(bundle: Bundle?): String? =

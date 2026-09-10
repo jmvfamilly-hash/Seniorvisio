@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -130,7 +131,12 @@ private fun PapyrusScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Parchment),
+            .background(Parchment)
+            // Le parchemin ne se réduit pas à un aplat : une feuille ancienne
+            // est plus sombre sur ses bords qu'en son centre. Dessiné plutôt
+            // qu'importé — une image de fond pèserait plus lourd que toute
+            // l'application, et se pixelliserait sur une autre dalle.
+            .background(Brush.radialGradient(listOf(Color.Transparent, ParchmentEdge))),
     ) {
         Column(
             modifier = Modifier
@@ -169,36 +175,47 @@ private fun PapyrusScreen() {
 }
 
 /**
- * Le texte tel qu'il s'affiche, avec une marque discrète à chaque couture.
+ * Le texte tel qu'il s'affiche : **un énoncé par ligne**, ajoutés les uns sous
+ * les autres. Rien n'est jamais réécrit ni effacé.
  *
- * Chaque marque est un endroit où le moteur s'est arrêté puis a été relancé —
- * c'est-à-dire exactement l'instant où des mots peuvent avoir été perdus. Les
- * montrer est tout l'objet de ce banc d'essai : sans elles, une phrase amputée
- * ressemble à une phrase mal comprise, et les deux ne se corrigent pas de la
- * même façon.
+ * Le retour à la ligne fait office de marque de couture : chaque ligne est une
+ * session du moteur, donc chaque passage à la ligne est l'instant précis où il
+ * s'est arrêté puis a repris. C'est là, et seulement là, que des mots peuvent
+ * manquer — et c'est tout l'objet de ce banc d'essai que de rendre ces endroits
+ * repérables à l'œil.
+ *
+ * L'énoncé en cours de dictée occupe sa propre ligne, en encre plus claire : il
+ * est encore susceptible d'être révisé par le moteur, et le distinguer évite de
+ * prendre une hésitation de machine pour une hésitation de la personne.
  */
 @Composable
 private fun renderTranscript(segments: List<String>, partial: String): AnnotatedString =
     buildAnnotatedString {
         segments.forEachIndexed { index, segment ->
-            if (index > 0) {
-                withStyle(SpanStyle(color = FadedInk)) { append(SEAM) }
-            }
+            if (index > 0) append('\n')
             append(segment)
         }
         if (partial.isNotEmpty()) {
-            if (segments.isNotEmpty()) withStyle(SpanStyle(color = FadedInk)) { append(SEAM) }
-            append(partial)
+            if (segments.isNotEmpty()) append('\n')
+            withStyle(SpanStyle(color = PendingInk)) { append(partial) }
         }
     }
 
-/** Le parchemin demandé, et une encre chaude plutôt qu'un noir pur, qui trancherait trop. */
+/**
+ * Le parchemin demandé, et une encre brune plutôt qu'un noir pur : sur un fond
+ * chaud, le noir tranche comme de l'imprimé et défait tout l'effet.
+ */
 private val Parchment = Color(0xFFFBF5E6)
-private val Ink = Color(0xFF2B2118)
-private val FadedInk = Color(0x552B2118)
 
-/** Sans espace insécable ni retour : une couture ne doit jamais couper une ligne en deux. */
-private const val SEAM = " · "
+/** Ombrage des bords, à peine perceptible : au-delà, la feuille paraît sale. */
+private val ParchmentEdge = Color(0x146B5A3E)
+
+private val Ink = Color(0xFF3A2C1C)
+
+/** L'énoncé en cours, encore révisable par le moteur. */
+private val PendingInk = Color(0x993A2C1C)
+
+private val FadedInk = Color(0x553A2C1C)
 
 /** Environ une heure de conversation soutenue. Au-delà, plus personne ne remontera. */
 private const val MAX_SEGMENTS = 400
