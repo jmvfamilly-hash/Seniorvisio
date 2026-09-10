@@ -168,6 +168,25 @@ class ContinuousSpeechManager(
     /** Lignes réellement figées pendant cette session. */
     private var sessionCommits = 0
 
+    /**
+     * Délai entre « le moteur écoute » et le premier texte lisible de CETTE
+     * session, en millisecondes. -1 tant qu'aucun texte n'est venu.
+     *
+     * Mesuré par session et publié au bilan, parce que la question ouverte n'a
+     * de réponse que là. Six secondes ont été observées au tout premier usage,
+     * ce qui s'explique par un modèle qui se charge. Mais la même trace montre
+     * que TOUTES les sessions sont tuées par la clôture forcée à vingt
+     * secondes, jamais par une fin naturelle — et si ce délai se reproduisait à
+     * chaque session, ce plafond nous rendrait sourds six secondes toutes les
+     * vingt. Un tiers du temps d'écoute perdu par une décision qui était censée
+     * protéger.
+     *
+     * Une colonne dans le bilan tranche entre les deux : un délai élevé sur la
+     * seule première session accuse le chargement du modèle, un délai élevé
+     * partout accuse le plafond.
+     */
+    private var sessionFirstTextMs = -1L
+
     // --- Mode segmenté, à l'essai -------------------------------------------
     //
     // EXTRA_SEGMENTED_SESSION (Android 13) demande au moteur de rendre ses
@@ -346,6 +365,7 @@ class ContinuousSpeechManager(
             sessionPartials = 0
             sessionCommits = 0
             sessionSegments = 0
+            sessionFirstTextMs = -1L
             sessionMaxRms = -120f
             sessionSummarised = false
             handler.removeCallbacks(sessionCap)
@@ -420,6 +440,7 @@ class ContinuousSpeechManager(
             if (!firstPartialLogged && firstResult(partialResults) != null) {
                 firstPartialLogged = true
                 val delay = android.os.SystemClock.elapsedRealtime() - readyAtMs
+                sessionFirstTextMs = delay
                 // Le délai entre « le moteur écoute » et le premier mot lisible
                 // est la seconde source possible de mots perdus, distincte du
                 // temps mort entre sessions — lequel s'est révélé négligeable.
@@ -453,11 +474,43 @@ class ContinuousSpeechManager(
                     return@let
                 }
 
-                val continues = previous.isEmpty() || current.startsWith(previous)
+                // Prolongé par la fin, mais aussi par le DÉBUT. L'analyse
+                // disait « ne prolonge pas ET NE CONTIENT PAS l'ancien
+                // tampon » ; je n'en avais retenu que la première moitié.
+                //
+                // Le moteur préfixe parfois son hypothèse en la re-décodant
+                // avec plus de contexte : « second mot » devient « voilà second
+                // mot ». Aucun mot de tête ne coïncide alors, l'ancien serait
+                // figé, et la version complète le serait à son tour — la même
+                // phrase deux fois à l'écran.
+                //
+                // MAIS « contient » tout court est trop large, et le prendre au
+                // pied de la lettre ouvrirait un trou plus grand que celui
+                // qu'il bouche. Un tampon de trois lettres — « oui », « non »,
+                // « bon » — se retrouve à l'intérieur de presque n'importe quel
+                // énoncé suivant ; le figeage ne se déclencherait alors plus
+                // JAMAIS après un mot isolé, et ce mot serait perdu à chaque
+                // fois. C'est précisément le défaut qu'on répare.
+                //
+                // Deux formes sont donc distinguées. Le préfixage est sûr et
+                // sans condition : l'ancien tampon est un SUFFIXE du nouveau,
+                // ce qui décrit exactement le re-décodage avec plus de contexte
+                // et n'arrive pas par hasard. L'inclusion au milieu, elle, ne
+                // vaut qu'au-delà d'une longueur où la coïncidence cesse d'être
+                // vraisemblable.
+                val containedInMiddle = previous.length >= MIN_CONTAINED_CHARS &&
+                    current.contains(previous)
+                val continues = previous.isEmpty() ||
+                    current.startsWith(previous) ||
+                    current.endsWith(previous) ||
+                    containedInMiddle
                 val relation = when {
                     previous.isEmpty() -> "premier"
                     current == previous -> "identique"
                     current.startsWith(previous) -> "prolongé (+${current.length - previous.length} car.)"
+                    current.endsWith(previous) -> "préfixé (+${current.length - previous.length} car. en tête)"
+                    containedInMiddle -> "englobé (+${current.length - previous.length} car. autour)"
+                    current.contains(previous) -> "inclus mais trop court (${previous.length} car.) — traité en rupture"
                     previous.startsWith(current) -> "RACCOURCI (-${previous.length - current.length} car.)"
                     else -> "RÉÉCRIT (${previous.length} → ${current.length} car.)"
                 }
@@ -688,9 +741,12 @@ class ContinuousSpeechManager(
             "APP bilan session n°$sessionCount",
             String.format(
                 java.util.Locale.FRANCE,
-                "%s — %.1f s, %d partiels, %d segment(s), %d ligne(s) figée(s), pic %.1f dB — fin : %s",
+                "%s — %.1f s, 1er texte %s, %d partiels, %d segment(s), " +
+                    "%d ligne(s) figée(s), pic %.1f dB — fin : %s",
                 if (segmentedRequested) "SEGMENTÉ" else "classique",
-                duration, sessionPartials, sessionSegments, sessionCommits, sessionMaxRms, outcome,
+                duration,
+                if (sessionFirstTextMs >= 0) "${sessionFirstTextMs} ms" else "JAMAIS",
+                sessionPartials, sessionSegments, sessionCommits, sessionMaxRms, outcome,
             ),
         )
     }
@@ -767,6 +823,23 @@ class ContinuousSpeechManager(
         /** Point de départ de l'espacement entre deux relances après erreur. */
         const val RESTART_DELAY_MS = 250L
         const val MAX_RESTART_DELAY_MS = 8_000L
+
+        /**
+         * Longueur au-delà de laquelle retrouver l'ancien tampon au MILIEU du
+         * nouveau vaut continuation, et non coïncidence.
+         *
+         * Douze caractères, soit deux ou trois mots courts. En deçà, l'inclusion
+         * ne prouve rien : « oui » est contenu dans une phrase sur deux, et lui
+         * accorder valeur de continuation empêcherait à jamais de figer un mot
+         * isolé — c'est-à-dire de le conserver. Au-delà, une suite de douze
+         * caractères qui se retrouve mot pour mot n'arrive pas par hasard.
+         *
+         * Le préfixage — l'ancien tampon en SUFFIXE du nouveau — n'est pas
+         * soumis à ce seuil : cette forme-là décrit un phénomène précis du
+         * moteur, le re-décodage avec plus de contexte, et non une rencontre
+         * fortuite de caractères.
+         */
+        const val MIN_CONTAINED_CHARS = 12
 
         /**
          * Silences au terme desquels le moteur clôt son énoncé.
