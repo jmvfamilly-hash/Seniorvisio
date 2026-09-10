@@ -82,71 +82,6 @@ class ContinuousSpeechManager(
         private set
 
     /**
-     * Délai sans évolution au terme duquel la ligne en cours est figée.
-     *
-     * Réglable depuis l'écran, et c'est tout l'objet de la manœuvre : deux
-     * secondes rendaient l'affichage stable mais l'attente trop longue, et
-     * personne ne peut dire au jugé ce qui est confortable. Le curseur est donc
-     * sous la main pendant qu'on parle.
-     *
-     * ═══ Ce que le réglage rencontre ═══
-     *
-     * Les résultats du moteur n'arrivent pas régulièrement mais PAR RAFALES :
-     * dans la trace mesurée, 57 % des écarts entre deux résultats sont
-     * inférieurs à 50 ms, puis vient un trou d'environ 630 ms. Autrement dit
-     * 42 % des écarts dépassent 300 ms.
-     *
-     * Un délai court fige donc une ligne après presque chaque rafale, ce qui
-     * est exactement l'effet recherché — un affichage qui suit la parole — mais
-     * n'a de sens qu'accompagné du retranchement décrit sous
-     * [committedPrefix]. Sans lui, le moteur continuant d'allonger la MÊME
-     * hypothèse, l'écran afficherait « il y a des » puis « il y a des
-     * problème » : le même texte deux fois.
-     */
-    @Volatile var idleCommitMs = DEFAULT_IDLE_COMMIT_MS
-        private set
-
-    /**
-     * Modifie le délai d'un cran et rend la valeur retenue.
-     *
-     * Le bornage vit ici et non dans l'écran : c'est cette classe qui sait ce
-     * qu'un délai de dix millisecondes ferait à sa minuterie, et un écran qui
-     * calculerait lui-même les bornes finirait tôt ou tard par diverger de ce
-     * que le gestionnaire accepte.
-     *
-     * Sans effet sur la minuterie DÉJÀ armée : le prochain résultat du moteur
-     * la réarmera à la nouvelle valeur, et il arrive dans la demi-seconde. Le
-     * réglage se juge donc en parlant, ce qui est bien l'intention.
-     */
-    fun adjustIdleCommit(deltaMs: Long): Long {
-        idleCommitMs = (idleCommitMs + deltaMs)
-            .coerceIn(MIN_IDLE_COMMIT_MS, MAX_IDLE_COMMIT_MS)
-        SpeechTrace.record("ÉCRAN délai de figeage", "réglé à ${idleCommitMs} ms")
-        return idleCommitMs
-    }
-
-    /** Un cran de réglage, pour l'écran qui n'a pas à connaître le pas. */
-    val idleCommitStepMs: Long get() = IDLE_COMMIT_STEP_MS
-
-    /**
-     * La part de l'hypothèse EN COURS du moteur déjà figée à l'écran.
-     *
-     * Un figeage par inactivité ne met pas fin à l'énoncé du moteur : celui-ci
-     * poursuit la même hypothèse et la rend en entier à chaque fois, début
-     * compris. Ce champ retient ce début pour le retrancher de la suite, de
-     * sorte qu'une ligne figée ne réapparaisse pas à l'intérieur de la
-     * suivante.
-     *
-     * C'est ce qui fait la différence entre un délai court utilisable et un
-     * délai court qui bégaie. Vidé dès que le moteur change d'énoncé, puisque
-     * la nouvelle hypothèse ne contient alors plus rien de ce qui a été figé.
-     */
-    private var committedPrefix = ""
-
-    /** La dernière hypothèse ENTIÈRE du moteur, retranchement non appliqué. */
-    private var lastRawHypothesis = ""
-
-    /**
      * Le dernier texte partiel de la session en cours.
      *
      * Conservé parce qu'une session ne rend pas toujours de résultat final :
@@ -159,14 +94,14 @@ class ContinuousSpeechManager(
     private var lastPartial = ""
 
     /**
-     * Le moteur a-t-il signalé une fin de parole depuis que le texte en cours a
-     * été prolongé pour la dernière fois ?
+     * Le moteur a-t-il signalé une fin de parole depuis la dernière ligne
+     * figée ?
      *
-     * Garde-fou contre un découpage abusif. Un texte qui change sans être la
-     * suite du précédent signifie presque toujours que le moteur est passé à
-     * l'énoncé suivant — mais pas toujours : il lui arrive de se corriger en
-     * pleine phrase, « bonjour comment » devenant « bon jour comment ». Exiger
-     * qu'une fin de parole soit passée entre les deux sépare les deux cas.
+     * La moitié de la condition de frontière. Un début de parole seul ne
+     * prouve rien : le moteur en émet cent vingt en deux minutes, dont deux
+     * en pleine phrase, et figer sur chacun couperait celle-ci en deux. C'est
+     * la SÉQUENCE fin de parole puis début de parole qui marque une frontière,
+     * et elle ne s'est jamais trompée sur la trace mesurée.
      */
     private var endOfSpeechSeen = false
 
@@ -176,25 +111,6 @@ class ContinuousSpeechManager(
      * verrait alors la même phrase deux fois.
      */
     private var lastCommitted = ""
-
-    /**
-     * Fige le texte en cours quand il cesse d'évoluer.
-     *
-     * Sans lui, le dernier énoncé avant un vrai silence ne serait jamais figé :
-     * rien ne vient plus le remplacer, et la session ne se termine pas. Il
-     * resterait indéfiniment en italique, ni acquis ni effacé.
-     */
-    private val idleCommit = Runnable {
-        if (lastPartial.isEmpty()) return@Runnable
-        SpeechTrace.record("APP inactivité", "texte figé après ${idleCommitMs} ms sans évolution")
-        commit(lastPartial)
-        // L'énoncé du moteur, lui, n'est pas terminé : il rendra la même
-        // hypothèse allongée, début compris. Ce début vient d'être figé, on le
-        // retranche donc de tout ce qui suivra — sans quoi il se réafficherait
-        // à l'intérieur de la ligne suivante.
-        committedPrefix = lastRawHypothesis
-        SpeechTrace.record("APP retranchement", "${committedPrefix.length} car. déjà acquis de cet énoncé")
-    }
 
     private val restart = Runnable {
         SpeechTrace.record("APP relance exécutée", "")
@@ -306,7 +222,6 @@ class ContinuousSpeechManager(
         wanted = false
         handler.removeCallbacks(restart)
         handler.removeCallbacks(sessionCap)
-        handler.removeCallbacks(idleCommit)
         listening = false
         SpeechTrace.record("APP stop()", "écoute arrêtée")
         destroyRecognizer()
@@ -401,8 +316,6 @@ class ContinuousSpeechManager(
             sessionStartedAtMs = android.os.SystemClock.elapsedRealtime()
             sessionPartials = 0
             sessionCommits = 0
-            committedPrefix = ""
-            lastRawHypothesis = ""
             sessionFirstTextMs = -1L
             sessionMaxRms = -120f
             sessionSummarised = false
@@ -486,173 +399,41 @@ class ContinuousSpeechManager(
             }
             firstResult(partialResults)?.let {
                 sessionPartials++
-                handler.removeCallbacks(idleCommit)
-                handler.postDelayed(idleCommit, idleCommitMs)
-                // La question posée par le diagnostic — le tampon est-il
-                // prolongé au lieu d'être remplacé ? — se règle par une mesure
-                // plutôt que par une lecture du code. Ce qui est noté ici est
-                // la RELATION entre l'ancien texte et le nouveau : le moteur
-                // prolonge-t-il sa transcription, la réécrit-il autrement, ou
-                // la raccourcit-il ? Le troisième cas est le seul inquiétant.
-                // Comparaison sur du texte nettoyé. La trace a montré le
-                // piège : « second mot » devenant «  second mot » — une simple
-                // espace en tête — était classé comme une réécriture, ce qui
-                // aurait fait couper la phrase en deux.
-                val previous = lastPartial.trim()
-
-                // ═══ Retranchement de ce qui est déjà acquis ═══
-                //
-                // Le moteur rend son hypothèse ENTIÈRE à chaque fois. Après un
-                // figeage par inactivité, il n'a pas pour autant terminé son
-                // énoncé : il reprend au début et allonge. Sans retrancher ce
-                // début, l'écran montrerait « il y a des » puis, en dessous,
-                // « il y a des problème ».
-                //
-                // Le retranchement ne s'applique que si l'hypothèse commence
-                // toujours par ce qui a été figé. Si le moteur a réécrit son
-                // début, elle ne le contient plus, et la conserver ferait
-                // perdre du texte : on repart alors de l'hypothèse entière,
-                // quitte à répéter — répéter se voit et se corrige, perdre
-                // ne se voit pas.
-                val raw = it.trim()
-                lastRawHypothesis = raw
-                val current = when {
-                    committedPrefix.isEmpty() -> raw
-                    raw.startsWith(committedPrefix) -> raw.removePrefix(committedPrefix).trim()
-                    else -> {
-                        SpeechTrace.record(
-                            "APP retranchement abandonné",
-                            "le moteur a réécrit le début déjà figé — hypothèse reprise entière",
-                        )
-                        committedPrefix = ""
-                        raw
-                    }
-                }
-
-                // Le moteur redit exactement ce qui vient d'être figé, sans
-                // rien y ajouter. Rien à afficher, et surtout pas une ligne
-                // vide : on attend la suite.
+                // Le moteur préfixe volontiers ses résultats d'une espace :
+                // « second mot » arrive en «  second mot ». Nettoyé ici une
+                // fois pour toutes, faute de quoi l'écart se verrait à
+                // l'écran et fausserait toute comparaison de textes.
+                val current = it.trim()
                 if (current.isEmpty()) return@let
 
-                // Écho d'une ligne qu'on vient de figer. Le moteur répète
-                // volontiers le même texte — la trace en montre plusieurs
-                // occurrences consécutives à l'identique — et après une ligne
-                // figée par inactivité, cette répétition réapparaîtrait en
-                // dessous, en italique, doublant à l'écran ce qui est déjà
-                // acquis juste au-dessus.
-                if (lastPartial.isEmpty() && current == lastCommitted) {
-                    SpeechTrace.record("APP partiel ignoré", "écho de la ligne déjà figée")
-                    return@let
-                }
-
-                // Prolongé par la fin, mais aussi par le DÉBUT. L'analyse
-                // disait « ne prolonge pas ET NE CONTIENT PAS l'ancien
-                // tampon » ; je n'en avais retenu que la première moitié.
+                // ═══ LE TAMPON EST REMPLACÉ, JAMAIS FIGÉ ICI ═══
                 //
-                // Le moteur préfixe parfois son hypothèse en la re-décodant
-                // avec plus de contexte : « second mot » devient « voilà second
-                // mot ». Aucun mot de tête ne coïncide alors, l'ancien serait
-                // figé, et la version complète le serait à son tour — la même
-                // phrase deux fois à l'écran.
+                // C'est tout ce que fait désormais ce rappel. Les partiels
+                // sont faits pour se remplacer les uns les autres — la trace
+                // le montre sans exception — et aucun d'eux ne dit s'il est
+                // le dernier. Leur demander de trancher revenait à deviner.
                 //
-                // MAIS « contient » tout court est trop large, et le prendre au
-                // pied de la lettre ouvrirait un trou plus grand que celui
-                // qu'il bouche. Un tampon de trois lettres — « oui », « non »,
-                // « bon » — se retrouve à l'intérieur de presque n'importe quel
-                // énoncé suivant ; le figeage ne se déclencherait alors plus
-                // JAMAIS après un mot isolé, et ce mot serait perdu à chaque
-                // fois. C'est précisément le défaut qu'on répare.
+                // La décision appartient maintenant aux deux événements du
+                // moteur, qui la portent réellement : voir onEndOfSpeech et
+                // onBeginningOfSpeech.
                 //
-                // Deux formes sont donc distinguées. Le préfixage est sûr et
-                // sans condition : l'ancien tampon est un SUFFIXE du nouveau,
-                // ce qui décrit exactement le re-décodage avec plus de contexte
-                // et n'arrive pas par hasard. L'inclusion au milieu, elle, ne
-                // vaut qu'au-delà d'une longueur où la coïncidence cesse d'être
-                // vraisemblable.
-                val containedInMiddle = previous.length >= MIN_CONTAINED_CHARS &&
-                    current.contains(previous)
-                val continues = previous.isEmpty() ||
-                    current.startsWith(previous) ||
-                    current.endsWith(previous) ||
-                    containedInMiddle
-                val relation = when {
-                    previous.isEmpty() -> "premier"
-                    current == previous -> "identique"
-                    current.startsWith(previous) -> "prolongé (+${current.length - previous.length} car.)"
-                    current.endsWith(previous) -> "préfixé (+${current.length - previous.length} car. en tête)"
-                    containedInMiddle -> "englobé (+${current.length - previous.length} car. autour)"
-                    current.contains(previous) -> "inclus mais trop court (${previous.length} car.) — traité en rupture"
-                    previous.startsWith(current) -> "RACCOURCI (-${previous.length - current.length} car.)"
-                    else -> "RÉÉCRIT (${previous.length} → ${current.length} car.)"
-                }
-                SpeechTrace.record("APP tampon partiel", relation)
-
-                // LE CORRECTIF. Un texte qui n'est pas la suite du précédent
-                // signifie que le moteur est passé à l'énoncé suivant — et
-                // l'ancien doit être figé AVANT d'être remplacé, sinon il
-                // disparaît purement et simplement.
-                //
-                // C'est exactement ce que la trace a montré : « premier mot »
-                // écrasé par « second » sans jamais avoir été figé, parce que
-                // je n'écrivais une ligne qu'à la fin de la session. Or la
-                // session ne se termine pas : le détecteur de voix du moteur
-                // clignote toutes les six dixièmes de seconde, il ne voit donc
-                // jamais le silence continu qui la clôturerait. Attendre la fin
-                // de session était une hypothèse, et elle est fausse sur cet
-                // appareil.
-                // ═══ Nouvel énoncé, ou correction de la phrase en cours ? ═══
-                //
-                // La question se tranche sur le CONTENU, plus sur la durée de
-                // la pause. La condition précédente exigeait qu'une fin de
-                // parole ait été signalée, c'est-à-dire un silence assez long
-                // pour que le moteur le déclare — et la trace a montré que
-                // celui-ci repart sur une hypothèse fraîche au bout de six
-                // dixièmes de seconde, bien avant. Trois segments entiers ont
-                // ainsi disparu : « tu as compris funiculaire mais », « mais
-                // sinon », « pourquoi pas ». Une voix un peu hachée tombe
-                // exactement dans cette zone.
-                //
-                // Le contenu, lui, sépare nettement les deux cas. Quand le
-                // moteur se corrige, il garde le début de sa phrase — c'est
-                // une révision, pas un recommencement. Quand il change
-                // d'énoncé, plus rien ne coïncide dès le premier mot.
-                //
-                // Le garde-fou n'est donc pas supprimé mais redéfini : partager
-                // un début protège du découpage abusif, ne rien partager
-                // déclenche le figeage. Une fin de parole signalée reste un
-                // indice supplémentaire de rupture, et lève la protection.
-                val shared = sharedWordPrefix(previous, current)
-                val selfCorrection = shared > 0 && !endOfSpeechSeen
-
-                if (!continues && !selfCorrection) {
-                    SpeechTrace.record(
-                        "APP nouvel énoncé",
-                        "figé avant remplacement (aucun mot commun en tête)",
-                    )
-                    commit(lastPartial)
-                } else if (!continues) {
-                    // LE SEUL CHEMIN DE PERTE QUI SUBSISTE, et il est le prix
-                    // du garde-fou : un texte discordant sans fin de parole
-                    // préalable est traité comme une correction du moteur, donc
-                    // remplacé sans être figé. Si c'était en réalité un nouvel
-                    // énoncé, il est perdu.
-                    //
-                    // Nommé plutôt que laissé invisible : c'est ce qu'il faudra
-                    // compter pour savoir si la condition sur la fin de parole
-                    // est trop stricte, et c'est la seule mesure qui puisse le
-                    // dire.
-                    SpeechTrace.record(
-                        "APP correction du moteur",
-                        "« $previous » → « $current » ($shared mot(s) commun(s) en tête)",
-                    )
-                }
-
-                lastPartial = it
-                endOfSpeechSeen = false
-                // Affiché nettoyé : le moteur préfixe volontiers ses résultats
-                // d'une espace, visible en tête de chaque phrase en cours. Les
-                // lignes figées l'étaient déjà ; celle en cours ne l'était pas,
-                // et l'écart se voyait à l'écran.
+                // La RELATION avec le texte précédent reste journalisée. Elle
+                // ne commande plus rien, mais c'est elle qui a permis de
+                // comprendre le fonctionnement du moteur, et c'est encore par
+                // elle qu'on verra si un autre appareil se comporte
+                // autrement.
+                val previous = lastPartial.trim()
+                SpeechTrace.record(
+                    "APP tampon partiel",
+                    when {
+                        previous.isEmpty() -> "premier"
+                        current == previous -> "identique"
+                        current.startsWith(previous) -> "prolongé (+${current.length - previous.length} car.)"
+                        previous.startsWith(current) -> "RACCOURCI (-${previous.length - current.length} car.)"
+                        else -> "réécrit (${previous.length} → ${current.length} car.)"
+                    },
+                )
+                lastPartial = current
                 onPartial(current)
             }
         }
@@ -728,17 +509,54 @@ class ContinuousSpeechManager(
         // Le moteur signale la fin de la parole avant de rendre son résultat.
         // Rien à faire ici : onResults ou onError suit immédiatement, et agir
         // aux deux endroits relancerait deux sessions concurrentes.
+        /**
+         * Le moteur a fini de décoder sa bouffée. NE FIGE RIEN ENCORE.
+         *
+         * Il arrive qu'un dernier partiel suive cet événement — la « vidange »
+         * de la phrase qui s'achève. Sur les huit cas observés il était sept
+         * fois identique au précédent et n'a jamais rien ajouté, mais c'est un
+         * appareil et une trace : attendre coûte moins cher que de trancher
+         * sur huit observations.
+         *
+         * Cet événement arme donc simplement l'autorisation de figer, que le
+         * prochain début de parole consommera.
+         */
         override fun onEndOfSpeech() {
             SpeechTrace.record("API onEndOfSpeech", "fin de parole détectée")
-            // Ne fige rien par lui-même : la trace montre qu'il se déclenche
-            // plusieurs fois par énoncé, y compris en pleine phrase. Il arme
-            // seulement l'autorisation de figer, que le prochain texte
-            // discordant utilisera.
             endOfSpeechSeen = true
         }
 
+        /**
+         * L'attaque de la phrase suivante. C'EST LUI QUI FIGE la précédente.
+         *
+         * ═══ Pourquoi ces deux événements, et plus aucune minuterie ═══
+         *
+         * Les partiels sont faits pour se remplacer les uns les autres, et
+         * aucun ne dit qu'il est le dernier. Toute tentative de le deviner —
+         * par la durée d'un silence, puis par la comparaison des contenus — a
+         * échoué sur un point ou sur un autre : la minuterie faisait attendre
+         * deux secondes une phrase dite en trois cents millisecondes, et la
+         * comparaison de contenus prenait des auto-corrections du moteur pour
+         * de nouvelles phrases (elle a produit les fragments « déjà » et
+         * « bon déjà il »).
+         *
+         * Le moteur, lui, sait. Sur la trace mesurée, les vingt-quatre
+         * ruptures se répartissent sans une seule erreur : les quinze
+         * précédées d'un début de parole sont de vraies nouvelles phrases, les
+         * neuf autres sont toutes des auto-corrections — « CAD » → « cadet »,
+         * « il n'y a pas » → « il y a pas ». Deux fausses alertes seulement
+         * sur deux cent treize continuations.
+         *
+         * LA FIN DE PAROLE EST EXIGÉE avant de figer. Sans elle, les deux
+         * débuts qui tombent en pleine phrase couperaient celle-ci en deux ;
+         * avec elle, ils sont sans effet. Un début de parole seul ne prouve
+         * rien — c'est la séquence fin PUIS début qui fait une frontière.
+         */
         override fun onBeginningOfSpeech() {
             SpeechTrace.record("API onBeginningOfSpeech", "début de parole détecté")
+            if (lastPartial.isEmpty() || !endOfSpeechSeen) return
+            SpeechTrace.record("APP frontière", "fin de parole puis début : phrase close")
+            commit(lastPartial)
         }
         override fun onRmsChanged(rmsdB: Float) {
             // Échantillonné : ce rappel arrive une dizaine de fois par seconde,
@@ -797,12 +615,7 @@ class ContinuousSpeechManager(
     }
 
     private fun commit(text: String) {
-        handler.removeCallbacks(idleCommit)
         endOfSpeechSeen = false
-        // Par défaut un figeage clôt l'énoncé : plus rien à retrancher. Le
-        // figeage par inactivité est la seule exception, et il repose le
-        // retranchement lui-même juste après cet appel.
-        committedPrefix = ""
         val hadPartial = lastPartial
         lastPartial = ""
         val trimmed = text.trim()
@@ -837,16 +650,6 @@ class ContinuousSpeechManager(
      * premier mot d'une phrase après coup, et un « Bonjour » succédant à
      * « bonjour » passerait sinon pour une rupture.
      */
-    private fun sharedWordPrefix(first: String, second: String): Int {
-        val a = first.split(' ').filter { it.isNotEmpty() }
-        val b = second.split(' ').filter { it.isNotEmpty() }
-        var shared = 0
-        while (shared < a.size && shared < b.size && a[shared].equals(b[shared], ignoreCase = true)) {
-            shared++
-        }
-        return shared
-    }
-
     private fun firstResult(bundle: Bundle?): String? =
         bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             ?.firstOrNull()
@@ -873,22 +676,6 @@ class ContinuousSpeechManager(
         const val RESTART_DELAY_MS = 250L
         const val MAX_RESTART_DELAY_MS = 8_000L
 
-        /**
-         * Longueur au-delà de laquelle retrouver l'ancien tampon au MILIEU du
-         * nouveau vaut continuation, et non coïncidence.
-         *
-         * Douze caractères, soit deux ou trois mots courts. En deçà, l'inclusion
-         * ne prouve rien : « oui » est contenu dans une phrase sur deux, et lui
-         * accorder valeur de continuation empêcherait à jamais de figer un mot
-         * isolé — c'est-à-dire de le conserver. Au-delà, une suite de douze
-         * caractères qui se retrouve mot pour mot n'arrive pas par hasard.
-         *
-         * Le préfixage — l'ancien tampon en SUFFIXE du nouveau — n'est pas
-         * soumis à ce seuil : cette forme-là décrit un phénomène précis du
-         * moteur, le re-décodage avec plus de contexte, et non une rencontre
-         * fortuite de caractères.
-         */
-        const val MIN_CONTAINED_CHARS = 12
 
         /**
          * Silences au terme desquels le moteur clôt son énoncé.
@@ -958,32 +745,6 @@ class ContinuousSpeechManager(
         /** Une mesure de niveau par quart de seconde : assez pour distinguer un silence d'une voix faible, sans noyer la trace. */
         const val RMS_SAMPLE_MS = 250L
 
-        /**
-         * Valeur de départ du délai de figeage, réglable ensuite depuis
-         * l'écran (voir [idleCommitMs]).
-         *
-         * Ce délai existe parce que le dernier énoncé avant un vrai silence
-         * n'est remplacé par rien : sans lui il resterait indéfiniment en
-         * attente, ni acquis ni effacé — et la session, qui ne se termine pas
-         * d'elle-même sur cet appareil, ne viendrait pas le sauver.
-         *
-         * Trois cents millisecondes, contre deux secondes auparavant. Le
-         * choix vient de l'usage et non de la mesure : deux secondes rendaient
-         * l'écran stable mais l'attente sensible, une phrase restant invisible
-         * le temps qu'on en dise une autre.
-         *
-         * La mesure, elle, dit ce que ce seuil rencontre : les résultats
-         * arrivent par rafales séparées d'environ 630 ms, et 42 % des écarts
-         * dépassent déjà 300 ms. Une ligne sera donc figée après presque
-         * chaque rafale. C'est voulu — mais cela n'aurait produit que des
-         * répétitions sans le retranchement mis en place avec ce réglage.
-         */
-        const val DEFAULT_IDLE_COMMIT_MS = 300L
-
-        /** Bornes du réglage à l'écran, et pas de sa course. */
-        const val MIN_IDLE_COMMIT_MS = 100L
-        const val MAX_IDLE_COMMIT_MS = 3_000L
-        const val IDLE_COMMIT_STEP_MS = 100L
 
     }
 }
