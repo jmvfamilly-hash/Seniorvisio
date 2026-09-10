@@ -90,6 +90,27 @@ class RoomHandoffController(
      */
     private val returnsByReason = linkedMapOf<String, Int>()
 
+    /**
+     * Combien de fois une voix a été entendue, et combien de fois la bascule a
+     * été refusée, par cause.
+     *
+     * Ces deux nombres séparent trois situations que « rien ne se passe » ne
+     * distingue pas, et qui se corrigent de trois façons opposées :
+     *
+     *  - aucune voix comptée : le déclencheur n'est jamais appelé, et c'est en
+     *    amont qu'il faut chercher — capture, détection de voix ;
+     *  - des voix comptées et des refus : une garde s'y oppose, et elle est
+     *    nommée ;
+     *  - des voix comptées et aucun refus alors que rien ne bascule : l'état
+     *    est incohérent.
+     *
+     * Le dernier cas était invisible jusqu'ici. C'est précisément celui qui
+     * produit « ça a basculé une fois puis plus jamais ».
+     */
+    private var voiceHeardCount = 0
+    private val refusalsByReason = linkedMapOf<String, Int>()
+    private var staleStateRecoveries = 0
+
     private val timedReturn = Runnable { returnToHomeScreen("durée écoulée") }
 
     /**
@@ -112,13 +133,46 @@ class RoomHandoffController(
      * aspirateur ou une porte ne doivent pas le déclencher.
      */
     fun onVoiceHeard() {
+        voiceHeardCount++
         if (active) return
         val reason = refuseReason()
         if (reason != null) {
+            // Compté par cause, et pas seulement retenu comme « dernière
+            // décision » : une garde qui refuse cent fois et une garde qui n'a
+            // jamais refusé donnent le même texte, et ce sont deux
+            // diagnostics opposés.
+            refusalsByReason[reason] = (refusalsByReason[reason] ?: 0) + 1
             lastDecision = reason
             return
         }
         handOff()
+    }
+
+    /**
+     * Notre boucle de capture tourne : le microphone nous est donc revenu, ce
+     * qui **prouve** que nous ne sommes plus basculés — une bascule commence
+     * précisément par le relâcher.
+     *
+     * Cette preuve est gratuite et rattrape le pire mode de panne de ce
+     * mécanisme : un état resté bloqué sur « basculé » alors que l'écran de
+     * Jean est revenu. La première ligne de [onVoiceHeard] interdit alors toute
+     * nouvelle bascule pour toujours, sans le moindre message — et le symptôme
+     * est exactement « ça a basculé une fois, puis plus jamais ».
+     *
+     * Les quatre chemins de retour appellent bien [returnToHomeScreen], mais
+     * en dépendre revenait à supposer qu'aucun autre chemin n'existe. Le
+     * système en a d'autres : une application tuée pour faire de la place, un
+     * retour arrière, une bascule refusée à mi-course.
+     */
+    fun noteMicrophoneHeld() {
+        if (!active) return
+        Log.w(TAG, "État incohérent : le micro est revenu alors que l'état dit « basculé »")
+        staleStateRecoveries++
+        active = false
+        handler.removeCallbacks(timedReturn)
+        banner.hide()
+        unregisterScreenOff()
+        lastDecision = "état réinitialisé : le micro était revenu sans retour signalé"
     }
 
     /**
@@ -237,11 +291,7 @@ class RoomHandoffController(
 
         handler.removeCallbacks(timedReturn)
         banner.hide()
-        try {
-            context.unregisterReceiver(screenOffReceiver)
-        } catch (e: IllegalArgumentException) {
-            // Jamais enregistré, ou déjà retiré : sans conséquence.
-        }
+        unregisterScreenOff()
 
         try {
             context.startActivity(
@@ -265,6 +315,14 @@ class RoomHandoffController(
     fun noteBackOnHomeScreen() {
         if (!active) return
         returnToHomeScreen("retour manuel")
+    }
+
+    private fun unregisterScreenOff() {
+        try {
+            context.unregisterReceiver(screenOffReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Jamais enregistré, ou déjà retiré : sans conséquence.
+        }
     }
 
     fun close() {
@@ -300,11 +358,17 @@ class RoomHandoffController(
             )
             else -> append(lastDecision)
         }
-        if (handoffCount > 0) append(", $handoffCount bascule(s)")
+        append(", voix entendues ×$voiceHeardCount")
+        append(", bascules ×$handoffCount")
         if (returnsByReason.isNotEmpty()) {
             append(", retours : ")
             append(returnsByReason.entries.joinToString(", ") { "${it.key} ×${it.value}" })
         }
+        if (refusalsByReason.isNotEmpty()) {
+            append(", refus : ")
+            append(refusalsByReason.entries.joinToString(", ") { "${it.key} ×${it.value}" })
+        }
+        if (staleStateRecoveries > 0) append(", états rattrapés ×$staleStateRecoveries")
     }
 
     private companion object {

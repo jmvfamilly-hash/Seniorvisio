@@ -722,6 +722,11 @@ class RoomPresenceService : Service() {
         // déclencher. Le portier Silero sert donc ici quel que soit le mode de
         // facturation du moteur, puisque ce mode n'en ouvre aucun.
         if (adminConfig.roomHandoffEnabled) {
+            // Nous sommes en train de lire le micro : il nous est donc revenu,
+            // et nous ne sommes plus basculés quoi qu'en dise l'état. Réconcilié
+            // ici plutôt que d'attendre un chemin de retour qui n'arrivera
+            // peut-être jamais.
+            ensureHandoff().noteMicrophoneHeld()
             val voiceGate = ensureVoiceGate()
             voiceGate.accept(buffer, length)
             // Détecteur indisponible : on ne bascule PAS. Il rend alors « oui »
