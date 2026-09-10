@@ -315,17 +315,24 @@ class AdminConfig(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_ROOM_HANDOFF_ENABLED, value).apply()
 
     /**
-     * Au bout de combien de minutes on ramène l'écran de Jean tout seul.
+     * Filet de sécurité : au bout de combien de minutes on ramène l'écran de
+     * Jean si aucun autre chemin ne l'a fait.
      *
-     * Une durée, et non un retour au silence — qui serait pourtant le bon
-     * critère. Pendant que Transcription instantanée écoute, elle tient le
-     * microphone : Senior Visio est **sourd** et ne peut pas savoir que la
-     * pièce s'est vidée. C'est la même exclusivité du micro qui régit tout le
-     * reste de cette application, et aucune ruse ne la contourne — sauf à
-     * reprendre le micro, c'est-à-dire à casser exactement ce qu'on est venu
-     * chercher.
+     * **Un filet, et non le chemin normal.** Celui-là est la mise en veille :
+     * elle survient quand la pièce se vide, c'est-à-dire exactement au bon
+     * moment, et le micro est repris dans la foulée pour que la surveillance du
+     * bruit reparte. La durée ne sert que si l'écran ne s'éteint jamais —
+     * Transcription instantanée est faite pour être lue en continu et pourrait
+     * le maintenir allumé. On ne le saura qu'en mesurant (voir
+     * RoomHandoffController.returnsByReason).
      *
-     * Zéro : pas de retour minuté, les autres chemins subsistent.
+     * Ce n'est en revanche jamais un retour au silence, qui serait pourtant le
+     * bon critère : pendant la bascule, l'application de Google tient le
+     * microphone et Senior Visio est **sourd**. Aucune ruse ne contourne cette
+     * exclusivité, sauf à reprendre le micro — c'est-à-dire à casser exactement
+     * ce qu'on est venu chercher.
+     *
+     * Zéro : pas de filet, les autres chemins subsistent.
      */
     var roomHandoffReturnMinutes: Int
         get() = prefs.getInt(KEY_ROOM_HANDOFF_RETURN_MINUTES, DEFAULT_HANDOFF_RETURN_MINUTES)
@@ -380,12 +387,12 @@ class AdminConfig(context: Context) {
         private const val KEY_ROOM_HANDOFF_RETURN_MINUTES = "room_handoff_return_minutes"
 
         /**
-         * Dix minutes : assez pour une visite qui s'installe, assez peu pour
-         * que la tablette ne reste pas indéfiniment sur l'écran d'une autre
-         * application après le départ du visiteur — auquel cas Jean ne verrait
-         * plus ni l'heure, ni la météo, ni ses photos.
+         * Trente minutes. Volontairement long : ce n'est qu'un filet, et il ne
+         * doit pas couper une visite qui s'installe. La mise en veille, elle,
+         * ramènera l'écran bien avant dès que la pièce se videra — si tant est
+         * qu'elle survienne, ce que la mesure dira.
          */
-        const val DEFAULT_HANDOFF_RETURN_MINUTES = 10
+        const val DEFAULT_HANDOFF_RETURN_MINUTES = 30
         private const val KEY_SPEAKER_ENGINE = "speaker_engine"
         private const val KEY_PICOVOICE_ACCESS_KEY = "picovoice_access_key"
 

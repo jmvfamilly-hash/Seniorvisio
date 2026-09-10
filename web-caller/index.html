@@ -515,8 +515,10 @@
             transcrit.
           </p>
           <p class="hint">
-            Retour par le bandeau en bas de l'écran, par le bouton Accueil, à
-            l'extinction de l'écran, ou après la durée ci-dessous. Il n'y a
+            <strong>Le retour normal, c'est la mise en veille</strong> : elle
+            survient quand la pièce se vide, et le micro est repris dans la
+            foulée pour que la surveillance du bruit reparte. S'y ajoutent le
+            bandeau en bas de l'écran et le bouton Accueil. Il n'y a en revanche
             <strong>pas</strong> de retour au silence : pendant la bascule
             l'application de Google tient le micro, la tablette est sourde et ne
             peut pas savoir que la pièce s'est vidée. Le bandeau demande une
@@ -525,15 +527,23 @@
           </p>
 
           <div class="caption-control">
-            <label for="handoffReturnSlider">Retour automatique après</label>
+            <label for="handoffReturnSlider">Filet de sécurité : retour forcé après</label>
             <input type="range" id="handoffReturnSlider"
-                   min="0" max="60" step="1" value="10" data-unit=" min">
+                   min="0" max="120" step="5" value="30" data-unit=" min">
           </div>
           <p class="hint">
-            Zéro : pas de retour minuté, les autres chemins subsistent. Après un
-            retour, deux minutes s'écoulent avant qu'une nouvelle bascule soit
-            possible — sans quoi un mot prononcé renverrait Jean aussitôt sur
-            l'autre écran, et il ne pourrait jamais récupérer le sien.
+            Un filet, pas le chemin normal : il ne sert que si l'écran ne
+            s'éteint jamais — Transcription instantanée est faite pour être lue
+            en continu et pourrait le maintenir allumé. Le diagnostic compte
+            désormais les retours par cause : si tous se font par « écran
+            éteint », ce curseur peut être mis à zéro ; si tous se font par
+            « durée écoulée », c'est que la veille ne vient pas.
+          </p>
+          <p class="hint">
+            Après un retour, deux minutes s'écoulent avant qu'une nouvelle
+            bascule soit possible — sans quoi un mot prononcé renverrait Jean
+            aussitôt sur l'autre écran, et il ne pourrait jamais récupérer le
+            sien.
           </p>
 
           <h3 class="admin-section">Plafond des services payants</h3>

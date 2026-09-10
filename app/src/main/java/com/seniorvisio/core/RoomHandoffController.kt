@@ -7,6 +7,7 @@ import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.seniorvisio.ui.MainActivity
 import com.seniorvisio.ui.ReturnBannerOverlay
 import java.time.LocalDateTime
@@ -62,6 +63,25 @@ class RoomHandoffController(
     /** Dernière raison d'agir ou de ne pas agir, publiée au diagnostic. */
     @Volatile var lastDecision: String = "inactif"
         private set
+
+    private var handoffCount = 0
+
+    /**
+     * Combien de retours par cause, depuis le démarrage.
+     *
+     * C'est la mesure qui tranche une question qu'on ne peut pas trancher
+     * autrement : **la tablette s'endort-elle seulement pendant que
+     * Transcription instantanée est affichée ?** Cette application est faite
+     * pour être lue en continu et maintient peut-être l'écran allumé, auquel
+     * cas la veille ne survient jamais et seul le filet de sécurité agit. Si
+     * les retours se font tous par « durée écoulée », c'est la réponse ; s'ils
+     * se font par « écran éteint », le filet peut être coupé.
+     *
+     * Supposer aurait été facile et faux dans un cas sur deux — il s'agit du
+     * comportement d'une application qu'on ne maîtrise pas, sur un appareil
+     * qu'on n'a pas en main.
+     */
+    private val returnsByReason = linkedMapOf<String, Int>()
 
     private val timedReturn = Runnable { returnToHomeScreen("durée écoulée") }
 
@@ -148,6 +168,7 @@ class RoomHandoffController(
             return
         }
 
+        handoffCount++
         lastDecision = "basculé vers Transcription instantanée"
         Log.i(TAG, "Bascule vers Transcription instantanée")
 
@@ -155,8 +176,22 @@ class RoomHandoffController(
         // la fenêtre qui s'ouvre.
         handler.postDelayed({ if (active) banner.show { returnToHomeScreen("bandeau") } }, BANNER_DELAY_MS)
 
-        context.registerReceiver(screenOffReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
+        // Drapeau explicite : depuis Android 14, un récepteur enregistré à
+        // l'exécution doit dire s'il accepte les diffusions d'autres
+        // applications. L'extinction d'écran est une diffusion protégée du
+        // système, donc dispensée — mais l'écrire coûte un mot et met à l'abri
+        // d'un durcissement ultérieur.
+        ContextCompat.registerReceiver(
+            context,
+            screenOffReceiver,
+            IntentFilter(Intent.ACTION_SCREEN_OFF),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
 
+        // La veille est le chemin normal : elle survient quand la pièce se
+        // vide, ce qui est exactement le bon moment. La durée n'est qu'un filet
+        // pour le cas où l'écran ne s'éteindrait jamais — Transcription
+        // instantanée est faite pour être lue et pourrait le maintenir allumé.
         val minutes = adminConfig.roomHandoffReturnMinutes
         if (minutes > 0) handler.postDelayed(timedReturn, minutes * 60_000L)
     }
@@ -170,6 +205,7 @@ class RoomHandoffController(
         if (!active) return
         active = false
         lastReturnAtMs = System.currentTimeMillis()
+        returnsByReason[reason] = (returnsByReason[reason] ?: 0) + 1
         lastDecision = "revenu ($reason)"
         Log.i(TAG, "Retour à l'écran de Jean : $reason")
 
@@ -219,11 +255,23 @@ class RoomHandoffController(
     }
 
     /** Ce que fait le mode, en une phrase, pour le diagnostic à distance. */
-    fun describe(): String = when {
-        !adminConfig.roomHandoffEnabled -> "désactivée"
-        active -> "en cours — ${if (banner.available()) "bandeau de retour affiché"
-        else "retour par le bouton Accueil (autorisation de superposition non accordée)"}"
-        else -> lastDecision
+    fun describe(): String = buildString {
+        when {
+            !adminConfig.roomHandoffEnabled -> {
+                append("désactivée")
+                return@buildString
+            }
+            active -> append(
+                "en cours — " + if (banner.available()) "bandeau de retour affiché"
+                else "retour par le bouton Accueil (superposition non autorisée)"
+            )
+            else -> append(lastDecision)
+        }
+        if (handoffCount > 0) append(", $handoffCount bascule(s)")
+        if (returnsByReason.isNotEmpty()) {
+            append(", retours : ")
+            append(returnsByReason.entries.joinToString(", ") { "${it.key} ×${it.value}" })
+        }
     }
 
     private companion object {
