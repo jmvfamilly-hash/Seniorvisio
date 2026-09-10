@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Thème de la plateforme plutôt que Material : tout l'écran est dessiné
+         par Compose, et dépendre de la bibliothèque Material pour une seule
+         couleur de fenêtre serait en ajouter une pour rien.
+
+         La couleur de fond y est posée aussi, et pas seulement dans Compose :
+         entre l'ouverture de la fenêtre et le premier rendu, c'est elle qui
+         s'affiche. Sans elle, l'application démarre sur un éclair blanc. -->
+    <style name="Theme.Papyrus" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/parchment</item>
+        <item name="android:statusBarColor">@color/parchment</item>
+        <item name="android:navigationBarColor">@color/parchment</item>
+    </style>
+</resources>

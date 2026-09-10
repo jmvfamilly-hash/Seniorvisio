@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Doit rester identique à Parchment dans MainActivity.kt : c'est la même
+         couleur vue de deux côtés, avant et après le premier rendu. -->
+    <color name="parchment">#FBF5E6</color>
+</resources>

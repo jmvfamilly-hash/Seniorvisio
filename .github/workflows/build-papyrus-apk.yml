@@ -1,0 +1,65 @@
+# Banc d'essai de l'écoute continue (voir papyrus/), volontairement séparé de la
+# chaîne de Senior Visio.
+#
+# Deux différences qui comptent avec build-debug-apk.yml, et qui sont la raison
+# d'un fichier distinct plutôt que d'un travail ajouté là-bas :
+#
+#   - aucune demande de mise à jour à distance. La chaîne principale en émet une
+#     en fin de course, et la tablette de Jean l'écoute en permanence : y
+#     raccrocher un banc d'essai reviendrait à lui envoyer une application de
+#     test ;
+#   - aucun secret. Ce projet n'appelle aucun service et n'a pas de clé.
+name: Build Papyrus APK
+
+on:
+  push:
+    paths:
+      - 'papyrus/**'
+      - '.github/workflows/build-papyrus-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Android SDK platform & build-tools
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build debug APK
+        working-directory: papyrus
+        run: gradle assembleDebug --stacktrace "-PbuildRev=rev${{ github.run_number }}"
+
+      - name: Rename APK with revision number
+        run: |
+          apk_name="papyrus-rev${{ github.run_number }}.apk"
+          echo "APK_NAME=$apk_name" >> "$GITHUB_ENV"
+          cp papyrus/app/build/outputs/apk/debug/app-debug.apk "papyrus/app/build/outputs/apk/debug/$apk_name"
+
+      - name: Publish APK as GitHub Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="papyrus-apk-${{ github.run_id }}"
+          gh release create "$tag" "papyrus/app/build/outputs/apk/debug/${{ env.APK_NAME }}" \
+            --title "Papyrus debug APK (run ${{ github.run_number }})" \
+            --notes "Banc d'essai de l'écoute continue, commit ${{ github.sha }}. Indépendant de Senior Visio." \
+            --target "${{ github.sha }}"

@@ -1,0 +1,7 @@
+// Mêmes versions que Senior Visio, et ce n'est pas un hasard : ce banc d'essai
+// sert à étudier un défaut qui se manifeste là-bas. Compiler avec une autre
+// chaîne reviendrait à mesurer autre chose.
+plugins {
+    id 'com.android.application' version '8.5.2' apply false
+    id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
+}

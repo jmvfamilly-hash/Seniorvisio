@@ -2,6 +2,13 @@ name: Build debug APK
 
 on:
   push:
+    # Le banc d'essai a sa propre chaîne (voir build-papyrus-apk.yml). Sans
+    # cette exclusion, un commit qui ne touche que lui reconstruirait Senior
+    # Visio ET demanderait une mise à jour à distance de la tablette de Jean —
+    # pour un code inchangé.
+    paths-ignore:
+      - 'papyrus/**'
+      - '.github/workflows/build-papyrus-apk.yml'
   workflow_dispatch:
 
 permissions:
