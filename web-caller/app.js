@@ -206,7 +206,9 @@ const els = {
   paidUsage: document.getElementById("paidUsage"),
   voiceGateToggle: document.getElementById("voiceGateToggle"),
   dimJeanSpeechToggle: document.getElementById("dimJeanSpeechToggle"),
-  jeanVoiceThresholdSlider: document.getElementById("jeanVoiceThresholdSlider"),
+  speakerEngineSelect: document.getElementById("speakerEngineSelect"),
+  thresholdEmbeddedSlider: document.getElementById("thresholdEmbeddedSlider"),
+  thresholdPicovoiceSlider: document.getElementById("thresholdPicovoiceSlider"),
   quotaAssemblyaiSlider: document.getElementById("quotaAssemblyaiSlider"),
   quotaGladiaSlider: document.getElementById("quotaGladiaSlider"),
   refreshUsageButton: document.getElementById("refreshUsageButton"),
@@ -569,9 +571,12 @@ const ADMIN_SLIDER_FIELDS = [
   // nouvelle convention (voir DeviceStatusReporter, FIELD_QUOTA_PREFIX).
   ["quotaAssemblyaiSlider", "quotaHours_assemblyai"],
   ["quotaGladiaSlider", "quotaHours_gladia"],
-  // Ressemblance exigée pour attribuer une parole à Jean (voir
-  // AdminConfig.jeanVoiceThresholdPercent).
-  ["jeanVoiceThresholdSlider", "jeanVoiceThreshold"],
+  // Ressemblance exigée pour attribuer une parole à Jean. Un seuil par
+  // moteur : leurs scores ne sont pas comparables, et un curseur commun
+  // appliquerait à l'un une exigence réglée pour l'autre (voir
+  // SpeakerEngineChoice).
+  ["thresholdEmbeddedSlider", "jeanVoiceThreshold_embedded"],
+  ["thresholdPicovoiceSlider", "jeanVoiceThreshold_picovoice"],
 ];
 
 // Mêmes réglages d'appareil, mais en tout ou rien.
@@ -963,6 +968,7 @@ const ENGINE_SELECT_FIELDS = [
   ["roomEngineSelect", "roomTranscriptionEngine"],
   ["callEngineSelect", "callTranscriptionEngine"],
   ["voskModelSelect", "voskModelSize"],
+  ["speakerEngineSelect", "speakerEngine"],
 ];
 
 function applyDeviceSettings(data) {

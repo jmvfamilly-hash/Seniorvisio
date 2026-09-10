@@ -398,9 +398,22 @@ class DeviceStatusReporter(private val context: Context) {
         snapshot.getBoolean(FIELD_DIM_JEAN_SPEECH)?.let {
             adminConfig.dimJeanSpeech = it
         }
-        snapshot.getLong(FIELD_JEAN_VOICE_THRESHOLD)?.let {
-            if (it > 0) adminConfig.jeanVoiceThresholdPercent = it.toInt()
+        // Moteur de reconnaissance de locuteur, et son seuil — lequel est propre
+        // à chaque moteur : les deux rendent un nombre entre 0 et 1, mais l'un
+        // sort d'un réseau de neurones et l'autre d'une moyenne pondérée. Un
+        // seuil commun appliquerait à l'un une exigence réglée pour l'autre.
+        SpeakerEngineChoice.fromRemoteValue(snapshot.getString(FIELD_SPEAKER_ENGINE))?.let {
+            if (adminConfig.speakerEngine != it) {
+                adminConfig.speakerEngine = it
+                Log.i(TAG, "Moteur de reconnaissance de locuteur réglé à distance : ${it.remoteValue}")
+            }
         }
+        SpeakerEngineChoice.entries.forEach { engine ->
+            snapshot.getLong(FIELD_VOICE_THRESHOLD_PREFIX + engine.remoteValue)?.let {
+                if (it > 0) adminConfig.setJeanVoiceThresholdPercent(engine, it.toInt())
+            }
+        }
+
         snapshot.getBoolean(FIELD_BLOCK_WAKE_AT_NIGHT)?.let {
             adminConfig.blockWakeAtNight = it
         }
@@ -578,7 +591,15 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"
         private const val FIELD_VOICE_GATE_ENABLED = "voiceGateEnabled"
         private const val FIELD_DIM_JEAN_SPEECH = "dimJeanSpeech"
-        private const val FIELD_JEAN_VOICE_THRESHOLD = "jeanVoiceThreshold"
+        private const val FIELD_SPEAKER_ENGINE = "speakerEngine"
+        // Pas de champ pour la clé Picovoice : comme les deux clés de
+        // transcription, elle se saisit sur la tablette ou vient d'un secret
+        // d'intégration continue. Les règles Firestore de ce projet laissent
+        // écrire quiconque connaît l'adresse du document — une clé n'y a rien
+        // à faire.
+
+        /** Suffixé du nom du moteur : « jeanVoiceThreshold_embedded », « jeanVoiceThreshold_picovoice ». */
+        private const val FIELD_VOICE_THRESHOLD_PREFIX = "jeanVoiceThreshold_"
 
         private const val LISTENER_RETRY_DELAY_MS = 60_000L
     }

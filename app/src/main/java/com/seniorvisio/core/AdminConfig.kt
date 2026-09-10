@@ -218,14 +218,43 @@ class AdminConfig(context: Context) {
     // livré une fonction qui ne s'active pas. ---
 
     /**
+     * Lequel des deux moteurs répond à « est-ce Jean qui parle » (voir
+     * SpeakerEngineChoice). Réglable à distance comme les moteurs de
+     * transcription, et pour la même raison : les comparer sur la même voix
+     * dans la même pièce est la seule évaluation qui vaille.
+     */
+    var speakerEngine: SpeakerEngineChoice
+        get() = SpeakerEngineChoice.fromRemoteValue(prefs.getString(KEY_SPEAKER_ENGINE, null))
+            ?: SpeakerEngineChoice.EMBEDDED
+        set(value) = prefs.edit().putString(KEY_SPEAKER_ENGINE, value.remoteValue).apply()
+
+    /** Clé d'accès Picovoice, obtenue sur leur console. Vide : le moteur refuse de démarrer en le disant. */
+    var picovoiceAccessKey: String
+        get() = prefs.getString(KEY_PICOVOICE_ACCESS_KEY, null)
+            ?.takeIf { it.isNotBlank() }
+            ?: BuildConfig.PICOVOICE_ACCESS_KEY_DEFAULT
+        set(value) = prefs.edit().putString(KEY_PICOVOICE_ACCESS_KEY, value.trim()).apply()
+
+    /**
      * La signature vocale de Jean, apprise une fois (voir
      * RoomPresenceService.startVoiceEnrollment). Chaîne vide tant qu'elle n'a
      * pas été enregistrée, auquel cas l'atténuation ne peut évidemment rien
      * faire et se tait plutôt que de deviner.
+     *
+     * **Rangée par moteur**, et c'est indispensable : une moyenne de
+     * coefficients acoustiques et un profil neuronal n'ont rien de commun, et
+     * donner l'une à l'autre reviendrait à comparer une voix à une empreinte
+     * qui ne la décrit pas — sans que rien à l'écran ne le signale. Le rangement
+     * séparé a en prime une vertu : basculer d'un moteur à l'autre ne détruit
+     * pas l'apprentissage du premier, et revenir en arrière ne demande pas de
+     * refaire parler Jean.
      */
-    var jeanVoiceSignature: String
-        get() = prefs.getString(KEY_JEAN_VOICE_SIGNATURE, "").orEmpty()
-        set(value) = prefs.edit().putString(KEY_JEAN_VOICE_SIGNATURE, value).apply()
+    fun jeanVoiceSignature(engine: SpeakerEngineChoice): String =
+        prefs.getString(KEY_VOICE_SIGNATURE_PREFIX + engine.remoteValue, "").orEmpty()
+
+    fun setJeanVoiceSignature(engine: SpeakerEngineChoice, signature: String) {
+        prefs.edit().putString(KEY_VOICE_SIGNATURE_PREFIX + engine.remoteValue, signature).apply()
+    }
 
     /**
      * Atténue-t-on à l'écran les paroles attribuées à Jean ?
@@ -254,10 +283,23 @@ class AdminConfig(context: Context) {
      * valeur écrite d'avance ne peut deviner. Le diagnostic publie la
      * ressemblance réellement mesurée, qui est ce sur quoi le réglage doit
      * s'appuyer.
+     *
+     * **Propre à chaque moteur**, et pas seulement par prudence : les deux
+     * rendent un nombre entre 0 et 1, mais l'un sort d'un réseau de neurones et
+     * l'autre d'une moyenne pondérée entre hauteur de voix et timbre. Le même
+     * nombre n'y veut pas dire la même chose. Un seuil commun aurait appliqué
+     * au second moteur une exigence réglée pour le premier, et le seul symptôme
+     * aurait été une reconnaissance devenue absurde après un simple changement
+     * de moteur.
      */
-    var jeanVoiceThresholdPercent: Int
-        get() = prefs.getInt(KEY_JEAN_VOICE_THRESHOLD, DEFAULT_JEAN_VOICE_THRESHOLD)
-        set(value) = prefs.edit().putInt(KEY_JEAN_VOICE_THRESHOLD, value.coerceIn(30, 95)).apply()
+    fun jeanVoiceThresholdPercent(engine: SpeakerEngineChoice): Int =
+        prefs.getInt(KEY_VOICE_THRESHOLD_PREFIX + engine.remoteValue, engine.defaultThresholdPercent)
+
+    fun setJeanVoiceThresholdPercent(engine: SpeakerEngineChoice, percent: Int) {
+        prefs.edit()
+            .putInt(KEY_VOICE_THRESHOLD_PREFIX + engine.remoteValue, percent.coerceIn(10, 95))
+            .apply()
+    }
 
     fun isCurrentlyNightWindow(hourNow: Int): Boolean {
         return if (nightStartHour <= nightEndHour) {
@@ -303,16 +345,16 @@ class AdminConfig(context: Context) {
         private const val KEY_LAST_COMMAND_ID = "last_command_id"
         private const val KEY_ROOM_WAKE_ENABLED = "room_wake_enabled"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
-        private const val KEY_JEAN_VOICE_SIGNATURE = "jean_voice_signature"
         private const val KEY_DIM_JEAN_SPEECH = "dim_jean_speech"
-        private const val KEY_JEAN_VOICE_THRESHOLD = "jean_voice_threshold"
+        private const val KEY_SPEAKER_ENGINE = "speaker_engine"
+        private const val KEY_PICOVOICE_ACCESS_KEY = "picovoice_access_key"
 
         /**
-         * 72 % : au-dessus de ce que mesure une voix masculine proche mais
-         * différente, en dessous de ce que mesure Jean parlant plus bas ou
-         * enrhumé. La marge est étroite de ce côté-là, large de l'autre — une
-         * voix de femme ou d'enfant tombe très en dessous.
+         * Suffixés du nom du moteur, comme les plafonds mensuels : une
+         * signature et un seuil n'ont de sens que pour le moteur qui les a
+         * produits ou pour lequel ils ont été réglés.
          */
-        const val DEFAULT_JEAN_VOICE_THRESHOLD = 72
+        private const val KEY_VOICE_SIGNATURE_PREFIX = "jean_voice_signature_"
+        private const val KEY_VOICE_THRESHOLD_PREFIX = "jean_voice_threshold_"
     }
 }

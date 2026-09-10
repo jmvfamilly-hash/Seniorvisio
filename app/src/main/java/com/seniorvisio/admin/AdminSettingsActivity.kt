@@ -133,7 +133,10 @@ class AdminSettingsActivity : AppCompatActivity() {
         val progress = status.enrollmentProgressPercent
         view.text = buildString {
             if (progress != null) {
-                append("Apprentissage en cours… $progress %  — faites parler Jean")
+                // L'avancement mesure la voix entendue, pas le temps écoulé :
+                // il ne bouge pas tant que personne ne parle, et c'est
+                // précisément ce qu'il faut savoir.
+                append("Apprentissage… $progress %  — faites parler Jean, il s'arrête tout seul")
                 return@buildString
             }
             append(status.speakerMode)
@@ -186,6 +189,7 @@ class AdminSettingsActivity : AppCompatActivity() {
 
         val inputAssemblyAiKey = findViewById<EditText>(R.id.inputAssemblyAiKey)
         val inputGladiaKey = findViewById<EditText>(R.id.inputGladiaKey)
+        val inputPicovoiceKey = findViewById<EditText>(R.id.inputPicovoiceKey)
         val checkboxRoomWakeEnabled = findViewById<CheckBox>(R.id.checkboxRoomWakeEnabled)
         val checkboxBlockWakeAtNight = findViewById<CheckBox>(R.id.checkboxBlockWakeAtNight)
         val inputNightStartHour = findViewById<EditText>(R.id.inputNightStartHour)
@@ -196,6 +200,7 @@ class AdminSettingsActivity : AppCompatActivity() {
         inputPin.setText(adminConfig.adminPin)
         inputAssemblyAiKey.setText(adminConfig.assemblyAiApiKey)
         inputGladiaKey.setText(adminConfig.gladiaApiKey)
+        inputPicovoiceKey.setText(adminConfig.picovoiceAccessKey)
         checkboxRoomWakeEnabled.isChecked = adminConfig.roomWakeEnabled
         checkboxBlockWakeAtNight.isChecked = adminConfig.blockWakeAtNight
         inputNightStartHour.setText(adminConfig.nightStartHour.toString())
@@ -224,6 +229,7 @@ class AdminSettingsActivity : AppCompatActivity() {
             adminConfig.adminPin = inputPin.text.toString().ifBlank { adminConfig.adminPin }
             adminConfig.assemblyAiApiKey = inputAssemblyAiKey.text.toString().trim()
             adminConfig.gladiaApiKey = inputGladiaKey.text.toString().trim()
+            adminConfig.picovoiceAccessKey = inputPicovoiceKey.text.toString().trim()
             adminConfig.zoneOrder = zoneOrders[spinnerZoneOrder.selectedItemPosition]
             adminConfig.roomWakeEnabled = checkboxRoomWakeEnabled.isChecked
             adminConfig.blockWakeAtNight = checkboxBlockWakeAtNight.isChecked
@@ -303,8 +309,19 @@ class AdminSettingsActivity : AppCompatActivity() {
                 Toast.makeText(this, "Impossible avec la reconnaissance Android : elle tient le micro. Changez le moteur de la pièce.", Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
-            service.startVoiceEnrollment()
-            Toast.makeText(this, "Faites parler Jean pendant vingt secondes", Toast.LENGTH_LONG).show()
+            // Le moteur peut refuser de démarrer — clé Picovoice absente,
+            // bibliothèque native manquante. Le dire ici, au moment du geste,
+            // plutôt que de laisser croire que l'apprentissage a commencé.
+            val refus = service.startVoiceEnrollment()
+            if (refus != null) {
+                Toast.makeText(this, refus, Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            Toast.makeText(
+                this,
+                "Faites parler Jean jusqu'à ce que l'apprentissage atteigne 100 %",
+                Toast.LENGTH_LONG,
+            ).show()
         }
 
         findViewById<Button>(R.id.buttonForgetJeanVoice).setOnClickListener {
@@ -336,11 +353,16 @@ class AdminSettingsActivity : AppCompatActivity() {
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             )
+            inputPicovoiceKey.inputType = plainOrPassword(
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            )
             // setInputType ramène sinon le curseur au tout début du champ.
             inputPin.setSelection(inputPin.text.length)
             inputWifiPassword.setSelection(inputWifiPassword.text.length)
             inputAssemblyAiKey.setSelection(inputAssemblyAiKey.text.length)
             inputGladiaKey.setSelection(inputGladiaKey.text.length)
+            inputPicovoiceKey.setSelection(inputPicovoiceKey.text.length)
         }
     }
 

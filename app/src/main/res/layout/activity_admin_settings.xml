@@ -211,6 +211,22 @@
         android:layout_height="wrap_content"
         android:inputType="textPassword" />
 
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Clé d'accès Picovoice"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <!-- Nécessaire seulement si la reconnaissance de locuteur est réglée sur
+         Picovoice Eagle. Le moteur intégré n'en demande aucune. -->
+    <EditText
+        android:id="@+id/inputPicovoiceKey"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textPassword" />
+
     <!-- État en direct de la surveillance du son (voir
          RoomPresenceService.currentStatus). Le seuil de déclenchement dépend
          du microphone et de l'acoustique de la pièce : sans voir le niveau

@@ -39,6 +39,13 @@ android {
         // comme AssemblyAI sans clé.
         buildConfigField "String", "GLADIA_API_KEY_DEFAULT", "\"${project.findProperty('gladiaApiKey') ?: ""}\""
 
+        // Clé d'accès Picovoice, pour la reconnaissance de locuteur Eagle (voir
+        // EagleSpeakerRecogniser), injectée depuis le secret GitHub
+        // PICOVOICE_ACCESS_KEY. Absente, le champ vaut la chaîne vide et le
+        // moteur refuse de démarrer en le disant — le moteur intégré reste
+        // disponible et ne demande aucune clé.
+        buildConfigField "String", "PICOVOICE_ACCESS_KEY_DEFAULT", "\"${project.findProperty('picovoiceAccessKey') ?: ""}\""
+
         // Rien d'équivalent pour la météo : wttr.in ne demande aucune clé API
         // (voir WeatherClient). Le secret WEATHER_API_KEY et son champ admin
         // ont donc disparu — un compte à créer, une clé à saisir sur la
@@ -135,6 +142,13 @@ dependencies {
     // et vérifiée pour elle-même, pas en passager clandestin d'une
     // fonctionnalité.
     implementation 'com.github.gkonovalov.android-vad:silero:2.0.8'
+
+    // Reconnaissance de locuteur sur l'appareil (voir EagleSpeakerRecogniser).
+    // Environ six mégaoctets : un modèle de 4,7 Mo et du code natif pour les
+    // quatre architectures. Aucune dépendance déclarée de son côté, ce qui
+    // écarte d'emblée le conflit de version de compilateur Kotlin qui a coûté
+    // un build à l'intégration de Silero.
+    implementation 'ai.picovoice:eagle-android:3.0.2'
 
     implementation 'com.alphacephei:vosk-android:0.3.47'
     implementation 'net.java.dev.jna:jna:5.13.0@aar'

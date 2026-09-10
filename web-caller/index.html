@@ -447,25 +447,51 @@
             garde le micro pour elle.
           </p>
 
+          <label for="speakerEngineSelect">Comment reconnaître la voix de Jean</label>
+          <select id="speakerEngineSelect">
+            <option value="embedded">Intégré — timbre et hauteur (gratuit, sans clé)</option>
+            <option value="picovoice">Picovoice Eagle — sur l'appareil (clé requise)</option>
+          </select>
+          <p class="hint">
+            L'intégré compare une hauteur de voix et un timbre : très sûr face à
+            une voix de femme ou d'enfant, faible face à une voix masculine
+            proche — un fils, justement le visiteur le plus fréquent. Eagle est
+            un modèle entraîné, qui traite bien ce cas-là ; il tourne lui aussi
+            entièrement sur la tablette, aucun son ne sort. Il demande une clé
+            d'accès Picovoice, à saisir sur l'écran d'administration de la
+            tablette.
+          </p>
+          <p class="hint">
+            Les deux gardent leur propre apprentissage : changer de moteur ne
+            détruit pas celui de l'autre, et revenir en arrière ne demande pas
+            de refaire parler Jean. En revanche <strong>chaque moteur doit
+            apprendre sa voix séparément</strong> — une signature de l'un est
+            illisible par l'autre.
+          </p>
+
           <div class="caption-control">
-            <label for="jeanVoiceThresholdSlider">
-              Ressemblance exigée pour reconnaître Jean
+            <label for="thresholdEmbeddedSlider">
+              Seuil du moteur intégré
             </label>
-            <!-- Valeur de départ identique au défaut de la tablette (voir
-                 AdminConfig.DEFAULT_JEAN_VOICE_THRESHOLD) : sans elle, le
-                 curseur se placerait au milieu de sa course et afficherait un
-                 réglage que la tablette n'applique pas. -->
-            <input type="range" id="jeanVoiceThresholdSlider"
-                   min="30" max="95" step="1" value="72" data-unit=" %">
+            <input type="range" id="thresholdEmbeddedSlider"
+                   min="10" max="95" step="1" value="72" data-unit=" %">
+          </div>
+          <div class="caption-control">
+            <label for="thresholdPicovoiceSlider">
+              Seuil de Picovoice Eagle
+            </label>
+            <input type="range" id="thresholdPicovoiceSlider"
+                   min="10" max="95" step="1" value="50" data-unit=" %">
           </div>
           <p class="hint">
-            Plus haut, moins de phrases sont attribuées à Jean : on préfère
-            afficher une de ses phrases en clair qu'atténuer celle d'un proche.
-            Le diagnostic ci-dessus publie la ressemblance réellement mesurée —
-            faites parler Jean, puis quelqu'un d'autre, et placez la limite
-            entre les deux nombres. Une voix de femme ou d'enfant tombe très
-            bas ; celle d'un fils peut être proche de celle de son père, et
-            c'est le cas où ce réglage compte vraiment.
+            Un seuil par moteur, et ce n'est pas de la prudence : les deux
+            rendent un nombre entre 0 et 1, mais l'un sort d'un réseau de
+            neurones et l'autre d'une moyenne pondérée. Le même nombre n'y veut
+            pas dire la même chose. Plus haut, moins de phrases sont attribuées
+            à Jean : on préfère afficher une de ses phrases en clair
+            qu'atténuer celle d'un proche. Le diagnostic ci-dessus publie la
+            ressemblance réellement mesurée — faites parler Jean, puis quelqu'un
+            d'autre, et placez la limite entre les deux nombres.
           </p>
 
           <h3 class="admin-section">Plafond des services payants</h3>

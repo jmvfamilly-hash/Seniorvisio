@@ -34,19 +34,23 @@ jobs:
         env:
           ASSEMBLYAI_API_KEY: ${{ secrets.ASSEMBLYAI_API_KEY }}
           GLADIA_API_KEY: ${{ secrets.GLADIA_API_KEY }}
+          PICOVOICE_ACCESS_KEY: ${{ secrets.PICOVOICE_ACCESS_KEY }}
         run: |
           echo "ASSEMBLYAI_API_KEY : ${#ASSEMBLYAI_API_KEY} caractère(s)"
           echo "GLADIA_API_KEY : ${#GLADIA_API_KEY} caractère(s)"
+          echo "PICOVOICE_ACCESS_KEY : ${#PICOVOICE_ACCESS_KEY} caractère(s)"
 
       - name: Build debug APK
         env:
           ASSEMBLYAI_API_KEY: ${{ secrets.ASSEMBLYAI_API_KEY }}
           GLADIA_API_KEY: ${{ secrets.GLADIA_API_KEY }}
+          PICOVOICE_ACCESS_KEY: ${{ secrets.PICOVOICE_ACCESS_KEY }}
         run: |
           gradle assembleDebug --stacktrace \
             "-PbuildRev=rev${{ github.run_number }}" \
             "-PassemblyAiApiKey=${ASSEMBLYAI_API_KEY}" \
-            "-PgladiaApiKey=${GLADIA_API_KEY}"
+            "-PgladiaApiKey=${GLADIA_API_KEY}" \
+            "-PpicovoiceAccessKey=${PICOVOICE_ACCESS_KEY}"
 
       - name: Rename APK with revision number
         run: |
