@@ -93,6 +93,38 @@ class ContinuousSpeechManager(
      */
     private var lastPartial = ""
 
+    /**
+     * Le moteur a-t-il signalé une fin de parole depuis que le texte en cours a
+     * été prolongé pour la dernière fois ?
+     *
+     * Garde-fou contre un découpage abusif. Un texte qui change sans être la
+     * suite du précédent signifie presque toujours que le moteur est passé à
+     * l'énoncé suivant — mais pas toujours : il lui arrive de se corriger en
+     * pleine phrase, « bonjour comment » devenant « bon jour comment ». Exiger
+     * qu'une fin de parole soit passée entre les deux sépare les deux cas.
+     */
+    private var endOfSpeechSeen = false
+
+    /**
+     * La dernière ligne figée. Sert à ne pas la figer deux fois : la clôture
+     * d'une session peut rendre un texte déjà figé au fil de l'eau, et Jean
+     * verrait alors la même phrase deux fois.
+     */
+    private var lastCommitted = ""
+
+    /**
+     * Fige le texte en cours quand il cesse d'évoluer.
+     *
+     * Sans lui, le dernier énoncé avant un vrai silence ne serait jamais figé :
+     * rien ne vient plus le remplacer, et la session ne se termine pas. Il
+     * resterait indéfiniment en italique, ni acquis ni effacé.
+     */
+    private val idleCommit = Runnable {
+        if (lastPartial.isEmpty()) return@Runnable
+        SpeechTrace.record("APP inactivité", "texte figé faute d'évolution")
+        commit(lastPartial)
+    }
+
     private val restart = Runnable {
         SpeechTrace.record("APP relance exécutée", "")
         beginListening()
@@ -145,6 +177,7 @@ class ContinuousSpeechManager(
         wanted = false
         handler.removeCallbacks(restart)
         handler.removeCallbacks(sessionCap)
+        handler.removeCallbacks(idleCommit)
         listening = false
         SpeechTrace.record("APP stop()", "écoute arrêtée")
         destroyRecognizer()
@@ -317,21 +350,62 @@ class ContinuousSpeechManager(
             }
             firstResult(partialResults)?.let {
                 sessionPartials++
+                handler.removeCallbacks(idleCommit)
+                handler.postDelayed(idleCommit, IDLE_COMMIT_MS)
                 // La question posée par le diagnostic — le tampon est-il
                 // prolongé au lieu d'être remplacé ? — se règle par une mesure
                 // plutôt que par une lecture du code. Ce qui est noté ici est
                 // la RELATION entre l'ancien texte et le nouveau : le moteur
                 // prolonge-t-il sa transcription, la réécrit-il autrement, ou
                 // la raccourcit-il ? Le troisième cas est le seul inquiétant.
-                val relation = when {
-                    lastPartial.isEmpty() -> "premier"
-                    it == lastPartial -> "identique"
-                    it.startsWith(lastPartial) -> "prolongé (+${it.length - lastPartial.length} car.)"
-                    lastPartial.startsWith(it) -> "RACCOURCI (-${lastPartial.length - it.length} car.)"
-                    else -> "RÉÉCRIT (${lastPartial.length} → ${it.length} car.)"
+                // Comparaison sur du texte nettoyé. La trace a montré le
+                // piège : « second mot » devenant «  second mot » — une simple
+                // espace en tête — était classé comme une réécriture, ce qui
+                // aurait fait couper la phrase en deux.
+                val previous = lastPartial.trim()
+                val current = it.trim()
+
+                // Écho d'une ligne qu'on vient de figer. Le moteur répète
+                // volontiers le même texte — la trace en montre plusieurs
+                // occurrences consécutives à l'identique — et après une ligne
+                // figée par inactivité, cette répétition réapparaîtrait en
+                // dessous, en italique, doublant à l'écran ce qui est déjà
+                // acquis juste au-dessus.
+                if (lastPartial.isEmpty() && current == lastCommitted) {
+                    SpeechTrace.record("APP partiel ignoré", "écho de la ligne déjà figée")
+                    return@let
                 }
-                SpeechTrace.record("APP tampon partiel", "$relation")
+
+                val continues = previous.isEmpty() || current.startsWith(previous)
+                val relation = when {
+                    previous.isEmpty() -> "premier"
+                    current == previous -> "identique"
+                    current.startsWith(previous) -> "prolongé (+${current.length - previous.length} car.)"
+                    previous.startsWith(current) -> "RACCOURCI (-${previous.length - current.length} car.)"
+                    else -> "RÉÉCRIT (${previous.length} → ${current.length} car.)"
+                }
+                SpeechTrace.record("APP tampon partiel", relation)
+
+                // LE CORRECTIF. Un texte qui n'est pas la suite du précédent
+                // signifie que le moteur est passé à l'énoncé suivant — et
+                // l'ancien doit être figé AVANT d'être remplacé, sinon il
+                // disparaît purement et simplement.
+                //
+                // C'est exactement ce que la trace a montré : « premier mot »
+                // écrasé par « second » sans jamais avoir été figé, parce que
+                // je n'écrivais une ligne qu'à la fin de la session. Or la
+                // session ne se termine pas : le détecteur de voix du moteur
+                // clignote toutes les six dixièmes de seconde, il ne voit donc
+                // jamais le silence continu qui la clôturerait. Attendre la fin
+                // de session était une hypothèse, et elle est fausse sur cet
+                // appareil.
+                if (!continues && endOfSpeechSeen) {
+                    SpeechTrace.record("APP nouvel énoncé", "le précédent est figé avant remplacement")
+                    commit(lastPartial)
+                }
+
                 lastPartial = it
+                endOfSpeechSeen = false
                 onPartial(it)
             }
         }
@@ -395,6 +469,11 @@ class ContinuousSpeechManager(
         // aux deux endroits relancerait deux sessions concurrentes.
         override fun onEndOfSpeech() {
             SpeechTrace.record("API onEndOfSpeech", "fin de parole détectée")
+            // Ne fige rien par lui-même : la trace montre qu'il se déclenche
+            // plusieurs fois par énoncé, y compris en pleine phrase. Il arme
+            // seulement l'autorisation de figer, que le prochain texte
+            // discordant utilisera.
+            endOfSpeechSeen = true
         }
 
         override fun onBeginningOfSpeech() {
@@ -452,6 +531,8 @@ class ContinuousSpeechManager(
     }
 
     private fun commit(text: String) {
+        handler.removeCallbacks(idleCommit)
+        endOfSpeechSeen = false
         val hadPartial = lastPartial
         lastPartial = ""
         val trimmed = text.trim()
@@ -465,6 +546,11 @@ class ContinuousSpeechManager(
             )
             return
         }
+        if (trimmed == lastCommitted) {
+            SpeechTrace.record("APP commit", "IGNORÉ, déjà figé : « $trimmed »")
+            return
+        }
+        lastCommitted = trimmed
         SpeechTrace.record("APP commit", "ligne figée : « $trimmed »")
         onFinal(trimmed)
     }
@@ -536,5 +622,18 @@ class ContinuousSpeechManager(
 
         /** Une mesure de niveau par quart de seconde : assez pour distinguer un silence d'une voix faible, sans noyer la trace. */
         const val RMS_SAMPLE_MS = 250L
+
+        /**
+         * Sans évolution du texte pendant ce délai, on le fige.
+         *
+         * Nécessaire parce que le dernier énoncé avant un vrai silence n'est
+         * remplacé par rien : sans cette minuterie il resterait indéfiniment en
+         * italique, ni acquis ni effacé — et la session, qui ne se termine pas
+         * d'elle-même sur cet appareil, ne viendrait pas le sauver.
+         *
+         * Deux secondes : au-delà du rythme normal des résultats
+         * intermédiaires, mesuré à un toutes les six dixièmes de seconde.
+         */
+        const val IDLE_COMMIT_MS = 2_000L
     }
 }

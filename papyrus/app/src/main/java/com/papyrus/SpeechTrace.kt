@@ -61,9 +61,14 @@ object SpeechTrace {
         val since = (now - startedAtMs) / 1000.0
         val delta = (now - lastAtMs) / 1000.0
         lastAtMs = now
+        // Délimiteur explicite entre l'origine et le contenu, et non un simple
+        // remplissage : « API onBeginningOfSpeech » fait vingt-trois caractères
+        // pour une colonne de vingt-deux, le remplissage sautait et le détail
+        // se collait au nom — illisible pour l'œil comme pour un analyseur.
+        // Une barre ne peut être cassée par aucune longueur de nom.
         val line = String.format(
             Locale.FRANCE,
-            "[%9.3fs %+8.3fs] %-22s %s",
+            "[%9.3fs %+8.3fs] %-26s | %s",
             since, delta, source, detail,
         )
         entries.addLast(line)
@@ -114,7 +119,7 @@ object SpeechTrace {
         appendLine("Papyrus — trace de la reconnaissance vocale")
         appendLine("Version : ${BuildConfig.BUILD_REV}")
         appendLine()
-        appendLine("Colonnes : [temps depuis le démarrage, écart avec la ligne précédente] origine  contenu")
+        appendLine("Colonnes : [temps depuis le démarrage, écart avec la ligne précédente] origine | contenu")
         appendLine()
         appendLine("Origines : API = rappel du moteur · APP = décision de l'application")
         appendLine("           ÉCRAN = ce qui est réellement affiché")
