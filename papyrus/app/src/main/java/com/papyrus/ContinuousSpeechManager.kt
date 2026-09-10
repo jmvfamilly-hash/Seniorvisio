@@ -98,6 +98,7 @@ class ContinuousSpeechManager(
     fun start() {
         if (wanted) return
         wanted = true
+        SpeechTrace.record("APP start()", "écoute demandée")
         describeEngine()
         beginListening()
     }
@@ -106,6 +107,7 @@ class ContinuousSpeechManager(
         wanted = false
         handler.removeCallbacks(restart)
         listening = false
+        SpeechTrace.record("APP stop()", "écoute arrêtée")
         destroyRecognizer()
     }
 
@@ -117,6 +119,7 @@ class ContinuousSpeechManager(
      * refusée. Trois causes, trois corrections, un seul symptôme.
      */
     private fun describeEngine() {
+        SpeechTrace.record("APP describeEngine", "Android ${Build.VERSION.SDK_INT}")
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             onDiagnostic("Aucun moteur de reconnaissance sur cet appareil")
             return
@@ -165,6 +168,9 @@ class ContinuousSpeechManager(
         try {
             listening = true
             sessionCount++
+            // LA MAIN PASSE AU MOTEUR. L'écart entre cette ligne et la fin de
+            // la session précédente est le temps mort qu'on cherche à mesurer.
+            SpeechTrace.record("APP → startListening", "session n°$sessionCount")
             instance.startListening(intent)
         } catch (e: Exception) {
             Log.w(TAG, "Démarrage de l'écoute impossible", e)
@@ -175,6 +181,7 @@ class ContinuousSpeechManager(
     }
 
     private fun createRecognizer(): SpeechRecognizer? = try {
+        SpeechTrace.record("APP createRecognizer", "construction du moteur")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
         } else {
@@ -187,6 +194,7 @@ class ContinuousSpeechManager(
     }
 
     private fun destroyRecognizer() {
+        if (recognizer != null) SpeechTrace.record("APP destroyRecognizer", "moteur détruit")
         try {
             recognizer?.destroy()
         } catch (e: Exception) {
@@ -204,6 +212,7 @@ class ContinuousSpeechManager(
         if (!wanted) return
         handler.removeCallbacks(restart)
         handler.postDelayed(restart, delayMs)
+        SpeechTrace.record("APP relance dans", "${delayMs} ms")
         onRestart()
     }
 
@@ -214,12 +223,16 @@ class ContinuousSpeechManager(
     private val listener = object : RecognitionListener {
 
         override fun onReadyForSpeech(params: Bundle?) {
+            // LA MAIN EST AU MOTEUR, et il écoute vraiment : entre
+            // startListening et ici, il ne captait pas encore.
+            SpeechTrace.record("API onReadyForSpeech", "le moteur écoute")
             // Une session s'est ouverte pour de bon : la précédente n'a donc
             // pas échoué, quoi qu'ait dit la dernière erreur.
             consecutiveErrors = 0
         }
 
         override fun onPartialResults(partialResults: Bundle?) {
+            SpeechTrace.recordResults("API onPartialResults", partialResults)
             firstResult(partialResults)?.let {
                 lastPartial = it
                 onPartial(it)
@@ -228,6 +241,8 @@ class ContinuousSpeechManager(
 
         override fun onResults(results: Bundle?) {
             listening = false
+            // LA MAIN REVIENT À L'APPLICATION.
+            SpeechTrace.recordResults("API onResults", results)
             // À défaut de résultat final, le dernier partiel fait foi : il a
             // été affiché, il a donc été lu, et le faire disparaître serait
             // pire que de le figer tel quel.
@@ -240,6 +255,8 @@ class ContinuousSpeechManager(
 
         override fun onError(error: Int) {
             listening = false
+            // LA MAIN REVIENT À L'APPLICATION, sans résultat.
+            SpeechTrace.record("API onError", "${describeError(error)} (code $error)")
             when (error) {
                 // Les deux façons de dire « personne n'a parlé ». Ce sont les
                 // erreurs les plus fréquentes en écoute continue, et de loin :
@@ -277,9 +294,13 @@ class ContinuousSpeechManager(
         // Le moteur signale la fin de la parole avant de rendre son résultat.
         // Rien à faire ici : onResults ou onError suit immédiatement, et agir
         // aux deux endroits relancerait deux sessions concurrentes.
-        override fun onEndOfSpeech() = Unit
+        override fun onEndOfSpeech() {
+            SpeechTrace.record("API onEndOfSpeech", "fin de parole détectée")
+        }
 
-        override fun onBeginningOfSpeech() = Unit
+        override fun onBeginningOfSpeech() {
+            SpeechTrace.record("API onBeginningOfSpeech", "début de parole détecté")
+        }
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
@@ -291,9 +312,20 @@ class ContinuousSpeechManager(
      * façon de garantir qu'aucun texte affiché ne disparaisse jamais.
      */
     private fun commit(text: String) {
+        val hadPartial = lastPartial
         lastPartial = ""
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
+        if (trimmed.isEmpty()) {
+            // Rien à figer. Noté quand même : si un partiel avait été affiché
+            // et se retrouve ici sans être validé, c'est du texte que l'écran
+            // a montré puis perdu — et la trace le désigne nommément.
+            SpeechTrace.record(
+                "APP commit",
+                if (hadPartial.isEmpty()) "rien à figer" else "RIEN FIGÉ alors qu'un partiel existait : « $hadPartial »",
+            )
+            return
+        }
+        SpeechTrace.record("APP commit", "ligne figée : « $trimmed »")
         onFinal(trimmed)
     }
 

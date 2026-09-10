@@ -1,14 +1,17 @@
 package com.papyrus
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,16 +31,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -128,9 +134,37 @@ private fun PapyrusScreen() {
     // et personne ne fera défiler à la main.
     LaunchedEffect(text) { scroll.animateScrollTo(scroll.maxValue) }
 
+    // Appui long n'importe où : la trace part vers le sélecteur de partage.
+    // Un geste plutôt qu'un bouton — l'écran doit rester nu, et personne ne
+    // découvrira ce geste par hasard.
+    val shareTrace = {
+        val file = SpeechTrace.writeTo(context)
+        if (file != null) {
+            try {
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.traces", file)
+                context.startActivity(
+                    Intent.createChooser(
+                        Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            putExtra(Intent.EXTRA_SUBJECT, "Papyrus — trace")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        },
+                        "Envoyer la trace",
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (e: Exception) {
+                Toast.makeText(context, "Partage impossible : ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        } else {
+            Toast.makeText(context, "Écriture de la trace impossible", Toast.LENGTH_LONG).show()
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .pointerInput(Unit) { detectTapGestures(onLongPress = { shareTrace() }) }
             .background(Parchment)
             // Le parchemin ne se réduit pas à un aplat : une feuille ancienne
             // est plus sombre sur ses bords qu'en son centre. Dessiné plutôt
@@ -171,6 +205,19 @@ private fun PapyrusScreen() {
                 style = TextStyle(color = FadedInk, fontSize = 13.sp),
             )
         }
+
+        // Le seul mode d'emploi de l'application, et il tient en une ligne.
+        // Elle porte aussi le geste : la zone de texte au-dessus défile, et un
+        // conteneur défilant peut absorber l'appui long avant qu'il n'atteigne
+        // le fond. Cette ligne-ci ne défile pas — le geste y aboutit toujours.
+        BasicText(
+            text = "appui long : envoyer la trace",
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(horizontal = 40.dp, vertical = 12.dp)
+                .pointerInput(Unit) { detectTapGestures(onLongPress = { shareTrace() }) },
+            style = TextStyle(color = FadedInk, fontSize = 13.sp),
+        )
     }
 }
 
@@ -197,7 +244,15 @@ private fun renderTranscript(segments: List<String>, partial: String): Annotated
         }
         if (partial.isNotEmpty()) {
             if (segments.isNotEmpty()) append('\n')
-            withStyle(SpanStyle(color = PendingInk)) { append(partial) }
+            // Reconnaissable SEULE, et pas seulement par contraste avec le
+            // texte acquis : tant que rien n'est figé au-dessus, une simple
+            // nuance de gris n'est comparable à rien et ne se perçoit pas.
+            // D'où trois marques cumulées — un signe en tête, l'italique, et
+            // une encre plus claire — dont chacune suffirait.
+            withStyle(SpanStyle(color = PendingInk, fontStyle = FontStyle.Italic)) {
+                append(PENDING_MARK)
+                append(partial)
+            }
         }
     }
 
@@ -212,8 +267,16 @@ private val ParchmentEdge = Color(0x146B5A3E)
 
 private val Ink = Color(0xFF3A2C1C)
 
-/** L'énoncé en cours, encore révisable par le moteur. */
-private val PendingInk = Color(0x993A2C1C)
+/**
+ * L'énoncé en cours, encore révisable par le moteur. Nettement plus clair qu'au
+ * premier essai : à 60 % d'opacité la différence ne se voyait pas, surtout
+ * quand cette ligne était seule à l'écran.
+ */
+private val PendingInk = Color(0x6B3A2C1C)
+
+/** En tête de la ligne en cours. Une plume qui écrit encore. */
+private const val PENDING_MARK = "✎ "
+
 
 private val FadedInk = Color(0x553A2C1C)
 

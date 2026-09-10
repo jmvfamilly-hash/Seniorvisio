@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Les fichiers propres à l'application : accessibles par câble sans
+         aucune permission, et partageables par le sélecteur système. -->
+    <external-files-path name="traces" path="." />
+    <files-path name="traces_internes" path="." />
+</paths>

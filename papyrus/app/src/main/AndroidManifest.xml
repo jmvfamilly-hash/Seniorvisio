@@ -29,5 +29,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Sortir la trace de la tablette suppose de passer un fichier à une
+             autre application. Depuis Android 7, une adresse « file:// » y est
+             refusée net : il faut ce fournisseur, qui accorde un accès
+             temporaire au seul fichier partagé. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.traces"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>
