@@ -414,8 +414,35 @@ class ContinuousSpeechManager(
                 // jamais le silence continu qui la clôturerait. Attendre la fin
                 // de session était une hypothèse, et elle est fausse sur cet
                 // appareil.
-                if (!continues && endOfSpeechSeen) {
-                    SpeechTrace.record("APP nouvel énoncé", "le précédent est figé avant remplacement")
+                // ═══ Nouvel énoncé, ou correction de la phrase en cours ? ═══
+                //
+                // La question se tranche sur le CONTENU, plus sur la durée de
+                // la pause. La condition précédente exigeait qu'une fin de
+                // parole ait été signalée, c'est-à-dire un silence assez long
+                // pour que le moteur le déclare — et la trace a montré que
+                // celui-ci repart sur une hypothèse fraîche au bout de six
+                // dixièmes de seconde, bien avant. Trois segments entiers ont
+                // ainsi disparu : « tu as compris funiculaire mais », « mais
+                // sinon », « pourquoi pas ». Une voix un peu hachée tombe
+                // exactement dans cette zone.
+                //
+                // Le contenu, lui, sépare nettement les deux cas. Quand le
+                // moteur se corrige, il garde le début de sa phrase — c'est
+                // une révision, pas un recommencement. Quand il change
+                // d'énoncé, plus rien ne coïncide dès le premier mot.
+                //
+                // Le garde-fou n'est donc pas supprimé mais redéfini : partager
+                // un début protège du découpage abusif, ne rien partager
+                // déclenche le figeage. Une fin de parole signalée reste un
+                // indice supplémentaire de rupture, et lève la protection.
+                val shared = sharedWordPrefix(previous, current)
+                val selfCorrection = shared > 0 && !endOfSpeechSeen
+
+                if (!continues && !selfCorrection) {
+                    SpeechTrace.record(
+                        "APP nouvel énoncé",
+                        "figé avant remplacement (aucun mot commun en tête)",
+                    )
                     commit(lastPartial)
                 } else if (!continues) {
                     // LE SEUL CHEMIN DE PERTE QUI SUBSISTE, et il est le prix
@@ -429,14 +456,18 @@ class ContinuousSpeechManager(
                     // est trop stricte, et c'est la seule mesure qui puisse le
                     // dire.
                     SpeechTrace.record(
-                        "APP texte remplacé sans figer",
-                        "« $previous » → « $current » (aucune fin de parole entre les deux)",
+                        "APP correction du moteur",
+                        "« $previous » → « $current » ($shared mot(s) commun(s) en tête)",
                     )
                 }
 
                 lastPartial = it
                 endOfSpeechSeen = false
-                onPartial(it)
+                // Affiché nettoyé : le moteur préfixe volontiers ses résultats
+                // d'une espace, visible en tête de chaque phrase en cours. Les
+                // lignes figées l'étaient déjà ; celle en cours ne l'était pas,
+                // et l'écart se voyait à l'écran.
+                onPartial(current)
             }
         }
 
@@ -594,6 +625,27 @@ class ContinuousSpeechManager(
         sessionCommits++
         SpeechTrace.record("APP commit", "ligne figée : « $trimmed »")
         onFinal(trimmed)
+    }
+
+    /**
+     * Combien de mots les deux textes partagent depuis leur début.
+     *
+     * C'est la mesure qui sépare une correction du moteur d'un changement
+     * d'énoncé, et elle est plus sûre que la durée de la pause : une révision
+     * garde le début de sa phrase, un nouvel énoncé ne partage rien.
+     *
+     * Comparaison insensible à la casse : le moteur capitalise parfois le
+     * premier mot d'une phrase après coup, et un « Bonjour » succédant à
+     * « bonjour » passerait sinon pour une rupture.
+     */
+    private fun sharedWordPrefix(first: String, second: String): Int {
+        val a = first.split(' ').filter { it.isNotEmpty() }
+        val b = second.split(' ').filter { it.isNotEmpty() }
+        var shared = 0
+        while (shared < a.size && shared < b.size && a[shared].equals(b[shared], ignoreCase = true)) {
+            shared++
+        }
+        return shared
     }
 
     private fun firstResult(bundle: Bundle?): String? =
