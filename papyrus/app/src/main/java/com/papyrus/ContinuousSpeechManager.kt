@@ -105,6 +105,40 @@ class ContinuousSpeechManager(
      */
     private var endOfSpeechSeen = false
 
+    // --- Deux séquencements, en alternance ----------------------------------
+    //
+    // ═══ Ce qui n'a jamais été observé ═══
+    //
+    // J'ai écrit plus d'une fois que « la session ne se termine jamais
+    // d'elle-même sur cet appareil ». C'était une conclusion, pas une mesure :
+    // dans TOUTES les traces relevées jusqu'ici, le plafond applicatif tuait la
+    // session avant que le moteur ait eu la moindre occasion de la clore. On a
+    // donc constaté qu'une session bâillonnée ne parle pas.
+    //
+    // ═══ Les deux régimes comparés ═══
+    //
+    // SÉQUENCEMENT PAR L'API : le moteur décide. Aucune consigne de silence ne
+    // lui est donnée, aucun plafond raisonnable ne l'interrompt, et la phrase
+    // est figée sur son onResults — c'est-à-dire là où l'interface d'Android
+    // prévoit qu'elle le soit, une session valant un énoncé. Ni fin de parole
+    // ni début de parole n'agissent.
+    //
+    // SÉQUENCEMENT PAR LES ÉVÉNEMENTS : ce que fait rev15. Consignes de silence
+    // posées, plafond à deux minutes, et la phrase figée sur la séquence « fin
+    // de parole puis début de parole ».
+    //
+    // Une session sur deux, pour que les deux régimes se retrouvent dans la
+    // même trace, sur la même voix, à quelques secondes d'intervalle. C'est la
+    // méthode déjà employée pour le mode segmenté, et la seule qui évite de
+    // comparer deux enregistrements dont tout diffère.
+    private var apiSequencing = false
+
+    /** Le plafond a-t-il dû intervenir ? Distingue une fin voulue d'une fin subie. */
+    private var cappedBySafety = false
+
+    /** Instant du dernier onEndOfSpeech, pour mesurer l'attente du moteur avant sa clôture. */
+    private var lastEndOfSpeechAtMs = 0L
+
     /**
      * La dernière ligne figée. Sert à ne pas la figer deux fois : la clôture
      * d'une session peut rendre un texte déjà figé au fil de l'eau, et Jean
@@ -122,8 +156,18 @@ class ContinuousSpeechManager(
      */
     private val sessionCap = Runnable {
         if (!listening) return@Runnable
-        SpeechTrace.record("APP session trop longue", "clôture forcée après ${MAX_SESSION_MS} ms")
-        endSession("clôture forcée")
+        cappedBySafety = true
+        // LA LIGNE DÉCISIVE DE L'EXPÉRIENCE, en mode API. Si elle apparaît, le
+        // moteur n'a pas clos sa session de lui-même en une minute entière —
+        // et l'affirmation que je répétais sans l'avoir mesurée est vraie. Si
+        // elle n'apparaît jamais en mode API, elle était fausse.
+        SpeechTrace.record(
+            if (apiSequencing) "APP L'API N'A PAS CLOS" else "APP session trop longue",
+            if (apiSequencing)
+                "plafond de secours atteint : ${SAFETY_SESSION_MS} ms sans onResults"
+            else "clôture forcée après ${MAX_SESSION_MS} ms",
+        )
+        endSession(if (apiSequencing) "plafond de SECOURS — l'API n'a pas clos" else "clôture forcée")
         try {
             recognizer?.stopListening()
         } catch (e: Exception) {
@@ -276,6 +320,11 @@ class ContinuousSpeechManager(
         }
         recognizer = instance
 
+        // Décidé AVANT la construction de l'intention, jamais après : le régime
+        // doit figurer dans la ligne de démarrage, faute de quoi on ne saurait
+        // pas à quel mode rattacher ce qui suit.
+        apiSequencing = !apiSequencing
+
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, LANGUAGE)
@@ -286,16 +335,22 @@ class ContinuousSpeechManager(
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
 
-            // Consignes de durée de silence. Le moteur les traite comme des
-            // souhaits et non comme des ordres — la documentation le dit, et
-            // les appareils le confirment. Elles sont posées quand même : là
-            // où elles sont suivies, elles rallongent la session et espacent
-            // donc les coutures.
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_COMPLETE_MS)
-            putExtra(
-                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
-                SILENCE_POSSIBLY_COMPLETE_MS,
-            )
+            // Consignes de durée de silence, posées SEULEMENT quand c'est nous
+            // qui séquençons. En mode API elles sont tues : lui dicter quand se
+            // taire, c'est déjà lui retirer la décision qu'on veut précisément
+            // lui laisser prendre, et l'expérience ne prouverait plus rien.
+            //
+            // Le moteur les traite de toute façon comme des souhaits et non
+            // comme des ordres — la documentation le dit, et les appareils le
+            // confirment. Là où elles sont suivies, elles rallongent la session
+            // et espacent donc les coutures.
+            if (!apiSequencing) {
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_COMPLETE_MS)
+                putExtra(
+                    RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                    SILENCE_POSSIBLY_COMPLETE_MS,
+                )
+            }
             // EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS n'est plus posé, et son
             // absence est le correctif principal — voir le commentaire de
             // SILENCE_COMPLETE_MS.
@@ -309,7 +364,12 @@ class ContinuousSpeechManager(
             SpeechTrace.record(
                 "APP → startListening",
                 "session n°$sessionCount — " +
-                    "silence ${SILENCE_COMPLETE_MS}/${SILENCE_POSSIBLY_COMPLETE_MS} ms, hors-ligne demandé",
+                    (if (apiSequencing) "SÉQUENCEMENT PAR L'API : aucune consigne de silence, " +
+                        "plafond de secours ${SAFETY_SESSION_MS / 1000} s, figeage sur onResults seul"
+                    else "séquencement par les événements : silence " +
+                        "${SILENCE_COMPLETE_MS}/${SILENCE_POSSIBLY_COMPLETE_MS} ms, " +
+                        "plafond ${MAX_SESSION_MS / 1000} s") +
+                    ", hors-ligne demandé",
             )
             firstPartialLogged = false
             peakRmsSinceLog = -120f
@@ -319,8 +379,10 @@ class ContinuousSpeechManager(
             sessionFirstTextMs = -1L
             sessionMaxRms = -120f
             sessionSummarised = false
+            cappedBySafety = false
+            lastEndOfSpeechAtMs = 0L
             handler.removeCallbacks(sessionCap)
-            handler.postDelayed(sessionCap, MAX_SESSION_MS)
+            handler.postDelayed(sessionCap, if (apiSequencing) SAFETY_SESSION_MS else MAX_SESSION_MS)
             instance.startListening(intent)
         } catch (e: Exception) {
             Log.w(TAG, "Démarrage de l'écoute impossible", e)
@@ -442,6 +504,19 @@ class ContinuousSpeechManager(
             listening = false
             // LA MAIN REVIENT À L'APPLICATION.
             SpeechTrace.recordResults("API onResults", results)
+            // Spontané ou arraché ? En mode API c'est TOUTE la question, et
+            // sans cette distinction la trace montrerait un onResults sans
+            // dire s'il vient du moteur ou de notre stopListening — deux
+            // conclusions opposées sous la même ligne.
+            SpeechTrace.record(
+                "APP origine de la clôture",
+                if (cappedBySafety) "provoquée par notre plafond"
+                else "SPONTANÉE : le moteur a clos de lui-même" +
+                    (if (lastEndOfSpeechAtMs > 0)
+                        ", ${android.os.SystemClock.elapsedRealtime() - lastEndOfSpeechAtMs} ms " +
+                            "après la dernière fin de parole"
+                    else ""),
+            )
             // « l'API ne rend rien » et « la session n'a rien produit » sont
             // deux choses différentes depuis que les lignes sont figées en
             // cours de route. Le libellé précédent les confondait, et laissait
@@ -522,7 +597,11 @@ class ContinuousSpeechManager(
          * prochain début de parole consommera.
          */
         override fun onEndOfSpeech() {
+            lastEndOfSpeechAtMs = android.os.SystemClock.elapsedRealtime()
             SpeechTrace.record("API onEndOfSpeech", "fin de parole détectée")
+            // Armée dans les deux régimes, mais consommée seulement par le
+            // nôtre : en mode API l'instant sert uniquement à mesurer combien
+            // de temps le moteur attend ensuite avant de clore.
             endOfSpeechSeen = true
         }
 
@@ -554,6 +633,11 @@ class ContinuousSpeechManager(
          */
         override fun onBeginningOfSpeech() {
             SpeechTrace.record("API onBeginningOfSpeech", "début de parole détecté")
+            // En mode API on ne touche à rien : c'est onResults qui figera,
+            // s'il vient. Toute intervention ici retirerait au moteur la
+            // décision qu'on veut lui laisser prendre, et l'expérience ne
+            // prouverait plus rien.
+            if (apiSequencing) return
             if (lastPartial.isEmpty() || !endOfSpeechSeen) return
             SpeechTrace.record("APP frontière", "fin de parole puis début : phrase close")
             commit(lastPartial)
@@ -605,11 +689,21 @@ class ContinuousSpeechManager(
             "APP bilan session n°$sessionCount",
             String.format(
                 java.util.Locale.FRANCE,
-                "%.1f s, 1er texte %s, %d partiels, " +
-                    "%d ligne(s) figée(s), pic %.1f dB — fin : %s",
+                "%s — %.1f s, 1er texte %s, %d partiels, " +
+                    "%d ligne(s) figée(s), pic %.1f dB, %s — fin : %s",
+                if (apiSequencing) "API" else "ÉVÉNEMENTS",
                 duration,
                 if (sessionFirstTextMs >= 0) "${sessionFirstTextMs} ms" else "JAMAIS",
-                sessionPartials, sessionCommits, sessionMaxRms, outcome,
+                sessionPartials, sessionCommits, sessionMaxRms,
+                // Combien de temps le moteur a laissé passer entre sa dernière
+                // fin de parole et la clôture de la session. C'est la mesure
+                // qui dira si son silence de clôture est atteignable, et à
+                // quel prix en attente.
+                if (lastEndOfSpeechAtMs > 0)
+                    "clôture ${android.os.SystemClock.elapsedRealtime() - lastEndOfSpeechAtMs} ms " +
+                        "après la dernière fin de parole"
+                else "aucune fin de parole signalée",
+                outcome,
             ),
         )
     }
@@ -703,6 +797,23 @@ class ContinuousSpeechManager(
          */
         const val SILENCE_COMPLETE_MS = 1_500
         const val SILENCE_POSSIBLY_COMPLETE_MS = 1_000
+
+        /**
+         * Plafond de SECOURS du mode « séquencement par l'API », et rien
+         * d'autre.
+         *
+         * Une minute, contre deux pour l'autre régime, et la différence est
+         * voulue : ce plafond n'est pas censé servir. S'il sert, c'est le
+         * résultat de l'expérience — le moteur n'a pas clos sa session en une
+         * minute entière, et la trace le dit en toutes lettres.
+         *
+         * Il existe malgré tout, parce qu'une session qui ne finit jamais
+         * bloquerait l'alternance : le régime suivant n'arriverait pas, et la
+         * trace ne contiendrait qu'une moitié de la comparaison. Un plafond
+         * qu'on espère inutile reste préférable à une expérience qui se
+         * saborde.
+         */
+        const val SAFETY_SESSION_MS = 60_000L
 
         /**
          * Au-delà, on referme la session nous-mêmes.
