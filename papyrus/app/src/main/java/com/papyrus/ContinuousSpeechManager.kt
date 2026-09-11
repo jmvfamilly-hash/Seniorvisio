@@ -365,10 +365,6 @@ class ContinuousSpeechManager(
                             "${SILENCE_COMPLETE_MS}/${SILENCE_POSSIBLY_COMPLETE_MS} ms, " +
                             "plafond ${MAX_SESSION_MS / 1000} s"
                 } + ", hors-ligne demandé",
-                    else "séquencement par les événements : silence " +
-                        "${SILENCE_COMPLETE_MS}/${SILENCE_POSSIBLY_COMPLETE_MS} ms, " +
-                        "plafond ${MAX_SESSION_MS / 1000} s") +
-                    ", hors-ligne demandé",
             )
             firstPartialLogged = false
             peakRmsSinceLog = -120f
