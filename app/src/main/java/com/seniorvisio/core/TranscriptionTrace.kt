@@ -3,6 +3,7 @@ package com.seniorvisio.core
 import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
+import com.seniorvisio.BuildConfig
 import java.security.MessageDigest
 import java.util.Locale
 import javax.crypto.Cipher
