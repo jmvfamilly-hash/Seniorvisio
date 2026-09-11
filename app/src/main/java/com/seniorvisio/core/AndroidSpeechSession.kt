@@ -36,52 +36,52 @@ import androidx.core.content.ContextCompat
  * installé — cas signalé dans le diagnostic — qu'un moteur qui marche en
  * expédiant discrètement la pièce sur le réseau.
  *
- * ═══ Ce que la campagne de mesures a corrigé ici ═══
+ * ═══ Ce que la campagne de mesures a établi, et ce qu'elle a fait retirer ═══
  *
  * Une application d'essai a été construite pour observer CE moteur seul, avec
- * un journal de chaque appel dans les deux sens. Six conclusions en sont
- * sorties, toutes contraires à ce que ce fichier supposait, et toutes portées
- * ci-dessous. Les suppositions étaient les miennes ; les mesures ont été
- * faites sur la tablette elle-même, en français, dans une vraie pièce.
+ * un journal de chaque appel dans les deux sens. Ce qui suit en sort ; les
+ * suppositions qu'elle a démenties ont été supprimées d'ici, pas commentées.
  *
- * 1. **La session ne se termine pas toute seule DANS CETTE CONFIGURATION.** Le
- *    détecteur de voix du moteur clignote toutes les six dixièmes de seconde,
- *    et aucune des sessions mesurées ne s'est close d'elle-même.
+ * 1. **LE MOTEUR SAIT CLORE SES SESSIONS.** Livré à lui-même — sans consigne
+ *    de durée de silence, sans plafond, sans stopListening de notre part — il
+ *    ferme sa session spontanément, quatre à sept millisecondes après sa
+ *    dernière fin de parole. Une session vaut un énoncé, comme l'interface
+ *    d'Android le prévoit.
  *
- *    CORRECTION, et elle est importante. Une mesure ultérieure, moteur livré
- *    à lui-même — sans aucune consigne de durée de silence et sans plafond —
- *    montre le contraire : il clôt sa session spontanément, quelques
- *    millisecondes après sa dernière fin de parole. Ce n'est donc pas le
- *    moteur qui refuse de conclure, c'est notre configuration qui l'en
- *    empêche, et le coupable le plus probable est la consigne de silence que
- *    nous lui imposons.
+ *    C'est la conclusion qui commande toutes les autres, et elle a longtemps
+ *    été niée ici : on avait mesuré qu'une session bâillonnée par un plafond
+ *    ne se termine pas, et on en avait tiré qu'elle ne se termine jamais.
  *
- *    Ce qui suit reste en place parce que ce fichier N'A PAS ENCORE ÉTÉ
- *    mesuré sans ces consignes, et qu'un mécanisme qui écrit du texte ne se
- *    démonte pas sur une mesure faite ailleurs. Mais la question est
- *    rouverte : si le moteur sait conclure seul, presque tout ce qui suit
- *    devient superflu.
+ * 2. **onResults EST DONC LA FRONTIÈRE DE PHRASE**, et la seule. Le découpage
+ *    par comparaison de contenus et la minuterie d'inactivité qui vivaient
+ *    ici devinaient ce que ce rappel déclare. Ils sont retirés.
  *
- * 2. **onResults ne rend souvent aucun texte** — trois fois sur trois dans les
- *    sessions mesurées. Le texte utile est TOUJOURS venu des partiels. Un
- *    moteur dont on n'écoute que le résultat final n'écrit rien.
+ * 3. **NI LA FIN NI LE DÉBUT DE PAROLE NE DÉCOUPENT QUOI QUE CE SOIT.** La
+ *    trace compte un seul début de parole sur seize secondes et demie de
+ *    parole continue, et aucune fin intermédiaire : un découpage assis sur
+ *    ces signaux manquerait tout ce qui dure.
  *
- * 3. **Un partiel qui ne prolonge pas le précédent est un nouvel énoncé**, et
- *    l'ancien doit être figé avant d'être remplacé, sans quoi il disparaît de
- *    l'écran sans laisser de trace. C'est la cause mesurée des mots perdus.
+ * 4. **LE RÉSULTAT FINAL EST SOUVENT VIDE.** Le texte utile vient des
+ *    résultats intermédiaires. D'où le tampon, figé à chaque fin de session
+ *    quel qu'en soit le motif — c'est l'invariant « aucun mot perdu », et non
+ *    un artifice de contrôle.
  *
- * 4. Mais **le moteur se corrige aussi en cours de phrase**, et ces
- *    corrections-là ne doivent PAS couper la ligne. Les deux cas se
- *    distinguent au contenu, jamais à la durée de la pause : une correction
- *    garde le début de la phrase, un nouvel énoncé ne partage rien.
- *
- * 5. **Le mode segmenté d'Android 13 n'apporte rien** et dégrade. Essayé,
- *    mesuré, écarté — voir plus bas.
- *
- * 6. **Chaque relance coûte de deux à huit secondes de surdité**, pendant
+ * 5. **CHAQUE RELANCE COÛTE DE DEUX À HUIT SECONDES DE SURDITÉ**, pendant
  *    lesquelles le moteur signale pourtant de la parole et ne rend que du
- *    vide. Ce fichier détruisait et reconstruisait le moteur à chaque relance,
- *    ce qui ne pouvait qu'aggraver ce délai.
+ *    vide. Le moteur est donc réutilisé d'une session à l'autre, et
+ *    reconstruit seulement quand une erreur montre qu'il est perdu.
+ *
+ * 6. **Le mode segmenté d'Android 13 n'apporte rien** et dégrade. Essayé,
+ *    mesuré, écarté — voir la construction de l'intention.
+ *
+ * ═══ Ce qui reste à vérifier sur la tablette de Jean ═══
+ *
+ * Les quatre à sept millisecondes ont été mesurées sur deux sessions, sur une
+ * tablette d'essai. Si le moteur ne clôt PAS sa session ici, la dernière
+ * phrase avant un silence resterait en attente et la zone d'affichage
+ * finirait par l'effacer sans l'avoir jamais figée. C'est le seul risque connu
+ * de cette simplification, et il est assumé : mettre un filet masquerait
+ * précisément la mesure qu'on cherche à faire.
  */
 class AndroidSpeechSession(
     private val context: Context,
@@ -159,6 +159,10 @@ class AndroidSpeechSession(
      */
     private var lastCommitted = ""
 
+    // --- Mesure par session, pour la trace ----------------------------------
+    private var sessionStartedAtMs = 0L
+    private var firstTextLogged = false
+
     fun isRunning(): Boolean = wanted
 
     /**
@@ -181,6 +185,7 @@ class AndroidSpeechSession(
         }
         wanted = true
         consecutiveErrors = 0
+        TranscriptionTrace.record("APP start()", "écoute demandée")
         // Une écoute qui reprend après un appel repart d'une page blanche : le
         // souvenir de la dernière ligne figée ferait taire, comme un écho, une
         // phrase réellement redite un quart d'heure plus tard.
@@ -197,6 +202,7 @@ class AndroidSpeechSession(
 
     fun stop() {
         if (wanted) UsageStats.noteTranscriptionStop()
+        TranscriptionTrace.record("APP stop()", "écoute arrêtée")
         wanted = false
         handler.removeCallbacksAndMessages(null)
         handler.post {
@@ -272,6 +278,11 @@ class AndroidSpeechSession(
             // valeur élevée, il gèle tout le texte pendant ce temps. Mesuré.
         }
         try {
+            // LA MAIN PASSE AU MOTEUR. L'écart entre cette ligne et la fin de la
+            // session précédente est le temps mort qu'on cherche à mesurer.
+            TranscriptionTrace.record("APP → startListening", "hors-ligne demandé, aucune consigne de silence")
+            sessionStartedAtMs = android.os.SystemClock.elapsedRealtime()
+            firstTextLogged = false
             instance.startListening(intent)
         } catch (e: Exception) {
             // Un moteur réutilisé peut refuser de repartir. Dans ce cas
@@ -313,6 +324,7 @@ class AndroidSpeechSession(
     private val listener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {
             consecutiveErrors = 0
+            TranscriptionTrace.record("API onReadyForSpeech", "le moteur écoute")
         }
 
         override fun onBeginningOfSpeech() {
@@ -343,11 +355,51 @@ class AndroidSpeechSession(
             if (rmsdB >= wakeThresholdDb()) onSpeechDetected()
         }
         override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() {}
+
+        override fun onEndOfSpeech() {
+            // Journalisée, jamais utilisée pour découper : la mesure montre un
+            // seul début de parole sur seize secondes de parole continue, et
+            // aucune fin intermédiaire.
+            TranscriptionTrace.record("API onEndOfSpeech", "fin de parole détectée")
+        }
         override fun onEvent(eventType: Int, params: Bundle?) {}
 
+        /**
+         * LE TAMPON EST REMPLACÉ, ET RIEN D'AUTRE.
+         *
+         * Les résultats intermédiaires sont faits pour se remplacer les uns
+         * les autres, et aucun ne dit s'il est le dernier. C'est au moteur de
+         * le dire, et il le dit : par onResults, quand il clôt sa session.
+         *
+         * Ce rappel a longtemps porté davantage — une comparaison de contenus
+         * pour deviner les frontières de phrase, et une minuterie pour figer
+         * ce qui n'évoluait plus. Les deux existaient parce qu'on croyait le
+         * moteur incapable de conclure. Il en est capable : mesuré, il ferme
+         * sa session quelques millisecondes après sa dernière fin de parole.
+         * Deviner ce qu'on peut lire n'est pas de la prudence, c'est du bruit
+         * ajouté à un signal qui était déjà clair.
+         */
         override fun onPartialResults(partialResults: Bundle?) {
-            firstResult(partialResults)?.let { handlePartial(it) }
+            TranscriptionTrace.recordResults("API onPartialResults", partialResults)
+            val raw = firstResult(partialResults) ?: return
+            if (!firstTextLogged) {
+                firstTextLogged = true
+                val delay = android.os.SystemClock.elapsedRealtime() - sessionStartedAtMs
+                // La surdité de reprise : le moteur signale de la parole et ne
+                // rend rien pendant ce temps. Mesurée de 2 à 8 s ailleurs, et
+                // c'est la pièce de Jean qui dira ce qu'il en est ici.
+                TranscriptionTrace.record("APP 1er texte après", "$delay ms d'écoute")
+            }
+            // Le moteur préfixe volontiers ses résultats d'une espace. Nettoyé
+            // ici une fois pour toutes, faute de quoi l'écart se verrait à
+            // l'écran entre la ligne en cours et les lignes figées.
+            val current = raw.trim()
+            if (current.isEmpty()) return
+            // Écho d'une ligne qu'on vient de figer, à ne pas réafficher en
+            // dessous d'elle-même.
+            if (pendingText.isEmpty() && current == lastCommitted) return
+            pendingText = current
+            onText(current, false)
         }
 
         override fun onResults(results: Bundle?) {
@@ -355,6 +407,7 @@ class AndroidSpeechSession(
             // meilleure version du même énoncé. Quand il n'existe pas — le cas
             // ordinaire, conclusion n°2 — c'est le tampon qui est figé, sans
             // quoi la phrase que Jean vient de dire serait perdue à la relance.
+            TranscriptionTrace.recordResults("API onResults", results)
             val text = firstResult(results)
             if (text != null) commit(text) else commitPending()
             // Fin d'énoncé, pas fin d'écoute : on relance aussitôt.
@@ -362,6 +415,7 @@ class AndroidSpeechSession(
         }
 
         override fun onError(error: Int) {
+            TranscriptionTrace.record("API onError", "code $error")
             // Quel que soit le motif, ce qui était dit avant l'erreur a été
             // dit. Une erreur tardive était l'un des chemins par lesquels une
             // phrase disparaissait sans jamais avoir été écrite.
@@ -395,6 +449,7 @@ class AndroidSpeechSession(
                     // bon — l'économie d'une reconstruction ne vaut pas une
                     // transcription morte.
                     releaseRecognizer()
+                    TranscriptionTrace.record("APP moteur reconstruit", "après le code $error")
                     consecutiveErrors++
                     if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
                         diagnose("reconnaissance Android en échec répété (code $error), écoute arrêtée")
@@ -413,105 +468,28 @@ class AndroidSpeechSession(
             ?.firstOrNull()
             ?.takeIf { it.isNotBlank() }
 
-    /**
-     * Décide, à chaque partiel, si le moteur continue sa phrase ou en a
-     * commencé une autre — et fige l'ancienne dans le second cas.
-     *
-     * ═══ Pourquoi le contenu, et non la durée du silence ═══
-     *
-     * La première version de ce garde-fou attendait qu'une fin de parole ait
-     * été signalée, c'est-à-dire un silence assez long pour que le moteur le
-     * déclare. Les mesures l'ont démenti : le moteur repart sur une hypothèse
-     * fraîche après six dixièmes de seconde, bien avant de déclarer quoi que
-     * ce soit. Une voix un peu hachée tombe exactement dans cette zone — et
-     * c'est celle de Jean.
-     *
-     * La question se tranche donc sur le texte. Quand le moteur se corrige, il
-     * garde le début de sa phrase ; quand il change d'énoncé, plus rien ne
-     * coïncide dès le premier mot. Vérifié sur les sept cas de la trace de
-     * mesure : les trois pertes réelles ne partageaient aucun mot de tête, les
-     * quatre auto-corrections en partageaient toutes.
-     */
-    private fun handlePartial(raw: String) {
-        // Le moteur préfixe volontiers ses résultats d'une espace. Les lignes
-        // figées étaient nettoyées, celle en cours ne l'était pas : l'écart se
-        // voyait à l'écran.
-        val current = raw.trim()
-        if (current.isEmpty()) return
-
-        val previous = pendingText
-
-        // Écho d'une ligne qu'on vient de figer, à ne pas réafficher en
-        // dessous d'elle-même.
-        if (previous.isEmpty() && current == lastCommitted) return
-
-        // Prolongé par la fin, mais aussi par le début : le moteur re-décode
-        // parfois son hypothèse avec plus de contexte et la rallonge par
-        // devant — « second mot » devient « voilà second mot ». Sans ce cas,
-        // l'ancien texte serait figé puis la version complète figée à son
-        // tour : la même phrase deux fois, l'une tronquée.
-        //
-        // L'inclusion au milieu, en revanche, ne vaut qu'au-delà d'une
-        // longueur où la coïncidence cesse d'être vraisemblable. Un tampon de
-        // trois lettres — « oui », « non », « bon » — se retrouve dans presque
-        // n'importe quel énoncé suivant ; l'accepter sans condition
-        // empêcherait à jamais de figer un mot isolé, c'est-à-dire de le
-        // conserver. Ce serait rouvrir, par la correction, le trou qu'elle
-        // bouche.
-        val continues = previous.isEmpty() ||
-            current.startsWith(previous) ||
-            current.endsWith(previous) ||
-            (previous.length >= MIN_CONTAINED_CHARS && current.contains(previous))
-
-        if (!continues && sharedWordPrefix(previous, current) == 0) {
-            commit(previous)
-        }
-
-        pendingText = current
-        onText(current, false)
-        armIdleCommit()
-    }
-
-    /**
-     * Fige le tampon faute d'évolution.
-     *
-     * Nécessaire tant que la session ne se termine pas d'elle-même
-     * (conclusion n°1, et sa correction) : sans ce garde-temps, une phrase
-     * suivie d'un vrai silence resterait indéfiniment « en cours », jamais
-     * acquise, et disparaîtrait au premier mot suivant.
-     */
-    private fun armIdleCommit() {
-        handler.removeCallbacks(idleCommit)
-        handler.postDelayed(idleCommit, IDLE_COMMIT_MS)
-    }
-
-    private val idleCommit = Runnable { commitPending() }
-
     private fun commitPending() {
         if (pendingText.isNotEmpty()) commit(pendingText)
     }
 
     private fun commit(text: String) {
-        handler.removeCallbacks(idleCommit)
         val phrase = text.trim()
+        val hadPending = pendingText.isNotEmpty()
         pendingText = ""
-        if (phrase.isEmpty() || phrase == lastCommitted) return
-        lastCommitted = phrase
-        onText(phrase, true)
-    }
-
-    /** Nombre de mots identiques en tête, casse ignorée. */
-    private fun sharedWordPrefix(a: String, b: String): Int {
-        if (a.isEmpty() || b.isEmpty()) return 0
-        val left = a.split(' ').filter { it.isNotEmpty() }
-        val right = b.split(' ').filter { it.isNotEmpty() }
-        var shared = 0
-        while (shared < left.size && shared < right.size &&
-            left[shared].equals(right[shared], ignoreCase = true)
-        ) {
-            shared++
+        if (phrase.isEmpty()) {
+            // Noté quand même : un partiel affiché qui arrive ici sans être
+            // figé est du texte que l'écran a montré puis perdu, et la trace
+            // doit le désigner nommément.
+            if (hadPending) TranscriptionTrace.record("APP figé", "RIEN FIGÉ alors qu'un partiel existait")
+            return
         }
-        return shared
+        if (phrase == lastCommitted) {
+            TranscriptionTrace.record("APP figé", "ignoré, déjà figé : « $phrase »")
+            return
+        }
+        lastCommitted = phrase
+        TranscriptionTrace.record("APP figé", "« $phrase »")
+        onText(phrase, true)
     }
 
     /**
@@ -522,7 +500,13 @@ class AndroidSpeechSession(
      */
     private fun scheduleRestart(immediate: Boolean = false) {
         if (!wanted) return
-        val delay = if (immediate) RESTART_DELAY_MS
+        // SANS DÉLAI dans le cas normal, et c'est une mesure qui le dit :
+        // chaque milliseconde passée ici est un mot que le moteur n'entend
+        // pas, et la fin d'un énoncé est précisément le moment où le suivant
+        // commence. Passer par le fil principal suffit à laisser la session
+        // précédente se refermer — ce qui était le seul rôle des trois cents
+        // millisecondes d'avant.
+        val delay = if (immediate) 0L
         else (RESTART_DELAY_MS shl consecutiveErrors.coerceAtMost(6)).coerceAtMost(MAX_RESTART_DELAY_MS)
         handler.postDelayed({ listen() }, delay)
     }
@@ -533,24 +517,6 @@ class AndroidSpeechSession(
         const val RESTART_DELAY_MS = 300L
         const val MAX_RESTART_DELAY_MS = 30_000L
         const val MAX_CONSECUTIVE_ERRORS = 8
-
-        /**
-         * Silence au terme duquel le tampon est figé sans attendre le moteur.
-         *
-         * Deux secondes : assez pour laisser passer les hésitations d'une
-         * phrase — le moteur lui-même repart sur une hypothèse fraîche après
-         * six dixièmes de seconde — et assez court pour qu'une phrase finie
-         * s'inscrive pendant que Jean respire, et non au mot suivant.
-         */
-        const val IDLE_COMMIT_MS = 2_000L
-
-        /**
-         * Longueur au-delà de laquelle retrouver l'ancien tampon au MILIEU du
-         * nouveau vaut continuation, et non coïncidence. Douze caractères,
-         * soit deux ou trois mots courts : en deçà, l'inclusion ne prouve
-         * rien.
-         */
-        const val MIN_CONTAINED_CHARS = 12
 
         /** Bornes du curseur de sensibilité, côté administration (voir index.html). */
         const val RMS_SCALE_MIN = 500f

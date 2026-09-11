@@ -46,6 +46,21 @@ android {
         // disponible et ne demande aucune clé.
         buildConfigField "String", "PICOVOICE_ACCESS_KEY_DEFAULT", "\"${project.findProperty('picovoiceAccessKey') ?: ""}\""
 
+        // Clé de chiffrement de la trace de reconnaissance (voir
+        // TranscriptionTrace), injectée depuis le secret GitHub
+        // SPEECH_TRACE_KEY.
+        //
+        // Elle ne protège pas un service : elle protège ce que Jean dit chez
+        // lui. La trace transite par un Firestore dont les règles laissent
+        // lire quiconque connaît l'adresse d'un document ; sans cette clé, un
+        // transcript de sa chambre y serait déposé en clair.
+        //
+        // Absente, la trace s'enregistre mais n'est JAMAIS publiée, et l'état
+        // envoyé au panneau d'administration le dit. Publier en clair faute de
+        // clé serait précisément l'accident qu'on cherche à éviter, et il
+        // passerait inaperçu puisque tout aurait l'air de fonctionner.
+        buildConfigField "String", "SPEECH_TRACE_KEY", "\"${project.findProperty('speechTraceKey') ?: ""}\""
+
         // Rien d'équivalent pour la météo : wttr.in ne demande aucune clé API
         // (voir WeatherClient). Le secret WEATHER_API_KEY et son champ admin
         // ont donc disparu — un compte à créer, une clé à saisir sur la

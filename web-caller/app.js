@@ -136,6 +136,11 @@ function applySettingsToUi(settings) {
 const engine = new RealCallEngine(FIREBASE_CONFIG);
 
 const els = {
+  speechTraceToggle: document.getElementById("speechTraceToggle"),
+  speechTraceState: document.getElementById("speechTraceState"),
+  speechTraceKey: document.getElementById("speechTraceKey"),
+  speechTraceDownload: document.getElementById("speechTraceDownload"),
+  speechTraceResult: document.getElementById("speechTraceResult"),
   idle: document.getElementById("stateIdle"),
   calling: document.getElementById("stateCalling"),
   blocked: document.getElementById("stateBlocked"),
@@ -591,6 +596,7 @@ const ADMIN_TOGGLE_FIELDS = [
   ["voiceGateToggle", "voiceGateEnabled"],
   ["dimJeanSpeechToggle", "dimJeanSpeech"],
   ["roomHandoffToggle", "roomHandoffEnabled"],
+  ["speechTraceToggle", "speechTraceEnabled"],
 ];
 
 for (const [elementKey, field] of ADMIN_TOGGLE_FIELDS) {
@@ -980,6 +986,11 @@ const ENGINE_SELECT_FIELDS = [
 function applyDeviceSettings(data) {
   deviceSettingsLoaded = true;
 
+  // L'état de la trace, tel que la tablette le rapporte. Affiché plutôt que
+  // déduit de la case cochée : la trace s'arrête toute seule au bout de dix
+  // minutes, et ce qu'on croit avoir demandé n'est pas ce qui se passe.
+  els.speechTraceState.textContent = data.speechTraceState || "aucune trace enregistrée";
+
   // Empreinte du code d'accès, publiée par la tablette avec son signe de vie
   // (voir DeviceStatusReporter.adminPinFingerprint). Elle arrive par le même
   // canal que les réglages : un seul abonnement au document d'appareil.
@@ -1086,6 +1097,73 @@ for (const [elementKey, field] of ENGINE_SELECT_FIELDS) {
     writeDeviceSetting(field, els[elementKey].value, els[elementKey]);
   });
 }
+
+// --- Trace de reconnaissance : clé de lecture et récupération --------------
+//
+// La clé reste dans CE navigateur. Elle n'est ni envoyée à Firestore — où les
+// règles laissent lire quiconque connaît l'adresse d'un document — ni livrée
+// avec le site, où elle se lirait dans le JavaScript publié.
+
+const TRACE_KEY_STORAGE = "seniorvisio.speechTraceKey";
+
+els.speechTraceKey.value = localStorage.getItem(TRACE_KEY_STORAGE) || "";
+els.speechTraceKey.addEventListener("change", () => {
+  localStorage.setItem(TRACE_KEY_STORAGE, els.speechTraceKey.value.trim());
+});
+
+/**
+ * Déchiffre un morceau « vecteur:contenu », les deux en Base64.
+ *
+ * La clé est la même chaîne que le secret de compilation, réduite par SHA-256
+ * exactement comme du côté Android : c'est ce qui permet aux deux bouts de
+ * s'entendre sans échanger autre chose que le mot de passe.
+ */
+async function decryptTraceChunk(chunk, keyText) {
+  const [ivPart, dataPart] = chunk.split(":");
+  const fromBase64 = (text) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(keyText));
+  const key = await crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["decrypt"]);
+  const plain = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: fromBase64(ivPart), tagLength: 128 },
+    key,
+    fromBase64(dataPart)
+  );
+  return new TextDecoder().decode(plain);
+}
+
+els.speechTraceDownload.addEventListener("click", async () => {
+  const keyText = els.speechTraceKey.value.trim();
+  if (!keyText) {
+    els.speechTraceResult.textContent = "Collez d'abord la clé de lecture.";
+    return;
+  }
+  els.speechTraceResult.textContent = "Lecture…";
+  try {
+    const chunks = await engine.readTraceChunks(CONFIG.deviceDocId);
+    if (!chunks.length) {
+      els.speechTraceResult.textContent = "Aucune trace déposée par la tablette.";
+      return;
+    }
+    const parts = [];
+    for (const chunk of chunks) parts.push(await decryptTraceChunk(chunk, keyText));
+    const text = parts.join("");
+
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "seniorvisio-trace.txt";
+    link.click();
+    URL.revokeObjectURL(url);
+    els.speechTraceResult.textContent = `Trace récupérée : ${text.length} caractères.`;
+  } catch (e) {
+    // Une clé fausse ne produit pas un texte faux : le mode GCM vérifie
+    // l'authenticité et refuse. Le message le dit, plutôt que de laisser
+    // croire à une trace corrompue.
+    console.warn("[app] Déchiffrement de la trace impossible :", e);
+    els.speechTraceResult.textContent =
+      "Déchiffrement impossible — clé incorrecte, ou trace écrite par une autre version.";
+  }
+});
 
 engine.watchDeviceSettings(CONFIG.deviceDocId, applyDeviceSettings);
 

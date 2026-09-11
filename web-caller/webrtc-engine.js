@@ -660,6 +660,34 @@ class RealCallEngine extends CallEngine {
       .set({ [field]: value }, { merge: true });
   }
 
+  /**
+   * Les morceaux de la trace de reconnaissance, dans l'ordre.
+   *
+   * Chiffrés : cette méthode ne fait que les rapporter, le déchiffrement est
+   * l'affaire de l'interface, qui seule détient la clé.
+   *
+   * Le tri se fait sur l'entier et non sur l'identifiant de document : Firestore
+   * ordonne les identifiants comme des chaînes, ce qui placerait le morceau 10
+   * entre le 1 et le 2. Une trace remontée dans le désordre se déchiffre
+   * pourtant sans erreur — chaque morceau est autonome — et le défaut ne se
+   * verrait qu'à la lecture du texte, beaucoup plus tard.
+   */
+  async readTraceChunks(deviceId) {
+    if (!this._available) return [];
+    const traces = await this._db
+      .collection("devices").doc(deviceId).collection("traces")
+      .get();
+    if (traces.empty) return [];
+    // Une seule trace est conservée côté tablette ; on prend la plus récente
+    // si jamais un effacement n'avait pas abouti.
+    const latest = traces.docs.sort((a, b) => (a.id < b.id ? 1 : -1))[0];
+    const chunks = await latest.ref.collection("chunks").get();
+    return chunks.docs
+      .sort((a, b) => Number(a.id) - Number(b.id))
+      .map((doc) => doc.data().data)
+      .filter(Boolean);
+  }
+
   async cancelCall() {
     // Invalide toute exécution de startCall() encore en cours (voir
     // isStale() dans startCall) : sans ça, Annuler pendant la préparation

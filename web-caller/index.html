@@ -494,6 +494,44 @@
             d'autre, et placez la limite entre les deux nombres.
           </p>
 
+          <h3>Trace de la reconnaissance vocale</h3>
+          <p class="hint">
+            Un journal détaillé de chaque échange entre la tablette et le moteur
+            de reconnaissance d'Android : ce qu'il rend, quand, et ce que
+            l'application en fait. C'est l'instrument qui a servi à corriger le
+            moteur ; celui-ci l'installe dans la vraie chambre, où les
+            conditions diffèrent.
+          </p>
+          <p class="hint">
+            <strong>Cette trace contient mot pour mot ce qui se dit chez
+            Jean.</strong> Elle est donc chiffrée avant d'être déposée, et elle
+            s'arrête d'elle-même au bout de dix minutes — une trace oubliée
+            allumée est le scénario probable, pas le scénario rare. Une seule
+            trace est conservée : la suivante efface la précédente.
+          </p>
+
+          <div class="caption-control">
+            <label>
+              <input type="checkbox" id="speechTraceToggle">
+              🔍 Enregistrer une trace (dix minutes au maximum)
+            </label>
+          </div>
+          <p class="hint" id="speechTraceState">—</p>
+
+          <div class="caption-control">
+            <label for="speechTraceKey">Clé de lecture</label>
+            <input type="password" id="speechTraceKey" placeholder="collez la clé ici" autocomplete="off">
+          </div>
+          <p class="hint">
+            La même que le secret <code>SPEECH_TRACE_KEY</code> qui a servi à
+            fabriquer l'application. Elle reste dans <em>ce</em> navigateur et
+            n'est envoyée nulle part. Elle n'est volontairement pas livrée avec
+            le site : une clé publiée dans le JavaScript se lit en trente
+            secondes, et ne protégerait plus rien.
+          </p>
+          <button id="speechTraceDownload" class="secondary-button">Récupérer la trace</button>
+          <p class="hint" id="speechTraceResult"></p>
+
           <div class="caption-control">
             <label>
               <input type="checkbox" id="roomHandoffToggle">

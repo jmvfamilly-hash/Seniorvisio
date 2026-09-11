@@ -17,6 +17,21 @@ service cloud.firestore {
       match /usage/{day} {
         allow read, write: if true;
       }
+      // La trace de reconnaissance, et ses morceaux un niveau plus bas. Deux
+      // règles là encore, pour la même raison : sans la seconde, les morceaux
+      // seraient refusés en silence et le panneau afficherait un index de
+      // trace dont aucun contenu n'arriverait jamais.
+      //
+      // Ce que ces documents contiennent est CHIFFRÉ (voir TranscriptionTrace)
+      // — et il le faut, parce que ces règles-ci laissent lire n'importe qui,
+      // alors qu'une trace de reconnaissance est un transcript de la chambre
+      // de Jean.
+      match /traces/{traceId} {
+        allow read, write: if true;
+        match /chunks/{index} {
+          allow read, write: if true;
+        }
+      }
     }
   }
 }

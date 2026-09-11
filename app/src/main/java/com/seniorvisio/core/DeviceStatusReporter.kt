@@ -34,6 +34,11 @@ class DeviceStatusReporter(private val context: Context) {
     private val deviceDoc get() = db.document(DEVICE_DOC_PATH)
     private val retryHandler = Handler(Looper.getMainLooper())
 
+    /** Le plafond de durée de la trace. Retenu pour pouvoir l'annuler SEUL. */
+    private val traceCap = Runnable {
+        finishTrace("plafond de ${TranscriptionTrace.MAX_DURATION_MS / 60_000} minutes atteint")
+    }
+
     /** À appeler périodiquement (voir CallListenerService, déjà un foreground service permanent). */
     fun reportHeartbeat() {
         val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
@@ -368,6 +373,7 @@ class DeviceStatusReporter(private val context: Context) {
      */
     private fun applyTranscriptionSettings(snapshot: DocumentSnapshot) {
         val adminConfig = AdminConfig(context)
+        applyTraceSwitch(snapshot)
 
         TranscriptionEngineChoice.fromRemoteValue(snapshot.getString(FIELD_ROOM_ENGINE))?.let {
             if (adminConfig.roomEngine != it) {
@@ -485,6 +491,106 @@ class DeviceStatusReporter(private val context: Context) {
         }.start()
     }
 
+    /**
+     * L'interrupteur de la trace de reconnaissance, commandé depuis le panneau
+     * d'administration (voir TranscriptionTrace).
+     *
+     * Deux transitions, et elles ne se ressemblent pas. L'allumage ne fait que
+     * vider et démarrer. L'extinction chiffre, découpe et publie — c'est-à-dire
+     * qu'elle touche au réseau, et qu'elle peut échouer.
+     *
+     * Le champ Firestore est lu à CHAQUE écriture sur le document d'appareil,
+     * donc aussi à chaque signe de vie. D'où la comparaison avec l'état courant
+     * plutôt qu'une action à chaque passage : sans elle, la trace repartirait
+     * de zéro toutes les cinq minutes et n'observerait jamais rien.
+     */
+    private fun applyTraceSwitch(snapshot: DocumentSnapshot) {
+        val wanted = snapshot.getBoolean(FIELD_TRACE_ENABLED) ?: false
+        if (wanted && !TranscriptionTrace.isRecording()) {
+            TranscriptionTrace.start()
+            Log.i(TAG, "Trace de reconnaissance démarrée")
+            // L'arrêt forcé est armé au démarrage et non surveillé ailleurs :
+            // une trace oubliée allumée est le scénario probable, et personne
+            // ne sera là pour l'éteindre.
+            //
+            // Une référence retenue, et non un removeCallbacksAndMessages(null)
+            // au moment de l'annuler : ce Handler porte aussi le réabonnement à
+            // Firestore après une erreur d'écoute, et tout effacer d'un coup
+            // aurait rendu la tablette sourde aux commandes à distance —
+            // silencieusement, et jusqu'au prochain redémarrage.
+            retryHandler.postDelayed(traceCap, TranscriptionTrace.MAX_DURATION_MS)
+        } else if (!wanted && TranscriptionTrace.isRecording()) {
+            finishTrace("arrêt demandé depuis l'administration")
+        }
+    }
+
+    /**
+     * Clôt la trace et la publie, chiffrée et découpée.
+     *
+     * ═══ Ce qui est écrit, et dans quel ordre ═══
+     *
+     * Les morceaux d'abord, le document d'index ensuite. L'inverse laisserait
+     * une fenêtre pendant laquelle le panneau annoncerait une trace complète
+     * dont les morceaux ne sont pas encore arrivés — et le lecteur croirait à
+     * une trace tronquée alors qu'elle est seulement en route.
+     *
+     * ═══ Une seule trace conservée ═══
+     *
+     * La précédente est effacée. Ce n'est pas de l'économie de place : chaque
+     * trace est un transcript de la chambre de Jean, et il n'y a aucune raison
+     * d'en accumuler dans le nuage.
+     */
+    private fun finishTrace(reason: String) {
+        retryHandler.removeCallbacks(traceCap)
+        val text = TranscriptionTrace.stopAndTake(reason) ?: return
+        val chunks = TranscriptionTrace.encryptToChunks(text, BuildConfig.SPEECH_TRACE_KEY)
+        if (chunks.isEmpty()) {
+            // Aucune clé : on ne publie RIEN. Dit explicitement, parce qu'une
+            // absence de trace ressemble sinon à une trace vide, et qu'on
+            // chercherait la panne du mauvais côté.
+            deviceDoc.set(
+                mapOf(
+                    FIELD_TRACE_STATE to "non publiée : aucune clé de chiffrement dans cette version",
+                    FIELD_TRACE_ENABLED to false,
+                ),
+                SetOptions.merge(),
+            )
+            Log.w(TAG, "Trace non publiée : aucune clé de chiffrement")
+            return
+        }
+
+        val traces = deviceDoc.collection(TRACES_COLLECTION)
+        traces.get().addOnSuccessListener { old ->
+            old.documents.forEach { it.reference.delete() }
+        }
+
+        val traceId = java.time.Instant.now().toString().replace(":", "-")
+        val doc = traces.document(traceId)
+        chunks.forEachIndexed { index, chunk ->
+            doc.collection(CHUNKS_COLLECTION).document(index.toString())
+                .set(mapOf(FIELD_CHUNK_DATA to chunk))
+                .addOnFailureListener { e -> Log.e(TAG, "Échec de l'envoi du morceau $index", e) }
+        }
+        doc.set(
+            mapOf(
+                FIELD_TRACE_CHUNKS to chunks.size,
+                FIELD_TRACE_CHARS to text.length,
+                FIELD_TRACE_REASON to reason,
+                FIELD_TRACE_VERSION to BuildConfig.BUILD_REV,
+                FIELD_TRACE_AT to FieldValue.serverTimestamp(),
+            )
+        ).addOnFailureListener { e -> Log.e(TAG, "Échec de l'index de trace", e) }
+
+        deviceDoc.set(
+            mapOf(
+                FIELD_TRACE_STATE to "publiée : ${chunks.size} morceau(x), ${text.length} caractères — $reason",
+                FIELD_TRACE_ENABLED to false,
+            ),
+            SetOptions.merge(),
+        )
+        Log.i(TAG, "Trace publiée : ${chunks.size} morceaux")
+    }
+
     private fun reportUpdateFailure(message: String) {
         deviceDoc.set(
             mapOf(
@@ -582,6 +688,18 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_CAPTION_CLEAR_DELAY = "captionClearDelaySeconds"
         private const val FIELD_ADMIN_PIN_FINGERPRINT = "adminPinFingerprint"
         private const val FIELD_ROOM_LISTENING = "roomListening"
+
+        // --- Trace de reconnaissance ---
+        private const val FIELD_TRACE_ENABLED = "speechTraceEnabled"
+        private const val FIELD_TRACE_STATE = "speechTraceState"
+        private const val TRACES_COLLECTION = "traces"
+        private const val CHUNKS_COLLECTION = "chunks"
+        private const val FIELD_CHUNK_DATA = "data"
+        private const val FIELD_TRACE_CHUNKS = "chunks"
+        private const val FIELD_TRACE_CHARS = "chars"
+        private const val FIELD_TRACE_REASON = "reason"
+        private const val FIELD_TRACE_VERSION = "version"
+        private const val FIELD_TRACE_AT = "at"
         private const val FIELD_TRANSCRIPTION_DIAGNOSTIC = "transcriptionDiagnostic"
         private const val FIELD_PAID_USAGE = "paidUsage"
 
