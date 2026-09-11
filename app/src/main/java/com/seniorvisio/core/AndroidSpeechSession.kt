@@ -451,11 +451,31 @@ class AndroidSpeechSession(
                     releaseRecognizer()
                     TranscriptionTrace.record("APP moteur reconstruit", "après le code $error")
                     consecutiveErrors++
-                    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-                        diagnose("reconnaissance Android en échec répété (code $error), écoute arrêtée")
-                        wanted = false
-                        UsageStats.noteTranscriptionStop()
-                        return
+                    // ═══ ON NE RENONCE PLUS JAMAIS POUR DE BON ═══
+                    //
+                    // Ce code posait wanted = false au bout de huit erreurs :
+                    // l'écoute s'arrêtait alors jusqu'au redémarrage de
+                    // l'application, sur une tablette que personne ne touche.
+                    // Une suite d'erreurs passagère condamnait la journée.
+                    //
+                    // La temporisation monte désormais jusqu'à son plafond et
+                    // y reste. Une transcription qui réessaie toutes les
+                    // trente secondes vaut infiniment mieux qu'une
+                    // transcription qui ne revient pas, et le coût d'un essai
+                    // toutes les trente secondes est nul.
+                    //
+                    // Le diagnostic le dit au lieu de se taire : sans ça,
+                    // l'écran d'administration afficherait un moteur « en
+                    // marche » qui ne rend rien.
+                    if (consecutiveErrors == MAX_CONSECUTIVE_ERRORS) {
+                        diagnose(
+                            "reconnaissance Android en échec répété (code $error) — " +
+                                "nouvel essai toutes les ${MAX_RESTART_DELAY_MS / 1000} s"
+                        )
+                        TranscriptionTrace.record(
+                            "APP échec répété",
+                            "$consecutiveErrors erreurs de suite, code $error — on continue d'essayer",
+                        )
                     }
                     scheduleRestart()
                 }
@@ -500,13 +520,27 @@ class AndroidSpeechSession(
      */
     private fun scheduleRestart(immediate: Boolean = false) {
         if (!wanted) return
-        // SANS DÉLAI dans le cas normal, et c'est une mesure qui le dit :
-        // chaque milliseconde passée ici est un mot que le moteur n'entend
-        // pas, et la fin d'un énoncé est précisément le moment où le suivant
-        // commence. Passer par le fil principal suffit à laisser la session
-        // précédente se refermer — ce qui était le seul rôle des trois cents
-        // millisecondes d'avant.
-        val delay = if (immediate) 0L
+        // ═══ Les trois cents millisecondes reviennent, et pourquoi ═══
+        //
+        // Je les avais mises à zéro sur une mesure faite AILLEURS : le banc
+        // d'essai relance à zéro sans dommage. Il possède un verrou qui
+        // empêche deux sessions de se chevaucher ; ce fichier n'en a pas.
+        //
+        // Résultat observé sur la tablette : plus aucune transcription. La
+        // relance immédiate redemandait à écouter avant que le service ait
+        // fini de se refermer, le moteur répondait « occupé », et huit refus
+        // consécutifs suffisaient à éteindre l'écoute pour de bon.
+        //
+        // Le commentaire d'origine le disait déjà — « relancer sans répit un
+        // moteur qui refuse de démarrer le ferait rejeter par le système ».
+        // Je l'ai lu, et j'ai quand même retiré la valeur qu'il protégeait,
+        // parce qu'une mesure prise sur un autre code me paraissait valoir
+        // plus qu'un avertissement écrit dans celui-ci.
+        //
+        // Le gain espéré était de trois cents millisecondes par énoncé, à
+        // comparer aux deux à huit SECONDES de surdité que coûte chaque
+        // reprise. Il était négligeable ; le risque ne l'était pas.
+        val delay = if (immediate) RESTART_DELAY_MS
         else (RESTART_DELAY_MS shl consecutiveErrors.coerceAtMost(6)).coerceAtMost(MAX_RESTART_DELAY_MS)
         handler.postDelayed({ listen() }, delay)
     }
