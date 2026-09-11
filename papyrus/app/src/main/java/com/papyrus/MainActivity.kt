@@ -1,9 +1,11 @@
 package com.papyrus
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -15,15 +17,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,14 +37,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -46,30 +56,41 @@ import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import kotlinx.coroutines.delay
 
 /**
- * Banc d'essai de l'écoute continue, indépendant de Senior Visio.
+ * Papyrus : la dictée de la pièce, affichée à une vitesse de lecture.
  *
- * Un fond, un texte, un défilement. L'écoute démarre seule et ne s'arrête
- * qu'avec l'écran.
+ * ═══ Ce que cet écran résout ═══
  *
- * Ce dépouillement n'est pas de l'esthétique : il s'agit d'observer un seul
- * phénomène — les coupures de la reconnaissance continue (voir
- * ContinuousSpeechManager) — et tout élément d'interface supplémentaire serait
- * une variable de plus dans une mesure qui en compte déjà trop.
+ * Le moteur de reconnaissance produit par à-coups — plusieurs résultats dans
+ * la même milliseconde, puis des secondes de rien. Un écran qui suivrait ce
+ * rythme sauterait, et personne ne peut lire un texte qui saute. Encore moins
+ * quelqu'un d'âgé, pour qui chaque secousse est une ligne perdue.
  *
- * UNE SEULE COMMANDE, en bas à droite : le régime de séquencement.
+ * Le texte défile donc à **cadence fixe**, indépendante de celle du moteur.
+ * Entre les deux, une file d'attente absorbe l'écart (voir ScrollPipeline).
  *
- * Elle existe parce qu'une comparaison honnête l'exige. Les deux régimes ne
- * durent pas aussi longtemps l'un que l'autre — l'observation pure laisse le
- * moteur clore quand il veut, notre découpage tient jusqu'au plafond — et les
- * faire alterner automatiquement donnait quelques secondes au premier contre
- * deux minutes au second. Une session d'essai n'applique donc qu'un régime, du
- * début à la fin, et c'est la personne qui bascule quand elle juge en avoir
- * assez vu.
+ * ═══ La règle qu'il ne faut pas enfreindre ═══
  *
- * Basculer reconstruit l'écoute : le régime se pose au démarrage d'une session
- * et ne se change pas en cours de route.
+ * Quand la file grossit, le défilement **ne s'accélère pas**. Jamais. Un stock
+ * important se signale par un point discret, et rien d'autre. Accélérer pour
+ * rattraper reviendrait à rendre le texte illisible exactement au moment où il
+ * y en a le plus à lire — l'inverse du service rendu.
+ *
+ * Seule une personne peut changer le rythme, par le sélecteur en bas.
+ *
+ * ═══ Trois zones ═══
+ *
+ * En haut, le **passé** : ce qui est sorti de la fenêtre de lecture, en encre
+ * pâlie, définitif. Au milieu, la **fenêtre de lecture** — les deux dernières
+ * lignes, en pleine encre, là où l'œil se pose. En bas, le **futur** : ce que
+ * le moteur propose mais qui n'est pas encore acquis, en italique clair.
+ *
+ * La frontière entre passé et fenêtre de lecture est calculée par la mise en
+ * page elle-même, pas devinée à partir d'un nombre de mots : « deux lignes »
+ * ne veut rien dire tant qu'on ne sait pas où le texte se coupe, et il se coupe
+ * ailleurs selon la longueur des mots.
  */
 class MainActivity : ComponentActivity() {
 
@@ -146,75 +167,64 @@ private fun PapyrusScreen() {
         }
     }
 
-    /**
-     * Les énoncés FIGÉS, et eux seuls. C'est tout ce que l'écran montre.
-     *
-     * ═══ Pourquoi la version en cours de dictée a disparu de l'écran ═══
-     *
-     * Elle était affichée en encre claire, et elle bougeait sans arrêt : la
-     * trace compte deux cent quatre-vingt-trois révisions en cent trente-cinq
-     * secondes, soit deux par seconde. Le moteur ne construit pas sa phrase
-     * mot après mot comme on l'écrirait ; il rend une hypothèse entière,
-     * l'allonge, la raccourcit, la réécrit. À l'écran, cela donne un texte qui
-     * frétille — illisible pendant qu'il bouge, et surtout impossible à lire
-     * en diagonale, puisque ce qu'on vient de lire peut avoir changé.
-     *
-     * N'afficher que le figé rend l'écran immobile entre deux lignes. Le texte
-     * n'apparaît qu'une fois, et il ne bouge plus jamais.
-     *
-     * LE PRIX EST UN DÉLAI, et il est réel : une phrase ne s'inscrit qu'au
-     * moment où elle est figée — sur rupture de contenu, ou après deux
-     * secondes sans évolution. Deux à six secondes en pratique, d'après les
-     * intervalles entre lignes de la trace. Pendant ce temps l'écran ne montre
-     * rien de la phrase en cours, alors qu'il en montrait une ébauche avant.
-     * C'est l'échange demandé : de la stabilité contre de l'immédiateté.
-     *
-     * Et un bénéfice moins visible : l'écran ne se recompose plus que
-     * vingt-quatre fois au lieu de deux cent quatre-vingt-trois. Le défilement
-     * automatique, qui était relancé à chaque révision et donc constamment
-     * interrompu en cours d'animation, ne l'est plus qu'à chaque ligne.
-     */
-    val segments = remember { mutableStateListOf<String>() }
+    // --- L'état affiché -----------------------------------------------------
+
+    /** Les mots déjà défilés, dans l'ordre. Rien n'en sort que par la purge d'ancienneté. */
+    val shown = remember { mutableStateListOf<String>() }
+
+    /** Les mots proposés par le moteur mais pas encore acquis : la zone future. */
+    var pending by remember { mutableStateOf("") }
+
     var diagnostic by remember { mutableStateOf("") }
+    var backlogVisible by remember { mutableStateOf(false) }
+    var stillListening by remember { mutableStateOf(false) }
 
-    // Le régime en cours. L'écoute est reconstruite à chaque changement — d'où
-    // sa présence dans la clé de l'effet ci-dessous.
-    var mode by remember { mutableStateOf(SequencingMode.API_PURE) }
+    // La vitesse survit au redémarrage de l'application : un réglage de confort
+    // qu'il faut refaire à chaque lancement n'est pas un réglage, c'est une
+    // corvée.
+    var rate by remember { mutableStateOf(loadRate(context)) }
 
-    DisposableEffect(granted, mode) {
+    // --- La chaîne, construite une fois pour toutes --------------------------
+    //
+    // Retenue HORS de l'effet d'écoute, et c'est essentiel : elle ne doit rien
+    // perdre quand la session du moteur se relance, or les relances sont
+    // incessantes. Une file reconstruite à chaque session produirait exactement
+    // la coupure visible que cette architecture existe pour supprimer.
+    val queue = remember { WordQueue() }
+    val indicator = remember {
+        BacklogIndicator(ScrollDefaults.BACKLOG_ENTER, ScrollDefaults.BACKLOG_EXIT)
+    }
+    val stabiliser = remember {
+        WordStabiliser(ScrollDefaults.STABLE_DELAY_MS) { word -> queue.enqueue(word) }
+    }
+
+    DisposableEffect(granted) {
         if (!granted) return@DisposableEffect onDispose { }
-        SpeechTrace.record("ÉCRAN écoute", "démarrage du gestionnaire")
-        SpeechTrace.record("ÉCRAN régime", "séquencement : ${mode.label}")
+        SpeechTrace.record(
+            "ÉCRAN écoute",
+            "démarrage du gestionnaire, mode ${SequencingMode.SEQUENCE.label}",
+        )
         val speech = ContinuousSpeechManager(
             context = context,
-            mode = mode,
-            onPartial = {
-                // REÇU MAIS PAS AFFICHÉ. Les révisions restent journalisées —
-                // elles sont l'objet même de ce banc d'essai, et le découpage
-                // par le contenu se juge sur elles — mais elles ne touchent
-                // plus aucun état de composition, donc plus l'écran.
-                //
-                // La distinction est notée dans le libellé plutôt que laissée
-                // à deviner : une trace qui dirait encore « partiel affiché »
-                // mentirait sur ce que l'écran a montré, et c'est précisément
-                // la question à laquelle ce journal doit répondre.
-                SpeechTrace.record("APP partiel reçu (non affiché)", "${it.length} car.")
+            // LE SEUL MODE LIVRÉ, et aucune interface ne permet d'en changer.
+            // Les deux autres régimes restent dans le gestionnaire comme
+            // instruments de mesure, mais rien ici ne peut les atteindre.
+            mode = SequencingMode.SEQUENCE,
+            onPartial = { text ->
+                stabiliser.submitPartial(text, SystemClock.elapsedRealtime())
+                pending = stabiliser.pendingWords().joinToString(" ")
             },
-            onFinal = { text ->
-                segments.add(text)
-                // Le tampon ne grandit pas sans fin : une observation peut
-                // durer des heures, et rien ne sert de garder ce qui est sorti
-                // de l'écran depuis longtemps.
-                var purged = 0
-                while (segments.size > MAX_SEGMENTS) {
-                    segments.removeAt(0)
-                    purged++
-                }
+            // Sans emploi en mode séquence : le figeage appartient au
+            // stabilisateur, pas au gestionnaire.
+            onFinal = { },
+            onSessionEnd = { finalText ->
+                stabiliser.finish(finalText)
+                pending = ""
                 SpeechTrace.record(
-                    "ÉCRAN ligne ajoutée",
-                    "${segments.size} lignes à l'écran" +
-                        (if (purged > 0) ", $purged purgée(s) en tête" else "") +
-                        " — « $text »",
+                    "APP réconciliation",
+                    if (finalText.isNullOrBlank())
+                        "aucun texte final — les candidats restants sont acquis tels quels"
+                    else "texte final reçu, ${finalText.length} car.",
                 )
             },
             onRestart = { },
@@ -230,46 +240,62 @@ private fun PapyrusScreen() {
         }
     }
 
-    val scroll = rememberScrollState()
-    val text = renderTranscript(segments.toList())
+    // --- L'horloge de défilement --------------------------------------------
+    //
+    // Relancée quand la vitesse change, et rien d'autre n'en dépend : ni la
+    // file, ni le texte déjà affiché. Changer de palier ne peut donc produire
+    // ni saut ni perte — l'invariant est vrai par construction, pas par
+    // vigilance.
+    LaunchedEffect(granted, rate) {
+        if (!granted) return@LaunchedEffect
+        var lastWordAtMs = SystemClock.elapsedRealtime()
+        while (true) {
+            delay(rate.intervalMs)
+            val now = SystemClock.elapsedRealtime()
 
-    // Du texte ACQUIS peut-il disparaître de l'écran ? C'est la seule forme de
-    // perte qui compte : la ligne en cours, elle, est faite pour être remplacée.
-    //
-    // Deux corrections par rapport à la version précédente, qui signalait treize
-    // pertes dont aucune n'en était une.
-    //
-    // On ne mesure plus que les lignes acquises, sans la ligne en cours ni sa
-    // marque de plume. Douze des treize signalements venaient de la disparition
-    // de cette marque au moment où une ligne passe d'« en cours » à « acquise » :
-    // deux caractères, comptés comme une perte de texte.
-    //
-    // Et la mesure sort du LaunchedEffect. Celui-ci appelle une animation de
-    // défilement, donc il suspend ; quand le texte change à nouveau avant la
-    // fin, l'effet est annulé AVANT d'avoir enregistré la longueur, et la
-    // comparaison suivante se fait contre une valeur périmée. C'est ce qui a
-    // produit le treizième signalement, à vingt caractères. SideEffect
-    // s'exécute après chaque composition effectivement affichée, sans jamais
-    // être annulé — c'est exactement « ce que l'écran a montré ».
-    val committedLength = remember { intArrayOf(0) }
-    val committedChars = segments.sumOf { it.length }
-    SideEffect {
-        if (committedChars < committedLength[0]) {
-            SpeechTrace.record(
-                "ÉCRAN LIGNES ACQUISES PERDUES",
-                "${committedLength[0]} → $committedChars car. — vérifier la purge juste au-dessus",
-            )
+            // Le temps mûrit même sans nouveau résultat du moteur : sans ce
+            // rappel, les derniers mots d'une phrase resteraient candidats
+            // pour toujours, le silence les empêchant d'être promus alors que
+            // c'est lui qui prouve qu'ils sont définitifs.
+            stabiliser.tick(now)
+
+            val word = queue.dequeue()
+            if (word != null) {
+                shown.add(word)
+                lastWordAtMs = now
+                // Purge d'ancienneté, très au-delà de ce qu'un écran montre :
+                // elle borne la mémoire sans jamais retirer quoi que ce soit
+                // de visible.
+                while (shown.size > MAX_WORDS) shown.removeAt(0)
+            }
+
+            indicator.update(queue.backlog)
+            backlogVisible = indicator.visible
+
+            // Deux informations distinctes, et il ne faut pas les confondre :
+            // le voyant dit « il reste à lire », celui-ci dit « le moteur
+            // écoute toujours ». Un écran parfaitement immobile pendant trente
+            // secondes n'aurait sinon aucune explication — la trace en montre
+            // trois sessions de suite.
+            stillListening = queue.backlog == 0 &&
+                now - lastWordAtMs > ScrollDefaults.SILENCE_HINT_MS
+
+            pending = stabiliser.pendingWords().joinToString(" ")
         }
-        committedLength[0] = committedChars
     }
 
-    // Défilement vers le bas à chaque mot : c'est la dernière ligne qui compte,
-    // et personne ne fera défiler à la main.
-    LaunchedEffect(text) { scroll.animateScrollTo(scroll.maxValue) }
+    // --- Le rendu ------------------------------------------------------------
 
-    // Appui long n'importe où : la trace part vers le sélecteur de partage.
-    // Un geste plutôt qu'un bouton — l'écran doit rester nu, et personne ne
-    // découvrira ce geste par hasard.
+    val scroll = rememberScrollState()
+
+    // Où commence la fenêtre de lecture, en caractères depuis le début du
+    // texte. Fourni par la mise en page elle-même (voir onTextLayout), et non
+    // estimé à partir d'un nombre de mots.
+    var readingWindowStart by remember { mutableStateOf(0) }
+
+    val body = shown.joinToString(" ")
+    LaunchedEffect(body, pending) { scroll.animateScrollTo(scroll.maxValue) }
+
     val shareTrace = {
         SpeechTrace.record("ÉCRAN partage", "trace demandée")
         val file = SpeechTrace.writeTo(context)
@@ -310,10 +336,11 @@ private fun PapyrusScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scroll)
-                .padding(horizontal = 40.dp, vertical = 32.dp),
+                .padding(horizontal = 40.dp)
+                .padding(top = 32.dp, bottom = 96.dp),
         ) {
             BasicText(
-                text = text,
+                text = renderBody(body, readingWindowStart),
                 style = TextStyle(
                     color = Ink,
                     fontSize = 36.sp,
@@ -323,59 +350,108 @@ private fun PapyrusScreen() {
                     lineHeight = 50.sp,
                     fontFamily = FontFamily.Serif,
                 ),
+                onTextLayout = { layout ->
+                    val firstVisibleLine =
+                        (layout.lineCount - READING_WINDOW_LINES).coerceAtLeast(0)
+                    val start = layout.getLineStart(firstVisibleLine)
+                    // Réaffecté seulement s'il change : ce rappel survient à
+                    // chaque mise en page, et écrire la même valeur relancerait
+                    // une composition pour rien, quatre fois par seconde.
+                    if (start != readingWindowStart) readingWindowStart = start
+                },
+            )
+
+            // La zone future : ce que le moteur propose et qui n'est pas encore
+            // acquis. Italique et encre claire, pour qu'on ne la confonde
+            // jamais avec ce qui est écrit — ce texte-là peut encore changer,
+            // et il change souvent.
+            if (pending.isNotEmpty()) {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    BasicText(
+                        text = pending,
+                        modifier = Modifier.weight(1f, fill = false),
+                        style = TextStyle(
+                            color = PendingInk,
+                            fontSize = 36.sp,
+                            lineHeight = 50.sp,
+                            fontFamily = FontFamily.Serif,
+                            fontStyle = FontStyle.Italic,
+                        ),
+                    )
+                    // Le voyant de retard, en bordure de la zone future.
+                    //
+                    // Un point, rien de plus : pas de chiffre qui change, pas
+                    // de couleur qui s'aggrave, pas de clignotement. Un
+                    // compteur « 12 mots en attente » attirerait l'œil à chaque
+                    // mot et casserait la lecture posée, qui est tout ce qu'on
+                    // cherche ici. Présence ou absence, et c'est assez : « il
+                    // reste à lire » n'a pas de degrés.
+                    if (backlogVisible) {
+                        Spacer(Modifier.size(16.dp))
+                        Box(
+                            Modifier
+                                .padding(top = 18.dp)
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(FadedInk)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Le signal « toujours à l'écoute », distinct du voyant de retard.
+        // Celui-ci répond à « est-ce que ça marche encore ? » quand rien ne
+        // bouge depuis longtemps ; l'autre à « y a-t-il plus à lire ? ».
+        if (stillListening) {
+            BasicText(
+                text = "à l'écoute",
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(horizontal = 40.dp, vertical = 24.dp),
+                style = TextStyle(color = FadedInk, fontSize = 15.sp, fontStyle = FontStyle.Italic),
             )
         }
 
-        // Une seule ligne de service, en bas et très effacée : elle dit quel
-        // moteur travaille et ce qui l'empêche. Sans elle, un modèle de langue
-        // absent produit un écran vide — indiscernable d'un micro muet ou d'une
-        // permission refusée.
-        //
-        // Le réglage du délai de figeage qui l'accompagnait a disparu avec le
-        // délai lui-même : plus rien ne se règle, ce sont les événements du
-        // moteur qui décident. L'écran redevient nu, comme la consigne
-        // d'origine le voulait.
+        // Le diagnostic : quel moteur travaille, et ce qui l'empêche. Sans lui,
+        // un modèle de langue absent produit un écran vide — indiscernable d'un
+        // micro muet ou d'une permission refusée.
         if (diagnostic.isNotEmpty()) {
             BasicText(
                 text = diagnostic,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(horizontal = 40.dp, vertical = 12.dp),
+                    .padding(horizontal = 40.dp, vertical = 14.dp),
                 style = TextStyle(color = FadedInk, fontSize = 13.sp),
             )
         }
 
-        // Le mode d'emploi et la seule commande, réunis en bas à droite.
+        // Le sélecteur de vitesse, seule commande de l'écran.
         //
-        // Cette ligne porte aussi l'appui long : la zone de texte au-dessus
-        // défile, et un conteneur défilant peut absorber le geste avant qu'il
-        // n'atteigne le fond. Celle-ci ne défile pas — le geste y aboutit
-        // toujours.
+        // La valeur choisie reste affichée en permanence, et pas seulement au
+        // moment du réglage : quelqu'un qui trouve le défilement trop lent doit
+        // pouvoir voir où il en est sans rien toucher.
         //
-        // Le nom du régime est écrit en clair plutôt qu'abrégé : une trace
-        // relue trois jours plus tard doit pouvoir être rattachée à ce qui
-        // était affiché, et « API pure » ne se confond avec rien.
+        // Des crans nommés plutôt qu'un curseur : « mets-le sur normal » est une
+        // consigne qu'un aidant peut donner au téléphone, « cent trente-sept
+        // mots par minute » non. La valeur numérique accompagne le libellé, en
+        // petit, pour le diagnostic.
         Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(horizontal = 40.dp, vertical = 12.dp),
+                .padding(horizontal = 40.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.End,
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SpeedStep("−") { rate = rate.previous().also { saveRate(context, it) } }
+                BasicText(
+                    text = rate.label,
+                    style = TextStyle(color = Ink, fontSize = 17.sp, fontFamily = FontFamily.Serif),
+                )
+                SpeedStep("+") { rate = rate.next().also { saveRate(context, it) } }
+            }
             BasicText(
-                text = "régime : ${mode.label}  ⇄",
-                modifier = Modifier
-                    .clickable {
-                        mode = if (mode == SequencingMode.API_PURE) SequencingMode.EVENTS
-                        else SequencingMode.API_PURE
-                        SpeechTrace.record("ÉCRAN bascule", "régime demandé : ${mode.label}")
-                    }
-                    // Zone tactile plus large que le texte : à treize points,
-                    // une cible ajustée au glyphe se rate une fois sur deux.
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                style = TextStyle(color = Ink, fontSize = 15.sp),
-            )
-            BasicText(
-                text = "appui long ailleurs : envoyer la trace",
+                text = "${rate.wordsPerMinute} mots/min · appui long : envoyer la trace",
                 modifier = Modifier
                     .padding(horizontal = 10.dp)
                     .pointerInput(Unit) { detectTapGestures(onLongPress = { shareTrace() }) },
@@ -386,28 +462,59 @@ private fun PapyrusScreen() {
 }
 
 /**
- * Le texte tel qu'il s'affiche : **un énoncé par ligne**, ajoutés les uns sous
- * les autres. Rien n'est jamais réécrit ni effacé.
+ * Un cran du sélecteur.
  *
- * Le retour à la ligne fait office de marque de couture : chaque ligne est une
- * session du moteur, donc chaque passage à la ligne est l'instant précis où il
- * s'est arrêté puis a repris. C'est là, et seulement là, que des mots peuvent
- * manquer — et c'est tout l'objet de ce banc d'essai que de rendre ces endroits
- * repérables à l'œil.
- *
- * L'énoncé en cours de dictée n'y figure plus. Il occupait une ligne en encre
- * claire et se révisait deux fois par seconde ; l'écran ne montre désormais que
- * ce qui ne bougera plus. Voir le commentaire sur `segments` pour ce que cela
- * coûte et ce que cela rapporte.
+ * La zone tactile est nettement plus large que le signe : à cette taille, une
+ * cible ajustée au glyphe se rate une fois sur deux, et ce bouton s'adresse à
+ * des doigts qui ne visent plus très bien.
  */
 @Composable
-private fun renderTranscript(segments: List<String>): AnnotatedString =
+private fun SpeedStep(sign: String, onClick: () -> Unit) {
+    BasicText(
+        text = sign,
+        modifier = Modifier
+            .clickable { onClick() }
+            .padding(horizontal = 18.dp, vertical = 8.dp),
+        style = TextStyle(color = Ink, fontSize = 24.sp),
+    )
+}
+
+/**
+ * Le corps du texte, coupé en deux à l'endroit que la mise en page a désigné.
+ *
+ * Avant [readingWindowStart], le passé : encre pâlie, définitif, présent pour
+ * le contexte et non pour être lu. À partir de là, la fenêtre de lecture, en
+ * pleine encre — c'est là que l'œil doit se poser, et le contraste l'y ramène
+ * sans qu'on ait à y penser.
+ */
+private fun renderBody(body: String, readingWindowStart: Int): AnnotatedString =
     buildAnnotatedString {
-        segments.forEachIndexed { index, segment ->
-            if (index > 0) append('\n')
-            append(segment)
+        val split = readingWindowStart.coerceIn(0, body.length)
+        if (split > 0) {
+            withStyle(SpanStyle(color = PastInk)) { append(body.substring(0, split)) }
         }
+        append(body.substring(split))
     }
+
+private fun prefs(context: Context) =
+    context.getSharedPreferences("papyrus", Context.MODE_PRIVATE)
+
+private fun loadRate(context: Context): ScrollRate =
+    ScrollRate.fromNameOrDefault(prefs(context).getString(KEY_RATE, null))
+
+private fun saveRate(context: Context, rate: ScrollRate) {
+    prefs(context).edit().putString(KEY_RATE, rate.name).apply()
+    SpeechTrace.record("ÉCRAN vitesse", "réglée sur ${rate.label} (${rate.wordsPerMinute} mots/min)")
+}
+
+private const val KEY_RATE = "scroll_rate"
+
+/**
+ * La fenêtre de lecture, en lignes. Deux, comme le veut la spécification : de
+ * quoi tenir une proposition entière sous les yeux sans que le regard ait à
+ * balayer un paragraphe.
+ */
+private const val READING_WINDOW_LINES = 2
 
 /**
  * Le parchemin demandé, et une encre brune plutôt qu'un noir pur : sur un fond
@@ -420,12 +527,21 @@ private val ParchmentEdge = Color(0x146B5A3E)
 
 private val Ink = Color(0xFF3A2C1C)
 
-// L'encre claire et la marque de plume de l'énoncé en cours ont été retirées
-// avec lui. Elles ne sont pas conservées « au cas où » : une constante que
-// personne n'utilise est du code mort, et l'historique du dépôt les rendra
-// bien mieux que ce fichier si l'affichage des révisions revient un jour.
+/**
+ * Le passé : lisible si on le cherche, effacé si on ne le cherche pas. Assez
+ * pâle pour que l'œil revienne de lui-même à la fenêtre de lecture, assez
+ * présent pour qu'on puisse relire la phrase précédente sans rien toucher.
+ */
+private val PastInk = Color(0x663A2C1C)
+
+/** La zone future, encore révisable. Plus claire que le passé, et en italique. */
+private val PendingInk = Color(0x593A2C1C)
 
 private val FadedInk = Color(0x553A2C1C)
 
-/** Environ une heure de conversation soutenue. Au-delà, plus personne ne remontera. */
-private const val MAX_SEGMENTS = 400
+/**
+ * Borne de la mémoire d'affichage, en mots. Deux mille mots font plus d'une
+ * heure de dictée à la cadence normale — très au-delà de ce qu'un écran montre,
+ * donc la purge ne retire jamais rien de visible.
+ */
+private const val MAX_WORDS = 2_000

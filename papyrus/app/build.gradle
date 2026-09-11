@@ -54,4 +54,10 @@ dependencies {
     // dont rien ici ne se sert.
     implementation 'androidx.compose.foundation:foundation'
     implementation 'androidx.compose.ui:ui'
+
+    // La chaîne de défilement n'importe rien d'Android : elle se vérifie donc
+    // sur la machine qui compile, en quelques secondes, sans émulateur ni
+    // appareil. C'est ce qui rend ces essais assez rapides pour être lancés à
+    // chaque compilation plutôt qu'oubliés.
+    testImplementation 'junit:junit:4.13.2'
 }

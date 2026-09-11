@@ -12,41 +12,6 @@ import android.speech.SpeechRecognizer
 import android.util.Log
 
 /**
- * Les deux régimes de séquencement, choisis au bouton et jamais mélangés.
- *
- * Une session d'essai n'en applique qu'un seul, du début à la fin. C'est la
- * correction d'une alternance automatique qui s'est révélée fausse : les deux
- * régimes n'ont aucune raison de durer aussi longtemps l'un que l'autre, et
- * alterner une session sur deux aurait donné quelques secondes au premier
- * contre deux minutes au second — 4 % de la parole contre 96 %. Le déséquilibre
- * venait de la question même que l'expérience pose.
- */
-enum class SequencingMode(val label: String) {
-    /**
-     * OBSERVATION PURE. Le moteur fait tout, nous ne faisons que regarder.
-     *
-     * Aucune consigne de silence, AUCUN PLAFOND, aucun stopListening de notre
-     * part, aucun figeage déclenché par une fin ou un début de parole. La
-     * phrase est écrite quand le moteur rend son onResults, et la session
-     * relancée quand il l'a close lui-même.
-     *
-     * Le plafond de secours a été retiré volontairement. Il rendait
-     * l'observation impure : une session close par nous au bout d'une minute
-     * ne dit rien de ce que le moteur aurait fait. Si la session ne finit
-     * jamais, c'est LE résultat, et la trace le montrera par son silence même
-     * — aucune ligne de clôture, aucune relance, une session qui court.
-     *
-     * Les résultats intermédiaires restent demandés. C'est de l'observation,
-     * pas une intervention : ils ne changent pas le séquencement, ils le
-     * rendent visible.
-     */
-    API_PURE("API pure"),
-
-    /** Notre découpage : consignes de silence, plafond, figeage sur la séquence fin puis début. */
-    EVENTS("événements"),
-}
-
-/**
  * Écoute continue par le moteur de reconnaissance d'Android, hors-ligne.
  *
  * ═══ Le problème que cette classe existe pour étudier ═══
@@ -96,6 +61,16 @@ class ContinuousSpeechManager(
     private val onPartial: (String) -> Unit,
     /** Énoncé clos par le moteur. */
     private val onFinal: (String) -> Unit,
+    /**
+     * La session du moteur s'est refermée, avec son texte final s'il en rend un.
+     *
+     * Existe pour le mode séquence, où ce n'est pas le gestionnaire qui décide
+     * ce qui s'affiche : la chaîne de défilement tient elle-même ses mots, et
+     * la fin de session lui sert à réconcilier ce qui n'était pas encore
+     * acquis. En mode API pure et en mode événements, le figeage passe par
+     * [onFinal] et ce rappel n'est pas utilisé.
+     */
+    private val onSessionEnd: (finalText: String?) -> Unit = {},
     /** Une session vient d'être relancée : c'est là que se produisent les coupures. */
     private val onRestart: () -> Unit,
     /** Ce qui mérite d'être su : moteur choisi, refus, erreurs inhabituelles. */
@@ -142,8 +117,14 @@ class ContinuousSpeechManager(
      */
     private var endOfSpeechSeen = false
 
-    /** Vrai en mode API pure : raccourci de lecture pour tout ce qui suit. */
-    private val pureApi get() = mode == SequencingMode.API_PURE
+    /**
+     * Vrai quand le moteur ne doit RIEN séquencer — mode séquence comme mode
+     * API pure. Les deux se ressemblent du côté de l'intention envoyée au
+     * moteur ; ils diffèrent entièrement du côté de ce qu'on fait des
+     * résultats.
+     */
+    private val enginePacesItself get() =
+        mode == SequencingMode.API_PURE || mode == SequencingMode.SEQUENCE
 
     /** Instant du dernier onEndOfSpeech, pour mesurer l'attente du moteur avant sa clôture. */
     private var lastEndOfSpeechAtMs = 0L
@@ -353,7 +334,7 @@ class ContinuousSpeechManager(
             // comme des ordres — la documentation le dit, et les appareils le
             // confirment. Là où elles sont suivies, elles rallongent la session
             // et espacent donc les coutures.
-            if (!pureApi) {
+            if (!enginePacesItself) {
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_COMPLETE_MS)
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
@@ -372,9 +353,18 @@ class ContinuousSpeechManager(
             // la session précédente est le temps mort qu'on cherche à mesurer.
             SpeechTrace.record(
                 "APP → startListening",
-                "session n°$sessionCount — " +
-                    (if (pureApi) "OBSERVATION PURE DE L'API : aucune consigne de silence, " +
-                        "AUCUN PLAFOND, figeage sur onResults seul"
+                "session n°$sessionCount — " + when (mode) {
+                    SequencingMode.API_PURE ->
+                        "OBSERVATION PURE DE L'API : aucune consigne de silence, " +
+                            "AUCUN PLAFOND, figeage sur onResults seul"
+                    SequencingMode.SEQUENCE ->
+                        "SÉQUENCE : aucune consigne de silence, AUCUN PLAFOND, " +
+                            "découpage par la stabilité du texte"
+                    SequencingMode.EVENTS ->
+                        "séquencement par les événements : silence " +
+                            "${SILENCE_COMPLETE_MS}/${SILENCE_POSSIBLY_COMPLETE_MS} ms, " +
+                            "plafond ${MAX_SESSION_MS / 1000} s"
+                } + ", hors-ligne demandé",
                     else "séquencement par les événements : silence " +
                         "${SILENCE_COMPLETE_MS}/${SILENCE_POSSIBLY_COMPLETE_MS} ms, " +
                         "plafond ${MAX_SESSION_MS / 1000} s") +
@@ -393,7 +383,7 @@ class ContinuousSpeechManager(
             // Rien à armer en observation pure : aucune minuterie de notre part
             // ne doit pouvoir interrompre le moteur, sans quoi ce qu'on mesure
             // n'est plus lui mais nous.
-            if (!pureApi) handler.postDelayed(sessionCap, MAX_SESSION_MS)
+            if (!enginePacesItself) handler.postDelayed(sessionCap, MAX_SESSION_MS)
             instance.startListening(intent)
         } catch (e: Exception) {
             Log.w(TAG, "Démarrage de l'écoute impossible", e)
@@ -521,7 +511,7 @@ class ContinuousSpeechManager(
             // conclusions opposées sous la même ligne.
             SpeechTrace.record(
                 "APP origine de la clôture",
-                if (!pureApi) "mode événements : notre plafond a pu intervenir"
+                if (!enginePacesItself) "mode événements : notre plafond a pu intervenir"
                 else "SPONTANÉE : le moteur a clos de lui-même" +
                     (if (lastEndOfSpeechAtMs > 0)
                         ", ${android.os.SystemClock.elapsedRealtime() - lastEndOfSpeechAtMs} ms " +
@@ -537,10 +527,7 @@ class ContinuousSpeechManager(
                 if (firstResult(results) != null) "l'API rend un texte final"
                 else "l'API ne rend aucun texte final"
             )
-            // À défaut de résultat final, le dernier partiel fait foi : il a
-            // été affiché, il a donc été lu, et le faire disparaître serait
-            // pire que de le figer tel quel.
-            commit(firstResult(results) ?: lastPartial)
+            closePendingText(firstResult(results))
             // Sans délai : c'est le cas normal, et chaque milliseconde ici est
             // un mot que le moteur n'entend pas. Passer par le fil principal
             // suffit à laisser la session précédente se refermer.
@@ -562,7 +549,7 @@ class ContinuousSpeechManager(
                     // « Rien compris » arrive aussi APRÈS plusieurs secondes de
                     // dictée déjà affichée. Le partiel est alors tout ce qui
                     // reste de ces mots-là.
-                    commit(lastPartial)
+                    closePendingText()
                     scheduleRestart(0L)
                 }
 
@@ -570,7 +557,7 @@ class ContinuousSpeechManager(
                 // la même erreur indéfiniment.
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
                 SpeechRecognizer.ERROR_CLIENT -> {
-                    commit(lastPartial)
+                    closePendingText()
                     consecutiveErrors++
                     destroyRecognizer()
                     onDiagnostic("Moteur reconstruit (${describeError(error)})")
@@ -599,7 +586,7 @@ class ContinuousSpeechManager(
                     // cas où l'on ignore si l'instance est encore saine.
                     // Reconstruire coûte une poignée de millisecondes ;
                     // s'abstenir a coûté toute la session d'essai.
-                    commit(lastPartial)
+                    closePendingText()
                     consecutiveErrors++
                     destroyRecognizer()
                     onDiagnostic("Moteur reconstruit (${describeError(error)})")
@@ -670,7 +657,13 @@ class ContinuousSpeechManager(
             // s'il vient. Toute intervention ici retirerait au moteur la
             // décision qu'on veut lui laisser prendre, et l'expérience ne
             // prouverait plus rien.
-            if (pureApi) return
+            //
+            // En mode séquence non plus, et pour une raison mesurée : sur
+            // seize secondes et demie de parole continue, la trace ne compte
+            // qu'UN seul début de parole et aucune fin intermédiaire. Un
+            // découpage assis sur ces signaux manquerait tout ce qui dure —
+            // c'est la stabilité du texte qui décide, et elle seule.
+            if (enginePacesItself) return
             if (lastPartial.isEmpty() || !endOfSpeechSeen) return
             SpeechTrace.record("APP frontière", "fin de parole puis début : phrase close")
             commit(lastPartial)
@@ -724,7 +717,11 @@ class ContinuousSpeechManager(
                 java.util.Locale.FRANCE,
                 "%s — %.1f s, 1er texte %s, %d partiels, " +
                     "%d ligne(s) figée(s), pic %.1f dB, %s — fin : %s",
-                if (pureApi) "API PURE" else "ÉVÉNEMENTS",
+                when (mode) {
+                    SequencingMode.API_PURE -> "API PURE"
+                    SequencingMode.SEQUENCE -> "SÉQUENCE"
+                    SequencingMode.EVENTS -> "ÉVÉNEMENTS"
+                },
                 duration,
                 if (sessionFirstTextMs >= 0) "${sessionFirstTextMs} ms" else "JAMAIS",
                 sessionPartials, sessionCommits, sessionMaxRms,
@@ -739,6 +736,32 @@ class ContinuousSpeechManager(
                 outcome,
             ),
         )
+    }
+
+    /**
+     * Le texte en attente au moment où la session se referme, quel qu'en soit
+     * le motif — résultat final, silence, erreur.
+     *
+     * Point de sortie UNIQUE, et c'est délibéré : ces quatre chemins se
+     * ressemblent assez pour qu'une condition oubliée dans l'un d'eux passe
+     * inaperçue, et assez peu pour qu'on soit tenté de les traiter séparément.
+     * C'est exactement ainsi qu'un mot se perd sur un seul chemin d'erreur, et
+     * qu'on met une semaine à le comprendre.
+     */
+    private fun closePendingText(finalText: String? = null) {
+        if (mode == SequencingMode.SEQUENCE) {
+            // Le gestionnaire ne fige rien ici : la chaîne de défilement
+            // détient ses propres mots, dont certains sont déjà partis à
+            // l'écran. Lui donner le texte final la laisse réconcilier ce qui
+            // ne l'est pas encore, sans jamais retoucher le reste.
+            lastPartial = ""
+            onSessionEnd(finalText)
+            return
+        }
+        // À défaut de résultat final, le dernier partiel fait foi : il a été
+        // affiché, il a donc été lu, et le faire disparaître serait pire que
+        // de le figer tel quel.
+        commit(finalText ?: lastPartial)
     }
 
     private fun commit(text: String) {

@@ -44,6 +44,13 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      # Avant l'APK : si la chaîne de défilement est cassée, inutile de
+      # fabriquer une application qui l'embarque. L'échec arrive alors en
+      # quelques secondes et nomme le cas qui ne passe plus.
+      - name: Essais de la chaîne de défilement
+        working-directory: papyrus
+        run: gradle testDebugUnitTest --stacktrace
+
       - name: Build debug APK
         working-directory: papyrus
         run: gradle assembleDebug --stacktrace "-PbuildRev=rev${{ github.run_number }}"
