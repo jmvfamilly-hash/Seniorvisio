@@ -258,7 +258,22 @@ class ContinuousSpeechManager(
         wanted = true
         SpeechTrace.record("APP start()", "écoute demandée")
         describeEngine()
-        beginListening()
+        // ═══ Pourquoi la première écoute attend ═══
+        //
+        // Changer de régime détruit ce gestionnaire et en construit un autre.
+        // La destruction de l'ancien moteur et la création du nouveau
+        // tombaient alors dans la même image, et le service de reconnaissance
+        // n'avait pas fini de se refermer quand on lui redemandait une
+        // instance — d'où la connexion perdue immédiatement, sept fois de
+        // suite, observée en rev17.
+        //
+        // La reconstruction sur erreur, ajoutée juste au-dessus, suffirait à
+        // s'en relever en une demi-seconde. Ce délai évite d'avoir à s'en
+        // relever : il ne coûte qu'un tiers de seconde, une seule fois par
+        // bascule, et il n'écrit aucune erreur dans la trace — ce qui compte
+        // sur un instrument de mesure, où chaque ligne fausse se paie plus
+        // tard en temps de lecture.
+        handler.postDelayed({ if (wanted) beginListening() }, FIRST_LISTEN_DELAY_MS)
     }
 
     fun stop() {
@@ -563,9 +578,31 @@ class ContinuousSpeechManager(
                 }
 
                 else -> {
+                    // RECONSTRUCTION, et c'est le correctif de la panne
+                    // observée en rev17 : sept démarrages sur sept refusés en
+                    // moins de quinze millisecondes, avec l'erreur 11.
+                    //
+                    // Cette branche comptait l'échec et reprogrammait une
+                    // relance — sur la MÊME instance. Or l'erreur 11 est
+                    // « connexion au service perdue » : l'objet est mort, et
+                    // le relancer rend la même erreur indéfiniment. La
+                    // temporisation grandissait jusqu'à huit secondes sans
+                    // jamais rien réparer, et vingt-trois secondes de parole
+                    // sont passées sans qu'un seul flux audio soit ouvert —
+                    // le pic de −120 dB du bilan n'était pas un silence, mais
+                    // l'absence de toute capture.
+                    //
+                    // Mon propre commentaire, deux branches plus haut, disait
+                    // déjà « l'instance ne sort pas seule de cet état » à
+                    // propos du moteur occupé. La bonne règle est plus large :
+                    // une erreur qu'on ne sait pas nommer est précisément le
+                    // cas où l'on ignore si l'instance est encore saine.
+                    // Reconstruire coûte une poignée de millisecondes ;
+                    // s'abstenir a coûté toute la session d'essai.
                     commit(lastPartial)
                     consecutiveErrors++
-                    onDiagnostic(describeError(error))
+                    destroyRecognizer()
+                    onDiagnostic("Moteur reconstruit (${describeError(error)})")
                     scheduleRestart(backoffMs())
                 }
             }
@@ -755,12 +792,29 @@ class ContinuousSpeechManager(
         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "moteur occupé"
         SpeechRecognizer.ERROR_SERVER -> "erreur serveur"
         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "silence"
+        // Valeurs littérales plutôt que constantes : celles-ci datent d'Android
+        // 12 et 13, au-delà du minimum visé, et une constante d'API récente
+        // référencée ici ferait broncher l'analyse statique pour un simple
+        // libellé. Les noms de plate-forme sont cités en clair à la place.
+        ERROR_TOO_MANY_REQUESTS -> "trop de demandes (ERROR_TOO_MANY_REQUESTS)"
+        ERROR_SERVER_DISCONNECTED -> "connexion au service perdue (ERROR_SERVER_DISCONNECTED)"
+        ERROR_LANGUAGE_NOT_SUPPORTED -> "langue non prise en charge — modèle français à installer"
+        ERROR_LANGUAGE_UNAVAILABLE -> "langue indisponible — modèle français à télécharger"
         else -> "erreur $error"
     }
 
     private companion object {
         const val TAG = "ContinuousSpeech"
         const val LANGUAGE = "fr-FR"
+
+        /** Laisse le service se refermer avant qu'on lui redemande une instance. */
+        const val FIRST_LISTEN_DELAY_MS = 300L
+
+        // Codes d'erreur de SpeechRecognizer postérieurs au minimum visé.
+        const val ERROR_TOO_MANY_REQUESTS = 10
+        const val ERROR_SERVER_DISCONNECTED = 11
+        const val ERROR_LANGUAGE_NOT_SUPPORTED = 12
+        const val ERROR_LANGUAGE_UNAVAILABLE = 13
 
         /** Point de départ de l'espacement entre deux relances après erreur. */
         const val RESTART_DELAY_MS = 250L
@@ -817,6 +871,17 @@ class ContinuousSpeechManager(
          * segmentée, aucune d'une fin de parole naturelle. Le plafond n'était
          * donc pas un filet : c'était le mécanisme ORDINAIRE de fin de
          * session, et il fabriquait une couture toutes les vingt secondes.
+         *
+         * CE QUI RESTE VRAI, ET CE QUI NE L'EST PLUS. Une mesure ultérieure,
+         * moteur livré à lui-même — sans consigne de silence ni plafond —
+         * montre qu'il clôt sa session spontanément, quelques millisecondes
+         * après sa dernière fin de parole. Il sait donc conclure.
+         *
+         * Ce qu'on ignore encore, c'est s'il le sait AVEC nos consignes de
+         * silence : le régime « événements » n'a jamais pu être observé, sa
+         * première mesure ayant échoué sur une panne de reconstruction du
+         * moteur. Le plafond reste donc en place, comme filet et non comme
+         * mécanisme — mais il n'est plus exclu qu'il ne serve plus à rien.
          *
          * Il ne coûtait rien tant que le texte n'était figé qu'à la fin d'une
          * session — le raccourcir était même la façon de voir du texte

@@ -44,10 +44,23 @@ import androidx.core.content.ContextCompat
  * ci-dessous. Les suppositions étaient les miennes ; les mesures ont été
  * faites sur la tablette elle-même, en français, dans une vraie pièce.
  *
- * 1. **La session ne se termine jamais toute seule.** Le détecteur de voix du
- *    moteur clignote toutes les six dixièmes de seconde — il ne voit donc
- *    jamais le silence continu qui clôturerait l'énoncé. Attendre onResults
- *    pour figer une phrase, c'est l'attendre indéfiniment.
+ * 1. **La session ne se termine pas toute seule DANS CETTE CONFIGURATION.** Le
+ *    détecteur de voix du moteur clignote toutes les six dixièmes de seconde,
+ *    et aucune des sessions mesurées ne s'est close d'elle-même.
+ *
+ *    CORRECTION, et elle est importante. Une mesure ultérieure, moteur livré
+ *    à lui-même — sans aucune consigne de durée de silence et sans plafond —
+ *    montre le contraire : il clôt sa session spontanément, quelques
+ *    millisecondes après sa dernière fin de parole. Ce n'est donc pas le
+ *    moteur qui refuse de conclure, c'est notre configuration qui l'en
+ *    empêche, et le coupable le plus probable est la consigne de silence que
+ *    nous lui imposons.
+ *
+ *    Ce qui suit reste en place parce que ce fichier N'A PAS ENCORE ÉTÉ
+ *    mesuré sans ces consignes, et qu'un mécanisme qui écrit du texte ne se
+ *    démonte pas sur une mesure faite ailleurs. Mais la question est
+ *    rouverte : si le moteur sait conclure seul, presque tout ce qui suit
+ *    devient superflu.
  *
  * 2. **onResults ne rend souvent aucun texte** — trois fois sur trois dans les
  *    sessions mesurées. Le texte utile est TOUJOURS venu des partiels. Un
@@ -462,10 +475,10 @@ class AndroidSpeechSession(
     /**
      * Fige le tampon faute d'évolution.
      *
-     * Nécessaire parce que la session ne se termine jamais d'elle-même
-     * (conclusion n°1) : sans ce garde-temps, une phrase suivie d'un vrai
-     * silence resterait indéfiniment « en cours », jamais acquise, et
-     * disparaîtrait au premier mot suivant.
+     * Nécessaire tant que la session ne se termine pas d'elle-même
+     * (conclusion n°1, et sa correction) : sans ce garde-temps, une phrase
+     * suivie d'un vrai silence resterait indéfiniment « en cours », jamais
+     * acquise, et disparaîtrait au premier mot suivant.
      */
     private fun armIdleCommit() {
         handler.removeCallbacks(idleCommit)
