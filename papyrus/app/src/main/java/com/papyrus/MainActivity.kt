@@ -21,12 +21,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -38,10 +38,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -80,12 +82,26 @@ import kotlinx.coroutines.delay
  *
  * Seule une personne peut changer le rythme, par le sélecteur en bas.
  *
- * ═══ Trois zones ═══
+ * ═══ Trois zones, et une qui ne bouge pas ═══
  *
  * En haut, le **passé** : ce qui est sorti de la fenêtre de lecture, en encre
  * pâlie, définitif. Au milieu, la **fenêtre de lecture** — les deux dernières
  * lignes, en pleine encre, là où l'œil se pose. En bas, le **futur** : ce que
  * le moteur propose mais qui n'est pas encore acquis, en italique clair.
+ *
+ * **La fenêtre de lecture est ancrée.** Elle occupe toujours le même endroit
+ * de l'écran, et c'est le texte qui la traverse — il monte à travers elle et
+ * sort par le haut. C'est l'inverse de ce que faisait la version précédente :
+ * un texte qui grandissait vers le bas dans une zone qu'on faisait défiler à
+ * chaque mot, si bien que la fenêtre dérivait pendant l'animation et que l'œil
+ * devait la suivre. Or suivre du regard une ligne qui se déplace est
+ * exactement le travail qu'on cherche à épargner.
+ *
+ * Deux choses tiennent cet ancrage, et il faut les deux : le texte acquis est
+ * aligné sur le BORD BAS de sa zone, et la zone future a une hauteur FIXE,
+ * réservée même quand elle est vide. Sans la seconde, une hypothèse qui
+ * s'allonge repousserait la fenêtre vers le haut — elle se remettrait à bouger,
+ * par l'autre bout.
  *
  * La frontière entre passé et fenêtre de lecture est calculée par la mise en
  * page elle-même, pas devinée à partir d'un nombre de mots : « deux lignes »
@@ -286,15 +302,18 @@ private fun PapyrusScreen() {
 
     // --- Le rendu ------------------------------------------------------------
 
-    val scroll = rememberScrollState()
-
     // Où commence la fenêtre de lecture, en caractères depuis le début du
     // texte. Fourni par la mise en page elle-même (voir onTextLayout), et non
     // estimé à partir d'un nombre de mots.
     var readingWindowStart by remember { mutableStateOf(0) }
 
     val body = shown.joinToString(" ")
-    LaunchedEffect(body, pending) { scroll.animateScrollTo(scroll.maxValue) }
+
+    // Les hauteurs des deux zones basses, en unités d'interligne. Dérivées de
+    // la taille du texte et non écrites en dur : si quelqu'un agrandit la
+    // police du système, les bandes grandissent avec elle et la mise en page
+    // tient toujours.
+    val lineHeight = with(LocalDensity.current) { LINE_HEIGHT.toDp() }
 
     val shareTrace = {
         SpeechTrace.record("ÉCRAN partage", "trace demandée")
@@ -335,45 +354,91 @@ private fun PapyrusScreen() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(scroll)
                 .padding(horizontal = 40.dp)
-                .padding(top = 32.dp, bottom = 96.dp),
+                .padding(top = 24.dp, bottom = 78.dp),
         ) {
-            BasicText(
-                text = renderBody(body, readingWindowStart),
-                style = TextStyle(
-                    color = Ink,
-                    fontSize = 36.sp,
-                    // Interligne généreux : à cette taille, des lignes serrées
-                    // se lisent mal de loin, et c'est de loin qu'on regarde une
-                    // tablette murale.
-                    lineHeight = 50.sp,
-                    fontFamily = FontFamily.Serif,
-                ),
-                onTextLayout = { layout ->
-                    val firstVisibleLine =
-                        (layout.lineCount - READING_WINDOW_LINES).coerceAtLeast(0)
-                    val start = layout.getLineStart(firstVisibleLine)
-                    // Réaffecté seulement s'il change : ce rappel survient à
-                    // chaque mise en page, et écrire la même valeur relancerait
-                    // une composition pour rien, quatre fois par seconde.
-                    if (start != readingWindowStart) readingWindowStart = start
-                },
-            )
+            // ═══ LE TEXTE ACQUIS, CALÉ PAR LE BAS ═══
+            //
+            // C'est ici que se joue « la fenêtre de lecture ne bouge pas ».
+            //
+            // Cette zone occupe tout l'espace disponible au-dessus de la zone
+            // future, et son contenu est aligné sur son BORD INFÉRIEUR. Le
+            // texte grandit donc vers le HAUT, et déborde par le haut, où il
+            // est coupé. Son bord bas ne bouge jamais — donc les deux
+            // dernières lignes non plus.
+            //
+            // La version précédente faisait l'inverse : un texte qui grandit
+            // vers le bas dans une zone qu'on faisait défiler jusqu'en bas à
+            // chaque mot. Le résultat tenait dans l'écran, mais la fenêtre de
+            // lecture dérivait pendant l'animation de défilement, et l'œil
+            // devait la suivre. Or c'est exactement le travail qu'on cherche à
+            // épargner.
+            //
+            // wrapContentHeight(unbounded) est ce qui rend la chose possible :
+            // sans lui, le texte serait MESURÉ à la hauteur de la zone et donc
+            // tronqué par le bas — on perdrait les dernières lignes, c'est-à-
+            // dire les seules qui comptent. Avec lui, il est mesuré sans
+            // limite de hauteur, puis posé en bas ; le débordement passe en
+            // haut, où clipToBounds le coupe.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clipToBounds(),
+                contentAlignment = Alignment.BottomStart,
+            ) {
+                BasicText(
+                    text = renderBody(body, readingWindowStart),
+                    modifier = Modifier.wrapContentHeight(Alignment.Bottom, unbounded = true),
+                    style = TextStyle(
+                        color = Ink,
+                        fontSize = TEXT_SIZE,
+                        // Interligne généreux : à cette taille, des lignes
+                        // serrées se lisent mal de loin, et c'est de loin qu'on
+                        // regarde une tablette murale.
+                        lineHeight = LINE_HEIGHT,
+                        fontFamily = FontFamily.Serif,
+                    ),
+                    onTextLayout = { layout ->
+                        val firstVisibleLine =
+                            (layout.lineCount - READING_WINDOW_LINES).coerceAtLeast(0)
+                        val start = layout.getLineStart(firstVisibleLine)
+                        // Réaffecté seulement s'il change : ce rappel survient à
+                        // chaque mise en page, et écrire la même valeur
+                        // relancerait une composition pour rien.
+                        if (start != readingWindowStart) readingWindowStart = start
+                    },
+                )
+            }
 
-            // La zone future : ce que le moteur propose et qui n'est pas encore
-            // acquis. Italique et encre claire, pour qu'on ne la confonde
-            // jamais avec ce qui est écrit — ce texte-là peut encore changer,
-            // et il change souvent.
-            if (pending.isNotEmpty()) {
+            // ═══ LA ZONE FUTURE, DE HAUTEUR FIXE ═══
+            //
+            // Fixe, et c'est la seconde moitié de l'ancrage. Si cette bande
+            // grandissait avec le texte proposé, elle repousserait la fenêtre
+            // de lecture vers le haut à chaque mot entendu — la fenêtre se
+            // remettrait à bouger, par l'autre bout.
+            //
+            // Elle réserve donc sa place en permanence, occupée ou non. Le
+            // texte y est aligné par le bas lui aussi : ce sont les derniers
+            // mots proposés qui comptent, et une hypothèse plus longue que
+            // deux lignes doit laisser filer son début, pas sa fin.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(lineHeight * FUTURE_LINES)
+                    .clipToBounds(),
+                contentAlignment = Alignment.BottomStart,
+            ) {
                 Row(modifier = Modifier.fillMaxWidth()) {
                     BasicText(
                         text = pending,
-                        modifier = Modifier.weight(1f, fill = false),
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .wrapContentHeight(Alignment.Bottom, unbounded = true),
                         style = TextStyle(
                             color = PendingInk,
-                            fontSize = 36.sp,
-                            lineHeight = 50.sp,
+                            fontSize = TEXT_SIZE,
+                            lineHeight = LINE_HEIGHT,
                             fontFamily = FontFamily.Serif,
                             fontStyle = FontStyle.Italic,
                         ),
@@ -390,7 +455,7 @@ private fun PapyrusScreen() {
                         Spacer(Modifier.size(16.dp))
                         Box(
                             Modifier
-                                .padding(top = 18.dp)
+                                .padding(bottom = 14.dp)
                                 .size(12.dp)
                                 .clip(CircleShape)
                                 .background(FadedInk)
@@ -513,8 +578,34 @@ private const val KEY_RATE = "scroll_rate"
  * La fenêtre de lecture, en lignes. Deux, comme le veut la spécification : de
  * quoi tenir une proposition entière sous les yeux sans que le regard ait à
  * balayer un paragraphe.
+ *
+ * Ce nombre ne définit PAS une hauteur à l'écran — il désigne les deux
+ * dernières lignes du texte acquis, celles qui reçoivent l'encre pleine. Leur
+ * position, elle, est fixée par l'ancrage bas de la zone qui les contient.
  */
 private const val READING_WINDOW_LINES = 2
+
+/**
+ * La hauteur réservée en permanence à la zone future, en lignes.
+ *
+ * Réservée même quand elle est vide, et c'est la condition pour que la fenêtre
+ * de lecture ne bouge pas : une bande qui grandirait avec le texte proposé
+ * repousserait la fenêtre vers le haut à chaque mot entendu.
+ *
+ * Deux lignes suffisent à l'usage — une hypothèse du moteur dépasse rarement
+ * une dizaine de mots avant d'être acquise ou remplacée.
+ */
+private const val FUTURE_LINES = 2
+
+/** Taille du texte de dictée. Assez grande pour être lue de l'autre bout d'une pièce. */
+private val TEXT_SIZE = 36.sp
+
+/**
+ * Interligne. Sert deux fois : à la mise en page du texte, et au calcul de la
+ * hauteur des bandes — les deux doivent venir de la même valeur, sans quoi la
+ * zone future réserverait une place qui ne correspond à aucun nombre de lignes.
+ */
+private val LINE_HEIGHT = 50.sp
 
 /**
  * Le parchemin demandé, et une encre brune plutôt qu'un noir pur : sur un fond
