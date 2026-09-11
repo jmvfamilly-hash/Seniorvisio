@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,9 +58,18 @@ import androidx.core.view.WindowInsetsControllerCompat
  * ContinuousSpeechManager) — et tout élément d'interface supplémentaire serait
  * une variable de plus dans une mesure qui en compte déjà trop.
  *
- * Le réglage du délai de figeage, apparu ici un temps, a disparu avec le délai
- * lui-même : ce sont désormais les événements du moteur qui décident quand une
- * phrase est close. Il n'y a plus rien à régler, donc plus rien à afficher.
+ * UNE SEULE COMMANDE, en bas à droite : le régime de séquencement.
+ *
+ * Elle existe parce qu'une comparaison honnête l'exige. Les deux régimes ne
+ * durent pas aussi longtemps l'un que l'autre — l'observation pure laisse le
+ * moteur clore quand il veut, notre découpage tient jusqu'au plafond — et les
+ * faire alterner automatiquement donnait quelques secondes au premier contre
+ * deux minutes au second. Une session d'essai n'applique donc qu'un régime, du
+ * début à la fin, et c'est la personne qui bascule quand elle juge en avoir
+ * assez vu.
+ *
+ * Basculer reconstruit l'écoute : le régime se pose au démarrage d'une session
+ * et ne se change pas en cours de route.
  */
 class MainActivity : ComponentActivity() {
 
@@ -167,11 +177,17 @@ private fun PapyrusScreen() {
     val segments = remember { mutableStateListOf<String>() }
     var diagnostic by remember { mutableStateOf("") }
 
-    DisposableEffect(granted) {
+    // Le régime en cours. L'écoute est reconstruite à chaque changement — d'où
+    // sa présence dans la clé de l'effet ci-dessous.
+    var mode by remember { mutableStateOf(SequencingMode.API_PURE) }
+
+    DisposableEffect(granted, mode) {
         if (!granted) return@DisposableEffect onDispose { }
         SpeechTrace.record("ÉCRAN écoute", "démarrage du gestionnaire")
+        SpeechTrace.record("ÉCRAN régime", "séquencement : ${mode.label}")
         val speech = ContinuousSpeechManager(
             context = context,
+            mode = mode,
             onPartial = {
                 // REÇU MAIS PAS AFFICHÉ. Les révisions restent journalisées —
                 // elles sont l'objet même de ce banc d'essai, et le découpage
@@ -329,18 +345,43 @@ private fun PapyrusScreen() {
             )
         }
 
-        // Le seul mode d'emploi de l'application, et il tient en une ligne.
-        // Elle porte aussi le geste : la zone de texte au-dessus défile, et un
-        // conteneur défilant peut absorber l'appui long avant qu'il n'atteigne
-        // le fond. Cette ligne-ci ne défile pas — le geste y aboutit toujours.
-        BasicText(
-            text = "appui long : envoyer la trace",
+        // Le mode d'emploi et la seule commande, réunis en bas à droite.
+        //
+        // Cette ligne porte aussi l'appui long : la zone de texte au-dessus
+        // défile, et un conteneur défilant peut absorber le geste avant qu'il
+        // n'atteigne le fond. Celle-ci ne défile pas — le geste y aboutit
+        // toujours.
+        //
+        // Le nom du régime est écrit en clair plutôt qu'abrégé : une trace
+        // relue trois jours plus tard doit pouvoir être rattachée à ce qui
+        // était affiché, et « API pure » ne se confond avec rien.
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(horizontal = 40.dp, vertical = 12.dp)
-                .pointerInput(Unit) { detectTapGestures(onLongPress = { shareTrace() }) },
-            style = TextStyle(color = FadedInk, fontSize = 13.sp),
-        )
+                .padding(horizontal = 40.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
+            BasicText(
+                text = "régime : ${mode.label}  ⇄",
+                modifier = Modifier
+                    .clickable {
+                        mode = if (mode == SequencingMode.API_PURE) SequencingMode.EVENTS
+                        else SequencingMode.API_PURE
+                        SpeechTrace.record("ÉCRAN bascule", "régime demandé : ${mode.label}")
+                    }
+                    // Zone tactile plus large que le texte : à treize points,
+                    // une cible ajustée au glyphe se rate une fois sur deux.
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                style = TextStyle(color = Ink, fontSize = 15.sp),
+            )
+            BasicText(
+                text = "appui long ailleurs : envoyer la trace",
+                modifier = Modifier
+                    .padding(horizontal = 10.dp)
+                    .pointerInput(Unit) { detectTapGestures(onLongPress = { shareTrace() }) },
+                style = TextStyle(color = FadedInk, fontSize = 13.sp),
+            )
+        }
     }
 }
 
