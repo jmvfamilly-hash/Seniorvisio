@@ -162,6 +162,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      */
     private var savedMusicVolume: Int? = null
 
+    /** Le focus audio tenu pendant l'appel, à rendre à la fin (voir requestAudioFocus). */
+    private var audioFocusRequest: android.media.AudioFocusRequest? = null
+
+    /** Dernier relevé des niveaux système, pour ne journaliser que les changements. */
+    private var lastSeenVolumes: String? = null
+
     override var state: CallState = CallState.IDLE
         private set
 
@@ -750,6 +756,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         val runnable = object : Runnable {
             override fun run() {
                 pollInboundBytes()
+                watchSystemVolumes()
                 mediaWatchdogHandler.postDelayed(this, MEDIA_WATCHDOG_TICK_MS)
             }
         }
@@ -760,6 +767,34 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private fun stopMediaWatchdog() {
         mediaWatchdogRunnable?.let { mediaWatchdogHandler.removeCallbacks(it) }
         mediaWatchdogRunnable = null
+    }
+
+    /**
+     * Relève les niveaux système pendant l'appel, et ne note que ce qui bouge.
+     *
+     * Tout ce qu'on a corrigé jusqu'ici POSE un niveau. Rien ne vérifiait
+     * qu'il tenait. Or « le son revient aléatoirement » décrit précisément un
+     * niveau qui ne tient pas : quelque chose le change sous nous, entre deux
+     * de nos écritures, sans que rien dans notre code en soit l'auteur.
+     *
+     * Deux lignes dans la trace — l'une posée par nous, l'autre relevée dix
+     * secondes plus tard et différente — et la question est close. C'est le
+     * genre de constat qu'aucune correction ne remplace.
+     */
+    private fun watchSystemVolumes() {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        val now = "appel=${audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)}" +
+            "/${audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)}" +
+            " média=${audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)}" +
+            "/${audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)}" +
+            " mode=${audioManager.mode}"
+        if (now == lastSeenVolumes) return
+        val avant = lastSeenVolumes
+        lastSeenVolumes = now
+        CallTrace.record(
+            "APPEL niveaux",
+            if (avant == null) "à la connexion : $now" else "CHANGÉ SOUS NOUS : $avant → $now",
+        )
     }
 
     private fun pollInboundBytes() {
@@ -924,6 +959,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         savedCallVolume = audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
         savedMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        requestAudioFocus(audioManager)
         routeToBuiltinSpeaker(audioManager)
         pinSystemVolume()
         reportAudioRouting(audioManager)
@@ -1023,6 +1059,89 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     /**
+     * Demande le focus audio pour la durée de l'appel.
+     *
+     * ═══ CETTE DEMANDE N'EXISTAIT NULLE PART ═══
+     *
+     * Aucune ligne de cette application ne demandait le focus audio. C'est une
+     * omission, pas un choix : `MODE_IN_COMMUNICATION` suppose que
+     * l'application le détient, et sans lui le système reste libre de couper,
+     * d'atténuer ou de rerouter la sortie quand un autre composant le prend.
+     *
+     * Et sur CETTE tablette, un composant le prend et le rend sans arrêt : le
+     * service de reconnaissance vocale d'Android, que l'écoute de la pièce
+     * relance à chaque silence, toute la journée (voir AlertVolume, dont le
+     * commentaire décrit la même relance permanente). L'écoute est censée être
+     * suspendue pendant un appel, mais rien ne garantit qu'aucun autre
+     * composant du système ne demande le focus entre-temps.
+     *
+     * UN SON QUI VA ET VIENT SANS LOGIQUE APPARENTE EST LA SIGNATURE EXACTE
+     * de cette omission : la perte de focus coupe la sortie sous le niveau
+     * réglé, ce qui explique aussi qu'aucun curseur n'y ait jamais rien changé.
+     *
+     * ═══ Ce qui est demandé, et pourquoi ═══
+     *
+     * `USAGE_VOICE_COMMUNICATION` décrit ce que c'est vraiment — une
+     * conversation, pas de la musique — et c'est cette description que le
+     * système utilise pour router le son et arbitrer entre applications.
+     *
+     * `GAIN_TRANSIENT_EXCLUSIVE` plutôt qu'un simple gain : pendant un appel,
+     * une autre application ne doit pas s'atténuer poliment pour continuer
+     * par-dessus, elle doit se taire. C'est le comportement d'un appel
+     * téléphonique, et c'est celui qu'on attend ici.
+     *
+     * L'échec n'interrompt RIEN. Un appel sans focus vaut mieux qu'un appel
+     * refusé ; on le note et on continue.
+     */
+    private fun requestAudioFocus(audioManager: AudioManager) {
+        val attributes = android.media.AudioAttributes.Builder()
+            .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
+            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+        val request = android.media.AudioFocusRequest
+            .Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+            .setAudioAttributes(attributes)
+            // Refusé plutôt que différé : un focus qui arriverait après la fin
+            // de l'appel ne servirait à personne, et laisserait l'application
+            // le détenir sans rien jouer.
+            .setAcceptsDelayedFocusGain(false)
+            .setOnAudioFocusChangeListener({ change -> onAudioFocusChanged(change) }, volumeHandler)
+            .build()
+        audioFocusRequest = request
+        val granted = audioManager.requestAudioFocus(request)
+        CallTrace.record(
+            "APPEL focus",
+            when (granted) {
+                AudioManager.AUDIOFOCUS_REQUEST_GRANTED -> "accordé"
+                AudioManager.AUDIOFOCUS_REQUEST_FAILED -> "REFUSÉ — un autre composant le détient"
+                else -> "réponse inattendue ($granted)"
+            },
+        )
+    }
+
+    /**
+     * Note chaque changement de focus, et ne fait rien d'autre.
+     *
+     * Volontairement passif pour l'instant. Reprendre le focus dès qu'on le
+     * perd déclencherait une guerre avec le composant qui vient de le prendre,
+     * et surtout rendrait impossible d'établir QUI le prend et QUAND — ce qui
+     * est précisément la question. La trace d'abord, la réaction ensuite, une
+     * fois qu'on saura contre quoi on réagit.
+     */
+    private fun onAudioFocusChanged(change: Int) {
+        CallTrace.record(
+            "APPEL focus",
+            when (change) {
+                AudioManager.AUDIOFOCUS_GAIN -> "regagné"
+                AudioManager.AUDIOFOCUS_LOSS -> "PERDU définitivement"
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> "PERDU temporairement"
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> "perdu, atténuation demandée"
+                else -> "changement inattendu ($change)"
+            },
+        )
+    }
+
+    /**
      * Force la sortie sur le haut-parleur intégré.
      *
      * `setSpeakerphoneOn` est déprécié depuis Android 12 et son effet n'y est
@@ -1093,6 +1212,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             } catch (e: Exception) {
             }
         }
+        audioFocusRequest?.let {
+            audioManager.abandonAudioFocusRequest(it)
+            CallTrace.record("APPEL focus", "rendu")
+        }
+        audioFocusRequest = null
+        lastSeenVolumes = null
         savedAudioMode?.let { audioManager.mode = it }
         @Suppress("DEPRECATION")
         audioManager.isSpeakerphoneOn = savedSpeakerphoneOn
