@@ -8,9 +8,8 @@
      Les deux grandes cartes qui occupaient le bas de cet écran ont disparu :
      le bouton "Voir ce qui se dit" n'a plus de raison d'être maintenant que
      la pièce est transcrite d'elle-même (voir RoomPresenceService), et le QR
-     code du soignant est passé en vignette de coin — il reste le seul moyen
-     pour un visiteur d'ouvrir le PWA, mais il s'adresse à lui, pas à Jean, et
-     n'a donc pas à occuper la moitié de l'écran.
+     code qui occupait l'autre moitié n'existe plus du tout — il ouvrait le
+     PWA dans un mode simplifié qui a été retiré faute d'usage.
 
      Aucune couleur de fond ici : elle est posée en code selon l'heure et la
      luminosité de la pièce (voir ScreenTheme). L'écrire ici donnerait un
@@ -23,11 +22,11 @@
 
     <include layout="@layout/view_home_zones" />
 
-    <!-- Le QR code soignant a quitté cet écran : il est passé dans les
-         réglages admin (voir AdminSettingsActivity). L'écran de Jean n'affiche
-         que ce qui le concerne — la date, la météo, le moment de la journée et
-         ce qui se dit autour de lui. Un carré noir et blanc qui ne lui sert à
-         rien n'y avait pas sa place. -->
+    <!-- Plus aucun QR code sur cet écran. Il en a porté un, puis les réglages
+         admin l'ont porté à leur tour, et il a fini par ne plus rien servir :
+         le mode simplifié du PWA qu'il ouvrait n'existe plus. L'écran de Jean
+         n'affiche que ce qui le concerne — la date, la météo, le moment de la
+         journée et ce qui se dit autour de lui. -->
 
     <!-- Version affichée en permanence, discrètement, pour vérifier quel APK
          tourne réellement sur la tablette sans la brancher (voir

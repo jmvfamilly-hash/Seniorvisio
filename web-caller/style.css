@@ -463,65 +463,6 @@ body.video-mode #localVideo {
   color: #8FA0BC;
 }
 
-/* ---- Mode soignant (?soignant=1, ouvert en scannant le QR code de la
-   tablette) --------------------------------------------------------------
-   Quelqu'un qui est debout dans une chambre, souvent pressé, et qui découvre
-   l'outil : tout ce qui n'est pas "parler" et "terminer" est du bruit. On
-   masque donc par la feuille de style tout ce que le mode normal propose —
-   identité, réglages, photos, vidéo — sans dupliquer de page ni de code.
-
-   Ce qui reste : la réplique de l'écran de Jean, seul retour qui confirme au
-   soignant que sa voix est bien captée et transcrite. */
-.caregiver-mode #identityPanel,
-.caregiver-mode .side-panel,
-.caregiver-mode #callStats,
-.caregiver-mode #localVideo,
-.caregiver-mode .jean-screen #remoteVideo,
-.caregiver-mode #openSettingsButton,
-.caregiver-mode #openSlideshowButton,
-.caregiver-mode #forceConnectButton {
-  display: none !important;
-}
-
-.caregiver-mode #callButton,
-.caregiver-mode #hangupButton {
-  font-size: 22px;
-  padding: 22px;
-}
-
-/* Le texte transcrit est lu en diagonale, à bout de bras, pendant qu'on
-   parle : la réplique n'a pas à rester à l'échelle exacte de la tablette
-   ici, contrairement au mode normal où le proche veut justement juger de la
-   place que ça prend chez Jean. */
-.caregiver-mode .jean-caption-text {
-  font-size: 22px;
-}
-
-/* Consignes réservées au mode soignant : masquées partout ailleurs, sans avoir
-   à dupliquer une page dédiée. */
-.caregiver-only {
-  display: none;
-}
-
-.caregiver-mode .caregiver-only {
-  display: block;
-}
-
-/* Encadré franc : c'est la consigne qui décide du succès ou de l'échec de la
-   fonction (parler dans le téléphone, pas vers la personne). Elle doit sauter
-   aux yeux avant le bouton, pas se fondre dans le reste. */
-.caregiver-hint {
-  margin: 0 0 20px;
-  padding: 16px;
-  border-radius: 10px;
-  background: #23344F;
-  border: 1px solid #3E5680;
-  color: #E8EDF5;
-  font-size: 17px;
-  line-height: 1.45;
-  text-align: left;
-}
-
 /* ================= ADMINISTRATION =================
    Un calque par-dessus tout le reste plutôt qu'une quatrième fenêtre : les
    fenêtres (vidéo/réglages/photos) n'existent que pendant un appel, or les

@@ -108,11 +108,13 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
     /**
      * Consigne de coupure du micro reçue avant même que la piste audio existe
-     * (le mode soignant l'écrit dès la création de l'appel, voir
-     * web-caller/app.js). Sans ce report, la piste était créée active dans
-     * answer() puis coupée quelques centaines de millisecondes plus tard, à
-     * l'arrivée de l'instantané Firestore : assez pour un bref larsen quand le
-     * téléphone du soignant est à quelques centimètres de la tablette.
+     * (voir web-caller/app.js). Sans ce report, la piste était créée active
+     * dans answer() puis coupée quelques centaines de millisecondes plus tard,
+     * à l'arrivée de l'instantané Firestore : assez pour un bref larsen quand
+     * le téléphone du proche est à quelques centimètres de la tablette.
+     *
+     * Remis à false par cleanup() : c'est une consigne d'appel, pas un réglage
+     * de la tablette. Voir le commentaire là-bas, la distinction a coûté cher.
      */
     private var pendingMicMuted: Boolean = false
     private var pendingVolume: Double = 1.0
@@ -161,7 +163,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
     override fun answer() {
         // Abandonner en silence ici a coûté cher : appelée avant que l'offre du
-        // proche ne soit reçue (connexion immédiate du mode soignant), cette
+        // proche ne soit reçue (bouton « Connexion immédiate » du PWA), cette
         // méthode ne faisait rien du tout, sans le moindre message. Résultat, la
         // tablette se croyait en communication, le proche restait devant un
         // décompte sans fin, et la transcription — qui passe par Firestore et
@@ -388,7 +390,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             pendingMicMuted = muted
             // Mémorisé même quand la piste n'existe pas encore : startLocalMedia
             // l'appliquera à sa création (voir pendingMicMuted).
-            localAudioTrack?.setEnabled(!muted)
+            //
+            // Et on ne rallume jamais le micro sans vérifier le mode même pièce :
+            // décocher la coupure micro pendant un appel depuis le fauteuil d'à
+            // côté ramènerait l'écho que ce mode existe précisément pour éviter.
+            // Symétrique de listenForSameRoomMode juste en dessous.
+            localAudioTrack?.setEnabled(!muted && !sameRoomMode)
         }
     }
 
@@ -783,9 +790,16 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         val audioTrack = factory.createAudioTrack("SVIO_AUDIO", factory.createAudioSource(MediaConstraints()))
         localAudioTrack = audioTrack
         // Coupé avant même d'être ajouté à la connexion si la consigne est déjà
-        // arrivée (mode soignant) : rien ne doit sortir du micro de la tablette,
-        // pas même le temps d'un instantané Firestore.
-        audioTrack.setEnabled(!pendingMicMuted)
+        // arrivée : rien ne doit sortir du micro de la tablette, pas même le
+        // temps d'un instantané Firestore.
+        //
+        // Les DEUX consignes comptent ici, et la seconde manquait : en mode même
+        // pièce, le haut-parleur est bien coupé à sa création (voir plus haut,
+        // initialVolume), mais le micro, lui, partait actif et renvoyait au
+        // téléphone du proche la voix qu'il venait de prononcer à deux mètres.
+        // L'écho ne s'arrêtait qu'à l'arrivée de l'instantané Firestore de
+        // listenForSameRoomMode, quelques centaines de millisecondes plus tard.
+        audioTrack.setEnabled(!pendingMicMuted && !sameRoomMode)
         // Reliée en permanence, mais n'alimente la transcription que si
         // l'appelant a demandé d'écouter la pièce (voir setMicToRoom).
         attachTranscriptionSink(audioTrack, TranscriptionSource.ROOM)
@@ -852,6 +866,15 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         volumeRampRunnable = null
         pendingVolume = 1.0
         currentVolume = 1.0
+        // Remise à zéro indispensable, et elle manquait : la consigne de coupure
+        // du micro est portée par l'engine, pas par l'appel. Le processus de la
+        // tablette ne redémarre jamais de lui-même (CallListenerService est un
+        // service de premier plan permanent), donc une coupure demandée une
+        // seule fois survivait à l'appel, à tous les appels suivants, et jusqu'au
+        // prochain redémarrage complet : la piste audio était recréée coupée sans
+        // que rien ne l'indique nulle part. Vu de la chambre, le micro de la
+        // tablette « ne marchait plus », sans cause visible.
+        pendingMicMuted = false
 
         // La libération effective (caméra, GL, connexion WebRTC) se fait sur
         // un thread à part, pas ici : videoCapturer.stopCapture() est un

@@ -80,7 +80,7 @@ class IncomingCallActivity : AppCompatActivity() {
     /** Vrai dès que l'offre WebRTC du proche est reçue et acceptée (voir prepareIncomingCall). */
     private var isPrepared = false
 
-    /** Connexion immédiate demandée avant que l'offre ne soit prête (mode soignant). */
+    /** Connexion immédiate demandée avant que l'offre ne soit prête (bouton du PWA). */
     private var pendingForceConnect = false
 
     // Références gardées pour adapter la disposition à chaque rotation (voir
@@ -286,7 +286,7 @@ class IncomingCallActivity : AppCompatActivity() {
         // connue AVANT que answer() ne crée la piste micro (voir
         // WebRtcCallEngine.pendingMicMuted), sans quoi le micro de la tablette
         // émet le temps d'un aller-retour Firestore — assez pour un larsen avec
-        // le téléphone du soignant posé à côté.
+        // le téléphone du proche posé à côté.
         callEngine.listenForMicMute()
 
         // Écouté dès maintenant pour la même raison que la coupure micro : la
@@ -296,9 +296,9 @@ class IncomingCallActivity : AppCompatActivity() {
         // un larsen franc quand le téléphone du proche est dans la pièce.
         callEngine.listenForSameRoomMode()
 
-        // Le mode soignant écrit cette demande dès la création de l'appel (voir
-        // web-caller/app.js) : elle arrive donc souvent AVANT que l'offre WebRTC
-        // n'ait été récupérée. Connecter à ce moment-là échouait en silence —
+        // Le bouton « Connexion immédiate » du PWA écrit cette demande (voir
+        // web-caller/app.js), et le proche peut le toucher AVANT que l'offre
+        // WebRTC n'ait été récupérée. Connecter à ce moment-là échouait en silence —
         // answer() abandonne sans rien dire tant que la connexion n'existe pas —
         // laissant le proche devant un décompte qui ne se termine jamais, alors
         // que la transcription, elle, fonctionnait (elle passe par Firestore, pas

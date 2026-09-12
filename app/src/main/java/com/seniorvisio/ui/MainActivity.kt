@@ -384,12 +384,5 @@ class MainActivity : AppCompatActivity() {
          * jetait un œil.
          */
         private const val READING_GRACE_MS = 20_000L
-
-        /**
-         * Adresse encodée dans le QR code de l'écran d'accueil. Le paramètre
-         * `soignant` fait ouvrir le PWA dans son mode simplifié : connexion
-         * immédiate sans décompte ni photo, son de la tablette coupé,
-         * sous-titres activés d'office (voir web-caller/app.js).
-         */
     }
 }

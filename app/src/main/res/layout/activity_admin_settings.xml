@@ -359,26 +359,6 @@
         android:layout_height="wrap_content"
         android:inputType="number" />
 
-    <!-- QR code soignant, déplacé depuis l'écran d'accueil : à montrer une
-         fois à un soignant ou un visiteur, dont le téléphone ouvrira le PWA en
-         mode soignant. Ici plutôt que sous les yeux de Jean, à qui il ne sert
-         à rien. Le toucher affiche l'explication à montrer avec. -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="QR code à faire scanner par un soignant présent dans la pièce"
-        android:textSize="14sp" />
-
-    <ImageView
-        android:id="@+id/imageCaregiverQr"
-        android:layout_width="200dp"
-        android:layout_height="200dp"
-        android:layout_marginTop="8dp"
-        android:clickable="true"
-        android:focusable="true"
-        android:contentDescription="QR code à scanner pour parler à Jean" />
-
     <Button
         android:id="@+id/buttonTranscriptionLab"
         android:layout_width="match_parent"

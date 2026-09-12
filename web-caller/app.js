@@ -6,20 +6,6 @@
 
 document.getElementById("pwaVersion").textContent = `v. ${window.PWA_VERSION || "?"}`;
 
-// --- Mode soignant -------------------------------------------------------
-// Ouvert en scannant le QR code affiché sur l'écran d'accueil de la tablette
-// (voir MainActivity.showCaregiverQrCode). Destiné à quelqu'un qui est DANS la
-// pièce avec Jean — soignant, visiteur — et veut lui parler sans hausser la
-// voix : sa parole s'écrit en grand sur la tablette.
-//
-// Tout ce qui a du sens pour un appel venu de l'extérieur est retiré ici :
-// pas de décompte (la personne est déjà là), pas de photo d'appelant (Jean la
-// voit en vrai), pas de vidéo, pas de réglages — et surtout aucun son côté
-// tablette, sans quoi le téléphone du soignant, à quelques centimètres,
-// provoquerait un larsen immédiat.
-const CAREGIVER_MODE = new URLSearchParams(location.search).has("soignant");
-if (CAREGIVER_MODE) document.body.classList.add("caregiver-mode");
-
 // --- Paramètres, alignés avec AdminConfig côté Android ---
 const CONFIG = {
   targetDeviceId: "jean-tablette-01", // non utilisé par le signaling Firestore (un seul foyer), gardé pour usage futur multi-tablette
@@ -472,38 +458,15 @@ els.callButton.addEventListener("click", async () => {
   // le bouton, sans plus aucun moyen de relancer la connexion pour cet appel.
   els.forceConnectButton.disabled = true;
   showState("calling");
-  if (CAREGIVER_MODE) {
-    els.callingHint.textContent = "Connexion immédiate…";
-    await engine.startCall(CONFIG.targetDeviceId, "Un soignant", {
-      // Aucun son chez Jean : le soignant parle de vive voix dans la pièce,
-      // la tablette ne fait qu'écrire. Sans ça, larsen immédiat.
-      remoteVolume: 0,
-      tabletMicMuted: true,
-      // Les sous-titres sont toute la raison d'être de ce mode : activés
-      // d'office, jamais à cocher.
-      captionModeEnabled: true,
-      selfPreviewEnabled: false,
-      // Ni décompte, ni photo, ni caméra : voir le commentaire de CAREGIVER_MODE.
-      forceConnect: true,
-      skipPhoto: true,
-      audioOnly: true,
-      // Scanner le QR code de la tablette, c'est être debout devant elle :
-      // le mode "même pièce" est acquis par construction, sans rien à cocher
-      // ni à détecter. C'est le second des deux chemins vers ce mode, l'autre
-      // étant la case des réglages.
-      sameRoomMode: true,
-    });
-  } else {
-    // Identité renseignée sur l'écran d'attente, sinon repli sur l'ancien
-    // comportement : nom générique et capture webcam prise à l'ouverture.
-    const identity = loadIdentity() || {};
-    await engine.startCall(CONFIG.targetDeviceId, identity.name || CONFIG.callerName, {
-      remoteVolume: settings.volume / 100,
-      captionModeEnabled: settings.captionEnabled,
-      selfPreviewEnabled: settings.selfPreview,
-      callerPhotoBase64: identity.photoBase64 || null,
-    });
-  }
+  // Identité renseignée sur l'écran d'attente, sinon repli sur l'ancien
+  // comportement : nom générique et capture webcam prise à l'ouverture.
+  const identity = loadIdentity() || {};
+  await engine.startCall(CONFIG.targetDeviceId, identity.name || CONFIG.callerName, {
+    remoteVolume: settings.volume / 100,
+    captionModeEnabled: settings.captionEnabled,
+    selfPreviewEnabled: settings.selfPreview,
+    callerPhotoBase64: identity.photoBase64 || null,
+  });
   els.forceConnectButton.disabled = false;
 });
 
@@ -1432,24 +1395,6 @@ els.hangupButton.addEventListener("click", async () => {
   await engine.cancelCall();
   showState("idle");
 });
-
-// Le mode soignant réduit l'écran à sa plus simple expression : un bouton pour
-// parler, un pour terminer, et la réplique de l'écran de Jean — le seul retour
-// qui dit au soignant que sa voix est bien captée et transcrite. Le reste
-// (photo, réglages, vidéo) est masqué par la feuille de style ; ici on ne
-// change que ce qui doit être formulé autrement.
-if (CAREGIVER_MODE) {
-  document.querySelector("h1").textContent = "Parler à Jean";
-  els.callButton.textContent = "🗣️ Commencer à parler";
-  els.hangupButton.textContent = "Terminer";
-  // Répété avant ET pendant : c'est le contresens le plus probable, et le
-  // réflexe de baisser le téléphone pour s'adresser à la personne revient vite.
-  document.getElementById("caregiverIdleHint").textContent =
-    "🎤 Parlez dans votre téléphone, comme au téléphone : c'est lui qui vous écoute. La tablette de Jean ne fait qu'écrire, sans aucun son.";
-  document.getElementById("caregiverCallHint").textContent =
-    "🎤 Gardez le téléphone près de vous et parlez dedans, à voix normale.";
-  document.getElementById("mirrorHint").textContent = "👆 Ce que Jean lit en ce moment";
-}
 
 // Deux façons de ne pas aboutir, qui n'ont rien à voir l'une avec l'autre :
 // Jean a refusé, ou il était déjà en ligne avec quelqu'un d'autre. Dans le

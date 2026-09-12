@@ -178,12 +178,8 @@ class RealCallEngine extends CallEngine {
       // unité de capture audio, sans le traitement de voix (donc sans son
       // annulation d'écho matérielle, excellente par défaut). Ne pas
       // "durcir" ces contraintes sans test réel sur iPad ET Android.
-      //
-      // audioOnly : mode soignant (voir app.js). Sa caméra n'apporte rien —
-      // il est dans la pièce, Jean le voit — et la demander ajouterait une
-      // permission à accorder debout, dans l'urgence, avant de pouvoir parler.
       localStream = await navigator.mediaDevices.getUserMedia({
-        video: !initialSettings.audioOnly,
+        video: true,
         audio: true,
       });
     } catch (e) {
@@ -233,16 +229,9 @@ class RealCallEngine extends CallEngine {
     // elle existe : nettement plus reconnaissable qu'une capture webcam prise
     // à la volée, souvent sombre et mal cadrée — et c'est elle que Jean voit
     // en plein écran pendant la sonnerie.
-    //
-    // skipPhoto : mode soignant (voir app.js), où l'appelant est dans la même
-    // pièce que Jean — le montrer en photo n'a aucun intérêt, et la capture
-    // webcam ferait attendre 1,5 s pour rien avant de renoncer, faute de flux
-    // vidéo à photographier.
     const photoPromise = initialSettings.callerPhotoBase64
       ? Promise.resolve(initialSettings.callerPhotoBase64)
-      : initialSettings.skipPhoto
-        ? Promise.resolve(null)
-        : this._captureCallerPhoto();
+      : this._captureCallerPhoto();
 
     // Aucun de ces appels n'était protégé jusqu'ici : une offre WebRTC qui
     // échoue à se créer, ou surtout une écriture Firestore rejetée (constaté
@@ -288,14 +277,15 @@ class RealCallEngine extends CallEngine {
         // appel précédent laisserait Jean sans aucun son, sans que personne ne
         // comprenne pourquoi.
         sameRoomMode: false,
-        // Mode soignant : la tablette se connecte sans attendre son décompte de
-        // 30 s (celui-ci a du sens pour un appel venu de l'extérieur, aucun
-        // quand la personne est déjà debout à côté de Jean), et son micro est
-        // coupé d'emblée pour éviter le larsen avec le téléphone du soignant,
-        // à quelques centimètres. Écrits ici plutôt qu'après connexion : la
-        // tablette les lit dès le premier instantané Firestore.
-        forceConnectRequested: initialSettings.forceConnect ?? false,
-        tabletMicMuted: initialSettings.tabletMicMuted ?? false,
+        // Faux au départ dans les deux cas, et remis à vrai en cours d'appel
+        // seulement : la connexion immédiate par le bouton « Connexion
+        // immédiate » (voir forceConnect), la coupure du micro par la case
+        // « même pièce » (voir setTabletMicMuted). Écrits ici plutôt
+        // qu'omis : la tablette lit ce document dès le premier instantané, et
+        // un champ absent l'obligerait à distinguer « pas encore reçu » de
+        // « explicitement faux ».
+        forceConnectRequested: false,
+        tabletMicMuted: false,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
     } catch (e) {
