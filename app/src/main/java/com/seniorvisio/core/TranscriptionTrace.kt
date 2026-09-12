@@ -115,8 +115,18 @@ object TranscriptionTrace {
      * l'application — c'est lui qui permet de savoir **qui** a produit quoi, ce
      * qui est toute la question quand du texte disparaît.
      */
-    @Synchronized
     fun record(source: String, detail: String = "") {
+        // Le test AVANT le verrou, et non à l'intérieur. La trace est désormais
+        // alimentée depuis les threads de WebRTC autant que depuis le thread
+        // principal ; verrouiller cet objet à chaque événement d'une pile temps
+        // réel, même pour en ressortir aussitôt, serait exactement le coût
+        // qu'une trace éteinte ne doit pas avoir.
+        if (!recording) return
+        append(source, detail)
+    }
+
+    @Synchronized
+    private fun append(source: String, detail: String) {
         if (!recording) return
         val now = SystemClock.elapsedRealtime()
         val since = (now - startedAtMs) / 1000.0
@@ -160,6 +170,36 @@ object TranscriptionTrace {
                 if (index == 0) "« $text »" else "| variante $index : « $text »"
             }.joinToString(" "),
         )
+    }
+
+    /**
+     * Exécute un rappel venu de Firestore ou de WebRTC en journalisant son
+     * entrée, et SANS laisser une exception remonter.
+     *
+     * ═══ Pourquoi avaler l'exception est ici le bon choix ═══
+     *
+     * Un rappel d'instantané Firestore s'exécute sur le thread principal. Une
+     * exception qui en sort ne « fait pas échouer le réglage » : elle TUE LE
+     * PROCESSUS. Vu de la chambre, l'appel s'interrompt brutalement au moment
+     * précis où le proche a touché une case, et rien n'indique que les deux
+     * faits sont liés.
+     *
+     * L'arbitrage n'est donc pas « masquer une erreur » contre « la voir » :
+     * c'est « le réglage n'a pas pris, et on sait lequel » contre « l'appel
+     * s'arrête ». Pour un appareil que personne ne relève, c'est sans appel.
+     *
+     * L'erreur n'est pas perdue pour autant — elle part dans le journal
+     * système ET dans la trace, avec le nom du rappel fautif, ce qui est
+     * strictement plus que ce qu'un plantage laisse derrière lui.
+     */
+    fun guard(source: String, detail: String = "", block: () -> Unit) {
+        record(source, detail)
+        try {
+            block()
+        } catch (e: Throwable) {
+            Log.e(TAG, "Exception dans $source, appel préservé", e)
+            record("APPEL EXCEPTION", "$source : ${e.javaClass.simpleName} ${e.message ?: ""}")
+        }
     }
 
     /**
@@ -210,8 +250,30 @@ object TranscriptionTrace {
         appendLine()
         appendLine("Colonnes : [temps depuis le début, écart avec la ligne précédente] origine | contenu")
         appendLine("Origines : API = rappel du moteur · APP = décision de l'application")
+        appendLine("           APPEL = chemin de la visiophonie (WebRTC, consignes du proche)")
         appendLine()
-        appendLine("Les lignes à chercher en premier :")
+        appendLine("Pour une panne d'APPEL, lire dans cet ordre :")
+        appendLine()
+        appendLine("  « APPEL answer » puis « APPEL onTrack » puis « APPEL volume »  la chaîne")
+        appendLine("        qui décide si Jean entend quelque chose. Le niveau posé sur la piste")
+        appendLine("        est écrit en toutes lettres : s'il vaut 0, la suite est inutile à")
+        appendLine("        chercher ailleurs. Comparer avec « APPEL consigne volume ».")
+        appendLine()
+        appendLine("  « APPEL consigne … »  chaque réglage venu du PWA, à l'instant où il")
+        appendLine("        arrive. Un réglage sans effet a deux causes très différentes : soit")
+        appendLine("        sa ligne manque (rien n'est arrivé jusqu'à la tablette), soit elle")
+        appendLine("        est là et n'a rien changé. Les deux se traitent à l'opposé.")
+        appendLine()
+        appendLine("  « APPEL raccroché » / « APPEL raccroché auto » / « APPEL ICE »  pourquoi")
+        appendLine("        un appel s'est arrêté. Le raccroché porte les trois appels qui l'ont")
+        appendLine("        déclenché : c'est ce qui distingue le chien de garde du flux d'un")
+        appendLine("        échec ICE ou d'un geste sur l'écran.")
+        appendLine()
+        appendLine("  « APPEL EXCEPTION »  une erreur qui aurait tué l'application, interceptée")
+        appendLine("        pour préserver l'appel. Toute ligne de ce type est un défaut à")
+        appendLine("        corriger, même si l'appel a continué.")
+        appendLine()
+        appendLine("Pour la transcription, les lignes à chercher en premier :")
         appendLine()
         appendLine("  « APP → startListening » / « API onResults »  une session du moteur, donc")
         appendLine("        un énoncé. L'écart entre un onResults et le startListening suivant")

@@ -29,6 +29,7 @@ import com.seniorvisio.core.AlertVolume
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.ScreenTheme
 import com.seniorvisio.core.TranscriptionSource
+import com.seniorvisio.core.TranscriptionTrace
 import com.seniorvisio.core.UsageStats
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.signaling.CallSignalingClient
@@ -66,6 +67,9 @@ class IncomingCallActivity : AppCompatActivity() {
     private lateinit var callEngine: WebRtcCallEngine
     private lateinit var zones: HomeZonesController
     private lateinit var buttonBlock: Button
+
+    /** Répondre sans attendre la fin du décompte. Masqué dès la connexion (voir connectVideoCall). */
+    private lateinit var buttonAnswerNow: Button
     private var isConnected = false
     private var callHandled = false
 
@@ -225,6 +229,7 @@ class IncomingCallActivity : AppCompatActivity() {
         val textCallerName = findViewById<TextView>(R.id.textCallerName)
         val countdownFill = findViewById<View>(R.id.countdownProgressFill)
         buttonBlock = findViewById(R.id.buttonBlock)
+        buttonAnswerNow = findViewById(R.id.buttonAnswerNow)
 
         // Prénom renseigné côté PWA (panneau "Qui appelle ?") affiché quand il
         // existe, plutôt qu'un générique systématique : "Marie vous appelle"
@@ -240,6 +245,17 @@ class IncomingCallActivity : AppCompatActivity() {
 
         countdownFill.pivotX = 0f
         countdownFill.scaleX = 0f
+
+        // Le même chemin exactement que la fin du décompte (onTimeoutConnect) :
+        // on ne fait qu'abréger l'attente, on ne connecte pas autrement.
+        // connectVideoCall se protège elle-même d'un second déclenchement, ce
+        // qui couvre le cas où le décompte arrive à son terme dans la même
+        // seconde que l'appui.
+        buttonAnswerNow.setOnClickListener {
+            TranscriptionTrace.record("APPEL décompte", "abrégé par le bouton de la tablette")
+            alertController.cancel()
+            connectVideoCall()
+        }
 
         buttonBlock.setOnClickListener {
             alertController.cancel()
@@ -508,6 +524,7 @@ class IncomingCallActivity : AppCompatActivity() {
         // raccrochait donc côté proche, sans explication.
         if (isConnected) return
         isConnected = true
+        buttonAnswerNow.visibility = View.GONE
         // Le micro a déjà changé de main à l'arrivée de l'appel (voir
         // onCreate) : WebRTC le trouve libre, sans avoir à attendre une
         // libération dans la seconde.
@@ -535,12 +552,18 @@ class IncomingCallActivity : AppCompatActivity() {
         localRenderer.visibility = View.INVISIBLE
         remoteRenderer.visibility = View.VISIBLE
         callEngine.attachRenderers(localRenderer, remoteRenderer)
+        // AVANT answer(), et non après comme jusqu'ici. Même raison que pour la
+        // coupure micro et le mode même pièce : la piste audio du proche peut
+        // arriver dans la milliseconde qui suit answer(), et c'est à sa
+        // création que son niveau est posé. Écouter le curseur ensuite, c'est
+        // laisser la première valeur du proche arriver trop tard pour le
+        // premier son — celui qu'on entend, ou pas, au début de l'appel.
+        callEngine.listenForRemoteVolumeControl()
         callEngine.answer()
         buttonBlock.text = "Raccrocher"
         remoteRendererRef = remoteRenderer
         localRendererRef = localRenderer
         setupCaptionMode()
-        callEngine.listenForRemoteVolumeControl()
         callEngine.listenForSlideshowPhoto { photoBase64 -> showSlideshowPhoto(photoBase64) }
         callEngine.listenForSelfPreviewMode { enabled ->
             runOnUiThread { localRenderer.visibility = if (enabled) View.VISIBLE else View.INVISIBLE }

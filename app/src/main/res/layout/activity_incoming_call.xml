@@ -145,6 +145,31 @@
         android:textSize="11sp"
         android:text="" />
 
+    <!-- Répondre sans attendre la fin du décompte.
+         Pour qui se trouve déjà dans la pièce — un proche en visite, quelqu'un
+         qui passe — et n'a aucune raison de regarder une barre se remplir
+         pendant trente secondes alors que la conversation peut commencer tout
+         de suite. Jean, lui, n'a toujours rien à faire : sans personne pour y
+         toucher, le décompte va au bout et l'appel se connecte seul, exactement
+         comme avant.
+         Disparaît dès la connexion (voir connectVideoCall) : il n'a plus de
+         sens une fois l'appel établi, et deux boutons côte à côte pendant la
+         conversation invitent à en toucher un par erreur. -->
+    <Button
+        android:id="@+id/buttonAnswerNow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginBottom="24dp"
+        android:layout_marginStart="24dp"
+        android:text="Répondre maintenant"
+        android:textSize="22sp"
+        android:paddingLeft="32dp"
+        android:paddingRight="32dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
+        android:backgroundTint="#1E8449" />
+
     <Button
         android:id="@+id/buttonBlock"
         android:layout_width="wrap_content"

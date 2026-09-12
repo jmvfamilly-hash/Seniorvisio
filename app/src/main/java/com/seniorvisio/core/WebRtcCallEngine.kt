@@ -55,15 +55,39 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var videoCapturer: CameraVideoCapturer? = null
     private var surfaceTextureHelper: SurfaceTextureHelper? = null
     private var localVideoTrack: VideoTrack? = null
-    private var localAudioTrack: AudioTrack? = null
     private var remoteVideoTrack: VideoTrack? = null
-    private var remoteAudioTrack: AudioTrack? = null
     private var micMuteListener: ListenerRegistration? = null
     private var sameRoomListener: ListenerRegistration? = null
     private var slideshowListener: ListenerRegistration? = null
 
+    /**
+     * ═══ CES CHAMPS SONT LUS ET ÉCRITS PAR DEUX THREADS DIFFÉRENTS ═══
+     *
+     * Les consignes du proche arrivent par des instantanés Firestore, donc sur
+     * le THREAD PRINCIPAL. Les pistes audio, elles, arrivent par onTrack, qui
+     * s'exécute sur le THREAD DE SIGNALISATION DE WEBRTC. Et onTrack décide du
+     * son que Jean va entendre en lisant [sameRoomMode] et [pendingVolume],
+     * écrits par l'autre thread quelques millisecondes plus tôt.
+     *
+     * Sans `@Volatile`, rien n'oblige ce thread-là à voir l'écriture de
+     * l'autre : il peut travailler sur une valeur périmée, indéfiniment. Le
+     * symptôme est exactement celui qui a été constaté — aucun son au début
+     * d'un appel, un curseur de volume sans effet, puis le son qui revient
+     * sans qu'on sache pourquoi. Un défaut de visibilité mémoire ne se
+     * reproduit pas à la demande : c'est sa signature, et c'est ce qui le rend
+     * si difficile à attribuer.
+     *
+     * `@Volatile` établit le lien manquant entre les deux threads. Il ne rend
+     * PAS les suites d'opérations atomiques — c'est pourquoi l'application du
+     * volume est en plus ramenée sur un seul thread (voir rampVolumeTo et
+     * onTrack) : deux écritures concurrentes de setVolume sur la même piste
+     * donneraient sinon un niveau final imprévisible.
+     */
+    @Volatile private var localAudioTrack: AudioTrack? = null
+    @Volatile private var remoteAudioTrack: AudioTrack? = null
+
     /** Voir listenForSameRoomMode : coupe entièrement le son, quel que soit le curseur de volume. */
-    private var sameRoomMode = false
+    @Volatile private var sameRoomMode = false
 
     private var callerCandidatesListener: ListenerRegistration? = null
     private var callId: String? = null
@@ -116,8 +140,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * Remis à false par cleanup() : c'est une consigne d'appel, pas un réglage
      * de la tablette. Voir le commentaire là-bas, la distinction a coûté cher.
      */
-    private var pendingMicMuted: Boolean = false
-    private var pendingVolume: Double = 1.0
+    @Volatile private var pendingMicMuted: Boolean = false
+
+    /** Consigne du curseur du proche. Voir le commentaire de [remoteAudioTrack] sur les threads. */
+    @Volatile private var pendingVolume: Double = 1.0
+
+    /** Niveau réellement appliqué à la piste. Touché seulement sur le thread principal. */
     private var currentVolume: Double = 1.0
     private var volumeRampRunnable: Runnable? = null
     private val volumeHandler = Handler(Looper.getMainLooper())
@@ -139,9 +167,11 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         }
         this.callId = callId
         state = CallState.RINGING_SILENT
+        TranscriptionTrace.record("APPEL préparation", "callId=$callId")
         ensureFactory()
 
         signaling.fetchOfferSdp(callId) { sdp ->
+            TranscriptionTrace.record("APPEL offre", if (sdp == null) "INTROUVABLE" else "reçue (${sdp.length} car.)")
             if (sdp == null) {
                 onError(IllegalStateException("Offre d'appel introuvable (callId=$callId)"))
                 return@fetchOfferSdp
@@ -178,6 +208,10 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         }
         val id = callId ?: return
         state = CallState.CONNECTING
+        TranscriptionTrace.record(
+            "APPEL answer",
+            "consigneVolume=$pendingVolume microCoupé=$pendingMicMuted mêmePièce=$sameRoomMode",
+        )
         startLocalMedia(pc)
         pc.createAnswer(SimpleSdpObserver(onCreate = { desc ->
             pc.setLocalDescription(
@@ -207,6 +241,14 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     override fun hangUp() {
+        // La pile d'appel est journalisée, et ce n'est pas du luxe : « l'appel
+        // s'est arrêté tout seul » a plusieurs causes possibles — le chien de
+        // garde du flux, l'échec ICE, un raccroché du proche, le bouton de la
+        // tablette — et elles sont indiscernables une fois l'appel terminé.
+        TranscriptionTrace.record(
+            "APPEL raccroché",
+            Throwable().stackTrace.drop(1).take(3).joinToString(" ← ") { "${it.methodName}:${it.lineNumber}" },
+        )
         callId?.let { signaling.updateStatus(it, CallSignalingClient.STATUS_ENDED) }
         cleanup()
         state = CallState.ENDED
@@ -214,6 +256,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
     /** Appelée quand Jean bloque l'appel pendant le décompte (avant connexion). */
     fun blockCall() {
+        TranscriptionTrace.record("APPEL bloqué", "refus depuis la tablette")
         callId?.let { signaling.updateStatus(it, CallSignalingClient.STATUS_BLOCKED) }
         cleanup()
         state = CallState.ENDED
@@ -352,8 +395,10 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     fun listenForRemoteVolumeControl() {
         val id = callId ?: return
         volumeListener = signaling.listenForRemoteVolume(id) { volume ->
-            pendingVolume = volume
-            rampVolumeTo(volume)
+            TranscriptionTrace.guard("APPEL consigne volume", "$volume") {
+                pendingVolume = volume
+                rampVolumeTo(volume)
+            }
         }
     }
 
@@ -387,15 +432,19 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     fun listenForMicMute() {
         val id = callId ?: return
         micMuteListener = signaling.listenForMicMute(id) { muted ->
-            pendingMicMuted = muted
-            // Mémorisé même quand la piste n'existe pas encore : startLocalMedia
-            // l'appliquera à sa création (voir pendingMicMuted).
-            //
-            // Et on ne rallume jamais le micro sans vérifier le mode même pièce :
-            // décocher la coupure micro pendant un appel depuis le fauteuil d'à
-            // côté ramènerait l'écho que ce mode existe précisément pour éviter.
-            // Symétrique de listenForSameRoomMode juste en dessous.
-            localAudioTrack?.setEnabled(!muted && !sameRoomMode)
+            TranscriptionTrace.guard("APPEL consigne micro", "coupé=$muted mêmePièce=$sameRoomMode") {
+                pendingMicMuted = muted
+                // Mémorisé même quand la piste n'existe pas encore :
+                // startLocalMedia l'appliquera à sa création (voir
+                // pendingMicMuted).
+                //
+                // Et on ne rallume jamais le micro sans vérifier le mode même
+                // pièce : décocher la coupure micro pendant un appel depuis le
+                // fauteuil d'à côté ramènerait l'écho que ce mode existe
+                // précisément pour éviter. Symétrique de listenForSameRoomMode
+                // juste en dessous.
+                localAudioTrack?.setEnabled(!muted && !sameRoomMode)
+            }
         }
     }
 
@@ -418,9 +467,14 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     fun listenForSameRoomMode() {
         val id = callId ?: return
         sameRoomListener = signaling.listenForSameRoomMode(id) { enabled ->
-            sameRoomMode = enabled
-            localAudioTrack?.setEnabled(!enabled && !pendingMicMuted)
-            rampVolumeTo(pendingVolume)
+            TranscriptionTrace.guard(
+                "APPEL consigne même pièce",
+                "activé=$enabled microCoupé=$pendingMicMuted consigneVolume=$pendingVolume",
+            ) {
+                sameRoomMode = enabled
+                localAudioTrack?.setEnabled(!enabled && !pendingMicMuted)
+                rampVolumeTo(pendingVolume)
+            }
         }
     }
 
@@ -573,13 +627,28 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         if (total > lastInboundBytes) {
             lastInboundBytes = total
             lastInboundProgressAtMs = now
+            // Le premier octet seulement : un relevé par tour remplirait la
+            // trace de lignes toutes identiques et noierait ce qu'on y cherche.
+            // Ce qui compte, c'est QUAND le flux commence et QUAND il s'arrête.
+            if (total > 0 && !hasEverReceivedMedia) {
+                TranscriptionTrace.record("APPEL flux entrant", "premiers octets reçus du proche ($total)")
+            }
             if (total > 0) hasEverReceivedMedia = true
             return
         }
+        TranscriptionTrace.record(
+            "APPEL flux entrant",
+            "à l'arrêt sur $total octets depuis ${(now - lastInboundProgressAtMs) / 1000} s",
+        )
         val allowed = if (hasEverReceivedMedia) MEDIA_STALL_TIMEOUT_MS else MEDIA_START_TIMEOUT_MS
         if (now - lastInboundProgressAtMs < allowed) return
 
         Log.i(TAG, "Plus rien reçu du proche depuis ${allowed / 1000}s : raccroché automatique")
+        TranscriptionTrace.record(
+            "APPEL raccroché auto",
+            "chien de garde : $total octets reçus, aucun progrès depuis ${allowed / 1000} s " +
+                "(médiaDéjàReçu=$hasEverReceivedMedia)",
+        )
         stopMediaWatchdog()
         hangUp()
         connectionLostCb?.invoke()
@@ -604,15 +673,52 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
     // ---- internals ----
 
+    /**
+     * Pose immédiatement le niveau qui découle de l'état courant, sans rampe.
+     *
+     * Utilisée quand la piste distante vient d'arriver : il n'y a rien à
+     * adoucir puisque rien ne sortait encore du haut-parleur, et surtout il ne
+     * faut pas attendre une seconde de rampe avant que Jean entende quoi que
+     * ce soit.
+     *
+     * À n'appeler que depuis le thread principal.
+     */
+    private fun applyVolumeNow() {
+        val target = if (sameRoomMode) 0.0 else pendingVolume
+        val track = remoteAudioTrack
+        volumeRampRunnable?.let { volumeHandler.removeCallbacks(it) }
+        volumeRampRunnable = null
+        currentVolume = target
+        if (track == null) {
+            TranscriptionTrace.record("APPEL volume", "niveau $target retenu, aucune piste distante encore")
+            return
+        }
+        track.setVolume(target)
+        TranscriptionTrace.record("APPEL volume", "niveau $target posé sur la piste distante")
+    }
+
     private fun rampVolumeTo(requested: Double) {
         // Le mode "même pièce" prime sur le curseur : voir listenForSameRoomMode.
         val target = if (sameRoomMode) 0.0 else requested
         val track = remoteAudioTrack
         volumeRampRunnable?.let { volumeHandler.removeCallbacks(it) }
         if (track == null) {
+            // La consigne n'est pas perdue pour autant : elle reste dans
+            // pendingVolume, et applyVolumeNow la posera quand la piste
+            // arrivera (voir onTrack). C'est ce rattrapage qui manquait — une
+            // consigne arrivée avant la piste ne s'appliquait jamais, et le
+            // curseur semblait mort pour le reste de l'appel.
             currentVolume = target
+            TranscriptionTrace.record(
+                "APPEL rampe",
+                "demandé=$requested cible=$target — aucune piste distante, en attente",
+            )
             return
         }
+        TranscriptionTrace.record(
+            "APPEL rampe",
+            "demandé=$requested cible=$target départ=$currentVolume mêmePièce=$sameRoomMode",
+        )
         val start = currentVolume
         val steps = 20
         val stepDelayMs = 60L
@@ -650,6 +756,13 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         audioManager.isSpeakerphoneOn = true
         pinSystemVolume()
+        TranscriptionTrace.record(
+            "APPEL audio système",
+            "mode précédent=$savedAudioMode hautParleurPrécédent=$savedSpeakerphoneOn " +
+                "volumeAppelSauvegardé=$savedCallVolume → fixé à " +
+                "${audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)}/" +
+                "${audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)}",
+        )
     }
 
     /**
@@ -733,12 +846,23 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                 val track = transceiver?.receiver?.track()
                 if (track is VideoTrack) {
                     remoteVideoTrack = track
+                    TranscriptionTrace.record("APPEL onTrack", "piste vidéo du proche reçue")
                     remoteRenderer?.let { track.addSink(it) }
                 } else if (track is AudioTrack) {
                     remoteAudioTrack = track
-                    val initialVolume = if (sameRoomMode) 0.0 else pendingVolume
-                    track.setVolume(initialVolume)
-                    currentVolume = initialVolume
+                    TranscriptionTrace.record(
+                        "APPEL onTrack",
+                        "piste audio du proche reçue — mêmePièce=$sameRoomMode consigne=$pendingVolume",
+                    )
+                    // Le niveau n'est PAS posé ici. onTrack s'exécute sur le
+                    // thread de signalisation de WebRTC ; rampVolumeTo, lui,
+                    // travaille sur le thread principal. Poser le volume des
+                    // deux côtés, c'est laisser une rampe en cours écraser
+                    // cette valeur — ou l'inverse — selon lequel finit le
+                    // dernier. On repasse donc par le seul thread qui a le
+                    // droit de toucher au volume, et par le seul chemin qui
+                    // sait ce qui prime sur quoi (le mode même pièce).
+                    volumeHandler.post { applyVolumeNow() }
                     attachTranscriptionSink(track, TranscriptionSource.CALL)
                 }
             }
@@ -746,6 +870,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             override fun onIceCandidatesRemoved(candidates: Array<IceCandidate>) {}
             override fun onSignalingChange(newState: PeerConnection.SignalingState?) {}
             override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {
+                TranscriptionTrace.record("APPEL ICE", newState?.name ?: "null")
                 when (newState) {
                     PeerConnection.IceConnectionState.DISCONNECTED,
                     PeerConnection.IceConnectionState.FAILED -> scheduleAutoHangupOnIceFailure()
@@ -800,6 +925,11 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         // L'écho ne s'arrêtait qu'à l'arrivée de l'instantané Firestore de
         // listenForSameRoomMode, quelques centaines de millisecondes plus tard.
         audioTrack.setEnabled(!pendingMicMuted && !sameRoomMode)
+        TranscriptionTrace.record(
+            "APPEL micro tablette",
+            "piste créée — actif=${!pendingMicMuted && !sameRoomMode} " +
+                "(coupéParLeProche=$pendingMicMuted mêmePièce=$sameRoomMode)",
+        )
         // Reliée en permanence, mais n'alimente la transcription que si
         // l'appelant a demandé d'écouter la pièce (voir setMicToRoom).
         attachTranscriptionSink(audioTrack, TranscriptionSource.ROOM)
@@ -834,6 +964,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     private fun cleanup() {
+        TranscriptionTrace.record("APPEL nettoyage", "fin de l'appel, remise à zéro de l'état")
         cancelScheduledAutoHangup()
         stopMediaWatchdog()
         restoreAudio()
