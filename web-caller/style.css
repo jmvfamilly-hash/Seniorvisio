@@ -648,3 +648,16 @@ body.video-mode #localVideo {
   line-height: 1.5;
   white-space: pre;
 }
+
+/* Son coupé chez Jean : à lire sans le chercher. Le rouge est réservé ici à
+   ce qui empêche la conversation d'avoir lieu, pas à une simple information. */
+.volume-warning {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #4A1F1C;
+  border: 1px solid #C0392B;
+  color: #FFD9D4;
+  font-size: 15px;
+  line-height: 1.4;
+}

@@ -897,6 +897,29 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      *
      * À n'appeler que depuis le thread principal.
      */
+    /**
+     * Le gain à poser sur la piste, pour une consigne donnée.
+     *
+     * ═══ L'ATTÉNUATION NE DOIT ÊTRE APPLIQUÉE QU'UNE FOIS ═══
+     *
+     * Depuis que le curseur agit aussi sur le flux système, une consigne de
+     * cinquante pour cent était appliquée DEUX FOIS : le flux descendait à
+     * trente-cinq pour cent de son maximum, et le gain de la piste multipliait
+     * encore par un demi. Le résultat tombait à moins de vingt pour cent, et
+     * le bas de la course devenait inaudible — un curseur poussé à cinq pour
+     * cent ne donnait strictement rien.
+     *
+     * C'est une faute que j'ai introduite en croyant ajouter un chemin de
+     * secours : deux chemins qui atténuent chacun de leur côté ne se doublent
+     * pas, ils se multiplient.
+     *
+     * Le flux système porte donc seul l'atténuation sous cent pour cent, et le
+     * gain de la piste ne sert plus qu'à AMPLIFIER au-delà. Zéro reste zéro :
+     * le mode même pièce doit couper franchement, pas atténuer.
+     */
+    private fun trackGainFor(target: Double): Double =
+        if (target <= 0.0) 0.0 else maxOf(1.0, target)
+
     private fun applyVolumeNow() {
         val target = if (sameRoomMode) 0.0 else pendingVolume
         val track = remoteAudioTrack
@@ -910,8 +933,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             CallTrace.record("APPEL volume", "niveau $target retenu, aucune piste distante encore")
             return
         }
-        track.setVolume(target)
-        CallTrace.record("APPEL volume", "niveau $target posé sur la piste distante")
+        val gain = trackGainFor(target)
+        track.setVolume(gain)
+        CallTrace.record("APPEL volume", "consigne $target → gain piste $gain")
     }
 
     private fun rampVolumeTo(requested: Double) {
@@ -941,16 +965,17 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             "APPEL rampe",
             "demandé=$requested cible=$target départ=$currentVolume mêmePièce=$sameRoomMode",
         )
-        val start = currentVolume
+        val start = trackGainFor(currentVolume)
+        val end = trackGainFor(target)
         val steps = 20
         val stepDelayMs = 60L
         var step = 0
         val runnable = object : Runnable {
             override fun run() {
                 step++
-                val value = start + (target - start) * (step.toFloat() / steps)
+                val value = start + (end - start) * (step.toFloat() / steps)
                 track.setVolume(value)
-                currentVolume = value
+                currentVolume = target
                 if (step < steps) volumeHandler.postDelayed(this, stepDelayMs)
             }
         }

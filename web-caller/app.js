@@ -98,7 +98,25 @@ function loadSavedSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (!raw) return null;
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    const saved = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    // ═══ UN VOLUME À ZÉRO NE SE MÉMORISE JAMAIS ═══
+    //
+    // Couper le son est un geste d'appel, pas une préférence. Personne ne
+    // décide « à l'avenir, Jean n'entendra rien » — on baisse le curseur à
+    // fond une fois, pour une raison du moment, et on raccroche.
+    //
+    // Mémorisé, ce zéro rouvrait l'appel suivant en silence : le document
+    // d'appel était créé avec remoteVolume = 0, la tablette obéissait
+    // parfaitement, et rien nulle part ne disait pourquoi Jean n'entendait
+    // plus rien. Des jours de recherche du côté de la tablette, alors que la
+    // consigne de silence partait d'ici.
+    //
+    // C'est exactement la faute déjà corrigée sur la coupure micro — quelques
+    // lignes plus bas, avec le même commentaire — et sur pendingMicMuted côté
+    // Android. Une consigne d'appel qui survit à l'appel, trois fois de suite,
+    // au même endroit de la même chaîne.
+    if (!(saved.volume > 0)) saved.volume = DEFAULT_SETTINGS.volume;
+    return saved;
   } catch (e) {
     return null;
   }
@@ -150,6 +168,7 @@ const els = {
   rememberSettingsButton: document.getElementById("rememberSettingsButton"),
   callStats: document.getElementById("callStats"),
   volumeSlider: document.getElementById("volumeSlider"),
+  volumeWarning: document.getElementById("volumeWarning"),
   captionToggle: document.getElementById("captionToggle"),
   tabletMicMuteToggle: document.getElementById("tabletMicMuteToggle"),
   slideshowInput: document.getElementById("slideshowInput"),
@@ -438,6 +457,7 @@ function applyScreenState(state) {
 els.callButton.addEventListener("click", async () => {
   const settings = loadSavedSettings() || DEFAULT_SETTINGS;
   applySettingsToUi(settings);
+  renderVolumeWarning();
   els.callingHint.textContent = "Connexion à sa tablette…";
   els.countdownFill.style.width = "0%";
   els.countdownText.textContent = "";
@@ -621,11 +641,33 @@ for (const [elementKey, field] of ADMIN_SLIDER_FIELDS) {
 
 let volumeDebounce = null;
 els.volumeSlider.addEventListener("input", () => {
+  renderVolumeWarning();
   clearTimeout(volumeDebounce);
   volumeDebounce = setTimeout(() => {
     engine.setRemoteVolume(Number(els.volumeSlider.value) / 100);
   }, 150);
 });
+
+/**
+ * Dit franchement que le son est coupé chez Jean, quand il l'est.
+ *
+ * Un curseur à zéro se voit quand on le regarde, et personne ne le regarde :
+ * il vit dans le panneau des réglages, qu'on ouvre rarement en pleine
+ * conversation. On entend Jean, on croit qu'il nous entend, et rien à l'écran
+ * ne dit le contraire.
+ *
+ * Un volume à zéro mémorisé d'un appel précédent a rendu Jean muet pendant
+ * des jours, et la cause a été cherchée partout ailleurs — dans la pile
+ * WebRTC, le routage audio, les fils temps réel. Une phrase à l'écran aurait
+ * suffi.
+ */
+function renderVolumeWarning() {
+  const muted = Number(els.volumeSlider.value) === 0;
+  els.volumeWarning.textContent = muted
+    ? "🔇 Le son est coupé chez Jean : il ne vous entend pas. Remontez le curseur."
+    : "";
+  els.volumeWarning.classList.toggle("hidden", !muted);
+}
 
 els.forceConnectButton.addEventListener("click", () => {
   els.forceConnectButton.disabled = true;

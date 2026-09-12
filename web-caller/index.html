@@ -171,6 +171,10 @@
         <div class="volume-control">
           <label for="volumeSlider">🔊 Volume chez Jean</label>
           <input type="range" id="volumeSlider" min="0" max="200" value="100" step="5" data-unit=" %">
+          <!-- Dit franchement quand le son est coupé chez Jean. Un curseur à
+               zéro se voit quand on le regarde, et personne ne le regarde en
+               pleine conversation. -->
+          <p class="volume-warning hidden" id="volumeWarning"></p>
         </div>
 
         <!-- Cas où le proche est physiquement à côté de Jean : la tablette ne
