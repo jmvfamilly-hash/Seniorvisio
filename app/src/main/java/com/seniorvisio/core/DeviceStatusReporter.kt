@@ -73,6 +73,43 @@ class DeviceStatusReporter(private val context: Context) {
         }
     }
 
+    /**
+     * Publie le journal technique de la visiophonie, EN CLAIR.
+     *
+     * ═══ Pourquoi celui-ci n'est pas chiffré, et c'est correct ═══
+     *
+     * Il ne contient aucune donnée personnelle, par construction et non par
+     * discipline : le chemin de la transcription n'appelle jamais [CallTrace]
+     * (voir le commentaire de cette classe). Des niveaux, des booléens, des
+     * compteurs d'octets, des noms d'états.
+     *
+     * Le chiffrement de l'autre trace existe parce qu'elle transporte ce qui
+     * se dit dans la chambre de Jean. Appliquer la même cérémonie ici —
+     * allumer un interrupteur, coller une clé, attendre une publication —
+     * coûterait trois occasions de ne pas obtenir le journal, pour protéger
+     * des nombres.
+     *
+     * ═══ Seulement quand il a changé ═══
+     *
+     * Hors appel, rien ne s'écrit dans ce journal, donc rien ne part sur le
+     * réseau. Le coût en régime normal est exactement nul, et c'est ce qui
+     * permet de le laisser allumé en permanence — donc d'avoir la trace de la
+     * PREMIÈRE panne, celle qu'on n'avait pas prévue.
+     */
+    private val callLogFlush = object : Runnable {
+        override fun run() {
+            if (CallTrace.hasNewLines()) {
+                deviceDoc.collection(DIAG_COLLECTION).document(DIAG_CALL_LOG).set(
+                    mapOf(
+                        FIELD_DIAG_TEXT to CallTrace.dump(BuildConfig.BUILD_REV),
+                        FIELD_DIAG_AT to FieldValue.serverTimestamp(),
+                    )
+                ).addOnFailureListener { e -> Log.e(TAG, "Échec de publication du journal d'appel", e) }
+            }
+            retryHandler.postDelayed(this, CALL_LOG_FLUSH_MS)
+        }
+    }
+
     /** À appeler périodiquement (voir CallListenerService, déjà un foreground service permanent). */
     fun reportHeartbeat() {
         val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
@@ -266,6 +303,13 @@ class DeviceStatusReporter(private val context: Context) {
      * ci-dessous), donc pas besoin de la rappeler à la main.
      */
     fun listenForRemoteCommands() {
+        // Armé ici, une fois pour la vie du service. Retiré d'abord, parce que
+        // cette méthode se rappelle elle-même après une erreur d'écoute (voir
+        // plus bas) : sans ce retrait, chaque réabonnement ajouterait une
+        // publication de plus, et le journal partirait deux fois, puis trois.
+        retryHandler.removeCallbacks(callLogFlush)
+        retryHandler.postDelayed(callLogFlush, CALL_LOG_FLUSH_MS)
+
         // Un seul listener pour toutes les commandes à distance : chaque
         // addSnapshotListener sur ce document est facturé une lecture à chaque
         // écriture, y compris celles que la tablette fait elle-même.
@@ -792,6 +836,20 @@ class DeviceStatusReporter(private val context: Context) {
 
         /** Intervalle entre deux publications d'une trace en cours (voir traceFlush). */
         private const val TRACE_FLUSH_MS = 60_000L
+
+        // --- Journal technique de la visiophonie, en clair (voir CallTrace) ---
+        private const val DIAG_COLLECTION = "diag"
+        private const val DIAG_CALL_LOG = "journal-appel"
+        private const val FIELD_DIAG_TEXT = "texte"
+        private const val FIELD_DIAG_AT = "at"
+
+        /**
+         * Vingt secondes : assez court pour qu'un appel qui vient d'échouer
+         * soit lisible avant qu'on ait fini de reprendre le téléphone, assez
+         * long pour ne rien coûter — le journal ne part que s'il a changé, donc
+         * jamais hors appel.
+         */
+        private const val CALL_LOG_FLUSH_MS = 20_000L
         private const val FIELD_TRANSCRIPTION_DIAGNOSTIC = "transcriptionDiagnostic"
         private const val FIELD_PAID_USAGE = "paidUsage"
 

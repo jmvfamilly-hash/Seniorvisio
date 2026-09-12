@@ -629,3 +629,22 @@ body.video-mode #localVideo {
   overflow: hidden;
   max-width: 100%;
 }
+
+/* Journal technique de l'appel (voir CallTrace côté Android). Chasse fixe et
+   défilement horizontal propre : ses colonnes sont alignées au caractère près,
+   et un retour à la ligne automatique les décalerait toutes, ce qui rend
+   justement illisible ce qu'on vient y chercher. */
+.call-log {
+  margin: 12px 0 0;
+  padding: 12px;
+  max-height: 340px;
+  overflow: auto;
+  background: #14202F;
+  border: 1px solid #2C3E55;
+  border-radius: 8px;
+  color: #C7D3E3;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+}

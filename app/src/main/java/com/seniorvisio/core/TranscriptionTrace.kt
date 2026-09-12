@@ -189,36 +189,6 @@ object TranscriptionTrace {
     }
 
     /**
-     * Exécute un rappel venu de Firestore ou de WebRTC en journalisant son
-     * entrée, et SANS laisser une exception remonter.
-     *
-     * ═══ Pourquoi avaler l'exception est ici le bon choix ═══
-     *
-     * Un rappel d'instantané Firestore s'exécute sur le thread principal. Une
-     * exception qui en sort ne « fait pas échouer le réglage » : elle TUE LE
-     * PROCESSUS. Vu de la chambre, l'appel s'interrompt brutalement au moment
-     * précis où le proche a touché une case, et rien n'indique que les deux
-     * faits sont liés.
-     *
-     * L'arbitrage n'est donc pas « masquer une erreur » contre « la voir » :
-     * c'est « le réglage n'a pas pris, et on sait lequel » contre « l'appel
-     * s'arrête ». Pour un appareil que personne ne relève, c'est sans appel.
-     *
-     * L'erreur n'est pas perdue pour autant — elle part dans le journal
-     * système ET dans la trace, avec le nom du rappel fautif, ce qui est
-     * strictement plus que ce qu'un plantage laisse derrière lui.
-     */
-    fun guard(source: String, detail: String = "", block: () -> Unit) {
-        record(source, detail)
-        try {
-            block()
-        } catch (e: Throwable) {
-            Log.e(TAG, "Exception dans $source, appel préservé", e)
-            record("APPEL EXCEPTION", "$source : ${e.javaClass.simpleName} ${e.message ?: ""}")
-        }
-    }
-
-    /**
      * Découpe le texte en morceaux chiffrés, prêts à être écrits dans Firestore.
      *
      * Rend une liste vide si aucune clé n'a été fournie à la compilation —

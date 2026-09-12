@@ -26,6 +26,17 @@ service cloud.firestore {
       // — et il le faut, parce que ces règles-ci laissent lire n'importe qui,
       // alors qu'une trace de reconnaissance est un transcript de la chambre
       // de Jean.
+      // Le journal technique de la visiophonie. Une règle de plus pour la
+      // même raison que les deux au-dessus : les règles ne descendent pas
+      // toutes seules.
+      //
+      // Celui-ci est EN CLAIR, et c'est délibéré : il ne contient aucune
+      // donnée personnelle (voir CallTrace — la garantie tient à ce que le
+      // chemin de la transcription n'y écrit jamais, pas à une consigne). Ce
+      // qu'il contient pourrait être affiché sur la porte de la chambre.
+      match /diag/{name} {
+        allow read, write: if true;
+      }
       match /traces/{traceId} {
         allow read, write: if true;
         match /chunks/{index} {

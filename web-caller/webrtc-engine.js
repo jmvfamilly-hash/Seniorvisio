@@ -562,9 +562,23 @@ class RealCallEngine extends CallEngine {
    * Android). 1 = volume normal, 0 = muet, >1 = amplifié.
    */
   async setRemoteVolume(volume) {
-    if (this._callDocRef) {
-      await this._callDocRef.update({ remoteVolume: volume }).catch(() => {});
+    if (!this._callDocRef) {
+      // Dit plutôt qu'avalé. Un curseur qu'on bouge hors appel n'a rien à
+      // régler, mais c'est aussi ce qu'on verrait si la référence d'appel
+      // avait été perdue en cours de route — et c'était l'une des hypothèses
+      // à éliminer quand le curseur ne faisait rien.
+      console.warn("[engine] Volume ignoré : aucun appel en cours");
+      return;
     }
+    // L'échec était avalé par un catch vide, ici comme ailleurs. Une écriture
+    // Firestore refusée ne laissait alors strictement aucune trace, ni à
+    // l'écran ni dans la console : le curseur paraissait sans effet, et rien
+    // ne permettait de distinguer « la consigne n'est pas partie » de « elle
+    // est partie et la tablette n'en a rien fait ». Ce sont pourtant deux
+    // pannes opposées.
+    await this._callDocRef
+      .update({ remoteVolume: volume })
+      .catch((e) => console.warn("[engine] Volume non transmis :", e));
   }
 
   /**
@@ -684,6 +698,22 @@ class RealCallEngine extends CallEngine {
     // autonome — et rajouteraient silencieusement du texte périmé à la fin.
     const announced = latest.data().chunks;
     return typeof announced === "number" ? ordered.slice(0, announced) : ordered;
+  }
+
+  /**
+   * Le journal technique de la visiophonie, en clair (voir CallTrace côté
+   * Android). Rend null si la tablette n'en a encore jamais publié.
+   *
+   * Aucune clé ici, et rien à déchiffrer : ce journal ne contient pas de
+   * parole, seulement des niveaux, des états et des compteurs.
+   */
+  async readCallLog(deviceId) {
+    if (!this._available) return null;
+    const doc = await this._db
+      .collection("devices").doc(deviceId).collection("diag").doc("journal-appel")
+      .get();
+    if (!doc.exists) return null;
+    return { text: doc.data().texte || "", at: doc.data().at || null };
   }
 
   async cancelCall() {

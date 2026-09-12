@@ -522,6 +522,21 @@
           <button id="speechTraceDownload" class="secondary-button">Récupérer la trace</button>
           <p class="hint" id="speechTraceResult"></p>
 
+          <!-- Le journal technique, à côté et non à la place. Les deux ne
+               répondent pas aux mêmes questions : celui-ci dit ce qu'a fait
+               l'appel, l'autre dit ce qui a été entendu. Celui-ci se lit sans
+               rien allumer ni coller, parce qu'il n'y a rien à protéger
+               dedans — que des niveaux, des états et des compteurs. -->
+          <h4>Journal technique de l'appel</h4>
+          <p class="hint">
+            Sans clé et sans interrupteur : il tourne en permanence et ne
+            contient aucune parole, seulement des niveaux, des états et des
+            compteurs. C'est ici qu'on lit pourquoi le son ou la connexion
+            n'ont pas fait ce qu'on attendait.
+          </p>
+          <button id="callLogRefresh" class="secondary-button">Afficher le journal technique</button>
+          <pre id="callLogText" class="call-log" hidden></pre>
+
           <div class="caption-control">
             <label>
               <input type="checkbox" id="roomHandoffToggle">

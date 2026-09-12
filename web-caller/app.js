@@ -127,6 +127,8 @@ const els = {
   speechTraceKey: document.getElementById("speechTraceKey"),
   speechTraceDownload: document.getElementById("speechTraceDownload"),
   speechTraceResult: document.getElementById("speechTraceResult"),
+  callLogRefresh: document.getElementById("callLogRefresh"),
+  callLogText: document.getElementById("callLogText"),
   idle: document.getElementById("stateIdle"),
   calling: document.getElementById("stateCalling"),
   blocked: document.getElementById("stateBlocked"),
@@ -1061,6 +1063,32 @@ for (const [elementKey, field] of ENGINE_SELECT_FIELDS) {
     writeDeviceSetting(field, els[elementKey].value, els[elementKey]);
   });
 }
+
+// --- Journal technique de l'appel, en clair -------------------------------
+// Sans clé et sans interrupteur, parce qu'il n'y a rien à protéger dedans
+// (voir CallTrace côté Android). Affiché à l'écran plutôt que téléchargé : on
+// le consulte juste après un appel qui s'est mal passé, souvent debout, et
+// ouvrir un fichier texte sur un téléphone pour lire trente lignes est une
+// épreuve de plus.
+els.callLogRefresh.addEventListener("click", async () => {
+  els.callLogText.hidden = false;
+  els.callLogText.textContent = "Lecture…";
+  try {
+    const log = await engine.readCallLog(CONFIG.deviceDocId);
+    if (!log) {
+      els.callLogText.textContent =
+        "La tablette n'a encore rien publié ici. Ce journal part au plus tard " +
+        "vingt secondes après le premier événement d'appel — si cette ligne " +
+        "persiste après un appel, c'est la tablette elle-même qui n'écrit pas.";
+      return;
+    }
+    const when = log.at?.toDate ? log.at.toDate().toLocaleString("fr-FR") : "date inconnue";
+    els.callLogText.textContent = `Publié le ${when}\n\n${log.text}`;
+  } catch (e) {
+    console.warn("[app] Journal technique illisible :", e);
+    els.callLogText.textContent = "Lecture impossible : " + e.message;
+  }
+});
 
 // --- Trace de reconnaissance : clé de lecture et récupération --------------
 //

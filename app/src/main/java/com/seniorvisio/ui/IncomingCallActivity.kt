@@ -28,8 +28,8 @@ import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.AlertVolume
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.ScreenTheme
+import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.TranscriptionSource
-import com.seniorvisio.core.TranscriptionTrace
 import com.seniorvisio.core.UsageStats
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.signaling.CallSignalingClient
@@ -252,7 +252,7 @@ class IncomingCallActivity : AppCompatActivity() {
         // qui couvre le cas où le décompte arrive à son terme dans la même
         // seconde que l'appui.
         buttonAnswerNow.setOnClickListener {
-            TranscriptionTrace.record("APPEL décompte", "abrégé par le bouton de la tablette")
+            CallTrace.record("APPEL décompte", "abrégé par le bouton de la tablette")
             alertController.cancel()
             connectVideoCall()
         }
