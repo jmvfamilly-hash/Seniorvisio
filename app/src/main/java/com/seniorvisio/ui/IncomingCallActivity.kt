@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import android.view.Gravity
@@ -673,6 +674,7 @@ class IncomingCallActivity : AppCompatActivity() {
         // La source du texte suffit à décider de sa zone : rien ici n'a à
         // savoir laquelle (voir HomeZonesController).
         callEngine.listenForCaptions { source, text, isFinal ->
+            noteCaptionShape(source, text, isFinal)
             runOnUiThread { zones.submitTranscription(source, text, isFinal) }
         }
 
@@ -759,6 +761,56 @@ class IncomingCallActivity : AppCompatActivity() {
             captionLines = zones.captionLines(),
         )
     }
+
+    /**
+     * Note la FORME d'un texte transcrit dans le journal technique, jamais son
+     * contenu.
+     *
+     * ═══ Pourquoi la forme suffit, et pourquoi le contenu est exclu ═══
+     *
+     * La question posée est précise : un nombre nu — « 75 » — apparaît sur
+     * l'écran de Jean quand le proche bouge le curseur de volume. Or il
+     * n'existe que deux écrivains dans ces zones, et tous deux ne font que
+     * transmettre ce qu'un moteur de reconnaissance a produit. Si ce nombre
+     * est bien arrivé par là, c'est donc que la tablette a ENTENDU quelque
+     * chose qu'elle a transcrit ainsi — et non qu'un réglage s'affiche par
+     * erreur. Les deux causes se traitent à l'opposé.
+     *
+     * « quatre mots, 23 caractères » ne dit rien de ce qui se passe dans la
+     * chambre. « deux caractères, uniquement des chiffres » répond à la
+     * question. Le journal technique reste donc ce qu'il promet d'être : des
+     * nombres et des états, rien qui puisse être lu comme une parole.
+     *
+     * Seuls les textes COURTS ET ENTIÈREMENT NUMÉRIQUES sont signalés à part.
+     * Un texte court et numérique n'est pas une parole : c'est exactement
+     * l'objet de l'enquête, et le distinguer ne révèle rien d'autre.
+     */
+    private fun noteCaptionShape(source: TranscriptionSource, text: String, isFinal: Boolean) {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
+        val numérique = trimmed.length <= 6 && trimmed.all { it.isDigit() || it == ' ' || it == '%' }
+        if (numérique) {
+            // Celui-là, on le cite : c'est l'objet de la recherche, et il ne
+            // peut pas constituer une parole.
+            CallTrace.record(
+                "APPEL texte",
+                "source=$source figé=$isFinal — TEXTE PUREMENT NUMÉRIQUE « $trimmed »",
+            )
+            return
+        }
+        // Tous les autres : forme seulement. Une fois par seconde au plus, un
+        // partiel arrivant plusieurs fois par seconde.
+        val now = SystemClock.elapsedRealtime()
+        if (!isFinal && now - lastCaptionShapeAtMs < 1_000L) return
+        lastCaptionShapeAtMs = now
+        CallTrace.record(
+            "APPEL texte",
+            "source=$source figé=$isFinal — ${trimmed.count { it == ' ' } + 1} mot(s), " +
+                "${trimmed.length} caractère(s)",
+        )
+    }
+
+    private var lastCaptionShapeAtMs = 0L
 
     private fun publishScreenStateIfChanged() {
         val callText = zones.displayedText(TranscriptionSource.CALL)
