@@ -1455,8 +1455,54 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         // l'appelant a demandé d'écouter la pièce (voir setMicToRoom).
         attachTranscriptionSink(audioTrack, TranscriptionSource.ROOM)
 
-        pc.addTrack(videoTrack, listOf("SVIO_STREAM"))
+        val videoSender = pc.addTrack(videoTrack, listOf("SVIO_STREAM"))
         pc.addTrack(audioTrack, listOf("SVIO_STREAM"))
+        preferResolutionOverFramerate(videoSender)
+    }
+
+    /**
+     * Demande à WebRTC de sacrifier la FLUIDITÉ plutôt que la DÉFINITION quand
+     * le débit ou le processeur manquent.
+     *
+     * ═══ Le réglage par défaut suppose une scène animée ═══
+     *
+     * Sous contrainte, WebRTC doit renoncer à quelque chose. Son arbitrage par
+     * défaut pour une caméra — BALANCED — baisse d'abord la définition, parce
+     * qu'il suppose du mouvement : un sport, une main qui passe, une caméra
+     * qu'on déplace. Une image floue mais fluide vaut alors mieux.
+     *
+     * Ce n'est pas ce qui se passe ici. Ce que Jean regarde, c'est un VISAGE
+     * QUI PARLE, le plus souvent assis et immobile. Sur une telle scène, la
+     * fluidité ne se remarque pas — quinze images par seconde suffisent à un
+     * visage — tandis que la définition décide de tout : reconnaître une
+     * expression, voir qu'on lui sourit.
+     *
+     * MAINTAIN_RESOLUTION inverse donc l'arbitrage. C'est un réglage gratuit :
+     * il ne demande ni processeur ni débit supplémentaire, il dit seulement
+     * lequel des deux abandonner en premier.
+     *
+     * Le résultat est journalisé : ces paramètres peuvent être refusés avant
+     * que la négociation ne soit terminée, et un refus silencieux laisserait
+     * croire le réglage appliqué.
+     */
+    private fun preferResolutionOverFramerate(sender: org.webrtc.RtpSender?) {
+        if (sender == null) {
+            CallTrace.record("APPEL vidéo", "aucun émetteur vidéo : arbitrage de dégradation non posé")
+            return
+        }
+        try {
+            val parameters = sender.parameters
+            parameters.degradationPreference =
+                org.webrtc.RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
+            val applied = sender.setParameters(parameters)
+            CallTrace.record(
+                "APPEL vidéo",
+                if (applied) "définition privilégiée sur la fluidité"
+                else "REFUSÉ : arbitrage de dégradation non appliqué",
+            )
+        } catch (e: Exception) {
+            CallTrace.record("APPEL vidéo", "arbitrage de dégradation impossible : ${e.javaClass.simpleName}")
+        }
     }
 
     private fun createFrontCameraCapturer(): CameraVideoCapturer? {

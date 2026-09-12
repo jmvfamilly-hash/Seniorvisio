@@ -178,8 +178,26 @@ class RealCallEngine extends CallEngine {
       // unité de capture audio, sans le traitement de voix (donc sans son
       // annulation d'écho matérielle, excellente par défaut). Ne pas
       // "durcir" ces contraintes sans test réel sur iPad ET Android.
+      //
+      // LA VIDÉO, ELLE, EST CONTRAINTE — et l'avertissement ci-dessus ne s'y
+      // applique pas : il porte sur la chaîne AUDIO d'iOS, dont le traitement
+      // de voix se perd quand on passe un objet de contraintes. `audio: true`
+      // reste donc intact, et ne doit pas être touché.
+      //
+      // Sans contrainte, le navigateur choisissait seul : sur téléphone, c'est
+      // souvent 640×480, pour une image ensuite étirée sur toute la dalle de
+      // Jean. Demander 1280×720 donne quatre fois plus de matière à l'encodeur,
+      // sans rien coûter à la tablette — c'est le téléphone du proche qui
+      // encode, et il est infiniment plus puissant qu'elle.
+      //
+      // `ideal` et NON `exact` ni `min` : une contrainte impérative que
+      // l'appareil ne sait pas satisfaire fait ÉCHOUER getUserMedia en entier,
+      // et l'appel n'aurait alors plus ni image ni son. Avec `ideal`, c'est un
+      // souhait : le navigateur s'en approche et n'échoue jamais pour cette
+      // raison. Sur un appareil qui ne sait pas faire 720p, on retombe
+      // simplement sur ce qu'il sait faire.
       localStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: true,
       });
     } catch (e) {
