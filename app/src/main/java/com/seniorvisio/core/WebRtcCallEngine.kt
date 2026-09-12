@@ -180,7 +180,20 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         }
         this.callId = callId
         state = CallState.RINGING_SILENT
-        CallTrace.record("APPEL préparation", "callId=$callId")
+        // Version ET permissions dès la première ligne, avant tout le reste.
+        //
+        // Ce sont les deux choses dont l'absence rend toutes les lignes
+        // suivantes ininterprétables : un journal sans la ligne attendue peut
+        // vouloir dire « la fonction n'a pas tourné » ou « la tablette est sur
+        // une version qui ne l'écrit pas encore », et ces deux lectures
+        // conduisent à des recherches opposées. La question ne doit plus jamais
+        // se poser.
+        CallTrace.record(
+            "APPEL préparation",
+            "${com.seniorvisio.BuildConfig.BUILD_REV} — callId=$callId · permissions caméra=" +
+                "${ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED}" +
+                " micro=${ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED}",
+        )
         ensureFactory()
 
         signaling.fetchOfferSdp(callId) { sdp ->
@@ -217,9 +230,14 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         val pc = peerConnection
         if (pc == null) {
             Log.e(TAG, "answer() appelée avant que la connexion WebRTC ne soit prête : appel ignoré")
+            CallTrace.record("APPEL answer", "ABANDON : connexion WebRTC pas encore prête")
             return
         }
-        val id = callId ?: return
+        val id = callId
+        if (id == null) {
+            CallTrace.record("APPEL answer", "ABANDON : aucun identifiant d'appel")
+            return
+        }
         state = CallState.CONNECTING
         CallTrace.record(
             "APPEL answer",
@@ -953,7 +971,11 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * qui bloque les boutons physiques).
      */
     private fun configureAudioForCall() {
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        if (audioManager == null) {
+            CallTrace.record("APPEL audio système", "ABANDON : AudioManager indisponible")
+            return
+        }
         savedAudioMode = audioManager.mode
         savedSpeakerphoneOn = audioManager.isSpeakerphoneOn
         savedCallVolume = audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
@@ -1324,16 +1346,52 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     private fun startLocalMedia(pc: PeerConnection) {
-        val factory = peerConnectionFactory ?: return
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
-        ) {
+        // ═══ PLUS AUCUNE SORTIE SILENCIEUSE SUR CE CHEMIN ═══
+        //
+        // Les trois `return` ci-dessous ne disaient rien. Or ils décident de
+        // TOUT ce qui suit : la configuration audio, le routage vers le
+        // haut-parleur, le focus, la piste micro, la piste caméra. Quand l'un
+        // d'eux se déclenche, l'appel se connecte quand même — la piste
+        // distante arrive, l'image du proche s'affiche — mais la tablette n'a
+        // rien configuré de son côté, et rien nulle part ne le dit.
+        //
+        // C'est exactement la forme de panne qu'on poursuit depuis des jours :
+        // pas d'erreur, pas de plantage, juste une moitié de chaîne qui n'a
+        // jamais démarré. Une fonction qui abandonne sans le dire est une
+        // fonction dont on ne peut pas diagnostiquer l'absence.
+        val factory = peerConnectionFactory
+        if (factory == null) {
+            CallTrace.record("APPEL média local", "ABANDON : aucune fabrique WebRTC")
+            return
+        }
+        val caméra = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+        val micro = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+        if (caméra != PackageManager.PERMISSION_GRANTED || micro != PackageManager.PERMISSION_GRANTED) {
+            // Android révoque de lui-même les permissions d'une application
+            // qu'il juge inutilisée, et met en veille prolongée celles qu'on ne
+            // touche pas. Sur une tablette que personne n'ouvre jamais, ce cas
+            // n'est pas théorique — et il se manifesterait exactement ainsi :
+            // un appel qui se connecte, une image qui arrive, et rien qui
+            // parte ni ne sorte du côté de Jean.
+            CallTrace.record(
+                "APPEL média local",
+                "ABANDON : permission refusée — caméra=${caméra == PackageManager.PERMISSION_GRANTED} " +
+                    "micro=${micro == PackageManager.PERMISSION_GRANTED}",
+            )
             return
         }
 
         configureAudioForCall()
 
-        val capturer = createFrontCameraCapturer() ?: return
+        val capturer = createFrontCameraCapturer()
+        if (capturer == null) {
+            // Après configureAudioForCall, donc l'audio système est bien posé —
+            // mais on sort AVANT la piste micro, et le proche n'entendra jamais
+            // Jean. La caméra occupée par un autre composant suffit à produire
+            // ce cas, et il varie d'un appel à l'autre.
+            CallTrace.record("APPEL média local", "ABANDON : aucune caméra disponible — AUCUNE PISTE MICRO CRÉÉE")
+            return
+        }
         videoCapturer = capturer
         val videoSource = factory.createVideoSource(false)
         val helper = SurfaceTextureHelper.create("SeniorVisioCapture", eglBase.eglBaseContext)
