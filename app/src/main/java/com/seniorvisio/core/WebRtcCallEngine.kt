@@ -33,6 +33,7 @@ import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 import java.nio.ByteBuffer
+import java.util.concurrent.ArrayBlockingQueue
 
 /**
  * Implémentation WebRTC de [CallEngine]. Le signaling (échange de l'offre,
@@ -352,9 +353,140 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                 // format attendu par le moteur.
                 val bytes = ByteArray(audioData.remaining())
                 audioData.duplicate().get(bytes)
-                transcription.feed(source, bytes, sampleRate, numberOfChannels)
+                enqueueForTranscription(PcmBlock(source, bytes, sampleRate, numberOfChannels))
             }
         })
+    }
+
+    /** Un bloc de son de dix millisecondes, en route vers la transcription. */
+    private class PcmBlock(
+        val source: TranscriptionSource,
+        val pcm16: ByteArray,
+        val sampleRate: Int,
+        val channels: Int,
+    )
+
+    /**
+     * ═══ POURQUOI CETTE FILE EXISTE : LE SON DE L'APPEL EN DÉPENDAIT ═══
+     *
+     * [onData] s'exécute sur LE THREAD DE RENDU AUDIO DE WEBRTC — celui qui
+     * alimente le haut-parleur. Tout ce qui s'y attarde retarde d'autant le
+     * son que Jean entend ; tout ce qui s'y bloque le fait taire.
+     *
+     * Et jusqu'ici, `transcription.feed` y était appelé directement, à chaque
+     * bloc de dix millisecondes. C'est-à-dire, dans ce seul appel : deux
+     * lectures de préférences, un calcul de niveau, un rééchantillonnage de
+     * 48 vers 16 kHz, l'ouverture éventuelle d'une session réseau, puis selon
+     * le moteur un envoi WebSocket ou le décodage natif de Vosk — du calcul
+     * lourd, synchrone, précédé la première fois du chargement d'un modèle qui
+     * prend plusieurs secondes.
+     *
+     * LE SYMPTÔME CORRESPONDAIT TRAIT POUR TRAIT. Aucun son au début de
+     * l'appel ; aucun effet du curseur de volume ni du mode même pièce — il ne
+     * s'agissait pas d'un niveau mais d'un thread affamé, sur quoi aucun
+     * réglage n'a de prise ; et le son qui apparaissait EXACTEMENT à la fin du
+     * retard d'affichage, c'est-à-dire à l'instant où la session se ferme sur
+     * le silence qui suit la phrase et où `feed` ressort immédiatement.
+     * Reproductible, parce que ce n'était pas une course mais une propriété du
+     * montage.
+     *
+     * ═══ ON JETTE, ON N'ATTEND JAMAIS ═══
+     *
+     * File BORNÉE, et débordement par l'ancien. Une file qui grandirait sans
+     * fin finirait par manquer de mémoire ; une file qui ferait attendre le
+     * producteur ramènerait très exactement le défaut qu'on corrige, avec une
+     * indirection de plus pour le cacher.
+     *
+     * L'arbitrage est tranché d'avance : si le moteur est plus lent que le
+     * temps réel, **la voix du proche passe avant sa transcription**. Du texte
+     * perdu se remarque et se répare ; un haut-parleur muet met fin à l'appel.
+     */
+    private val transcriptionQueue = ArrayBlockingQueue<PcmBlock>(TRANSCRIPTION_QUEUE_BLOCKS)
+
+    @Volatile private var transcriptionWorker: Thread? = null
+    @Volatile private var transcriptionWorkerRunning = false
+    private var droppedBlocks = 0
+    private var lastSlowFeedLoggedAtMs = 0L
+
+    private fun enqueueForTranscription(block: PcmBlock) {
+        if (transcriptionQueue.offer(block)) return
+        // Pleine : on fait de la place en jetant le plus ancien. poll() et
+        // offer() ne bloquent ni l'un ni l'autre, ce qui est toute la raison
+        // de les employer ici plutôt qu'un put().
+        transcriptionQueue.poll()
+        transcriptionQueue.offer(block)
+        droppedBlocks++
+        // Une ligne sur cent blocs perdus : de quoi voir que le moteur ne suit
+        // pas, sans transformer le journal en compteur.
+        if (droppedBlocks % 100 == 0) {
+            CallTrace.record("APPEL transcription", "$droppedBlocks blocs de son écartés, moteur en retard")
+        }
+    }
+
+    // Synchronisées toutes les deux : le démarrage est demandé depuis le
+    // thread principal (startLocalMedia) ET depuis le thread de signalisation
+    // de WebRTC (onTrack). Un simple test de nullité laisserait les deux
+    // passer ensemble et créer deux threads, dont l'un ne serait plus jamais
+    // arrêté — exactement le genre de fuite qui ne se voit qu'au bout de
+    // plusieurs appels.
+    @Synchronized
+    private fun startTranscriptionWorker() {
+        if (transcriptionWorker != null) return
+        transcriptionWorkerRunning = true
+        transcriptionWorker = Thread {
+            while (transcriptionWorkerRunning) {
+                val block = try {
+                    transcriptionQueue.take()
+                } catch (e: InterruptedException) {
+                    break
+                }
+                // Une exception du moteur ne doit pas emporter ce thread : sans
+                // lui, plus aucune transcription ne repart de l'appel, et rien
+                // ne le dirait.
+                try {
+                    // Mesuré, parce que c'est la mesure qui tranche. Un bloc
+                    // couvre dix millisecondes de son : si le moteur met plus
+                    // longtemps que ça à le traiter, il est plus lent que le
+                    // temps réel — et c'est ce retard-là qui, tant qu'il
+                    // s'accumulait sur le thread de rendu, rendait la tablette
+                    // muette. Journalisé seulement au-delà d'un seuil franc, et
+                    // au plus une fois par seconde.
+                    val startedAt = SystemClock.elapsedRealtime()
+                    transcription.feed(block.source, block.pcm16, block.sampleRate, block.channels)
+                    val tookMs = SystemClock.elapsedRealtime() - startedAt
+                    if (tookMs >= SLOW_FEED_MS && startedAt - lastSlowFeedLoggedAtMs >= 1_000L) {
+                        lastSlowFeedLoggedAtMs = startedAt
+                        CallTrace.record(
+                            "APPEL transcription",
+                            "moteur lent : $tookMs ms pour 10 ms de son, ${transcriptionQueue.size} blocs en attente",
+                        )
+                    }
+                } catch (e: Throwable) {
+                    CallTrace.record(
+                        "APPEL transcription",
+                        "exception du moteur : ${e.javaClass.simpleName} ${e.message ?: ""}",
+                    )
+                }
+            }
+        }.apply {
+            // Priorité de fond, explicitement : ce thread partage le processeur
+            // avec le rendu audio et vidéo de l'appel, et il n'a aucune raison
+            // de leur disputer un cycle. C'est la même décision que la file qui
+            // jette plutôt que d'attendre, appliquée à l'ordonnancement.
+            priority = Thread.MIN_PRIORITY
+            name = "SeniorVisioTranscription"
+            isDaemon = true
+            start()
+        }
+    }
+
+    @Synchronized
+    private fun stopTranscriptionWorker() {
+        transcriptionWorkerRunning = false
+        transcriptionWorker?.interrupt()
+        transcriptionWorker = null
+        transcriptionQueue.clear()
+        droppedBlocks = 0
     }
 
     /**
@@ -908,6 +1040,11 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                     // droit de toucher au volume, et par le seul chemin qui
                     // sait ce qui prime sur quoi (le mode même pièce).
                     volumeHandler.post { applyVolumeNow() }
+                    // Idempotent, et répété ici à dessein : startLocalMedia le
+                    // démarre déjà, mais rien dans l'interface de WebRTC ne
+                    // garantit l'ordre des deux, et un bloc déposé sans
+                    // consommateur resterait en file.
+                    startTranscriptionWorker()
                     attachTranscriptionSink(track, TranscriptionSource.CALL)
                 }
             }
@@ -956,6 +1093,11 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         val videoTrack = factory.createVideoTrack("SVIO_VIDEO", videoSource)
         localVideoTrack = videoTrack
         localRenderer?.let { videoTrack.addSink(it) }
+
+        // Démarré avant la première piste : c'est lui qui consomme la file, et
+        // un bloc déposé sans consommateur ne serait transcrit que bien plus
+        // tard, quand la file déborderait.
+        startTranscriptionWorker()
 
         val audioTrack = factory.createAudioTrack("SVIO_AUDIO", factory.createAudioSource(MediaConstraints()))
         localAudioTrack = audioTrack
@@ -1011,6 +1153,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private fun cleanup() {
         CallTrace.record("APPEL nettoyage", "fin de l'appel, remise à zéro de l'état")
         cancelScheduledAutoHangup()
+        stopTranscriptionWorker()
         stopMediaWatchdog()
         restoreAudio()
         transcription.stop()
@@ -1177,5 +1320,27 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
          * qui a causé un écho franc côté proche tant que ce réglage était à 1.0.
          */
         private const val SYSTEM_VOLUME_RATIO = 0.7f
+
+        /**
+         * Profondeur de la file d'attente de transcription, en blocs de dix
+         * millisecondes — donc deux secondes de son.
+         *
+         * Assez pour absorber une lenteur passagère du moteur (une ouverture
+         * de session, une rafale réseau) sans rien perdre. Pas davantage :
+         * au-delà, ce qui serait transcrit appartiendrait à une phrase que
+         * Jean a fini d'entendre depuis longtemps, et le texte arriverait
+         * décalé plutôt que manquant — ce qui est pire, parce que ça ne se
+         * voit pas.
+         */
+        private const val TRANSCRIPTION_QUEUE_BLOCKS = 200
+
+        /**
+         * Au-delà, le moteur est franchement plus lent que le temps réel et la
+         * trace le dit. Cinquante millisecondes pour dix millisecondes de son,
+         * c'est un facteur cinq : soutenu, il vide la file en quelques
+         * secondes et il aurait, avant cette file, tenu le haut-parleur muet
+         * tout ce temps.
+         */
+        private const val SLOW_FEED_MS = 50L
     }
 }
