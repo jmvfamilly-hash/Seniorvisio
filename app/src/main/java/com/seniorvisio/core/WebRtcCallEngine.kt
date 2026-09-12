@@ -33,7 +33,6 @@ import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 import java.nio.ByteBuffer
-import java.util.concurrent.ArrayBlockingQueue
 
 /**
  * Implémentation WebRTC de [CallEngine]. Le signaling (échange de l'offre,
@@ -155,6 +154,13 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var savedAudioMode: Int? = null
     private var savedSpeakerphoneOn: Boolean = false
     private var savedCallVolume: Int? = null
+
+    /**
+     * Le volume média d'avant l'appel. Sauvegardé depuis que le curseur agit
+     * aussi sur ce flux : sans ça, un appel laisserait la musique, les vidéos
+     * et les alarmes de la tablette au niveau choisi par le proche.
+     */
+    private var savedMusicVolume: Int? = null
 
     override var state: CallState = CallState.IDLE
         private set
@@ -339,6 +345,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * risqué pour un bénéfice nul.
      */
     private fun attachTranscriptionSink(track: AudioTrack, source: TranscriptionSource) {
+        val ring = ringFor(source)
         track.addSink(object : AudioTrackSink {
             override fun onData(
                 audioData: ByteBuffer,
@@ -348,80 +355,55 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                 numberOfFrames: Int,
                 absoluteCaptureTimestampMs: Long,
             ) {
-                // AudioTrackSink fournit un ByteBuffer (potentiellement direct,
-                // en lecture seule) — on en extrait une copie en ByteArray, le
-                // format attendu par le moteur.
-                val bytes = ByteArray(audioData.remaining())
-                audioData.duplicate().get(bytes)
-                enqueueForTranscription(PcmBlock(source, bytes, sampleRate, numberOfChannels))
+                // Le format est relevé à chaque bloc plutôt que supposé fixe :
+                // il ne change pas en pratique, mais le déduire d'une constante
+                // serait une hypothèse invérifiable, et une erreur de fréquence
+                // ne se voit PAS — elle produit du texte plausible et faux.
+                ring.sampleRate = sampleRate
+                ring.channels = numberOfChannels
+                // AUCUNE ALLOCATION ICI. Recopie directe dans un tampon
+                // préalloué (voir PcmRingBuffer) : ce rappel s'exécute sur le
+                // fil qui alimente le haut-parleur, et une pause du
+                // ramasse-miettes y tombe sur le fil qui alloue.
+                ring.pcm.write(audioData, audioData.remaining())
             }
         })
     }
 
-    /** Un bloc de son de dix millisecondes, en route vers la transcription. */
-    private class PcmBlock(
-        val source: TranscriptionSource,
-        val pcm16: ByteArray,
-        val sampleRate: Int,
-        val channels: Int,
-    )
-
     /**
-     * ═══ POURQUOI CETTE FILE EXISTE : LE SON DE L'APPEL EN DÉPENDAIT ═══
+     * Le son d'une source, en attente de transcription, avec son format.
      *
-     * [onData] s'exécute sur LE THREAD DE RENDU AUDIO DE WEBRTC — celui qui
-     * alimente le haut-parleur. Tout ce qui s'y attarde retarde d'autant le
-     * son que Jean entend ; tout ce qui s'y bloque le fait taire.
+     * ═══ UN TAMPON PAR SOURCE, ET C'EST ESSENTIEL ═══
      *
-     * Et jusqu'ici, `transcription.feed` y était appelé directement, à chaque
-     * bloc de dix millisecondes. C'est-à-dire, dans ce seul appel : deux
-     * lectures de préférences, un calcul de niveau, un rééchantillonnage de
-     * 48 vers 16 kHz, l'ouverture éventuelle d'une session réseau, puis selon
-     * le moteur un envoi WebSocket ou le décodage natif de Vosk — du calcul
-     * lourd, synchrone, précédé la première fois du chargement d'un modèle qui
-     * prend plusieurs secondes.
+     * Les deux pistes — le microphone de la tablette et la voix du proche —
+     * alimentent la transcription en permanence. Les verser dans un tampon
+     * commun mélangerait deux flux d'octets qui n'ont ni le même contenu ni
+     * forcément le même format, et le moteur recevrait un entrelacement des
+     * deux. Le résultat ne planterait pas : il produirait du texte, et ce
+     * texte n'aurait aucun rapport avec ce qui a été dit. C'est la pire forme
+     * de défaut, celle qui a l'air de marcher.
      *
-     * LE SYMPTÔME CORRESPONDAIT TRAIT POUR TRAIT. Aucun son au début de
-     * l'appel ; aucun effet du curseur de volume ni du mode même pièce — il ne
-     * s'agissait pas d'un niveau mais d'un thread affamé, sur quoi aucun
-     * réglage n'a de prise ; et le son qui apparaissait EXACTEMENT à la fin du
-     * retard d'affichage, c'est-à-dire à l'instant où la session se ferme sur
-     * le silence qui suit la phrase et où `feed` ressort immédiatement.
-     * Reproductible, parce que ce n'était pas une course mais une propriété du
-     * montage.
-     *
-     * ═══ ON JETTE, ON N'ATTEND JAMAIS ═══
-     *
-     * File BORNÉE, et débordement par l'ancien. Une file qui grandirait sans
-     * fin finirait par manquer de mémoire ; une file qui ferait attendre le
-     * producteur ramènerait très exactement le défaut qu'on corrige, avec une
-     * indirection de plus pour le cacher.
-     *
-     * L'arbitrage est tranché d'avance : si le moteur est plus lent que le
-     * temps réel, **la voix du proche passe avant sa transcription**. Du texte
-     * perdu se remarque et se répare ; un haut-parleur muet met fin à l'appel.
+     * La fréquence et le nombre de canaux voyagent donc AVEC le son, et non à
+     * côté. Vosk applique telle quelle la fréquence qu'on lui annonce :
+     * déclarer 16 kHz à du 48 kHz lui fait analyser une bande trois fois trop
+     * large, et là encore le texte sort — faux.
      */
-    private val transcriptionQueue = ArrayBlockingQueue<PcmBlock>(TRANSCRIPTION_QUEUE_BLOCKS)
+    private class SourceRing(val source: TranscriptionSource, capacityBytes: Int) {
+        val pcm = PcmRingBuffer(capacityBytes)
+        @Volatile var sampleRate = 0
+        @Volatile var channels = 0
+    }
+
+    private val callRing = SourceRing(TranscriptionSource.CALL, RING_CAPACITY_BYTES)
+    private val roomRing = SourceRing(TranscriptionSource.ROOM, RING_CAPACITY_BYTES)
+
+    private fun ringFor(source: TranscriptionSource) =
+        if (source == TranscriptionSource.CALL) callRing else roomRing
 
     @Volatile private var transcriptionWorker: Thread? = null
     @Volatile private var transcriptionWorkerRunning = false
-    private var droppedBlocks = 0
     private var lastSlowFeedLoggedAtMs = 0L
-
-    private fun enqueueForTranscription(block: PcmBlock) {
-        if (transcriptionQueue.offer(block)) return
-        // Pleine : on fait de la place en jetant le plus ancien. poll() et
-        // offer() ne bloquent ni l'un ni l'autre, ce qui est toute la raison
-        // de les employer ici plutôt qu'un put().
-        transcriptionQueue.poll()
-        transcriptionQueue.offer(block)
-        droppedBlocks++
-        // Une ligne sur cent blocs perdus : de quoi voir que le moteur ne suit
-        // pas, sans transformer le journal en compteur.
-        if (droppedBlocks % 100 == 0) {
-            CallTrace.record("APPEL transcription", "$droppedBlocks blocs de son écartés, moteur en retard")
-        }
-    }
+    private var lastOverflowLoggedAtMs = 0L
 
     // Synchronisées toutes les deux : le démarrage est demandé depuis le
     // thread principal (startLocalMedia) ET depuis le thread de signalisation
@@ -434,34 +416,61 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         if (transcriptionWorker != null) return
         transcriptionWorkerRunning = true
         transcriptionWorker = Thread {
+            // Préalloué une fois, réutilisé jusqu'à la fin de l'appel.
+            val readBuffer = ByteArray(READ_CHUNK_BYTES)
             while (transcriptionWorkerRunning) {
-                val block = try {
-                    transcriptionQueue.take()
-                } catch (e: InterruptedException) {
-                    break
+                // On ne draine que la source réellement transcrite, et on vide
+                // l'autre. Sans ce vidage, revenir sur une source ferait
+                // rejouer d'un coup plusieurs secondes de son périmé, que Jean
+                // verrait s'écrire comme s'il venait d'être dit.
+                val active = transcription.activeSource()
+                if (active != TranscriptionSource.CALL) callRing.pcm.clear()
+                if (active != TranscriptionSource.ROOM) roomRing.pcm.clear()
+                val ring = when (active) {
+                    null -> null
+                    else -> ringFor(active)
                 }
-                // Une exception du moteur ne doit pas emporter ce thread : sans
-                // lui, plus aucune transcription ne repart de l'appel, et rien
-                // ne le dirait.
+                if (ring == null) {
+                    // Rien à transcrire : on n'occupe pas le processeur à
+                    // tourner à vide. Le réveil viendra du prochain passage.
+                    try {
+                        Thread.sleep(IDLE_SLEEP_MS)
+                    } catch (e: InterruptedException) {
+                        break
+                    }
+                    continue
+                }
+                val read = ring.pcm.read(readBuffer, readBuffer.size)
+                if (read <= 0) {
+                    if (Thread.currentThread().isInterrupted) break
+                    continue
+                }
+                reportOverflowIfAny(ring)
                 try {
-                    // Mesuré, parce que c'est la mesure qui tranche. Un bloc
-                    // couvre dix millisecondes de son : si le moteur met plus
-                    // longtemps que ça à le traiter, il est plus lent que le
-                    // temps réel — et c'est ce retard-là qui, tant qu'il
-                    // s'accumulait sur le thread de rendu, rendait la tablette
-                    // muette. Journalisé seulement au-delà d'un seuil franc, et
-                    // au plus une fois par seconde.
+                    // LA COPIE EST ICI, ET ELLE EST NÉCESSAIRE. La réserve de
+                    // pré-roll et la file de BufferedSpeechRecognizer gardent
+                    // la RÉFÉRENCE du tableau qu'on leur donne ; leur passer le
+                    // tampon réutilisé ferait écraser sous elles du son qu'elles
+                    // croient détenir — sans plantage, juste du texte faux.
+                    //
+                    // Elle est sur ce fil-ci, et par blocs de cent
+                    // millisecondes au lieu de dix : dix fois moins
+                    // d'allocations, et plus aucune là où elle coûtait.
+                    val chunk = readBuffer.copyOf(read)
                     val startedAt = SystemClock.elapsedRealtime()
-                    transcription.feed(block.source, block.pcm16, block.sampleRate, block.channels)
+                    transcription.feed(ring.source, chunk, ring.sampleRate, ring.channels)
                     val tookMs = SystemClock.elapsedRealtime() - startedAt
                     if (tookMs >= SLOW_FEED_MS && startedAt - lastSlowFeedLoggedAtMs >= 1_000L) {
                         lastSlowFeedLoggedAtMs = startedAt
                         CallTrace.record(
                             "APPEL transcription",
-                            "moteur lent : $tookMs ms pour 10 ms de son, ${transcriptionQueue.size} blocs en attente",
+                            "moteur lent : $tookMs ms pour ${read / bytesPerMs(ring)} ms de son",
                         )
                     }
                 } catch (e: Throwable) {
+                    // Une exception du moteur ne doit pas emporter ce thread :
+                    // sans lui, plus aucune transcription ne repart de l'appel,
+                    // et rien ne le dirait.
                     CallTrace.record(
                         "APPEL transcription",
                         "exception du moteur : ${e.javaClass.simpleName} ${e.message ?: ""}",
@@ -471,8 +480,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         }.apply {
             // Priorité de fond, explicitement : ce thread partage le processeur
             // avec le rendu audio et vidéo de l'appel, et il n'a aucune raison
-            // de leur disputer un cycle. C'est la même décision que la file qui
-            // jette plutôt que d'attendre, appliquée à l'ordonnancement.
+            // de leur disputer un cycle. C'est la même décision que le tampon
+            // qui écrase plutôt que d'attendre, appliquée à l'ordonnancement.
             priority = Thread.MIN_PRIORITY
             // Pas « SeniorVisio-Transcription » : c'est déjà le nom du fil de
             // BufferedSpeechRecognizer, et deux threads dont les noms ne
@@ -484,13 +493,29 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         }
     }
 
+    /** Octets par milliseconde de son pour cette source, au moins un. */
+    private fun bytesPerMs(ring: SourceRing): Int =
+        maxOf(1, ring.sampleRate * ring.channels * 2 / 1000)
+
+    private fun reportOverflowIfAny(ring: SourceRing) {
+        val lost = ring.pcm.overwrittenBytes
+        if (lost <= 0) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastOverflowLoggedAtMs < 5_000L) return
+        lastOverflowLoggedAtMs = now
+        CallTrace.record(
+            "APPEL transcription",
+            "${lost / bytesPerMs(ring)} ms de son écrasées depuis le début, moteur en retard",
+        )
+    }
+
     @Synchronized
     private fun stopTranscriptionWorker() {
         transcriptionWorkerRunning = false
         transcriptionWorker?.interrupt()
         transcriptionWorker = null
-        transcriptionQueue.clear()
-        droppedBlocks = 0
+        callRing.pcm.clear()
+        roomRing.pcm.clear()
     }
 
     /**
@@ -897,9 +922,11 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         savedAudioMode = audioManager.mode
         savedSpeakerphoneOn = audioManager.isSpeakerphoneOn
         savedCallVolume = audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
+        savedMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        audioManager.isSpeakerphoneOn = true
+        routeToBuiltinSpeaker(audioManager)
         pinSystemVolume()
+        reportAudioRouting(audioManager)
         CallTrace.record(
             "APPEL audio système",
             "mode précédent=$savedAudioMode hautParleurPrécédent=$savedSpeakerphoneOn " +
@@ -962,23 +989,118 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      */
     private fun applySystemVolume(requested: Double) {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
         val share = requested.coerceIn(0.0, 1.0)
+        val voice = setStreamShare(audioManager, AudioManager.STREAM_VOICE_CALL, share)
+        // LES DEUX FLUX, ET NON LE SEUL FLUX D'APPEL.
+        //
+        // STREAM_VOICE_CALL est le flux de la téléphonie. Cette tablette n'a
+        // pas de radio cellulaire : rien ne garantit qu'il porte quoi que ce
+        // soit, ni même qu'il ait un maximum non nul. Si la couche d'émulation
+        // de téléphonie d'Android ne joue pas son rôle, le canal média prend le
+        // relais et le son sort quand même.
+        //
+        // Régler les deux n'a aucun inconvénient : celui qui ne porte rien
+        // ignore la consigne, celui qui porte l'applique. Les deux niveaux sont
+        // journalisés, ce qui dira lequel des deux travaille réellement —
+        // question qu'aucune correction, prise seule, n'aurait tranchée.
+        val music = setStreamShare(audioManager, AudioManager.STREAM_MUSIC, share)
+        CallTrace.record("APPEL volume système", "consigne=$requested → appel $voice · média $music")
+    }
+
+    /** Pose la part demandée du plafond sur un flux. Rend « niveau/max » pour le journal. */
+    private fun setStreamShare(audioManager: AudioManager, stream: Int, share: Double): String {
+        val max = audioManager.getStreamMaxVolume(stream)
+        if (max <= 0) return "indisponible"
         val level = Math.round(max * SYSTEM_VOLUME_RATIO * share).toInt().coerceIn(0, max)
-        audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, level, 0)
+        return try {
+            audioManager.setStreamVolume(stream, level, 0)
+            "$level/$max"
+        } catch (e: SecurityException) {
+            // Un flux peut être verrouillé par une politique de l'appareil.
+            // Le dire, plutôt que de laisser croire que la consigne est passée.
+            "refusé (${e.javaClass.simpleName})"
+        }
+    }
+
+    /**
+     * Force la sortie sur le haut-parleur intégré.
+     *
+     * `setSpeakerphoneOn` est déprécié depuis Android 12 et son effet n'y est
+     * plus garanti : il agit sur une notion de « haut-parleur » héritée de la
+     * téléphonie, que le routage moderne a remplacée par un choix explicite de
+     * périphérique. Sur une tablette sous Android 36, s'y fier revient à
+     * espérer qu'une API dépréciée fasse encore ce qu'elle promettait.
+     *
+     * [AudioManager.setCommunicationDevice] nomme le périphérique voulu, et
+     * rend un booléen — il dit donc s'il a réussi, ce que l'ancien ne faisait
+     * pas. L'ancien reste en repli sous Android 12, et si la sélection échoue.
+     */
+    private fun routeToBuiltinSpeaker(audioManager: AudioManager) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val speaker = audioManager.availableCommunicationDevices
+                .firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+            if (speaker != null && audioManager.setCommunicationDevice(speaker)) {
+                CallTrace.record("APPEL routage", "sortie forcée sur le haut-parleur intégré")
+                return
+            }
+            CallTrace.record(
+                "APPEL routage",
+                "setCommunicationDevice indisponible ou refusé, repli sur setSpeakerphoneOn",
+            )
+        }
+        @Suppress("DEPRECATION")
+        audioManager.isSpeakerphoneOn = true
+    }
+
+    /**
+     * Relève l'état réel du routage audio au début de l'appel.
+     *
+     * C'est la ligne qui manquait à toutes les corrections précédentes : elles
+     * changeaient le réglage sans jamais constater ce que l'appareil en
+     * faisait. Si le flux d'appel annonce ici un maximum nul, ou si aucune
+     * sortie n'est sélectionnée, la cause du silence est dans cette ligne et
+     * nulle part ailleurs.
+     */
+    private fun reportAudioRouting(audioManager: AudioManager) {
+        val sorties = try {
+            audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+                .joinToString(", ") { "${it.type}" }
+        } catch (e: Exception) {
+            "illisibles"
+        }
+        val choisie = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            audioManager.communicationDevice?.type?.toString() ?: "aucune"
+        } else {
+            "n/a"
+        }
         CallTrace.record(
-            "APPEL volume système",
-            "consigne=$requested → flux $level/$max (plafond ${SYSTEM_VOLUME_RATIO})",
+            "APPEL routage",
+            "mode=${audioManager.mode} sortieChoisie=$choisie " +
+                "maxAppel=${audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)} " +
+                "maxMédia=${audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)} " +
+                "sorties=[$sorties]",
         )
     }
 
     private fun restoreAudio() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        // Rendue AVANT le mode : une sortie de communication laissée
+        // sélectionnée après l'appel garde le routage détourné pour tout le
+        // reste du système, alarmes comprises, jusqu'au redémarrage.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            try {
+                audioManager.clearCommunicationDevice()
+            } catch (e: Exception) {
+            }
+        }
         savedAudioMode?.let { audioManager.mode = it }
+        @Suppress("DEPRECATION")
         audioManager.isSpeakerphoneOn = savedSpeakerphoneOn
         savedCallVolume?.let { audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, it, 0) }
+        savedMusicVolume?.let { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, it, 0) }
         savedAudioMode = null
         savedCallVolume = null
+        savedMusicVolume = null
     }
 
     /**
@@ -1326,17 +1448,26 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         private const val SYSTEM_VOLUME_RATIO = 0.7f
 
         /**
-         * Profondeur de la file d'attente de transcription, en blocs de dix
-         * millisecondes — donc deux secondes de son.
+         * Taille d'un tampon circulaire, par source.
          *
-         * Assez pour absorber une lenteur passagère du moteur (une ouverture
-         * de session, une rafale réseau) sans rien perdre. Pas davantage :
-         * au-delà, ce qui serait transcrit appartiendrait à une phrase que
-         * Jean a fini d'entendre depuis longtemps, et le texte arriverait
-         * décalé plutôt que manquant — ce qui est pire, parce que ça ne se
-         * voit pas.
+         * Dimensionné au pire cas observable — 48 kHz, deux canaux, seize bits
+         * font 192 ko par seconde — pour tenir deux secondes. Assez pour
+         * absorber une lenteur passagère du moteur. Pas davantage : au-delà, ce
+         * qui serait transcrit appartiendrait à une phrase que Jean a fini
+         * d'entendre, et le texte arriverait décalé plutôt que manquant — ce
+         * qui est pire, parce que ça ne se voit pas.
          */
-        private const val TRANSCRIPTION_QUEUE_BLOCKS = 200
+        private const val RING_CAPACITY_BYTES = 384_000
+
+        /**
+         * Taille d'une bouchée lue par le fil de transcription : environ cent
+         * millisecondes au format le plus courant. Dix fois moins d'allocations
+         * qu'un bloc de dix millisecondes, sans ajouter de retard perceptible.
+         */
+        private const val READ_CHUNK_BYTES = 19_200
+
+        /** Pause du fil de transcription quand aucune source n'est active. */
+        private const val IDLE_SLEEP_MS = 100L
 
         /**
          * Au-delà, le moteur est franchement plus lent que le temps réel et la

@@ -90,16 +90,25 @@ jobs:
       # listenForRemoteUpdate, déjà actif en continu côté tablette dès qu'elle
       # est Device Owner) : sans cette étape, rien ne renseignait jamais le
       # champ Firestore qu'elle écoute, il fallait le faire à la main
-      # (console Firebase). Seulement sur AssemblyAI : les autres branches ne
-      # sont pas censées atteindre la tablette réelle de Jean sans revue.
+      # (console Firebase).
+      #
+      # DEUX BRANCHES, ET DEUX SEULEMENT. AssemblyAI est la ligne principale.
+      # test-audio-refonte livre aussi, à la demande explicite de
+      # l'administrateur, pour éprouver sur l'appareil réel la refonte du
+      # chemin audio — elle ne se vérifie pas autrement, aucun émulateur
+      # n'ayant le routage audio de cette tablette.
+      #
+      # Nommées une par une, jamais un motif : un joker ferait livrer chez Jean
+      # la première branche de travail venue, et le garde-fou ne se remarquerait
+      # qu'après. À RETIRER quand la refonte aura rejoint la ligne principale.
       - name: Set up Node.js
-        if: github.ref == 'refs/heads/AssemblyAI'
+        if: github.ref == 'refs/heads/AssemblyAI' || github.ref == 'refs/heads/test-audio-refonte'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Demande la mise à jour à distance de la tablette
-        if: github.ref == 'refs/heads/AssemblyAI'
+        if: github.ref == 'refs/heads/AssemblyAI' || github.ref == 'refs/heads/test-audio-refonte'
         env:
           BUILD_REV: rev${{ github.run_number }}
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json

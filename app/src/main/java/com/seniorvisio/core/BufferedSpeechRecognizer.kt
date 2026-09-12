@@ -80,6 +80,9 @@ class BufferedSpeechRecognizer(
             }
         }.apply {
             name = "SeniorVisio-Transcription"
+            // Démon : on ne l'attend plus à l'arrêt (voir stop()), il ne doit
+            // donc pas retenir le processus s'il traîne sur un dernier bloc.
+            isDaemon = true
             // Sous la priorité du fil audio : ce fil-ci peut attendre, celui
             // qui capte le son ne le peut pas.
             priority = Thread.NORM_PRIORITY
@@ -108,14 +111,19 @@ class BufferedSpeechRecognizer(
     override fun stop() {
         running = false
         worker?.interrupt()
-        // Attente courte : on laisse au moteur une chance de finir le bloc en
-        // cours, sans bloquer l'appelant — stop() est appelé depuis le fil
-        // principal, à la fin d'un appel ou d'un changement de moteur.
-        try {
-            worker?.join(JOIN_TIMEOUT_MS)
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
-        }
+        // PLUS D'ATTENTE ICI. Un join d'une demi-seconde était posé pour
+        // laisser au moteur le temps de finir son bloc, en supposant que
+        // l'appelant était le fil principal, à la fin d'un appel.
+        //
+        // Cette supposition est fausse depuis longtemps : stop() est appelé
+        // depuis stopSession(), donc depuis feed(), donc depuis le fil qui
+        // vide la file de son — et avant rev273, depuis le fil de rendu audio
+        // de WebRTC lui-même. Une demi-seconde d'attente y gelait la livraison
+        // du son au haut-parleur, à chaque silence d'un moteur facturé.
+        //
+        // Ce que le join protégeait était mince : le dernier bloc en cours de
+        // traitement. Ce qu'il coûtait ne l'était pas. Le fil est marqué
+        // démon et sort de lui-même ; on ne l'attend plus.
         worker = null
         queue.clear()
         if (droppedBlocks > 0) {
@@ -137,6 +145,5 @@ class BufferedSpeechRecognizer(
         const val MAX_QUEUED_BLOCKS = 64
 
         const val POLL_TIMEOUT_MS = 200L
-        const val JOIN_TIMEOUT_MS = 500L
     }
 }
