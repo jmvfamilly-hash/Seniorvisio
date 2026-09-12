@@ -798,11 +798,17 @@ class IncomingCallActivity : AppCompatActivity() {
             )
             return
         }
-        // Tous les autres : forme seulement. Une fois par seconde au plus, un
-        // partiel arrivant plusieurs fois par seconde.
-        val now = SystemClock.elapsedRealtime()
-        if (!isFinal && now - lastCaptionShapeAtMs < 1_000L) return
-        lastCaptionShapeAtMs = now
+        // Seulement les textes FIGÉS, et non plus un relevé par seconde.
+        //
+        // Ce relevé-là a coûté une version entière. Un par seconde, sur un
+        // appel de deux minutes, remplissait à lui seul le journal et poussait
+        // dehors les lignes d'ouverture — version installée, permissions,
+        // focus, routage. On en a conclu que le focus n'avait pas été demandé,
+        // alors que sa ligne avait simplement été évincée par celle-ci.
+        //
+        // Un texte figé par phrase suffit largement à connaître la forme de ce
+        // qui s'écrit, et ne noie plus rien.
+        if (!isFinal) return
         CallTrace.record(
             "APPEL texte",
             "source=$source figé=$isFinal — ${trimmed.count { it == ' ' } + 1} mot(s), " +
@@ -810,7 +816,6 @@ class IncomingCallActivity : AppCompatActivity() {
         )
     }
 
-    private var lastCaptionShapeAtMs = 0L
 
     private fun publishScreenStateIfChanged() {
         val callText = zones.displayedText(TranscriptionSource.CALL)

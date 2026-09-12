@@ -45,12 +45,36 @@ import java.util.Locale
 object CallTrace {
 
     /**
-     * Un appel documenté de bout en bout tient en une centaine de lignes.
-     * Trois cents en gardent trois, ce qui suffit à comparer un appel qui
-     * marche avec celui qui vient d'échouer — comparaison qui tranche souvent
-     * plus vite que la lecture d'un seul.
+     * ═══ DEUX TAMPONS, ET LA RAISON EST UNE ERREUR DÉJÀ COMMISE ═══
+     *
+     * Il n'y en avait qu'un, de trois cents lignes, qui jetait les plus
+     * anciennes. Puis un relevé par seconde s'y est ajouté. Sur un appel de
+     * deux minutes, le compte est dépassé — et les lignes évincées sont celles
+     * du DÉBUT : la version installée, les permissions, le focus audio, le
+     * routage, les niveaux à la connexion.
+     *
+     * C'est-à-dire précisément celles qu'on venait y chercher. Un journal qui
+     * jette le début d'un appel est un journal qui perd la réponse et garde la
+     * question : « aucune trace focus » ne voulait pas dire que la fonction
+     * n'avait pas tourné, mais que sa ligne avait été poussée dehors.
+     *
+     * L'ouverture d'un appel n'est jamais la partie la moins intéressante. Les
+     * premières lignes sont donc mises à part et ne sont JAMAIS évincées ; le
+     * reste continue de rouler. Ce n'est pas de la place en plus, c'est le bon
+     * bout qu'on garde.
      */
-    private const val MAX_ENTRIES = 300
+    private const val MAX_OPENING = 120
+
+    /** La suite, qui roule. Un appel long ne doit pas faire perdre le début. */
+    private const val MAX_ENTRIES = 900
+
+    /** Les premières lignes depuis le dernier début d'appel. Jamais jetées. */
+    private val opening = ArrayDeque<String>()
+
+    /** Source qui marque le début d'un appel et remet [opening] à zéro. */
+    private const val CALL_START = "APPEL préparation"
+
+    private var droppedFromTail = 0
 
     private val entries = ArrayDeque<String>()
     private var startedAtMs = SystemClock.elapsedRealtime()
@@ -67,10 +91,22 @@ object CallTrace {
         val since = (now - startedAtMs) / 1000.0
         val delta = (now - lastAtMs) / 1000.0
         lastAtMs = now
-        entries.addLast(
-            String.format(Locale.FRANCE, "[%9.3fs %+8.3fs] %-26s | %s", since, delta, source, detail)
-        )
-        while (entries.size > MAX_ENTRIES) entries.removeFirst()
+        val line = String.format(Locale.FRANCE, "[%9.3fs %+8.3fs] %-26s | %s", since, delta, source, detail)
+
+        // Un nouvel appel commence : l'ouverture du précédent a fait son temps.
+        if (source == CALL_START) {
+            opening.clear()
+            droppedFromTail = 0
+        }
+        if (opening.size < MAX_OPENING) {
+            opening.addLast(line)
+        } else {
+            entries.addLast(line)
+            while (entries.size > MAX_ENTRIES) {
+                entries.removeFirst()
+                droppedFromTail++
+            }
+        }
         dirty = true
 
         // Recopié dans la trace chiffrée quand elle tourne, pour que les deux
@@ -116,7 +152,20 @@ object CallTrace {
             appendLine("Sans donnée personnelle : aucun texte prononcé n'entre ici (voir CallTrace).")
             appendLine("Colonnes : [temps depuis le démarrage, écart avec la ligne précédente] origine | contenu")
             appendLine()
-            append(entries.joinToString("\n"))
+            append(opening.joinToString("\n"))
+            if (droppedFromTail > 0) {
+                // Dit, et non passé sous silence : un journal qui a perdu des
+                // lignes sans le dire se lit comme un journal complet, et une
+                // ligne manquante s'y interprète alors comme un événement qui
+                // n'a pas eu lieu. C'est exactement l'erreur qui a coûté une
+                // version entière.
+                appendLine()
+                appendLine("──── $droppedFromTail ligne(s) intermédiaire(s) perdue(s), la suite reprend ici ────")
+            }
+            if (entries.isNotEmpty()) {
+                appendLine()
+                append(entries.joinToString("\n"))
+            }
         }
     }
 }
