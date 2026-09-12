@@ -474,7 +474,11 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             // de leur disputer un cycle. C'est la même décision que la file qui
             // jette plutôt que d'attendre, appliquée à l'ordonnancement.
             priority = Thread.MIN_PRIORITY
-            name = "SeniorVisioTranscription"
+            // Pas « SeniorVisio-Transcription » : c'est déjà le nom du fil de
+            // BufferedSpeechRecognizer, et deux threads dont les noms ne
+            // diffèrent que par un tiret sont indiscernables dans un journal
+            // système — exactement là où on les cherche.
+            name = "SeniorVisio-AudioQueue"
             isDaemon = true
             start()
         }
