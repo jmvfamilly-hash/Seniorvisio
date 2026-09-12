@@ -129,6 +129,9 @@ const els = {
   speechTraceResult: document.getElementById("speechTraceResult"),
   callLogRefresh: document.getElementById("callLogRefresh"),
   callLogText: document.getElementById("callLogText"),
+  callLogCopy: document.getElementById("callLogCopy"),
+  callLogDownload: document.getElementById("callLogDownload"),
+  callLogStatus: document.getElementById("callLogStatus"),
   idle: document.getElementById("stateIdle"),
   calling: document.getElementById("stateCalling"),
   blocked: document.getElementById("stateBlocked"),
@@ -1073,6 +1076,7 @@ for (const [elementKey, field] of ENGINE_SELECT_FIELDS) {
 els.callLogRefresh.addEventListener("click", async () => {
   els.callLogText.hidden = false;
   els.callLogText.textContent = "Lecture…";
+  els.callLogStatus.textContent = "";
   try {
     const log = await engine.readCallLog(CONFIG.deviceDocId);
     if (!log) {
@@ -1080,14 +1084,58 @@ els.callLogRefresh.addEventListener("click", async () => {
         "La tablette n'a encore rien publié ici. Ce journal part au plus tard " +
         "vingt secondes après le premier événement d'appel — si cette ligne " +
         "persiste après un appel, c'est la tablette elle-même qui n'écrit pas.";
+      els.callLogCopy.hidden = true;
+      els.callLogDownload.hidden = true;
       return;
     }
     const when = log.at?.toDate ? log.at.toDate().toLocaleString("fr-FR") : "date inconnue";
     els.callLogText.textContent = `Publié le ${when}\n\n${log.text}`;
+    // Les deux gestes de sortie n'apparaissent qu'une fois qu'il y a quelque
+    // chose à sortir : un bouton qui ne peut rien faire est un bouton qu'on
+    // touche quand même, puis qu'on croit cassé.
+    els.callLogCopy.hidden = false;
+    els.callLogDownload.hidden = false;
   } catch (e) {
     console.warn("[app] Journal technique illisible :", e);
     els.callLogText.textContent = "Lecture impossible : " + e.message;
+    els.callLogCopy.hidden = true;
+    els.callLogDownload.hidden = true;
   }
+});
+
+els.callLogCopy.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(els.callLogText.textContent);
+    els.callLogStatus.textContent = "Journal copié — collez-le où vous voulez.";
+  } catch (e) {
+    // Le presse-papiers est refusé hors contexte sécurisé, et sur certains
+    // navigateurs mobiles quand le geste n'est pas reconnu comme direct. On
+    // sélectionne alors le texte pour que la copie manuelle demande un seul
+    // geste au lieu de trois.
+    const range = document.createRange();
+    range.selectNodeContents(els.callLogText);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    els.callLogStatus.textContent =
+      "Copie automatique refusée par le navigateur : le texte est sélectionné, " +
+      "il ne reste qu'à le copier.";
+  }
+});
+
+els.callLogDownload.addEventListener("click", () => {
+  const blob = new Blob([els.callLogText.textContent], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  // Horodaté : on en compare souvent deux, celui d'un appel qui marche et
+  // celui d'un appel qui ne marche pas, et deux fichiers du même nom se
+  // recouvrent sans prévenir.
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+  link.download = `seniorvisio-journal-appel-${stamp}.txt`;
+  link.click();
+  URL.revokeObjectURL(url);
+  els.callLogStatus.textContent = "Journal enregistré.";
 });
 
 // --- Trace de reconnaissance : clé de lecture et récupération --------------

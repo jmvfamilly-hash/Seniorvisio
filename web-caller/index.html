@@ -534,7 +534,16 @@
             compteurs. C'est ici qu'on lit pourquoi le son ou la connexion
             n'ont pas fait ce qu'on attendait.
           </p>
+          <!-- Trois gestes, parce qu'ils ne servent pas au même moment : lire
+               sur place quand on veut vérifier une ligne tout de suite, copier
+               quand on va le coller dans un message, télécharger quand on veut
+               le garder. Le journal fait plusieurs dizaines de lignes : le
+               recopier à la main sur un téléphone était une corvée qu'on n'a
+               pas à demander. -->
           <button id="callLogRefresh" class="secondary-button">Afficher le journal technique</button>
+          <button id="callLogCopy" class="secondary-button" hidden>📋 Copier</button>
+          <button id="callLogDownload" class="secondary-button" hidden>💾 Télécharger</button>
+          <p class="hint" id="callLogStatus"></p>
           <pre id="callLogText" class="call-log" hidden></pre>
 
           <div class="caption-control">
