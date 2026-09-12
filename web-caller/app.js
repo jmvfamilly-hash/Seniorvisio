@@ -952,7 +952,8 @@ function applyDeviceSettings(data) {
   // L'état de la trace, tel que la tablette le rapporte. Affiché plutôt que
   // déduit de la case cochée : la trace s'arrête toute seule au bout de dix
   // minutes, et ce qu'on croit avoir demandé n'est pas ce qui se passe.
-  els.speechTraceState.textContent = data.speechTraceState || "aucune trace enregistrée";
+  els.speechTraceState.textContent =
+    data.speechTraceState || "aucune trace jamais lancée sur cette tablette";
 
   // Empreinte du code d'accès, publiée par la tablette avec son signe de vie
   // (voir DeviceStatusReporter.adminPinFingerprint). Elle arrive par le même
@@ -1104,7 +1105,13 @@ els.speechTraceDownload.addEventListener("click", async () => {
   try {
     const chunks = await engine.readTraceChunks(CONFIG.deviceDocId);
     if (!chunks.length) {
-      els.speechTraceResult.textContent = "Aucune trace déposée par la tablette.";
+      // On renvoie à l'état publié juste au-dessus plutôt que de laisser
+      // conclure. « Rien à télécharger » a des causes opposées — la tablette
+      // n'a jamais reçu la commande, elle enregistre encore, ou elle a refusé
+      // de publier faute de clé — et c'est l'état, lui, qui les distingue.
+      els.speechTraceResult.textContent =
+        "Rien à télécharger pour l'instant. Voyez l'état affiché au-dessus : " +
+        "il dit si la tablette enregistre, a publié, ou n'a rien reçu.";
       return;
     }
     const parts = [];

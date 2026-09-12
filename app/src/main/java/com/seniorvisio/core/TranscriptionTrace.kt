@@ -99,15 +99,31 @@ object TranscriptionTrace {
         record("APP trace", "démarrée")
     }
 
+    /**
+     * Rend le texte de la trace SANS l'arrêter. Null si elle ne tourne pas.
+     *
+     * Existe pour que la trace puisse être publiée en cours de route, et non
+     * seulement à l'arrêt. La raison est directe : la panne qu'on cherche le
+     * plus souvent avec un journal, c'est celle qui tue l'application — et une
+     * trace qui n'est envoyée qu'à l'arrêt disparaît précisément dans ce
+     * cas-là, le seul où elle aurait tout expliqué.
+     */
+    @Synchronized
+    fun snapshot(reason: String): String? {
+        if (!recording) return null
+        return header(reason) + entries.joinToString("\n")
+    }
+
     /** Rend le texte complet de la trace et l'éteint. Null si elle ne tournait pas. */
     @Synchronized
     fun stopAndTake(reason: String): String? {
         if (!recording) return null
-        record("APP trace", "arrêtée : $reason")
-        recording = false
+        append("APP trace", "arrêtée : $reason")
         val body = entries.joinToString("\n")
+        val text = header(reason) + body
+        recording = false
         entries.clear()
-        return header(reason) + body
+        return text
     }
 
     /**

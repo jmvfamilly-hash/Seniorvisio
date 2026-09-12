@@ -672,10 +672,18 @@ class RealCallEngine extends CallEngine {
     // si jamais un effacement n'avait pas abouti.
     const latest = traces.docs.sort((a, b) => (a.id < b.id ? 1 : -1))[0];
     const chunks = await latest.ref.collection("chunks").get();
-    return chunks.docs
+    const ordered = chunks.docs
       .sort((a, b) => Number(a.id) - Number(b.id))
       .map((doc) => doc.data().data)
       .filter(Boolean);
+    // On s'en tient au nombre annoncé par l'index, et on ne prend pas ce qui
+    // traîne dans la sous-collection. La tablette republie la trace en cours
+    // au même endroit à intervalle régulier : si une publication tardive
+    // comptait moins de morceaux que la précédente, les surnuméraires
+    // resteraient là, se déchiffreraient sans erreur — chaque morceau est
+    // autonome — et rajouteraient silencieusement du texte périmé à la fin.
+    const announced = latest.data().chunks;
+    return typeof announced === "number" ? ordered.slice(0, announced) : ordered;
   }
 
   async cancelCall() {

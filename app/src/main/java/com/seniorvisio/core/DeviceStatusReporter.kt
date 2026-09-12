@@ -39,6 +39,40 @@ class DeviceStatusReporter(private val context: Context) {
         finishTrace("plafond de ${TranscriptionTrace.MAX_DURATION_MS / 60_000} minutes atteint")
     }
 
+    /**
+     * Identifiant de la trace en cours, fixé à son démarrage.
+     *
+     * Stable pour toute la durée de l'enregistrement, parce que la trace est
+     * réécrite au même endroit à chaque publication intermédiaire (voir
+     * [traceFlush]). Un identifiant tiré à chaque envoi accumulerait des
+     * traces partielles à effacer, et ferait courir l'effacement derrière
+     * l'écriture.
+     */
+    private var traceId: String? = null
+
+    /**
+     * Publie la trace sans l'arrêter, et se réarme.
+     *
+     * ═══ Pourquoi ne pas attendre l'arrêt ═══
+     *
+     * Une trace n'était envoyée qu'à son extinction. Or ce qu'on lui demande
+     * le plus souvent, c'est d'expliquer une panne qui TUE L'APPLICATION — et
+     * dans ce cas précis, le seul où elle aurait tout dit, elle disparaissait
+     * avec le processus. L'instrument était aveugle exactement là où on le
+     * braquait.
+     *
+     * Une minute est un compromis assumé : c'est au pire une minute perdue
+     * avant le plantage, pour dix écritures sur une session de dix minutes.
+     */
+    private val traceFlush = object : Runnable {
+        override fun run() {
+            TranscriptionTrace.snapshot("publication intermédiaire")?.let {
+                publishTrace(it, "en cours", finished = false)
+            }
+            retryHandler.postDelayed(this, TRACE_FLUSH_MS)
+        }
+    }
+
     /** À appeler périodiquement (voir CallListenerService, déjà un foreground service permanent). */
     fun reportHeartbeat() {
         val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
@@ -509,6 +543,46 @@ class DeviceStatusReporter(private val context: Context) {
         if (wanted && !TranscriptionTrace.isRecording()) {
             TranscriptionTrace.start()
             Log.i(TAG, "Trace de reconnaissance démarrée")
+            // Un identifiant par session d'enregistrement, et l'effacement des
+            // précédentes UNE SEULE FOIS, ici. Le faire à chaque publication
+            // ferait courir l'effacement derrière l'écriture.
+            traceId = java.time.Instant.now().toString().replace(":", "-")
+            deviceDoc.collection(TRACES_COLLECTION).get().addOnSuccessListener { old ->
+                old.documents.filter { it.id != traceId }.forEach { stale ->
+                    // Les morceaux D'ABORD, et un par un. Firestore n'efface
+                    // pas les sous-collections avec leur document parent :
+                    // supprimer le seul index laisserait derrière lui le
+                    // contenu chiffré de la trace précédente, invisible dans la
+                    // console et conservé indéfiniment. Pour un transcript de
+                    // la chambre de Jean, « invisible » n'est pas « effacé ».
+                    stale.reference.collection(CHUNKS_COLLECTION).get()
+                        .addOnSuccessListener { parts ->
+                            parts.documents.forEach { it.reference.delete() }
+                            stale.reference.delete()
+                        }
+                        .addOnFailureListener { stale.reference.delete() }
+                }
+            }
+            // Dire tout de suite que ça tourne, et avec quelle version.
+            //
+            // Sans cette ligne, le panneau continuait d'afficher « aucune
+            // trace enregistrée » du début à la fin de l'enregistrement. Quatre
+            // situations parfaitement différentes s'y confondaient : la
+            // commande n'est jamais arrivée, la tablette tourne sur une version
+            // sans trace, l'enregistrement est en cours, ou la publication a
+            // échoué. C'est exactement l'ambiguïté que cette trace existe pour
+            // lever, et elle était installée à sa propre porte d'entrée.
+            //
+            // La version est dans le message pour la première de ces
+            // situations : un état qui ne change pas après la coche dit que
+            // rien n'atteint la tablette.
+            publishTraceState(
+                "en cours (${BuildConfig.BUILD_REV}) — publication toutes les " +
+                    "${TRACE_FLUSH_MS / 1000} s, arrêt automatique après " +
+                    "${TranscriptionTrace.MAX_DURATION_MS / 60_000} min",
+                enabled = true,
+            )
+            retryHandler.postDelayed(traceFlush, TRACE_FLUSH_MS)
             // L'arrêt forcé est armé au démarrage et non surveillé ailleurs :
             // une trace oubliée allumée est le scénario probable, et personne
             // ne sera là pour l'éteindre.
@@ -542,30 +616,32 @@ class DeviceStatusReporter(private val context: Context) {
      */
     private fun finishTrace(reason: String) {
         retryHandler.removeCallbacks(traceCap)
+        retryHandler.removeCallbacks(traceFlush)
         val text = TranscriptionTrace.stopAndTake(reason) ?: return
+        publishTrace(text, reason, finished = true)
+    }
+
+    /**
+     * Écrit la trace chiffrée, ses morceaux, et l'état que lit le panneau.
+     *
+     * Appelée aussi bien en cours d'enregistrement (voir [traceFlush]) qu'à
+     * l'arrêt. Dans les deux cas elle écrit au même endroit, sous le même
+     * identifiant : la trace se réécrit sur elle-même en grossissant, et la
+     * dernière version présente est toujours la plus complète.
+     */
+    private fun publishTrace(text: String, reason: String, finished: Boolean) {
         val chunks = TranscriptionTrace.encryptToChunks(text, BuildConfig.SPEECH_TRACE_KEY)
         if (chunks.isEmpty()) {
             // Aucune clé : on ne publie RIEN. Dit explicitement, parce qu'une
             // absence de trace ressemble sinon à une trace vide, et qu'on
             // chercherait la panne du mauvais côté.
-            deviceDoc.set(
-                mapOf(
-                    FIELD_TRACE_STATE to "non publiée : aucune clé de chiffrement dans cette version",
-                    FIELD_TRACE_ENABLED to false,
-                ),
-                SetOptions.merge(),
-            )
+            publishTraceState("non publiée : aucune clé de chiffrement dans cette version", enabled = false)
             Log.w(TAG, "Trace non publiée : aucune clé de chiffrement")
             return
         }
 
-        val traces = deviceDoc.collection(TRACES_COLLECTION)
-        traces.get().addOnSuccessListener { old ->
-            old.documents.forEach { it.reference.delete() }
-        }
-
-        val traceId = java.time.Instant.now().toString().replace(":", "-")
-        val doc = traces.document(traceId)
+        val id = traceId ?: return
+        val doc = deviceDoc.collection(TRACES_COLLECTION).document(id)
         chunks.forEachIndexed { index, chunk ->
             doc.collection(CHUNKS_COLLECTION).document(index.toString())
                 .set(mapOf(FIELD_CHUNK_DATA to chunk))
@@ -581,14 +657,27 @@ class DeviceStatusReporter(private val context: Context) {
             )
         ).addOnFailureListener { e -> Log.e(TAG, "Échec de l'index de trace", e) }
 
+        val quality = if (finished) "complète" else "partielle, enregistrement en cours"
+        publishTraceState(
+            "$quality : ${chunks.size} morceau(x), ${text.length} caractères — $reason",
+            enabled = !finished,
+        )
+        Log.i(TAG, "Trace publiée ($quality) : ${chunks.size} morceaux")
+    }
+
+    /**
+     * L'état lu par le panneau d'administration, et lui seul.
+     *
+     * [enabled] est réécrit avec l'état pour que les deux ne puissent pas
+     * diverger : une case restée cochée alors que la trace s'est arrêtée
+     * toute seule au bout de dix minutes ferait croire à un enregistrement qui
+     * n'a plus lieu.
+     */
+    private fun publishTraceState(state: String, enabled: Boolean) {
         deviceDoc.set(
-            mapOf(
-                FIELD_TRACE_STATE to "publiée : ${chunks.size} morceau(x), ${text.length} caractères — $reason",
-                FIELD_TRACE_ENABLED to false,
-            ),
+            mapOf(FIELD_TRACE_STATE to state, FIELD_TRACE_ENABLED to enabled),
             SetOptions.merge(),
         )
-        Log.i(TAG, "Trace publiée : ${chunks.size} morceaux")
     }
 
     private fun reportUpdateFailure(message: String) {
@@ -700,6 +789,9 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_TRACE_REASON = "reason"
         private const val FIELD_TRACE_VERSION = "version"
         private const val FIELD_TRACE_AT = "at"
+
+        /** Intervalle entre deux publications d'une trace en cours (voir traceFlush). */
+        private const val TRACE_FLUSH_MS = 60_000L
         private const val FIELD_TRANSCRIPTION_DIAGNOSTIC = "transcriptionDiagnostic"
         private const val FIELD_PAID_USAGE = "paidUsage"
 
