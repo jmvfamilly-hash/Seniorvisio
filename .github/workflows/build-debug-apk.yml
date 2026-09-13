@@ -92,23 +92,30 @@ jobs:
       # champ Firestore qu'elle écoute, il fallait le faire à la main
       # (console Firebase).
       #
-      # DEUX BRANCHES, ET DEUX SEULEMENT. AssemblyAI est la ligne principale.
-      # test-audio-refonte livre aussi, à la demande explicite de
-      # l'administrateur, pour éprouver sur l'appareil réel la refonte du
-      # chemin audio — elle ne se vérifie pas autrement, aucun émulateur
-      # n'ayant le routage audio de cette tablette.
+      # UNE SEULE BRANCHE, ET C'EST LA LIGNE PRINCIPALE.
       #
-      # Nommées une par une, jamais un motif : un joker ferait livrer chez Jean
-      # la première branche de travail venue, et le garde-fou ne se remarquerait
-      # qu'après. À RETIRER quand la refonte aura rejoint la ligne principale.
+      # test-audio-refonte a livré ici pendant la mise au point du son, à la
+      # demande explicite de l'administrateur : le routage audio de cette
+      # tablette ne se vérifiait pas autrement. LA TABLETTE EST DÉSORMAIS CHEZ
+      # LE SENIOR, EN SERVICE. Une branche de travail qui s'y installe toute
+      # seule n'est plus un raccourci de mise au point, c'est un risque pour
+      # quelqu'un qui n'a aucun moyen de comprendre ni de signaler une panne.
+      #
+      # Ce qui remplace ce raccourci : une seconde tablette, un second jeu de
+      # documents Firestore, et une version dédiée qui ne peut pas atteindre
+      # celle-ci (voir DEVICE_DOC_PATH et scripts/request_remote_update.js).
+      #
+      # Nommée explicitement, jamais un motif : un joker ferait livrer chez le
+      # senior la première branche de travail venue, et le garde-fou ne se
+      # remarquerait qu'après.
       - name: Set up Node.js
-        if: github.ref == 'refs/heads/AssemblyAI' || github.ref == 'refs/heads/test-audio-refonte'
+        if: github.ref == 'refs/heads/AssemblyAI'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Demande la mise à jour à distance de la tablette
-        if: github.ref == 'refs/heads/AssemblyAI' || github.ref == 'refs/heads/test-audio-refonte'
+        if: github.ref == 'refs/heads/AssemblyAI'
         env:
           BUILD_REV: rev${{ github.run_number }}
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
