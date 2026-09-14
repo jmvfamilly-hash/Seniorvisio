@@ -790,11 +790,22 @@ class IncomingCallActivity : AppCompatActivity() {
         if (trimmed.isEmpty()) return
         val numérique = trimmed.length <= 6 && trimmed.all { it.isDigit() || it == ' ' || it == '%' }
         if (numérique) {
-            // Celui-là, on le cite : c'est l'objet de la recherche, et il ne
-            // peut pas constituer une parole.
+            // ═══ ON NE CITE PLUS. LE COMPTE SUFFIT. ═══
+            //
+            // Cette ligne reproduisait le texte tel quel, sous prétexte qu'un
+            // texte court et numérique « ne peut pas constituer une parole ».
+            // C'était faux, et ça l'est devenu dangereux : un code de porte, un
+            // âge, une posologie, un fragment de numéro de téléphone sont des
+            // nombres — prononcés dans une chambre, recopiés dans un journal
+            // que ces règles Firestore laissent lire à qui en connaît
+            // l'adresse.
+            //
+            // La citation servait à identifier un nombre qui s'affichait chez
+            // Jean. Cette recherche est close. Ce qui reste utile — savoir
+            // qu'un texte numérique est passé — tient dans sa longueur.
             CallTrace.record(
                 "APPEL texte",
-                "source=$source figé=$isFinal — TEXTE PUREMENT NUMÉRIQUE « $trimmed »",
+                "source=$source figé=$isFinal — texte numérique, ${trimmed.length} caractère(s)",
             )
             return
         }
