@@ -39,6 +39,46 @@ jobs:
         run: |
           echo "window.PWA_VERSION = \"${GITHUB_SHA::7} · $(date -u +'%Y-%m-%d %H:%M UTC')\";" > web-caller/version.js
 
+      # ═══ INDEX.HTML ET APP.JS NE PEUVENT PLUS DIVERGER ═══
+      #
+      # Les fichiers du PWA étaient demandés par leur nom nu : <script
+      # src="app.js">. Le navigateur du proche les met en cache chacun de son
+      # côté et les renouvelle quand il veut — rien ne garantit qu'il serve
+      # index.html et app.js de la MÊME version.
+      #
+      # Ce n'est pas une inquiétude de principe : c'est ce qui explique « les
+      # modifications ne sont pas toujours prises au redémarrage, des fois
+      # oui », et probablement aussi des commandes qui ne répondaient plus.
+      # Un identifiant absent d'un index.html périmé suffit à faire tomber
+      # tout le câblage JavaScript qui vient après lui.
+      #
+      # En suffixant chaque fichier local du commit déployé, une nouvelle
+      # version change TOUTES les URL d'un coup. Un index.html en cache
+      # continue de désigner les fichiers de SA version — cohérents entre eux
+      # — et la version suivante arrive en bloc, jamais à moitié. Les scripts
+      # externes (gstatic) ne sont pas touchés : ils portent déjà leur numéro
+      # de version dans leur chemin.
+      - name: Suffixe les fichiers locaux du commit, contre les caches partiels
+        run: |
+          python3 - <<'PY'
+          import re
+          version = "${{ github.sha }}"[:7]
+          chemin = "web-caller/index.html"
+          html = open(chemin, encoding="utf-8").read()
+
+          def suffixer(m):
+              attribut, url = m.group(1), m.group(2)
+              if url.startswith(("http://", "https://", "//", "data:", "#")):
+                  return m.group(0)
+              if "?" in url:
+                  return m.group(0)
+              return f'{attribut}="{url}?v={version}"'
+
+          html, n = re.subn(r'\b(src|href)="([^"]+\.(?:js|css))"', suffixer, html)
+          open(chemin, "w", encoding="utf-8").write(html)
+          print(f"{n} fichier(s) local(aux) suffixé(s) en ?v={version}")
+          PY
+
       - name: Upload web-caller as Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

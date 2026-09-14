@@ -687,3 +687,20 @@ body.video-mode #localVideo {
 .health-ok { color: #7BD88F; }
 .health-warn { color: #E9C46A; }
 .health-dead { color: #FF8A7A; font-weight: 600; }
+
+/* Bandeau d'alerte posé en tête de page par app.js : page incomplètement
+   câblée (voir signalerPageIncomplète) ou consigne qui n'a pas atteint la
+   tablette (voir afficherConsigneRefusée).
+
+   Volontairement voyant et volontairement en haut : ces deux situations
+   étaient jusqu'ici entièrement muettes, et le proche découvrait la panne en
+   constatant que Jean ne réagissait pas. */
+.wiring-warning {
+  margin: 0;
+  padding: 12px 16px;
+  background: #b3261e;
+  color: #fff;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+}

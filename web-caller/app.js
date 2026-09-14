@@ -4,7 +4,98 @@
  * webrtc-engine.js (voir ces fichiers, chargés avant celui-ci dans index.html).
  */
 
-document.getElementById("pwaVersion").textContent = `v. ${window.PWA_VERSION || "?"}`;
+// ═══════════════════════════════════════════════════════════════════════════
+// TROIS GARDE-FOUS, POSÉS AVANT TOUT LE RESTE
+//
+// Ce fichier câble une soixantaine de commandes, les unes après les autres,
+// au chargement de la page. En JavaScript, une seule exception dans ce
+// câblage interrompt TOUT ce qui suit — silencieusement pour qui regarde
+// l'écran : la page s'affiche normalement, les boutons sont là, et la moitié
+// d'entre eux ne répond plus.
+//
+// Ce n'est pas une crainte théorique. Les commandes du panneau ⚙️ de la
+// famille — « même pièce », « écrire ce qui se dit dans la pièce » — étaient
+// câblées aux lignes 1592 et 1626, c'est-à-dire DERRIÈRE tout le panneau
+// d'administration ajouté au fil de la semaine. Chaque outil de diagnostic
+// que j'ajoutais à la fin du fichier se plaçait entre Jean et les commandes
+// que sa famille utilise.
+//
+// Et une cause suffisait à déclencher ça sans qu'aucun code soit fautif : le
+// navigateur du proche pouvait servir un index.html en cache avec un app.js
+// à jour. Un identifiant absent, `document.getElementById` rend null, et la
+// première commande qui s'y accroche fait tomber toutes les suivantes.
+//
+//   elementMalPresent — recense ce qui manque au lieu de rendre null en
+//     silence ;
+//   on()             — câble une commande, et si elle est absente le signale
+//     et passe à la suivante au lieu d'interrompre la page ;
+//   bloc()           — isole un morceau de câblage : ce qui échoue dedans
+//     n'emporte plus ce qui vient après.
+//
+// Aucun des trois ne répare quoi que ce soit. Ils font que la panne se voie,
+// et qu'elle reste locale. C'est la même règle que CallTrace.guard côté
+// tablette, et elle vient de la même leçon, répétée quatre fois cette
+// semaine : un échec muet coûte plus cher que la panne qu'il cache.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const élémentsManquants = [];
+const blocsEnPanne = [];
+
+/** Comme getElementById, mais retient ce qui manque au lieu de l'oublier. */
+function el(id) {
+  const trouvé = document.getElementById(id);
+  if (!trouvé) élémentsManquants.push(id);
+  return trouvé;
+}
+
+/**
+ * Câble une commande. Si l'élément n'existe pas, le dit et continue.
+ *
+ * La clé est celle de `els`, pas l'identifiant HTML : c'est `els` qui sait
+ * déjà faire la correspondance, et la faire deux fois la ferait diverger.
+ */
+function on(clé, événement, gestionnaire) {
+  const cible = els[clé];
+  if (!cible) {
+    blocsEnPanne.push(`commande « ${clé} » absente de la page`);
+    console.error(`[Câblage] Élément introuvable : ${clé}`);
+    return;
+  }
+  cible.addEventListener(événement, gestionnaire);
+}
+
+/** Isole un morceau de câblage : ce qui échoue dedans n'emporte pas la suite. */
+function bloc(nom, action) {
+  try {
+    action();
+  } catch (e) {
+    blocsEnPanne.push(`${nom} : ${e.message}`);
+    console.error(`[Câblage] ${nom} a échoué :`, e);
+  }
+}
+
+/**
+ * Dit à l'écran que la page est incomplète, et ce qu'il faut faire.
+ *
+ * Sans ça, une page à moitié câblée est indiscernable d'une page qui marche
+ * jusqu'à ce qu'on touche la commande morte — au pire moment, c'est-à-dire
+ * pendant l'appel.
+ */
+function signalerPageIncomplète() {
+  if (!élémentsManquants.length && !blocsEnPanne.length) return;
+  const bandeau = document.createElement("p");
+  bandeau.className = "wiring-warning";
+  bandeau.textContent =
+    "⚠️ Cette page n'est pas complètement chargée : certaines commandes ne " +
+    "répondront pas. Fermez l'onglet et rouvrez-le pour recharger.";
+  document.body.prepend(bandeau);
+  console.error("[Câblage] Éléments absents :", élémentsManquants);
+  console.error("[Câblage] Blocs en panne :", blocsEnPanne);
+}
+
+bloc("version affichée", () => {
+  el("pwaVersion").textContent = `v. ${window.PWA_VERSION || "?"}`;
+});
 
 // --- Paramètres, alignés avec AdminConfig côté Android ---
 const CONFIG = {
@@ -140,109 +231,109 @@ function applySettingsToUi(settings) {
 const engine = new RealCallEngine(FIREBASE_CONFIG);
 
 const els = {
-  speechTraceToggle: document.getElementById("speechTraceToggle"),
-  speechTraceState: document.getElementById("speechTraceState"),
-  speechTraceKey: document.getElementById("speechTraceKey"),
-  speechTraceDownload: document.getElementById("speechTraceDownload"),
-  speechTraceResult: document.getElementById("speechTraceResult"),
-  callLogRefresh: document.getElementById("callLogRefresh"),
-  callLogText: document.getElementById("callLogText"),
-  callLogCopy: document.getElementById("callLogCopy"),
-  callLogDownload: document.getElementById("callLogDownload"),
-  callLogStatus: document.getElementById("callLogStatus"),
-  idle: document.getElementById("stateIdle"),
-  calling: document.getElementById("stateCalling"),
-  blocked: document.getElementById("stateBlocked"),
-  connected: document.getElementById("stateConnected"),
-  callButton: document.getElementById("callButton"),
-  cancelButton: document.getElementById("cancelButton"),
-  forceConnectButton: document.getElementById("forceConnectButton"),
-  retryButton: document.getElementById("retryButton"),
-  blockedMessage: document.getElementById("blockedMessage"),
-  hangupButton: document.getElementById("hangupButton"),
-  paneVideo: document.getElementById("paneVideo"),
-  paneSettings: document.getElementById("paneSettings"),
-  paneSlideshow: document.getElementById("paneSlideshow"),
-  openSettingsButton: document.getElementById("openSettingsButton"),
-  openSlideshowButton: document.getElementById("openSlideshowButton"),
-  rememberSettingsButton: document.getElementById("rememberSettingsButton"),
-  callStats: document.getElementById("callStats"),
-  volumeSlider: document.getElementById("volumeSlider"),
-  volumeWarning: document.getElementById("volumeWarning"),
-  captionToggle: document.getElementById("captionToggle"),
-  tabletMicMuteToggle: document.getElementById("tabletMicMuteToggle"),
-  slideshowInput: document.getElementById("slideshowInput"),
-  slideshowNav: document.getElementById("slideshowNav"),
-  slideshowPrevButton: document.getElementById("slideshowPrevButton"),
-  slideshowNextButton: document.getElementById("slideshowNextButton"),
-  slideshowCounter: document.getElementById("slideshowCounter"),
-  slideshowStopButton: document.getElementById("slideshowStopButton"),
-  slideshowRememberToggle: document.getElementById("slideshowRememberToggle"),
-  sameRoomToggle: document.getElementById("sameRoomToggle"),
-  sameRoomStatus: document.getElementById("sameRoomStatus"),
-  slideshowStatus: document.getElementById("slideshowStatus"),
-  selfPreviewToggle: document.getElementById("selfPreviewToggle"),
-  scrollSpeedSlider: document.getElementById("scrollSpeedSlider"),
-  captionLinesSlider: document.getElementById("captionLinesSlider"),
-  captionClearDelaySlider: document.getElementById("captionClearDelaySlider"),
-  micToRoomControl: document.getElementById("micToRoomControl"),
-  micToRoomToggle: document.getElementById("micToRoomToggle"),
-  micToRoomStatus: document.getElementById("micToRoomStatus"),
-  openAdminIdleButton: document.getElementById("openAdminIdleButton"),
-  openAdminCallButton: document.getElementById("openAdminCallButton"),
-  adminOverlay: document.getElementById("adminOverlay"),
-  adminLock: document.getElementById("adminLock"),
-  adminPanel: document.getElementById("adminPanel"),
-  adminPinInput: document.getElementById("adminPinInput"),
-  adminUnlockButton: document.getElementById("adminUnlockButton"),
-  adminCancelButton: document.getElementById("adminCancelButton"),
-  adminCloseButton: document.getElementById("adminCloseButton"),
-  adminLockStatus: document.getElementById("adminLockStatus"),
-  micToRoomBanner: document.getElementById("micToRoomBanner"),
-  micToRoomBackButton: document.getElementById("micToRoomBackButton"),
-  callingHint: document.getElementById("callingHint"),
-  countdownFill: document.getElementById("countdownFill"),
-  countdownText: document.getElementById("countdownText"),
-  identityName: document.getElementById("identityName"),
-  identityPhotoInput: document.getElementById("identityPhotoInput"),
-  identityPhotoPreview: document.getElementById("identityPhotoPreview"),
-  identityRights: document.getElementById("identityRights"),
-  saveIdentityButton: document.getElementById("saveIdentityButton"),
-  identityStatus: document.getElementById("identityStatus"),
-  roomEngineSelect: document.getElementById("roomEngineSelect"),
-  callEngineSelect: document.getElementById("callEngineSelect"),
-  voskModelSelect: document.getElementById("voskModelSelect"),
-  engineStatus: document.getElementById("engineStatus"),
-  roomWakeEnabledToggle: document.getElementById("roomWakeEnabledToggle"),
-  roomWakeThresholdSlider: document.getElementById("roomWakeThresholdSlider"),
-  blockWakeAtNightToggle: document.getElementById("blockWakeAtNightToggle"),
-  roomListeningStatus: document.getElementById("roomListeningStatus"),
-  deviceHealth: document.getElementById("deviceHealth"),
-  transcriptionDiagnostic: document.getElementById("transcriptionDiagnostic"),
-  paidUsage: document.getElementById("paidUsage"),
-  voiceGateToggle: document.getElementById("voiceGateToggle"),
-  dimJeanSpeechToggle: document.getElementById("dimJeanSpeechToggle"),
-  roomHandoffToggle: document.getElementById("roomHandoffToggle"),
-  handoffReturnSlider: document.getElementById("handoffReturnSlider"),
-  speakerEngineSelect: document.getElementById("speakerEngineSelect"),
-  thresholdEmbeddedSlider: document.getElementById("thresholdEmbeddedSlider"),
-  thresholdPicovoiceSlider: document.getElementById("thresholdPicovoiceSlider"),
-  quotaAssemblyaiSlider: document.getElementById("quotaAssemblyaiSlider"),
-  quotaGladiaSlider: document.getElementById("quotaGladiaSlider"),
-  refreshUsageButton: document.getElementById("refreshUsageButton"),
-  usageSummary: document.getElementById("usageSummary"),
-  usageDays: document.getElementById("usageDays"),
-  restartAppButton: document.getElementById("restartAppButton"),
-  rebootDeviceButton: document.getElementById("rebootDeviceButton"),
-  commandStatus: document.getElementById("commandStatus"),
-  captionOverflowIndicator: document.getElementById("captionOverflowIndicator"),
+  speechTraceToggle: el("speechTraceToggle"),
+  speechTraceState: el("speechTraceState"),
+  speechTraceKey: el("speechTraceKey"),
+  speechTraceDownload: el("speechTraceDownload"),
+  speechTraceResult: el("speechTraceResult"),
+  callLogRefresh: el("callLogRefresh"),
+  callLogText: el("callLogText"),
+  callLogCopy: el("callLogCopy"),
+  callLogDownload: el("callLogDownload"),
+  callLogStatus: el("callLogStatus"),
+  idle: el("stateIdle"),
+  calling: el("stateCalling"),
+  blocked: el("stateBlocked"),
+  connected: el("stateConnected"),
+  callButton: el("callButton"),
+  cancelButton: el("cancelButton"),
+  forceConnectButton: el("forceConnectButton"),
+  retryButton: el("retryButton"),
+  blockedMessage: el("blockedMessage"),
+  hangupButton: el("hangupButton"),
+  paneVideo: el("paneVideo"),
+  paneSettings: el("paneSettings"),
+  paneSlideshow: el("paneSlideshow"),
+  openSettingsButton: el("openSettingsButton"),
+  openSlideshowButton: el("openSlideshowButton"),
+  rememberSettingsButton: el("rememberSettingsButton"),
+  callStats: el("callStats"),
+  volumeSlider: el("volumeSlider"),
+  volumeWarning: el("volumeWarning"),
+  captionToggle: el("captionToggle"),
+  tabletMicMuteToggle: el("tabletMicMuteToggle"),
+  slideshowInput: el("slideshowInput"),
+  slideshowNav: el("slideshowNav"),
+  slideshowPrevButton: el("slideshowPrevButton"),
+  slideshowNextButton: el("slideshowNextButton"),
+  slideshowCounter: el("slideshowCounter"),
+  slideshowStopButton: el("slideshowStopButton"),
+  slideshowRememberToggle: el("slideshowRememberToggle"),
+  sameRoomToggle: el("sameRoomToggle"),
+  sameRoomStatus: el("sameRoomStatus"),
+  slideshowStatus: el("slideshowStatus"),
+  selfPreviewToggle: el("selfPreviewToggle"),
+  scrollSpeedSlider: el("scrollSpeedSlider"),
+  captionLinesSlider: el("captionLinesSlider"),
+  captionClearDelaySlider: el("captionClearDelaySlider"),
+  micToRoomControl: el("micToRoomControl"),
+  micToRoomToggle: el("micToRoomToggle"),
+  micToRoomStatus: el("micToRoomStatus"),
+  openAdminIdleButton: el("openAdminIdleButton"),
+  openAdminCallButton: el("openAdminCallButton"),
+  adminOverlay: el("adminOverlay"),
+  adminLock: el("adminLock"),
+  adminPanel: el("adminPanel"),
+  adminPinInput: el("adminPinInput"),
+  adminUnlockButton: el("adminUnlockButton"),
+  adminCancelButton: el("adminCancelButton"),
+  adminCloseButton: el("adminCloseButton"),
+  adminLockStatus: el("adminLockStatus"),
+  micToRoomBanner: el("micToRoomBanner"),
+  micToRoomBackButton: el("micToRoomBackButton"),
+  callingHint: el("callingHint"),
+  countdownFill: el("countdownFill"),
+  countdownText: el("countdownText"),
+  identityName: el("identityName"),
+  identityPhotoInput: el("identityPhotoInput"),
+  identityPhotoPreview: el("identityPhotoPreview"),
+  identityRights: el("identityRights"),
+  saveIdentityButton: el("saveIdentityButton"),
+  identityStatus: el("identityStatus"),
+  roomEngineSelect: el("roomEngineSelect"),
+  callEngineSelect: el("callEngineSelect"),
+  voskModelSelect: el("voskModelSelect"),
+  engineStatus: el("engineStatus"),
+  roomWakeEnabledToggle: el("roomWakeEnabledToggle"),
+  roomWakeThresholdSlider: el("roomWakeThresholdSlider"),
+  blockWakeAtNightToggle: el("blockWakeAtNightToggle"),
+  roomListeningStatus: el("roomListeningStatus"),
+  deviceHealth: el("deviceHealth"),
+  transcriptionDiagnostic: el("transcriptionDiagnostic"),
+  paidUsage: el("paidUsage"),
+  voiceGateToggle: el("voiceGateToggle"),
+  dimJeanSpeechToggle: el("dimJeanSpeechToggle"),
+  roomHandoffToggle: el("roomHandoffToggle"),
+  handoffReturnSlider: el("handoffReturnSlider"),
+  speakerEngineSelect: el("speakerEngineSelect"),
+  thresholdEmbeddedSlider: el("thresholdEmbeddedSlider"),
+  thresholdPicovoiceSlider: el("thresholdPicovoiceSlider"),
+  quotaAssemblyaiSlider: el("quotaAssemblyaiSlider"),
+  quotaGladiaSlider: el("quotaGladiaSlider"),
+  refreshUsageButton: el("refreshUsageButton"),
+  usageSummary: el("usageSummary"),
+  usageDays: el("usageDays"),
+  restartAppButton: el("restartAppButton"),
+  rebootDeviceButton: el("rebootDeviceButton"),
+  commandStatus: el("commandStatus"),
+  captionOverflowIndicator: el("captionOverflowIndicator"),
   // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
-  jeanScreen: document.getElementById("jeanScreen"),
-  jeanSlideshow: document.getElementById("jeanSlideshow"),
-  jeanRoomText: document.getElementById("jeanRoomText"),
-  jeanCallText: document.getElementById("jeanCallText"),
-  jeanRoomBox: document.getElementById("jeanRoomBox"),
-  jeanCallBox: document.getElementById("jeanCallBox"),
+  jeanScreen: el("jeanScreen"),
+  jeanSlideshow: el("jeanSlideshow"),
+  jeanRoomText: el("jeanRoomText"),
+  jeanCallText: el("jeanCallText"),
+  jeanRoomBox: el("jeanRoomBox"),
+  jeanCallBox: el("jeanCallBox"),
 };
 
 let statsInterval = null;
@@ -284,8 +375,8 @@ function showState(name) {
   }
 }
 
-els.openSettingsButton.addEventListener("click", () => showPane("paneSettings"));
-els.openSlideshowButton.addEventListener("click", () => showPane("paneSlideshow"));
+on("openSettingsButton", "click", () => showPane("paneSettings"));
+on("openSlideshowButton", "click", () => showPane("paneSlideshow"));
 document.querySelectorAll("[data-back-to-video]").forEach((button) => {
   button.addEventListener("click", () => showPane("paneVideo"));
 });
@@ -455,7 +546,7 @@ function applyScreenState(state) {
   els.captionOverflowIndicator.classList.toggle("hidden", !lagging);
 }
 
-els.callButton.addEventListener("click", async () => {
+on("callButton", "click", async () => {
   const settings = loadSavedSettings() || DEFAULT_SETTINGS;
   applySettingsToUi(settings);
   renderVolumeWarning();
@@ -496,7 +587,7 @@ els.callButton.addEventListener("click", async () => {
   els.forceConnectButton.disabled = false;
 });
 
-els.rememberSettingsButton.addEventListener("click", () => {
+on("rememberSettingsButton", "click", () => {
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(currentSettingsFromUi()));
   const original = els.rememberSettingsButton.textContent;
   els.rememberSettingsButton.textContent = "✅ Réglages mémorisés";
@@ -512,11 +603,11 @@ engine.onCountdown((remaining, total) => {
     remaining > 0 ? `${remaining}s avant connexion automatique` : "Connexion en cours…";
 });
 
-els.captionToggle.addEventListener("change", () => {
+on("captionToggle", "change", () => {
   engine.setCaptionMode(els.captionToggle.checked);
 });
 
-els.selfPreviewToggle.addEventListener("change", () => {
+on("selfPreviewToggle", "change", () => {
   engine.setSelfPreviewMode(els.selfPreviewToggle.checked);
 });
 
@@ -525,7 +616,7 @@ els.selfPreviewToggle.addEventListener("change", () => {
 // cochant cette case, il vient de la tablette ; s'il persiste, il vient de ce
 // téléphone-ci. Volontairement non mémorisé d'un appel à l'autre : Jean se
 // retrouverait muet sans que personne ne comprenne pourquoi.
-els.tabletMicMuteToggle.addEventListener("change", () => {
+on("tabletMicMuteToggle", "change", () => {
   engine.setTabletMicMuted(els.tabletMicMuteToggle.checked);
 });
 
@@ -547,6 +638,34 @@ engine.onCaptionDebug((message) => {
 
 engine.onScreenState(applyScreenState);
 engine.onScreenLayout(applyScreenLayout);
+
+/**
+ * Dit au proche qu'une de ses consignes n'est pas arrivée chez Jean.
+ *
+ * Le bandeau est construit ici plutôt que déclaré dans index.html, et c'est
+ * délibéré : il sert précisément dans les situations où la page peut être
+ * incomplète. Un bandeau d'alerte qui dépend de la présence d'un élément
+ * dans le HTML est un bandeau qui manque le jour où il servirait.
+ */
+function afficherConsigneRefusée(nom, cause) {
+  let bandeau = document.getElementById("commandWarning");
+  if (!bandeau) {
+    bandeau = document.createElement("p");
+    bandeau.id = "commandWarning";
+    bandeau.className = "wiring-warning";
+    document.body.prepend(bandeau);
+  }
+  bandeau.textContent =
+    `⚠️ « ${nom} » n'est pas arrivé chez Jean (${cause}). Réessayez ; si cela ` +
+    `se reproduit, raccrochez et rappelez.`;
+  bandeau.hidden = false;
+  clearTimeout(afficherConsigneRefusée.minuterie);
+  afficherConsigneRefusée.minuterie = setTimeout(() => {
+    bandeau.hidden = true;
+  }, 8000);
+}
+
+engine.onCommandRejected(afficherConsigneRefusée);
 
 // Ergonomie de lecture : réglages d'ADMINISTRATEUR et non d'appel. Ils
 // décrivent la façon dont Jean lit, qui ne change pas selon qui l'appelle, et
@@ -589,7 +708,7 @@ const ADMIN_TOGGLE_FIELDS = [
 ];
 
 for (const [elementKey, field] of ADMIN_TOGGLE_FIELDS) {
-  els[elementKey].addEventListener("change", () => {
+  on(elementKey, "change", () => {
     if (!deviceSettingsLoaded) return;
     engine
       .setDeviceSetting(CONFIG.deviceDocId, field, els[elementKey].checked)
@@ -626,7 +745,7 @@ document.querySelectorAll('input[type="range"]').forEach((input) => {
 
 const adminSliderDebounce = {};
 for (const [elementKey, field] of ADMIN_SLIDER_FIELDS) {
-  els[elementKey].addEventListener("input", () => {
+  on(elementKey, "input", () => {
     if (!deviceSettingsLoaded) return;
     clearTimeout(adminSliderDebounce[field]);
     // Le curseur produit une écriture par pixel parcouru : sans ce délai, un
@@ -641,7 +760,7 @@ for (const [elementKey, field] of ADMIN_SLIDER_FIELDS) {
 }
 
 let volumeDebounce = null;
-els.volumeSlider.addEventListener("input", () => {
+on("volumeSlider", "input", () => {
   renderVolumeWarning();
   clearTimeout(volumeDebounce);
   volumeDebounce = setTimeout(() => {
@@ -670,17 +789,17 @@ function renderVolumeWarning() {
   els.volumeWarning.classList.toggle("hidden", !muted);
 }
 
-els.forceConnectButton.addEventListener("click", () => {
+on("forceConnectButton", "click", () => {
   els.forceConnectButton.disabled = true;
   engine.forceConnect();
 });
 
-els.cancelButton.addEventListener("click", async () => {
+on("cancelButton", "click", async () => {
   await engine.cancelCall();
   showState("idle");
 });
 
-els.retryButton.addEventListener("click", () => showState("idle"));
+on("retryButton", "click", () => showState("idle"));
 
 
 // --- Administration ------------------------------------------------------
@@ -805,12 +924,12 @@ async function tryUnlockAdmin() {
   }
 }
 
-els.openAdminIdleButton.addEventListener("click", openAdmin);
-els.openAdminCallButton.addEventListener("click", openAdmin);
-els.adminUnlockButton.addEventListener("click", tryUnlockAdmin);
-els.adminCancelButton.addEventListener("click", closeAdmin);
-els.adminCloseButton.addEventListener("click", closeAdmin);
-els.adminPinInput.addEventListener("keydown", (event) => {
+on("openAdminIdleButton", "click", openAdmin);
+on("openAdminCallButton", "click", openAdmin);
+on("adminUnlockButton", "click", tryUnlockAdmin);
+on("adminCancelButton", "click", closeAdmin);
+on("adminCloseButton", "click", closeAdmin);
+on("adminPinInput", "keydown", (event) => {
   if (event.key === "Enter") tryUnlockAdmin();
 });
 
@@ -967,7 +1086,7 @@ async function loadUsage() {
   }
 }
 
-els.refreshUsageButton.addEventListener("click", loadUsage);
+on("refreshUsageButton", "click", loadUsage);
 
 async function sendCommand(command, confirmation) {
   if (!window.confirm(confirmation)) return;
@@ -984,10 +1103,10 @@ async function sendCommand(command, confirmation) {
   }
 }
 
-els.restartAppButton.addEventListener("click", () =>
+on("restartAppButton", "click", () =>
   sendCommand("restart-app", "Relancer l'application sur la tablette de Jean ?")
 );
-els.rebootDeviceButton.addEventListener("click", () =>
+on("rebootDeviceButton", "click", () =>
   sendCommand("reboot", "Redémarrer complètement la tablette de Jean ? Elle sera indisponible une minute ou deux.")
 );
 
@@ -1173,9 +1292,11 @@ function renderDeviceHealth(data) {
 // rien — c'est-à-dire précisément quand elle est en panne, le seul moment où
 // cette ligne compte.
 setInterval(() => {
-  if (lastDeviceData && !els.adminOverlay.classList.contains("hidden")) {
-    renderDeviceHealth(lastDeviceData);
-  }
+  bloc("rafraîchissement du signe de vie", () => {
+    if (lastDeviceData && !els.adminOverlay.classList.contains("hidden")) {
+      renderDeviceHealth(lastDeviceData);
+    }
+  });
 }, 30000);
 
 function renderEngineStatus(data) {
@@ -1213,7 +1334,7 @@ async function writeDeviceSetting(field, value, select) {
 }
 
 for (const [elementKey, field] of ENGINE_SELECT_FIELDS) {
-  els[elementKey].addEventListener("change", () => {
+  on(elementKey, "change", () => {
     if (!deviceSettingsLoaded) return;
     writeDeviceSetting(field, els[elementKey].value, els[elementKey]);
   });
@@ -1225,7 +1346,7 @@ for (const [elementKey, field] of ENGINE_SELECT_FIELDS) {
 // le consulte juste après un appel qui s'est mal passé, souvent debout, et
 // ouvrir un fichier texte sur un téléphone pour lire trente lignes est une
 // épreuve de plus.
-els.callLogRefresh.addEventListener("click", async () => {
+on("callLogRefresh", "click", async () => {
   els.callLogText.hidden = false;
   els.callLogText.textContent = "Lecture…";
   els.callLogStatus.textContent = "";
@@ -1255,7 +1376,7 @@ els.callLogRefresh.addEventListener("click", async () => {
   }
 });
 
-els.callLogCopy.addEventListener("click", async () => {
+on("callLogCopy", "click", async () => {
   try {
     await navigator.clipboard.writeText(els.callLogText.textContent);
     els.callLogStatus.textContent = "Journal copié — collez-le où vous voulez.";
@@ -1275,7 +1396,7 @@ els.callLogCopy.addEventListener("click", async () => {
   }
 });
 
-els.callLogDownload.addEventListener("click", () => {
+on("callLogDownload", "click", () => {
   const blob = new Blob([els.callLogText.textContent], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -1298,8 +1419,10 @@ els.callLogDownload.addEventListener("click", () => {
 
 const TRACE_KEY_STORAGE = "seniorvisio.speechTraceKey";
 
-els.speechTraceKey.value = localStorage.getItem(TRACE_KEY_STORAGE) || "";
-els.speechTraceKey.addEventListener("change", () => {
+bloc("clé de trace chiffrée", () => {
+  els.speechTraceKey.value = localStorage.getItem(TRACE_KEY_STORAGE) || "";
+});
+on("speechTraceKey", "change", () => {
   localStorage.setItem(TRACE_KEY_STORAGE, els.speechTraceKey.value.trim());
 });
 
@@ -1323,7 +1446,7 @@ async function decryptTraceChunk(chunk, keyText) {
   return new TextDecoder().decode(plain);
 }
 
-els.speechTraceDownload.addEventListener("click", async () => {
+on("speechTraceDownload", "click", async () => {
   const keyText = els.speechTraceKey.value.trim();
   if (!keyText) {
     els.speechTraceResult.textContent = "Collez d'abord la clé de lecture.";
@@ -1363,7 +1486,11 @@ els.speechTraceDownload.addEventListener("click", async () => {
   }
 });
 
-engine.watchDeviceSettings(CONFIG.deviceDocId, applyDeviceSettings);
+// Sous garde : c'est la dernière instruction de haut niveau avant le câblage
+// de l'identité et du diaporama. Une erreur ici les emportait tous les deux.
+bloc("écoute des réglages de la tablette", () => {
+  engine.watchDeviceSettings(CONFIG.deviceDocId, applyDeviceSettings);
+});
 
 // --- Identité de l'appelant ---
 // Photo retenue en mémoire tant qu'elle n'est pas enregistrée : le
@@ -1372,7 +1499,7 @@ let pendingIdentityPhoto = null;
 
 const IDENTITY_JUST_SAVED_KEY = "seniorvisio_identity_just_saved";
 
-(function restoreIdentity() {
+bloc("identité de l'appelant", function restoreIdentity() {
   const identity = loadIdentity();
   if (identity) {
     els.identityName.value = identity.name || "";
@@ -1392,9 +1519,9 @@ const IDENTITY_JUST_SAVED_KEY = "seniorvisio_identity_just_saved";
     document.getElementById("identityPanel").open = true;
     els.identityStatus.textContent = "✅ Enregistré. Vous pouvez maintenant appeler Jean.";
   }
-})();
+});
 
-els.identityPhotoInput.addEventListener("change", async () => {
+on("identityPhotoInput", "change", async () => {
   const file = els.identityPhotoInput.files && els.identityPhotoInput.files[0];
   if (!file) return;
   els.identityStatus.textContent = "Préparation de la photo…";
@@ -1409,7 +1536,7 @@ els.identityPhotoInput.addEventListener("change", async () => {
   }
 });
 
-els.saveIdentityButton.addEventListener("click", () => {
+on("saveIdentityButton", "click", () => {
   const previous = loadIdentity() || {};
   const photoJustCaptured = Boolean(pendingIdentityPhoto);
   const photoBase64 = pendingIdentityPhoto || previous.photoBase64 || null;
@@ -1466,6 +1593,57 @@ const SLIDESHOW_PHOTO_QUALITY = 0.72;
 // qu'un échec incompréhensible au moment de mémoriser.
 const SLIDESHOW_MAX_PHOTOS = 15;
 
+/**
+ * Budget d'une photo une fois encodée, en octets.
+ *
+ * ═══ POURQUOI LA GALERIE NE S'AFFICHAIT PAS CHEZ JEAN ═══
+ *
+ * Un document Firestore ne peut pas dépasser un mébioctet, et la photo du
+ * diaporama voyage DANS le document d'appel — à côté des deux SDP, de la
+ * photo d'identité de l'appelant et des textes affichés à l'écran de Jean.
+ * Une photo de 1280 px encodée en base64 pèse couramment 400 à 700 Ko : avec
+ * tout le reste, le document passait par-dessus la limite, et Firestore
+ * refusait l'écriture.
+ *
+ * Le refus tombait dans un `.catch(() => {})`, et `pushCurrentSlide`
+ * affichait la photo localement sans attendre le résultat de l'envoi. D'où
+ * le symptôme exact rapporté : la photo est là du côté du proche, et Jean ne
+ * voit rien.
+ *
+ * 500 Ko laisse de la place pour tout le reste du document sans réduire les
+ * photos au point que la mémoire d'une réunion de famille devienne illisible
+ * sur un écran de tablette.
+ */
+const SLIDESHOW_PHOTO_MAX_BYTES = 500_000;
+
+/** Paliers essayés dans l'ordre jusqu'à tenir dans le budget ci-dessus. */
+const SLIDESHOW_FALLBACKS = [
+  { côté: SLIDESHOW_PHOTO_MAX_SIDE, qualité: SLIDESHOW_PHOTO_QUALITY },
+  { côté: 1024, qualité: 0.68 },
+  { côté: 800, qualité: 0.62 },
+  { côté: 640, qualité: 0.55 },
+];
+
+/**
+ * Encode une photo en restant sous le budget, en réduisant par paliers.
+ *
+ * Réduire vaut mieux qu'échouer : une photo un peu moins fine reste une
+ * photo que Jean regarde, alors qu'une photo refusée n'est rien du tout. Et
+ * le dernier palier est renvoyé même s'il dépasse encore — l'envoi dira
+ * alors franchement qu'il n'est pas passé, au lieu de faire disparaître la
+ * photo en silence comme avant.
+ */
+async function encoderSousLaLimite(file) {
+  let dernière = null;
+  for (const palier of SLIDESHOW_FALLBACKS) {
+    dernière = await resizeToBase64(file, palier.côté, palier.qualité);
+    if (dernière.length <= SLIDESHOW_PHOTO_MAX_BYTES) {
+      return { base64: dernière, réduite: palier !== SLIDESHOW_FALLBACKS[0] };
+    }
+  }
+  return { base64: dernière, réduite: true };
+}
+
 let slideshowPhotos = [];
 let slideshowIndex = 0;
 
@@ -1485,12 +1663,16 @@ function renderSlideshowState() {
  * la pose dans la réplique de son écran : c'est bien ce qu'il a sous les yeux
  * à la place de la vidéo tant que le diaporama tourne.
  */
-function pushCurrentSlide() {
+async function pushCurrentSlide() {
   if (!slideshowPhotos.length) return;
   const photo = slideshowPhotos[slideshowIndex];
-  engine.setSlideshowPhoto(photo);
-  els.jeanSlideshow.src = `data:image/jpeg;base64,${photo}`;
-  els.jeanSlideshow.classList.remove("hidden");
+  // La réplique locale n'est posée qu'APRÈS confirmation de l'envoi. Elle
+  // prétend montrer ce que Jean a sous les yeux : l'afficher sans attendre
+  // en faisait un mensonge, et c'est ce mensonge qui a fait chercher la
+  // panne du diaporama du mauvais côté.
+  const passée = await engine.setSlideshowPhoto(photo);
+  els.jeanSlideshow.classList.toggle("hidden", !passée);
+  if (passée) els.jeanSlideshow.src = `data:image/jpeg;base64,${photo}`;
 }
 
 function showSlide(index) {
@@ -1513,15 +1695,18 @@ function showSlide(index) {
   }
 })();
 
-els.slideshowInput.addEventListener("change", async () => {
+on("slideshowInput", "change", async () => {
   const files = Array.from(els.slideshowInput.files || []);
   if (!files.length) return;
   els.slideshowStatus.textContent = `Préparation de ${files.length} photo(s)…`;
 
   const prepared = [];
+  let réduites = 0;
   for (const file of files) {
     try {
-      prepared.push(await resizeToBase64(file, SLIDESHOW_PHOTO_MAX_SIDE, SLIDESHOW_PHOTO_QUALITY));
+      const ajustée = await encoderSousLaLimite(file);
+      if (ajustée.réduite) réduites++;
+      prepared.push(ajustée.base64);
     } catch (e) {
       // Une photo illisible (format exotique, fichier corrompu) ne doit pas
       // faire échouer toute la sélection.
@@ -1539,19 +1724,20 @@ els.slideshowInput.addEventListener("change", async () => {
   slideshowIndex = 0;
   renderSlideshowState();
   pushCurrentSlide();
-  els.slideshowStatus.textContent = tooMany
+  const allégées = réduites > 0 ? ` ${réduites} allégée(s) pour passer chez Jean.` : "";
+  els.slideshowStatus.textContent = (tooMany
     ? `${SLIDESHOW_MAX_PHOTOS} premières photos retenues (limite de cet appareil).`
-    : `${slideshowPhotos.length} photo(s) prête(s).`;
+    : `${slideshowPhotos.length} photo(s) prête(s).`) + allégées;
 
   if (els.slideshowRememberToggle.checked) saveSlideshow();
 });
 
-els.slideshowPrevButton.addEventListener("click", () => showSlide(slideshowIndex - 1));
-els.slideshowNextButton.addEventListener("click", () => showSlide(slideshowIndex + 1));
+on("slideshowPrevButton", "click", () => showSlide(slideshowIndex - 1));
+on("slideshowNextButton", "click", () => showSlide(slideshowIndex + 1));
 
 // Termine le diaporama : la vidéo du proche réapparaît chez Jean, la sélection
 // de photos reste en place pour pouvoir relancer sans tout re-choisir.
-els.slideshowStopButton.addEventListener("click", () => {
+on("slideshowStopButton", "click", () => {
   engine.setSlideshowPhoto(null);
   els.jeanSlideshow.classList.add("hidden");
   els.slideshowStatus.textContent = "Diaporama arrêté, Jean revoit la vidéo.";
@@ -1570,7 +1756,7 @@ function saveSlideshow() {
   }
 }
 
-els.slideshowRememberToggle.addEventListener("change", () => {
+on("slideshowRememberToggle", "change", () => {
   if (els.slideshowRememberToggle.checked) {
     saveSlideshow();
   } else {
@@ -1589,7 +1775,7 @@ els.slideshowRememberToggle.addEventListener("change", () => {
 // WebRtcCallEngine.listenForSameRoomMode) plutôt que de la déduire d'un
 // volume à zéro : un curseur remonté par inadvertance ramènerait sinon
 // l'écho, sans que rien n'indique pourquoi.
-els.sameRoomToggle.addEventListener("change", () => {
+on("sameRoomToggle", "change", () => {
   const sameRoom = els.sameRoomToggle.checked;
   engine.setSameRoomMode(sameRoom);
   els.tabletMicMuteToggle.checked = sameRoom;
@@ -1623,10 +1809,10 @@ function setMicToRoom(enabled) {
     : "";
 }
 
-els.micToRoomToggle.addEventListener("change", () => setMicToRoom(els.micToRoomToggle.checked));
-els.micToRoomBackButton.addEventListener("click", () => setMicToRoom(false));
+on("micToRoomToggle", "change", () => setMicToRoom(els.micToRoomToggle.checked));
+on("micToRoomBackButton", "click", () => setMicToRoom(false));
 
-els.hangupButton.addEventListener("click", async () => {
+on("hangupButton", "click", async () => {
   await engine.cancelCall();
   showState("idle");
 });
@@ -1648,3 +1834,9 @@ engine.onError((message) => {
   alert(message);
   showState("idle");
 });
+
+// Dernière instruction du fichier, et c'est voulu : à ce point, tout le
+// câblage a été tenté. Ce qui a manqué ou échoué en chemin a été retenu au
+// lieu d'interrompre la page, et c'est ici qu'on le dit — une fois, en clair,
+// au proche qui est devant l'écran.
+signalerPageIncomplète();

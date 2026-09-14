@@ -70,6 +70,47 @@ class RealCallEngine extends CallEngine {
     });
   }
 
+  /**
+   * Envoie une consigne à la tablette, et DIT quand elle n'est pas passée.
+   *
+   * ═══ DIX COMMANDES QUI ÉCHOUAIENT SANS UN MOT ═══
+   *
+   * Chacune des consignes du proche — volume, texte, photos, micro, même
+   * pièce, connexion immédiate, raccroché — s'écrivait ainsi :
+   *
+   *     await this._callDocRef.update({ … }).catch(() => {});
+   *
+   * Un refus de Firestore (règle, quota, réseau coupé, document trop gros)
+   * disparaissait donc entièrement. Le proche voyait sa case cochée, son
+   * curseur déplacé, sa photo affichée de son côté — et rien ne se passait
+   * chez Jean. Aucune trace nulle part, ni à l'écran, ni dans la console.
+   *
+   * C'est ce qui a fait chercher la panne du diaporama du côté de la
+   * tablette pendant qu'elle était ici : une photo de 1280 px encodée pèse
+   * plusieurs centaines de kilo-octets, le document d'appel porte déjà les
+   * SDP et la photo d'identité, et au-delà d'un mébioctet Firestore refuse
+   * l'écriture. Le refus était avalé, et la photo s'affichait quand même du
+   * côté de celui qui l'envoyait.
+   *
+   * Une consigne qui n'arrive pas est une information, pas un incident à
+   * masquer : c'est même la seule chose que le proche puisse agir dessus.
+   */
+  async _envoyerConsigne(nom, champs) {
+    if (!this._callDocRef) return false;
+    try {
+      await this._callDocRef.update(champs);
+      return true;
+    } catch (e) {
+      const cause = (e && (e.code || e.message)) || "cause inconnue";
+      console.error(`[Consigne] « ${nom} » non transmise :`, e);
+      this._consigneRefuséeCb && this._consigneRefuséeCb(nom, String(cause));
+      return false;
+    }
+  }
+
+  /** callback(nom, cause) — une consigne n'a pas atteint la tablette. */
+  onCommandRejected(callback) { this._consigneRefuséeCb = callback; }
+
   /** callback(reason) — "blocked" (Jean a refusé) ou "busy" (il est déjà en ligne). */
   onBlocked(callback) { this._blockedCb = callback; }
   onConnected(callback) { this._connectedCb = callback; }
@@ -484,9 +525,7 @@ class RealCallEngine extends CallEngine {
    * qui décide depuis le PWA, pas un bouton sur la tablette.
    */
   async setCaptionMode(enabled) {
-    if (this._callDocRef) {
-      await this._callDocRef.update({ captionModeEnabled: enabled }).catch(() => {});
-    }
+    await this._envoyerConsigne("afficher mes paroles chez Jean", { captionModeEnabled: enabled });
   }
 
   /**
@@ -499,9 +538,7 @@ class RealCallEngine extends CallEngine {
    * pendant tout ce temps.
    */
   async setMicToRoom(enabled) {
-    if (this._callDocRef) {
-      await this._callDocRef.update({ micToRoom: enabled }).catch(() => {});
-    }
+    await this._envoyerConsigne("écrire ce qui se dit dans la pièce", { micToRoom: enabled });
   }
 
   /**
@@ -513,9 +550,7 @@ class RealCallEngine extends CallEngine {
    * taille d'un document Firestore dès quelques images.
    */
   async setSlideshowPhoto(photoBase64) {
-    if (this._callDocRef) {
-      await this._callDocRef.update({ slideshowPhotoBase64: photoBase64 || null }).catch(() => {});
-    }
+    return this._envoyerConsigne("photo du diaporama", { slideshowPhotoBase64: photoBase64 || null });
   }
 
   /**
@@ -528,9 +563,7 @@ class RealCallEngine extends CallEngine {
    * chez Jean sans rien lui demander.
    */
   async setTabletMicMuted(muted) {
-    if (this._callDocRef) {
-      await this._callDocRef.update({ tabletMicMuted: muted }).catch(() => {});
-    }
+    await this._envoyerConsigne("couper le micro de la tablette", { tabletMicMuted: muted });
   }
 
   /**
@@ -539,9 +572,7 @@ class RealCallEngine extends CallEngine {
    * core/WebRtcCallEngine.kt : listenForSelfPreviewMode.
    */
   async setSelfPreviewMode(enabled) {
-    if (this._callDocRef) {
-      await this._callDocRef.update({ selfPreviewEnabled: enabled }).catch(() => {});
-    }
+    await this._envoyerConsigne("montrer à Jean sa propre image", { selfPreviewEnabled: enabled });
   }
 
   /**
@@ -556,9 +587,7 @@ class RealCallEngine extends CallEngine {
    * qu'un curseur pourrait défaire par accident à l'écran suivant.
    */
   async setSameRoomMode(enabled) {
-    if (this._callDocRef) {
-      await this._callDocRef.update({ sameRoomMode: enabled }).catch(() => {});
-    }
+    await this._envoyerConsigne("nous sommes dans la même pièce", { sameRoomMode: enabled });
   }
 
   /** Résumé lisible des métriques vidéo temps réel (résolution, fps, pertes). */
@@ -606,9 +635,7 @@ class RealCallEngine extends CallEngine {
    * saute directement à la vidéo dès qu'il passe à true.
    */
   async forceConnect() {
-    if (this._callDocRef) {
-      await this._callDocRef.update({ forceConnectRequested: true }).catch(() => {});
-    }
+    await this._envoyerConsigne("connexion immédiate", { forceConnectRequested: true });
   }
 
   /**
@@ -768,9 +795,7 @@ class RealCallEngine extends CallEngine {
     // visible tant que la connexion n'avait pas déjà eu lieu — l'exécution
     // en cours continuait en arrière-plan et refaisait sonner Jean.
     this._callGeneration++;
-    if (this._callDocRef) {
-      await this._callDocRef.update({ status: "ended" }).catch(() => {});
-    }
+    await this._envoyerConsigne("raccrocher", { status: "ended" });
     this._teardown();
   }
 
