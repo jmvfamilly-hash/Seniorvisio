@@ -33,6 +33,7 @@ import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 import java.nio.ByteBuffer
+import java.util.Locale
 
 /**
  * Implémentation WebRTC de [CallEngine]. Le signaling (échange de l'offre,
@@ -168,6 +169,15 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     /** Dernier relevé des niveaux système, pour ne journaliser que les changements. */
     private var lastSeenVolumes: String? = null
 
+    // ---- Qualité du lien (voir reportNetwork) ----
+    private var lastNetworkSample: NetworkSample? = null
+    private var lastNetworkLoggedAtMs = 0L
+    private var networkSamples = 0
+    private var networkLimitedSamples = 0
+
+    /** Instant du décrochage, pour mesurer le temps de mise en relation. */
+    private var answeredAtMs = 0L
+
     override var state: CallState = CallState.IDLE
         private set
 
@@ -239,6 +249,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             return
         }
         state = CallState.CONNECTING
+        answeredAtMs = SystemClock.elapsedRealtime()
         CallTrace.record(
             "APPEL answer",
             "consigneVolume=$pendingVolume microCoupé=$pendingMicMuted mêmePièce=$sameRoomMode",
@@ -799,6 +810,76 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * secondes plus tard et différente — et la question est close. C'est le
      * genre de constat qu'aucune correction ne remplace.
      */
+    /**
+     * Journalise l'état du lien, et calcule le débit RÉELLEMENT écoulé.
+     *
+     * ═══ Deux mesures de débit, et elles ne disent pas la même chose ═══
+     *
+     * `availableOutgoingBitrate` est l'ESTIMATION de WebRTC : ce qu'il croit
+     * pouvoir se permettre. Utile, mais c'est une prévision, et elle met du
+     * temps à monter après une période de mauvaise connexion.
+     *
+     * Le débit calculé ici est le CONSTAT : des octets comptés entre deux
+     * relevés, divisés par le temps écoulé. Quand les deux divergent — une
+     * estimation généreuse et un débit réel qui plafonne bien en dessous — ce
+     * n'est pas le réseau qui bride, c'est autre chose, et
+     * qualityLimitationReason dit quoi.
+     *
+     * Relevé toutes les trois secondes avec le chien de garde, mais journalisé
+     * bien plus rarement : ce qui compte est la tendance sur un appel, pas
+     * chaque soubresaut. Une exception, et c'est le plus utile — **un
+     * changement de ce qui bride la qualité est écrit immédiatement**, sans
+     * attendre le prochain tour. Passer de `none` à `bandwidth` est l'instant
+     * précis où l'image s'est dégradée, et c'est celui qu'on cherche.
+     */
+    private fun reportNetwork(sample: NetworkSample) {
+        val précédent = lastNetworkSample
+        lastNetworkSample = sample
+        if (sample.limitation != "none" && sample.limitation != "?") networkLimitedSamples++
+        networkSamples++
+
+        val changement = précédent != null && précédent.limitation != sample.limitation
+        val écoulé = sample.horodatageMs - lastNetworkLoggedAtMs
+        if (!changement && écoulé < NETWORK_LOG_INTERVAL_MS) return
+        lastNetworkLoggedAtMs = sample.horodatageMs
+
+        val débit = if (précédent == null) "" else {
+            val secondes = (sample.horodatageMs - précédent.horodatageMs) / 1000.0
+            if (secondes <= 0.0) "" else String.format(
+                Locale.FRANCE,
+                " · réel ↑%.0f ↓%.0f kb/s",
+                (sample.sortieOctets - précédent.sortieOctets) * 8.0 / 1000.0 / secondes,
+                (sample.entréeOctets - précédent.entréeOctets) * 8.0 / 1000.0 / secondes,
+            )
+        }
+        CallTrace.record(
+            if (changement) "APPEL réseau CHANGE" else "APPEL réseau",
+            sample.ligne + débit,
+        )
+    }
+
+    /**
+     * Le bilan de l'appel, écrit une fois à la fin.
+     *
+     * Un appel produit des dizaines de relevés ; les comparer entre deux
+     * appels demande de les lire tous. Ces trois chiffres tiennent sur une
+     * ligne et répondent à la seule question qu'on se pose après coup : est-ce
+     * que ça s'est bien passé, et sinon, à cause de quoi.
+     */
+    private fun reportNetworkSummary() {
+        if (networkSamples == 0) return
+        val part = 100 * networkLimitedSamples / networkSamples
+        CallTrace.record(
+            "APPEL bilan réseau",
+            "$networkSamples relevés · qualité bridée sur $part % d'entre eux · " +
+                "dernier état : ${lastNetworkSample?.ligne ?: "aucun"}",
+        )
+        networkSamples = 0
+        networkLimitedSamples = 0
+        lastNetworkSample = null
+        lastNetworkLoggedAtMs = 0L
+    }
+
     private fun watchSystemVolumes() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         val now = "appel=${audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)}" +
@@ -828,11 +909,120 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                 // n'étant pas garantie d'une version de WebRTC à l'autre.
                 total += (received as? Number)?.toLong() ?: 0L
             }
-            // getStats répond sur le thread de signalisation WebRTC : on
-            // revient sur le thread principal avant de toucher à l'état ou de
-            // raccrocher.
-            mediaWatchdogHandler.post { onInboundBytes(total) }
+            // Le même relevé sert aux deux : le chien de garde ne regarde que
+            // le compteur d'octets, l'analyse réseau lit tout le reste. Un
+            // second getStats aurait coûté un aller-retour de plus sur le
+            // thread de signalisation pour des chiffres déjà là.
+            val réseau = summariseNetwork(report)
+            mediaWatchdogHandler.post {
+                onInboundBytes(total)
+                réseau?.let { reportNetwork(it) }
+            }
         })
+    }
+
+    /**
+     * Ce qu'on retient d'un relevé de statistiques WebRTC.
+     *
+     * Rendu sous forme de texte déjà mis en forme plutôt que d'objets : rien
+     * ici n'est calculé deux fois ni relu par le code, tout est destiné à être
+     * lu par un humain dans le journal technique.
+     */
+    private class NetworkSample(
+        val ligne: String,
+        val sortieOctets: Long,
+        val entréeOctets: Long,
+        val horodatageMs: Long,
+        val limitation: String,
+    )
+
+    /**
+     * Extrait d'un relevé WebRTC ce qui dit l'état réel du lien.
+     *
+     * ═══ Pourquoi ces champs-là ═══
+     *
+     * « L'image est mauvaise » a trois causes qui ne se corrigent pas du tout
+     * pareil : le réseau ne suit pas, le processeur ne suit pas, ou on n'a
+     * jamais demandé mieux. Jusqu'ici rien ne permettait de les distinguer, et
+     * on a passé des jours à supposer.
+     *
+     * **qualityLimitationReason** tranche à lui seul les deux premières :
+     * WebRTC y écrit `bandwidth`, `cpu`, `other` ou `none`. C'est son propre
+     * verdict sur ce qui le bride, et il n'y a rien à interpréter.
+     *
+     * **La résolution réellement émise et reçue** tranche la troisième, et
+     * dément ou confirme ce qu'on croit envoyer. WebRTC réduit la définition
+     * de lui-même sous contrainte : demander 640×480 ne veut pas dire que
+     * 640×480 circule.
+     *
+     * **Le type des candidats** — host, srflx ou relay — dit si le lien est
+     * direct ou passe par un relais. Sur un réseau mobile derrière un NAT
+     * d'opérateur, c'est la différence entre un appel qui aboutit et un appel
+     * qui échoue, et ce projet n'a aucun serveur TURN.
+     *
+     * S'exécute sur le thread de signalisation de WebRTC : lecture seule, rien
+     * qui bloque, et le résultat repart sur le thread principal.
+     */
+    private fun summariseNetwork(report: org.webrtc.RTCStatsReport): NetworkSample? {
+        val stats = report.statsMap.values
+        val paire = stats.firstOrNull {
+            it.type == "candidate-pair" && it.members["state"] == "succeeded"
+        } ?: return null
+
+        fun typeDeCandidat(clé: String): String {
+            val id = paire.members[clé] as? String ?: return "?"
+            return report.statsMap[id]?.members?.get("candidateType") as? String ?: "?"
+        }
+
+        val sortieVidéo = stats.firstOrNull { it.type == "outbound-rtp" && it.members["kind"] == "video" }
+        val entréeVidéo = stats.firstOrNull { it.type == "inbound-rtp" && it.members["kind"] == "video" }
+        val entréeAudio = stats.firstOrNull { it.type == "inbound-rtp" && it.members["kind"] == "audio" }
+
+        val limitation = sortieVidéo?.members?.get("qualityLimitationReason") as? String ?: "?"
+        val ligne = buildString {
+            append("↑ ${format(sortieVidéo, "frameWidth")}×${format(sortieVidéo, "frameHeight")}")
+            append("@${format(sortieVidéo, "framesPerSecond")} bridé=$limitation")
+            append(" · ↓ ${format(entréeVidéo, "frameWidth")}×${format(entréeVidéo, "frameHeight")}")
+            append("@${format(entréeVidéo, "framesPerSecond")}")
+            append(" perte=${perte(entréeVidéo)}")
+            append(" · audio perte=${perte(entréeAudio)} gigue=${millisecondes(entréeAudio, "jitter")}")
+            append(" · RTT=${millisecondes(paire, "currentRoundTripTime")}")
+            append(" dispo=${kilobits(paire, "availableOutgoingBitrate")}")
+            append(" · lien ${typeDeCandidat("localCandidateId")}↔${typeDeCandidat("remoteCandidateId")}")
+        }
+        return NetworkSample(
+            ligne = ligne,
+            sortieOctets = (paire.members["bytesSent"] as? Number)?.toLong() ?: 0L,
+            entréeOctets = (paire.members["bytesReceived"] as? Number)?.toLong() ?: 0L,
+            horodatageMs = SystemClock.elapsedRealtime(),
+            limitation = limitation,
+        )
+    }
+
+    private fun format(stats: org.webrtc.RTCStats?, clé: String): String {
+        val valeur = stats?.members?.get(clé) as? Number ?: return "?"
+        return if (valeur.toDouble() % 1.0 == 0.0) valeur.toLong().toString()
+        else String.format(Locale.FRANCE, "%.0f", valeur.toDouble())
+    }
+
+    /** Perte en pourcentage des paquets attendus, « ? » quand les deux compteurs manquent. */
+    private fun perte(stats: org.webrtc.RTCStats?): String {
+        val perdus = (stats?.members?.get("packetsLost") as? Number)?.toDouble() ?: return "?"
+        val reçus = (stats.members["packetsReceived"] as? Number)?.toDouble() ?: return "?"
+        val attendus = perdus + reçus
+        if (attendus <= 0.0) return "0%"
+        return String.format(Locale.FRANCE, "%.1f%%", 100.0 * perdus / attendus)
+    }
+
+    /** WebRTC compte les durées en SECONDES ; le journal se lit en millisecondes. */
+    private fun millisecondes(stats: org.webrtc.RTCStats?, clé: String): String {
+        val secondes = (stats?.members?.get(clé) as? Number)?.toDouble() ?: return "?"
+        return String.format(Locale.FRANCE, "%.0fms", secondes * 1000.0)
+    }
+
+    private fun kilobits(stats: org.webrtc.RTCStats?, clé: String): String {
+        val bits = (stats?.members?.get(clé) as? Number)?.toDouble() ?: return "?"
+        return String.format(Locale.FRANCE, "%.0fkb/s", bits / 1000.0)
     }
 
     private fun onInboundBytes(total: Long) {
@@ -1350,7 +1540,17 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             override fun onIceCandidatesRemoved(candidates: Array<IceCandidate>) {}
             override fun onSignalingChange(newState: PeerConnection.SignalingState?) {}
             override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {
-                CallTrace.record("APPEL ICE", newState?.name ?: "null")
+                // Le délai depuis le décrochage accompagne l'état. Une
+                // connexion qui met vingt secondes à s'établir et une qui
+                // échoue se ressemblent beaucoup vues de la chambre — le
+                // proche attend devant un écran — et se distinguent
+                // parfaitement ici. C'est aussi la mesure qui dira si un
+                // serveur TURN change quelque chose, le jour où il y en aura
+                // un : sans relais, les liens difficiles n'aboutissent pas,
+                // ils expirent.
+                val depuisDécrochage =
+                    if (answeredAtMs > 0) " (+${SystemClock.elapsedRealtime() - answeredAtMs} ms)" else ""
+                CallTrace.record("APPEL ICE", (newState?.name ?: "null") + depuisDécrochage)
                 when (newState) {
                     PeerConnection.IceConnectionState.DISCONNECTED,
                     PeerConnection.IceConnectionState.FAILED -> scheduleAutoHangupOnIceFailure()
@@ -1531,7 +1731,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     private fun cleanup() {
+        reportNetworkSummary()
         CallTrace.record("APPEL nettoyage", "fin de l'appel, remise à zéro de l'état")
+        answeredAtMs = 0L
         cancelScheduledAutoHangup()
         stopTranscriptionWorker()
         stopMediaWatchdog()
@@ -1677,6 +1879,18 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
         /** Cadence de relevé du compteur d'octets reçus (voir startMediaWatchdog). */
         private const val MEDIA_WATCHDOG_TICK_MS = 3_000L
+
+        /**
+         * Intervalle entre deux lignes de qualité de lien.
+         *
+         * Le relevé se fait toutes les trois secondes avec le chien de garde,
+         * mais l'écrire aussi souvent noierait le journal — c'est la faute qui
+         * a déjà coûté une version, quand un relevé par seconde chassait les
+         * lignes d'ouverture. Quinze secondes suffisent à voir une tendance sur
+         * un appel, et tout changement de ce qui bride la qualité est écrit
+         * immédiatement sans attendre ce délai (voir reportNetwork).
+         */
+        private const val NETWORK_LOG_INTERVAL_MS = 15_000L
 
         /**
          * Silence toléré une fois que du média est arrivé au moins une fois.
