@@ -38,6 +38,7 @@ import com.seniorvisio.signaling.CallSignalingClient
 import com.seniorvisio.service.IncomingCallService
 import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.service.TimedCallAlertController
+import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -556,6 +557,7 @@ class IncomingCallActivity : AppCompatActivity() {
         // (donc sa surface bien créée), juste non dessinée à l'écran.
         localRenderer.visibility = View.INVISIBLE
         remoteRenderer.visibility = View.VISIBLE
+        callEngine.attachRenderers(localRenderer, remoteRenderer)
         // L'image entière du proche, à ses proportions réelles.
         //
         // Le réglage par défaut d'un SurfaceViewRenderer est un compromis qui
@@ -563,9 +565,14 @@ class IncomingCallActivity : AppCompatActivity() {
         // la verticale, il rognait franchement les côtés — et donc, selon la
         // façon dont le proche tient son téléphone, une partie de son visage.
         // Une bande noire ne gêne personne ; un menton coupé, si.
-        remoteRenderer.setScalingType(org.webrtc.RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+        //
+        // Après attachRenderers, donc après init() : ces deux réglages n'en
+        // dépendent pas aujourd'hui, mais les poser avant reviendrait à
+        // configurer une vue dont le rendu n'existe pas encore — un ordre qui
+        // marche par hasard est un ordre qui cassera à la prochaine montée de
+        // version de la bibliothèque.
+        remoteRenderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
         remoteRenderer.setEnableHardwareScaler(true)
-        callEngine.attachRenderers(localRenderer, remoteRenderer)
         // AVANT answer(), et non après comme jusqu'ici. Même raison que pour la
         // coupure micro et le mode même pièce : la piste audio du proche peut
         // arriver dans la milliseconde qui suit answer(), et c'est à sa
