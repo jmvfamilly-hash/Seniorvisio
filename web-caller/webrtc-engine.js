@@ -620,12 +620,39 @@ class RealCallEngine extends CallEngine {
    */
   async readUsageDays(deviceId, days = 8) {
     if (!this._available) return [];
-    const snapshot = await this._db
-      .collection("devices").doc(deviceId).collection("usage")
-      .orderBy(firebase.firestore.FieldPath.documentId(), "desc")
-      .limit(days)
-      .get();
-    return snapshot.docs.map((doc) => ({ date: doc.id, ...doc.data() }));
+    // ═══ AUCUNE REQUÊTE : LES DOCUMENTS SONT DEMANDÉS PAR LEUR NOM ═══
+    //
+    // Cette lecture passait par orderBy(documentId(), "desc"), et Firestore
+    // exigeait un index pour ça. Tant qu'il n'était pas construit, la section
+    // ne montrait rien — et cette dépendance aurait dû être recréée à la main
+    // dans tout nouveau projet, à commencer par l'environnement de validation
+    // prévu sur la seconde tablette.
+    //
+    // Or la tablette nomme chaque document par sa date (voir
+    // DeviceStatusReporter.publishUsage : document(today.toString())). Les noms
+    // sont donc calculables ici, et on les demande directement. Pas de requête,
+    // pas d'index, pas de tri côté serveur.
+    //
+    // C'est aussi ce qui rend inoffensive une sous-collection qui grossit d'un
+    // document par jour sans jamais être élaguée : on n'en liste jamais le
+    // contenu, on ne demande que les journées qu'on veut voir.
+    const aujourdhui = new Date();
+    const noms = Array.from({ length: days }, (_, décalage) => {
+      const jour = new Date(aujourdhui);
+      jour.setDate(jour.getDate() - décalage);
+      // Format ISO local, et non toISOString() qui bascule en UTC : passé
+      // minuit en heure d'été, il désignerait la veille et la journée en cours
+      // manquerait à l'appel.
+      return `${jour.getFullYear()}-${String(jour.getMonth() + 1).padStart(2, "0")}-${String(jour.getDate()).padStart(2, "0")}`;
+    });
+
+    const collection = this._db.collection("devices").doc(deviceId).collection("usage");
+    const documents = await Promise.all(
+      noms.map((nom) => collection.doc(nom).get().catch(() => null))
+    );
+    return documents
+      .filter((doc) => doc && doc.exists)
+      .map((doc) => ({ date: doc.id, ...doc.data() }));
   }
 
   /**
