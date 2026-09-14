@@ -938,13 +938,30 @@ function renderUsageSummary(days) {
 
 async function loadUsage() {
   els.refreshUsageButton.disabled = true;
+  // Lecture et affichage séparés, et la cause exacte reportée à l'écran.
+  //
+  // « Lecture de l'usage impossible » ne disait rien : ni si la lecture avait
+  // échoué ou l'affichage, ni pourquoi. Or les causes sont opposées — un refus
+  // Firestore se corrige dans les règles, une erreur d'affichage dans le code,
+  // et une absence de données ne se corrige pas du tout. C'est le même catch
+  // muet qui a coûté une semaine sur le volume.
+  let days;
   try {
-    const days = await engine.readUsageDays(CONFIG.deviceDocId, 8);
+    days = await engine.readUsageDays(CONFIG.deviceDocId, 8);
+  } catch (e) {
+    console.warn("[app] Lecture de l'usage refusée :", e);
+    els.usageSummary.textContent =
+      `Lecture refusée par Firestore (${e.code || e.name || "?"}) : ${e.message || e}`;
+    els.refreshUsageButton.disabled = false;
+    return;
+  }
+  try {
     renderUsageSummary(days);
     renderUsageDays(days);
   } catch (e) {
-    console.warn("[app] Lecture de l'usage impossible :", e);
-    els.usageSummary.textContent = "Lecture de l'usage impossible.";
+    console.warn("[app] Affichage de l'usage impossible :", e);
+    els.usageSummary.textContent =
+      `${days.length} journée(s) lue(s), mais affichage impossible : ${e.message || e}`;
   } finally {
     els.refreshUsageButton.disabled = false;
   }
@@ -1001,7 +1018,6 @@ function applyDeviceSettings(data) {
   // Retenu pour que la fraîcheur du signe de vie puisse vieillir toute seule
   // entre deux publications de la tablette (voir renderDeviceHealth).
   lastDeviceData = data;
-  renderDeviceHealth(data);
 
   // L'état de la trace, tel que la tablette le rapporte. Affiché plutôt que
   // déduit de la case cochée : la trace s'arrête toute seule au bout de dix
@@ -1073,6 +1089,16 @@ function applyDeviceSettings(data) {
     }
   }
   renderEngineStatus(data);
+  // EN DERNIER, ET PROTÉGÉ. Ce bloc était appelé en tête et sans garde : la
+  // moindre erreur dedans — un élément absent parce que le navigateur a gardé
+  // l'ancien index.html en cache tout en chargeant le nouveau app.js — coupait
+  // l'affichage de TOUS les réglages en dessous. Une nouveauté ne doit pas
+  // pouvoir emporter du code qui marchait.
+  try {
+    renderDeviceHealth(data);
+  } catch (e) {
+    console.warn("[app] État de la tablette non affichable :", e);
+  }
 }
 
 /**
@@ -1097,6 +1123,18 @@ function applyDeviceSettings(data) {
  * perdus de suite et ce n'est plus un hasard.
  */
 function renderDeviceHealth(data) {
+  if (!els.deviceHealth) {
+    // Le cas se produit quand le navigateur a gardé l'ancien index.html en
+    // cache tout en chargeant le nouveau app.js — les deux fichiers n'ont
+    // aucune raison d'expirer ensemble. Dit clairement, parce qu'un bloc
+    // absent ressemble sinon à une fonctionnalité qui n'a pas été livrée.
+    console.warn(
+      "[app] Bloc « État de la tablette » absent de la page : index.html est " +
+      "probablement une version en cache. Rechargez en forçant (Ctrl+Maj+R, " +
+      "ou vider les données du site sur téléphone)."
+    );
+    return;
+  }
   const vu = data.lastHeartbeatAt?.toDate ? data.lastHeartbeatAt.toDate() : null;
   const minutes = vu ? Math.round((Date.now() - vu.getTime()) / 60000) : null;
 
