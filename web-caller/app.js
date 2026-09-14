@@ -217,6 +217,7 @@ const els = {
   roomWakeThresholdSlider: document.getElementById("roomWakeThresholdSlider"),
   blockWakeAtNightToggle: document.getElementById("blockWakeAtNightToggle"),
   roomListeningStatus: document.getElementById("roomListeningStatus"),
+  deviceHealth: document.getElementById("deviceHealth"),
   transcriptionDiagnostic: document.getElementById("transcriptionDiagnostic"),
   paidUsage: document.getElementById("paidUsage"),
   voiceGateToggle: document.getElementById("voiceGateToggle"),
@@ -993,8 +994,14 @@ const ENGINE_SELECT_FIELDS = [
   ["speakerEngineSelect", "speakerEngine"],
 ];
 
+let lastDeviceData = null;
+
 function applyDeviceSettings(data) {
   deviceSettingsLoaded = true;
+  // Retenu pour que la fraîcheur du signe de vie puisse vieillir toute seule
+  // entre deux publications de la tablette (voir renderDeviceHealth).
+  lastDeviceData = data;
+  renderDeviceHealth(data);
 
   // L'état de la trace, tel que la tablette le rapporte. Affiché plutôt que
   // déduit de la case cochée : la trace s'arrête toute seule au bout de dix
@@ -1067,6 +1074,71 @@ function applyDeviceSettings(data) {
   }
   renderEngineStatus(data);
 }
+
+/**
+ * L'état de la tablette, à lire avant tout réglage.
+ *
+ * ═══ Pourquoi le signe de vie passe en premier ═══
+ *
+ * Tous ces chiffres étaient déjà publiés par la tablette toutes les cinq
+ * minutes. Aucun n'était affiché : `lastHeartbeatAt` servait uniquement à
+ * savoir s'il existait, jamais à dire QUAND. On pouvait donc régler pendant
+ * des minutes une tablette éteinte, débranchée ou plantée, sans que rien ne
+ * l'indique — et conclure que les réglages ne marchent pas.
+ *
+ * La fraîcheur du signe de vie est donc la première ligne, et la seule qui
+ * change de couleur. Le reste ne veut rien dire si elle est rouge : une
+ * révision, une batterie ou un état d'écoute vieux d'une heure décrivent une
+ * tablette qui n'existe plus.
+ *
+ * Les seuils découlent de la cadence réelle (cinq minutes, voir
+ * CallListenerService.HEARTBEAT_INTERVAL_MS) : sous douze minutes, un signe a
+ * pu être manqué sans que rien n'aille mal ; au-delà de trente, deux se sont
+ * perdus de suite et ce n'est plus un hasard.
+ */
+function renderDeviceHealth(data) {
+  const vu = data.lastHeartbeatAt?.toDate ? data.lastHeartbeatAt.toDate() : null;
+  const minutes = vu ? Math.round((Date.now() - vu.getTime()) / 60000) : null;
+
+  let classe = "health-dead";
+  let vie = "aucun signe de vie reçu";
+  if (minutes !== null) {
+    vie = minutes < 1 ? "à l'instant" : `il y a ${minutes} min`;
+    if (minutes < 12) classe = "health-ok";
+    else if (minutes < 30) classe = "health-warn";
+    else {
+      classe = "health-dead";
+      vie = `il y a ${minutes} min — la tablette ne répond plus`;
+    }
+  }
+
+  const compagnes = data.companionApps
+    ? Object.entries(data.companionApps).map(([nom, version]) =>
+        `${nom.split(".").pop()} ${version}`).join(", ")
+    : "—";
+
+  const lignes = [
+    ["Signe de vie", `<span class="${classe}">${vie}</span>`],
+    ["Version installée", data.appVersion || "—"],
+    ["Batterie", typeof data.batteryPercent === "number" && data.batteryPercent >= 0
+      ? `${data.batteryPercent} %` : "—"],
+    ["Écoute de la pièce", data.roomListening || "—"],
+    ["Modèle embarqué", data.voskModelState || "—"],
+    ["Applications tierces", compagnes],
+  ];
+  els.deviceHealth.innerHTML =
+    "<dl>" + lignes.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") + "</dl>";
+}
+
+// Le « il y a X min » vieillit tout seul : sans ce rafraîchissement, il
+// resterait figé à sa valeur d'affichage tant que la tablette ne republie
+// rien — c'est-à-dire précisément quand elle est en panne, le seul moment où
+// cette ligne compte.
+setInterval(() => {
+  if (lastDeviceData && !els.adminOverlay.classList.contains("hidden")) {
+    renderDeviceHealth(lastDeviceData);
+  }
+}, 30000);
 
 function renderEngineStatus(data) {
   const modelState = data.voskModelState;

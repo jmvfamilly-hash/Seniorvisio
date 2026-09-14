@@ -661,3 +661,29 @@ body.video-mode #localVideo {
   font-size: 15px;
   line-height: 1.4;
 }
+
+/* État de la tablette : lu d'un coup d'œil, avant tout réglage. */
+.device-health {
+  margin: 8px 0 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #1B2838;
+  border: 1px solid #2C3E55;
+}
+
+.device-health dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  font-size: 15px;
+}
+
+.device-health dt { color: #8FA0BC; }
+.device-health dd { margin: 0; color: #E8EDF5; }
+
+/* Trois états de vie, et le rouge est réservé à « la tablette ne répond
+   plus » — pas à une information qu'on pourrait confondre avec un réglage. */
+.health-ok { color: #7BD88F; }
+.health-warn { color: #E9C46A; }
+.health-dead { color: #FF8A7A; font-weight: 600; }
