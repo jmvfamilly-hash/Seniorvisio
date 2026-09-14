@@ -35,6 +35,9 @@ class RealCallEngine extends CallEngine {
     // plutôt que de continuer en arrière-plan et écraser l'état déjà
     // remis à zéro par cancelCall (voir isStale() dans startCall).
     this._callGeneration = 0;
+    this._consigneRefuséeCb = null;
+    /** Dernier facingMode demandé, pour les navigateurs qui ne le rapportent pas (voir currentFacingMode). */
+    this._facingModeDemandé = null;
 
     try {
       firebase.initializeApp(firebaseConfig);
@@ -110,6 +113,121 @@ class RealCallEngine extends CallEngine {
 
   /** callback(nom, cause) — une consigne n'a pas atteint la tablette. */
   onCommandRejected(callback) { this._consigneRefuséeCb = callback; }
+
+  /**
+   * Quelle caméra filme en ce moment : "user" (avant) ou "environment"
+   * (arrière). Null tant qu'aucun appel n'est en cours.
+   *
+   * Lue sur la piste elle-même plutôt que mémorisée depuis le départ : la
+   * demande initiale ne précise AUCUN facingMode — c'est le navigateur qui
+   * choisit, et son choix ne se devine pas. Un état supposé « avant » serait
+   * faux sur le premier appareil qui en décide autrement, et le premier
+   * basculement partirait alors du mauvais pied.
+   */
+  currentFacingMode() {
+    const piste = this._localStream && this._localStream.getVideoTracks()[0];
+    if (!piste) return null;
+    const réglages = (piste.getSettings && piste.getSettings()) || {};
+    // getSettings().facingMode n'est pas renseigné partout (notamment sur
+    // certains navigateurs de bureau, où la question ne se pose pas) : on
+    // retombe sur ce qu'on a demandé en dernier, et à défaut sur l'avant.
+    return réglages.facingMode || this._facingModeDemandé || "user";
+  }
+
+  /**
+   * Passe de la caméra avant à l'arrière, et inversement.
+   *
+   * Rend le mode réellement obtenu, ou lève une erreur si aucune des deux
+   * tentatives n'aboutit — l'appel garde alors l'image qu'il avait.
+   *
+   * ═══ TROIS PRÉCAUTIONS, CHACUNE POUR UNE RAISON PRÉCISE ═══
+   *
+   * **On ne redemande JAMAIS l'audio.** Le nouveau flux est vidéo seule
+   * (`audio: false`). L'avertissement en tête de startCall tient toujours :
+   * passer un objet de contraintes audio a déjà fait apparaître un écho sur
+   * iPad. Ici la question ne se pose même pas — la piste micro d'origine
+   * continue de vivre, intouchée.
+   *
+   * **replaceTrack, et non une nouvelle négociation.** Remplacer la piste
+   * d'un émetteur existant ne change pas la description de session : rien à
+   * renégocier, rien à réécrire dans Firestore, et surtout aucune coupure
+   * chez Jean. Refaire une offre aurait suspendu l'image le temps d'un
+   * aller-retour, pour un simple changement d'objectif.
+   *
+   * **On demande avant de libérer.** Plusieurs Android refusent d'ouvrir la
+   * seconde caméra tant que la première tourne (NotReadableError). La
+   * parade répandue — couper d'abord — perd l'image pour de bon si la
+   * demande échoue ensuite. On tente donc dans le bon ordre, et on ne coupe
+   * qu'en repli ; si la seconde tentative échoue elle aussi, on rouvre la
+   * caméra d'origine plutôt que de laisser le proche sans image.
+   */
+  async switchCamera() {
+    if (!this._localStream) throw new Error("aucun appel en cours");
+    const actuel = this.currentFacingMode();
+    const cible = actuel === "environment" ? "user" : "environment";
+    const ancienne = this._localStream.getVideoTracks()[0] || null;
+
+    let nouvellePiste;
+    try {
+      nouvellePiste = await this._ouvrirCaméra(cible);
+    } catch (premièreErreur) {
+      if (!ancienne) throw premièreErreur;
+      // La caméra est probablement tenue par la piste en cours : on la
+      // libère et on retente. À partir d'ici, l'appel n'a plus d'image
+      // tant qu'on n'en a pas récupéré une.
+      console.warn("[Caméra] Ouverture directe refusée, seconde tentative :", premièreErreur);
+      ancienne.stop();
+      try {
+        nouvellePiste = await this._ouvrirCaméra(cible);
+      } catch (secondeErreur) {
+        console.error("[Caméra] Bascule impossible, retour à la caméra d'origine :", secondeErreur);
+        // Dernier recours : rouvrir celle d'avant. Si même ça échoue, on
+        // laisse remonter — l'appelant saura que l'image est perdue, ce qui
+        // vaut mieux qu'un écran noir sans explication.
+        // `ancienne` est passée bien qu'elle soit déjà arrêtée : elle est
+        // toujours DANS le flux local, et l'y laisser y maintiendrait une
+        // piste morte que l'aperçu et les statistiques compteraient encore.
+        const repli = await this._ouvrirCaméra(actuel);
+        await this._poserPisteVidéo(repli, ancienne);
+        throw secondeErreur;
+      }
+    }
+
+    await this._poserPisteVidéo(nouvellePiste, ancienne);
+    this._facingModeDemandé = cible;
+    return this.currentFacingMode();
+  }
+
+  /** Ouvre une caméra donnée, aux mêmes contraintes de résolution que l'appel. */
+  async _ouvrirCaméra(facingMode) {
+    const flux = await navigator.mediaDevices.getUserMedia({
+      // `ideal` et non `exact`, pour la même raison qu'au démarrage : une
+      // contrainte impérative que l'appareil ne sait pas satisfaire fait
+      // échouer la demande entière. Sur un téléphone à une seule caméra, on
+      // récupère simplement celle qu'il a.
+      video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+    return flux.getVideoTracks()[0];
+  }
+
+  /**
+   * Installe une piste vidéo : chez Jean, dans l'aperçu local, puis libère
+   * l'ancienne.
+   *
+   * L'ancienne n'est arrêtée qu'en DERNIER, une fois la nouvelle en place :
+   * l'arrêter avant laisserait passer une image noire chez Jean, courte mais
+   * bien visible.
+   */
+  async _poserPisteVidéo(piste, ancienne) {
+    const émetteur = this._pc && this._pc.getSenders().find((s) => s.track && s.track.kind === "video");
+    if (émetteur) await émetteur.replaceTrack(piste);
+    if (ancienne) this._localStream.removeTrack(ancienne);
+    this._localStream.addTrack(piste);
+    const aperçu = document.getElementById("localVideo");
+    if (aperçu) aperçu.srcObject = this._localStream;
+    if (ancienne) ancienne.stop();
+  }
 
   /** callback(reason) — "blocked" (Jean a refusé) ou "busy" (il est déjà en ligne). */
   onBlocked(callback) { this._blockedCb = callback; }

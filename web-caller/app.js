@@ -254,6 +254,7 @@ const els = {
   paneVideo: el("paneVideo"),
   paneSettings: el("paneSettings"),
   paneSlideshow: el("paneSlideshow"),
+  switchCameraButton: el("switchCameraButton"),
   openSettingsButton: el("openSettingsButton"),
   openSlideshowButton: el("openSlideshowButton"),
   rememberSettingsButton: el("rememberSettingsButton"),
@@ -375,6 +376,38 @@ function showState(name) {
     document.body.classList.remove("video-mode");
   }
 }
+
+/**
+ * Met le libellé du bouton en accord avec ce que l'appui va faire.
+ *
+ * Nommer la caméra VERS laquelle on bascule, et non celle qui filme : un
+ * bouton qui affiche l'état courant se lit comme un bouton qui affiche son
+ * action, et on appuie en croyant faire l'inverse de ce qui se produit.
+ */
+function renderCameraButton() {
+  if (!els.switchCameraButton) return;
+  const versArrière = engine.currentFacingMode() !== "environment";
+  els.switchCameraButton.textContent = versArrière ? "🔄 Caméra arrière" : "🔄 Caméra avant";
+}
+
+on("switchCameraButton", "click", async () => {
+  // Désarmé le temps de la bascule : ouvrir une caméra prend un instant, et
+  // deux appuis coup sur coup lanceraient deux demandes concurrentes sur le
+  // même objectif — la seconde échouerait, et l'échec porterait sur une
+  // bascule que personne n'a demandée.
+  els.switchCameraButton.disabled = true;
+  try {
+    await engine.switchCamera();
+  } catch (e) {
+    // Cas le plus courant, et parfaitement normal : un appareil qui n'a
+    // qu'une caméra. Le dire franchement plutôt que laisser un bouton sans
+    // effet — c'est la règle de tout ce fichier depuis les dix catch muets.
+    afficherConsigneRefusée("changement de caméra", (e && (e.name || e.message)) || "impossible");
+  } finally {
+    renderCameraButton();
+    els.switchCameraButton.disabled = false;
+  }
+});
 
 on("openSettingsButton", "click", () => showPane("paneSettings"));
 on("openSlideshowButton", "click", () => showPane("paneSlideshow"));
@@ -1880,7 +1913,13 @@ engine.onBlocked((reason) => {
     : "Jean a bloqué l'appel.";
   showState("blocked");
 });
-engine.onConnected(() => showState("connected"));
+engine.onConnected(() => {
+  showState("connected");
+  // Seulement maintenant : la demande initiale ne précise aucun facingMode,
+  // c'est le navigateur qui a choisi, et on ne sait ce qu'il a pris qu'une
+  // fois la piste ouverte (voir currentFacingMode).
+  renderCameraButton();
+});
 engine.onEnded(() => showState("idle"));
 engine.onError((message) => {
   alert(message);
