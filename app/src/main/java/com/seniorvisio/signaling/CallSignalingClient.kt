@@ -2,6 +2,7 @@ package com.seniorvisio.signaling
 
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentChange
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -105,13 +106,55 @@ class CallSignalingClient {
         )
     }
 
-    /** Niveau de volume choisi à distance par l'appelant (voir web-caller/webrtc-engine.js). */
-    fun listenForRemoteVolume(callId: String, onVolume: (Double) -> Unit): ListenerRegistration {
+    /**
+     * Écoute UN champ du document d'appel, et ne prévient que lorsque sa
+     * valeur a réellement changé.
+     *
+     * ═══ POURQUOI CETTE COMPARAISON EST INDISPENSABLE ═══
+     *
+     * Firestore ne sait pas écouter un champ : il écoute un document. Or
+     * toutes les consignes du proche — volume, micro, même pièce, sous-titres
+     * géants, aperçu caméra, écoute de la pièce — vivent dans le MÊME document
+     * que le texte affiché chez Jean, que `publishScreenState` réécrit
+     * plusieurs fois par seconde pendant que le proche parle.
+     *
+     * Chacune de ces écritures redéclenchait donc les six écouteurs, qui
+     * relisaient leur champ inchangé et réappliquaient leur effet. Le coût
+     * n'est pas théorique :
+     *
+     *   - le journal technique se remplissait de consignes identiques au
+     *     rythme de la parole. Un appel de sept minutes a chassé **25 843
+     *     lignes** de son propre journal, dont tout le milieu de l'appel ;
+     *   - `rampVolumeTo` relançait une rampe d'une seconde plusieurs fois par
+     *     seconde, donc une rampe n'arrivait jamais à son terme ;
+     *   - `setEnabled` était reposé sur le micro à la même cadence.
+     *
+     * Rien de tout cela ne plantait, et c'est précisément le problème : la
+     * seule victime visible était le journal, c'est-à-dire l'instrument avec
+     * lequel on cherche les pannes. Le diaporama avait déjà sa propre
+     * comparaison pour cette raison exacte (voir listenForSlideshowPhoto) ;
+     * elle devient ici la règle commune.
+     *
+     * La toute première notification passe toujours (rien n'a encore été vu),
+     * donc l'état initial de l'appel est bien appliqué.
+     */
+    private fun <T : Any> listenForFieldChange(
+        callId: String,
+        read: (DocumentSnapshot) -> T?,
+        onChange: (T) -> Unit,
+    ): ListenerRegistration {
+        var lastSeen: T? = null
         return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val volume = snapshot?.getDouble(FIELD_REMOTE_VOLUME)
-            if (volume != null) onVolume(volume)
+            val value = snapshot?.let(read) ?: return@addSnapshotListener
+            if (value == lastSeen) return@addSnapshotListener
+            lastSeen = value
+            onChange(value)
         }
     }
+
+    /** Niveau de volume choisi à distance par l'appelant (voir web-caller/webrtc-engine.js). */
+    fun listenForRemoteVolume(callId: String, onVolume: (Double) -> Unit): ListenerRegistration =
+        listenForFieldChange(callId, { it.getDouble(FIELD_REMOTE_VOLUME) }, onVolume)
 
     /**
      * Signale le début du décompte d'alerte côté tablette, pour que le PWA
@@ -130,12 +173,8 @@ class CallSignalingClient {
     }
 
     /** Active/désactive à distance le mode "sous-titres géants" côté tablette (voir web-caller/app.js). */
-    fun listenForCaptionMode(callId: String, onEnabled: (Boolean) -> Unit): ListenerRegistration {
-        return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val enabled = snapshot?.getBoolean(FIELD_CAPTION_MODE)
-            if (enabled != null) onEnabled(enabled)
-        }
-    }
+    fun listenForCaptionMode(callId: String, onEnabled: (Boolean) -> Unit): ListenerRegistration =
+        listenForFieldChange(callId, { it.getBoolean(FIELD_CAPTION_MODE) }, onEnabled)
 
     /**
      * L'appelant demande que la transcription écoute la pièce de Jean plutôt
@@ -147,12 +186,8 @@ class CallSignalingClient {
      * circuler dans les deux sens, l'appelant peut donc parler avec la
      * personne présente dans la pièce pendant tout ce temps.
      */
-    fun listenForMicToRoom(callId: String, onEnabled: (Boolean) -> Unit): ListenerRegistration {
-        return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val enabled = snapshot?.getBoolean(FIELD_MIC_TO_ROOM)
-            if (enabled != null) onEnabled(enabled)
-        }
-    }
+    fun listenForMicToRoom(callId: String, onEnabled: (Boolean) -> Unit): ListenerRegistration =
+        listenForFieldChange(callId, { it.getBoolean(FIELD_MIC_TO_ROOM) }, onEnabled)
 
 
     /**
@@ -161,12 +196,8 @@ class CallSignalingClient {
      * c'est le proche qui décide de l'activer depuis le PWA, pas un bouton
      * sur la tablette.
      */
-    fun listenForSelfPreviewMode(callId: String, onEnabled: (Boolean) -> Unit): ListenerRegistration {
-        return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val enabled = snapshot?.getBoolean(FIELD_SELF_PREVIEW)
-            if (enabled != null) onEnabled(enabled)
-        }
-    }
+    fun listenForSelfPreviewMode(callId: String, onEnabled: (Boolean) -> Unit): ListenerRegistration =
+        listenForFieldChange(callId, { it.getBoolean(FIELD_SELF_PREVIEW) }, onEnabled)
 
     /**
      * Photo actuellement affichée en grand chez Jean pendant un diaporama
@@ -178,15 +209,18 @@ class CallSignalingClient {
      * images. Valeur nulle ou vide = fin du diaporama, retour à la vidéo.
      */
     fun listenForSlideshowPhoto(callId: String, onPhoto: (String?) -> Unit): ListenerRegistration {
+        // Même règle que listenForFieldChange, mais ce champ-ci a besoin de
+        // notifier sa propre disparition : l'absence de photo signifie « fin
+        // du diaporama, retour à la vidéo », et doit donc être transmise.
+        // C'est pourquoi il ne passe pas par le raccourci commun, qui ignore
+        // les valeurs nulles.
         var lastPhoto: String? = null
+        var seenOnce = false
         return callDoc(callId).addSnapshotListener { snapshot, _ ->
             if (snapshot == null) return@addSnapshotListener
-            // Ce listener écoute tout le document, donc il se redéclenche à
-            // chaque écriture (sous-titres, volume...) : sans cette
-            // comparaison, on redécoderait la même photo des dizaines de fois
-            // par minute pendant que le proche parle.
             val photo = snapshot.getString(FIELD_SLIDESHOW_PHOTO)
-            if (photo == lastPhoto) return@addSnapshotListener
+            if (seenOnce && photo == lastPhoto) return@addSnapshotListener
+            seenOnce = true
             lastPhoto = photo
             onPhoto(photo)
         }
@@ -197,24 +231,16 @@ class CallSignalingClient {
      * WebRtcCallEngine.listenForMicMute) : sert à localiser un écho sans
      * ambiguïté, et à couper un bruit de fond gênant chez Jean.
      */
-    fun listenForMicMute(callId: String, onMuted: (Boolean) -> Unit): ListenerRegistration {
-        return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val muted = snapshot?.getBoolean(FIELD_MIC_MUTED)
-            if (muted != null) onMuted(muted)
-        }
-    }
+    fun listenForMicMute(callId: String, onMuted: (Boolean) -> Unit): ListenerRegistration =
+        listenForFieldChange(callId, { it.getBoolean(FIELD_MIC_MUTED) }, onMuted)
 
     /**
      * L'appelant signale qu'il est dans la même pièce que Jean (voir
      * WebRtcCallEngine.listenForSameRoomMode) : le son de la tablette est
      * alors entièrement coupé, le texte continue de s'afficher.
      */
-    fun listenForSameRoomMode(callId: String, onEnabled: (Boolean) -> Unit): ListenerRegistration {
-        return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            val enabled = snapshot?.getBoolean(FIELD_SAME_ROOM_MODE)
-            if (enabled != null) onEnabled(enabled)
-        }
-    }
+    fun listenForSameRoomMode(callId: String, onEnabled: (Boolean) -> Unit): ListenerRegistration =
+        listenForFieldChange(callId, { it.getBoolean(FIELD_SAME_ROOM_MODE) }, onEnabled)
 
     /**
      * Publie l'état de l'écran de Jean : le texte réellement affiché dans

@@ -105,6 +105,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private val autoHangupHandler = Handler(Looper.getMainLooper())
     private var autoHangupRunnable: Runnable? = null
 
+    /** Instant de la perte du lien ICE, pour mesurer la durée d'une coupure qui se résorbe. */
+    private var iceLostAtMs = 0L
+
     // ---- Chien de garde du flux entrant (voir startMediaWatchdog) ----
     private val mediaWatchdogHandler = Handler(Looper.getMainLooper())
     private var mediaWatchdogRunnable: Runnable? = null
@@ -1060,8 +1063,23 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
     private fun scheduleAutoHangupOnIceFailure() {
         if (autoHangupRunnable != null) return
+        iceLostAtMs = SystemClock.elapsedRealtime()
+        CallTrace.record(
+            "APPEL ICE perdu",
+            "raccroché prévu dans ${ICE_FAILURE_GRACE_MS / 1000} s si le lien ne revient pas",
+        )
         val runnable = Runnable {
             autoHangupRunnable = null
+            // Ce raccroché était entièrement muet. Vu de la chambre, c'est
+            // pourtant l'événement le plus brutal de tout l'appel : l'écran de
+            // Jean se referme seul en pleine conversation. Le journal doit
+            // dire que c'est NOUS qui l'avons décidé, et après quel délai —
+            // sans quoi on cherche la panne du côté du réseau alors qu'elle
+            // est dans notre propre minuterie.
+            CallTrace.record(
+                "APPEL raccroché auto",
+                "lien ICE toujours perdu après ${ICE_FAILURE_GRACE_MS / 1000} s",
+            )
             hangUp()
             connectionLostCb?.invoke()
         }
@@ -1069,9 +1087,26 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         autoHangupHandler.postDelayed(runnable, ICE_FAILURE_GRACE_MS)
     }
 
-    /** Une brève déconnexion ICE se résout souvent seule (reprise Wi-Fi...) : n'agit qu'après le délai de grâce. */
+    /**
+     * Une brève déconnexion ICE se résout souvent seule (reprise Wi-Fi...) :
+     * n'agit qu'après le délai de grâce.
+     *
+     * La durée de la coupure est écrite ici, et c'est le point de toute la
+     * mesure : elle dit si le lien se rétablit tout seul, et en combien de
+     * temps. Tant qu'on raccrochait avant de le savoir, la réponse était
+     * inconnaissable — on ne mesurait que notre propre impatience.
+     */
     private fun cancelScheduledAutoHangup() {
-        autoHangupRunnable?.let { autoHangupHandler.removeCallbacks(it) }
+        val pending = autoHangupRunnable
+        if (pending != null && iceLostAtMs > 0) {
+            CallTrace.record(
+                "APPEL ICE rétabli",
+                "coupure résorbée en ${SystemClock.elapsedRealtime() - iceLostAtMs} ms, " +
+                    "raccroché annulé",
+            )
+        }
+        iceLostAtMs = 0L
+        pending?.let { autoHangupHandler.removeCallbacks(it) }
         autoHangupRunnable = null
     }
 
@@ -1874,8 +1909,30 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
          * Une brève déconnexion ICE se résout souvent seule (quelques
          * secondes de coupure Wi-Fi...) : ce délai laisse une chance de
          * reprendre avant de considérer l'appel définitivement perdu.
+         *
+         * ═══ HUIT SECONDES, C'ÉTAIT NOTRE IMPATIENCE, PAS UNE MESURE ═══
+         *
+         * Un journal d'appel réel montre la séquence exacte : lien perdu à
+         * trente-sept secondes, raccroché huit secondes plus tard, à la
+         * milliseconde près. Autrement dit, ce que le proche a vécu comme un
+         * « échec de connexion » était notre propre minuterie. Un autre appel,
+         * le même soir et sur le même réseau, a tenu sept minutes et demie
+         * sans la moindre coupure : le lien n'est donc pas mauvais par nature.
+         *
+         * Vingt secondes, c'est le temps qu'il faut à ICE pour tenter une
+         * reprise, et c'est surtout le temps qu'il faut pour SAVOIR s'il y
+         * parvient. Ce n'est pas encore le correctif : c'est la mesure, et
+         * elle s'écrit maintenant dans le journal (voir
+         * cancelScheduledAutoHangup). Si les coupures se résorbent en trois
+         * secondes, ce délai redescendra ; si elles ne se résorbent jamais, il
+         * faudra chercher ailleurs — mais on ne le devinera pas en raccrochant
+         * avant d'avoir regardé.
+         *
+         * Le risque de l'allonger est borné : le chien de garde du flux entrant
+         * raccroche de son côté, et lui se fonde sur les octets réellement
+         * reçus, pas sur ce que la pile croit.
          */
-        private const val ICE_FAILURE_GRACE_MS = 8000L
+        private const val ICE_FAILURE_GRACE_MS = 20_000L
 
         /** Cadence de relevé du compteur d'octets reçus (voir startMediaWatchdog). */
         private const val MEDIA_WATCHDOG_TICK_MS = 3_000L
@@ -1897,8 +1954,15 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
          * Assez long pour laisser passer un changement de réseau côté proche
          * (le flux reprend souvent après quelques secondes), assez court pour
          * que Jean ne reste pas devant une image figée.
+         *
+         * Porté de douze à vingt secondes en même temps que le délai de grâce
+         * ICE, et pour la même raison : les deux minuteries se déclenchent sur
+         * le même incident, et laisser l'une raccrocher pendant que l'autre
+         * attend reviendrait à ne rien mesurer du tout. Vingt secondes d'image
+         * figée, c'est long à regarder — mais moins pénalisant qu'un appel qui
+         * se referme alors qu'il allait reprendre.
          */
-        private const val MEDIA_STALL_TIMEOUT_MS = 12_000L
+        private const val MEDIA_STALL_TIMEOUT_MS = 20_000L
 
         /**
          * Attente avant le tout premier octet : la connexion peut encore être
