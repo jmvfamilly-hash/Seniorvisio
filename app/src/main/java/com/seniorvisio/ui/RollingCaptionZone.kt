@@ -501,10 +501,33 @@ class RollingCaptionZone(
         scrollAnimator.shiftBy(-removedPx)
     }
 
+    /**
+     * Prévenu quand cette zone apparaît ou disparaît.
+     *
+     * Averti au DÉBUT du fondu, pas à sa fin : ce qui écoute ici règle la
+     * hauteur de la vidéo du proche (voir IncomingCallActivity), et les deux
+     * mouvements doivent partir ensemble. Prévenir après coup ferait
+     * s'agrandir l'image une demi-seconde après que le texte s'est effacé —
+     * un à-coup, là où il faut un seul geste.
+     */
+    var onDisplayChanged: (() -> Unit)? = null
+
+    /**
+     * Ce que cette zone est en train de devenir, et non ce qu'elle est.
+     *
+     * Pendant le fondu de disparition la vue est encore VISIBLE : s'y fier
+     * ferait attendre la fin du fondu à ce qui doit bouger EN MÊME TEMPS
+     * qu'elle. Cet indicateur bascule dès la décision prise.
+     */
+    var isDisplayed = false
+        private set
+
     private fun reveal() {
         if (container.visibility == View.VISIBLE && container.alpha == 1f) return
         container.animate().cancel()
         container.visibility = View.VISIBLE
+        isDisplayed = true
+        onDisplayChanged?.invoke()
         container.animate().alpha(1f).setDuration(FADE_MS).start()
     }
 
@@ -521,6 +544,10 @@ class RollingCaptionZone(
         container.animate().alpha(0f).setDuration(FADE_MS)
             .withEndAction { container.visibility = View.INVISIBLE }
             .start()
+        // Annoncé ici, avant la fin du fondu : la vidéo reprend la place
+        // pendant que le texte s'efface, et non après.
+        isDisplayed = false
+        onDisplayChanged?.invoke()
     }
 
     companion object {

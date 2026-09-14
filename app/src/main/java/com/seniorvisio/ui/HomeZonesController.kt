@@ -222,8 +222,44 @@ class HomeZonesController(
         }
     }
 
+    /**
+     * Prévenu chaque fois qu'une zone de texte apparaît ou disparaît.
+     *
+     * Seul l'écran d'appel s'en sert : la vidéo du proche n'occupe que la
+     * bande laissée libre au-dessus du texte, et reprend toute la hauteur
+     * quand plus rien n'est affiché (voir IncomingCallActivity). L'écran
+     * d'accueil ne s'y abonne pas — là, rien ne doit jamais bouger.
+     */
+    var onTextZonesChanged: (() -> Unit)? = null
+
+    /**
+     * Ordonnée du haut de la première zone de TEXTE actuellement affichée, en
+     * pixels dans le repère de l'écran — ou null si aucune ne l'est.
+     *
+     * La zone d'information ne compte pas : pendant un appel elle est déjà
+     * effacée (voir setBackground), et la vidéo peut occuper sa place.
+     *
+     * L'ordre des zones étant réglable (voir applyZoneOrder), on ne peut pas
+     * se contenter de supposer que le texte est en bas : on parcourt la pile
+     * telle qu'elle est réellement empilée à cet instant.
+     */
+    fun topOfVisibleTextZones(): Int? {
+        for (index in 0 until zoneStack.childCount) {
+            val child = zoneStack.getChildAt(index)
+            val displayed = when (child) {
+                zoneRoom -> roomZone.isDisplayed
+                zoneCall -> callZone.isDisplayed
+                else -> false
+            }
+            if (displayed) return zoneStack.top + child.top
+        }
+        return null
+    }
+
     init {
         applyZoneOrder()
+        roomZone.onDisplayChanged = { onTextZonesChanged?.invoke() }
+        callZone.onDisplayChanged = { onTextZonesChanged?.invoke() }
     }
 
     /**

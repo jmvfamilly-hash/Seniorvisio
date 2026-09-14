@@ -196,6 +196,12 @@
             <input type="checkbox" id="captionToggle">
             🔤 Afficher mes paroles en grand chez Jean
           </label>
+          <!-- Cocher cette case démarre le moteur de transcription sur la
+               tablette, ce qui prend plusieurs secondes. Sans cette ligne,
+               rien ne se passait à l'écran pendant ce temps : on décochait en
+               croyant que la case n'avait rien fait — ce qui ARRÊTE le moteur
+               et produit exactement le symptôme qu'on essayait de corriger. -->
+          <p class="hint" id="captionStatus"></p>
         </div>
 
         <div class="caption-control">

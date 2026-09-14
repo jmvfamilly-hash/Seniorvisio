@@ -13,6 +13,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
+import android.animation.ValueAnimator
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -94,6 +95,9 @@ class IncomingCallActivity : AppCompatActivity() {
     // jamais interrompu par une rotation.
     private var remoteRendererRef: SurfaceViewRenderer? = null
     private var localRendererRef: SurfaceViewRenderer? = null
+
+    /** Agrandissement/rétrécissement en cours de la vidéo (voir fitVideoAboveCaptions). */
+    private var videoHeightAnimator: ValueAnimator? = null
 
     // Dernier état publié au PWA (voir publishScreenState) : sert à n'écrire
     // que lorsque quelque chose a réellement changé.
@@ -552,6 +556,15 @@ class IncomingCallActivity : AppCompatActivity() {
         // (donc sa surface bien créée), juste non dessinée à l'écran.
         localRenderer.visibility = View.INVISIBLE
         remoteRenderer.visibility = View.VISIBLE
+        // L'image entière du proche, à ses proportions réelles.
+        //
+        // Le réglage par défaut d'un SurfaceViewRenderer est un compromis qui
+        // recadre : sur une dalle 16/10 recevant un flux de téléphone tenu à
+        // la verticale, il rognait franchement les côtés — et donc, selon la
+        // façon dont le proche tient son téléphone, une partie de son visage.
+        // Une bande noire ne gêne personne ; un menton coupé, si.
+        remoteRenderer.setScalingType(org.webrtc.RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+        remoteRenderer.setEnableHardwareScaler(true)
         callEngine.attachRenderers(localRenderer, remoteRenderer)
         // AVANT answer(), et non après comme jusqu'ici. Même raison que pour la
         // coupure micro et le mode même pièce : la piste audio du proche peut
@@ -577,12 +590,85 @@ class IncomingCallActivity : AppCompatActivity() {
         callEngine.onConnectionLost {
             runOnUiThread { if (!callHandled) finish() }
         }
+        // La vidéo cède la place au texte, et la reprend quand il s'efface.
+        zones.onTextZonesChanged = { fitVideoAboveCaptions() }
+        remoteRenderer.post { fitVideoAboveCaptions(animate = false) }
         connectedAtMs = System.currentTimeMillis()
         screenStateHandler.post(screenStatePublisher)
         // Applique tout de suite la disposition correspondant à l'orientation
         // actuelle (la tablette peut déjà être en paysage au moment où
         // l'appel se connecte, pas seulement lors d'une rotation ultérieure).
         applyOrientationLayout(resources.configuration.orientation)
+    }
+
+    /**
+     * Donne à la vidéo du proche la bande libre au-dessus du texte, et toute
+     * la hauteur quand il n'y a pas de texte.
+     *
+     * ═══ CE QUI CHANGE, ET POURQUOI ═══
+     *
+     * La vidéo était un fond plein écran que les zones de texte recouvraient.
+     * Deux conséquences, toutes deux au détriment de ce que Jean regarde : le
+     * visage du proche était en partie caché par un cadre semi-opaque, et il
+     * était de toute façon recadré pour remplir une dalle qui n'a pas les
+     * proportions du téléphone d'en face.
+     *
+     * Désormais les deux se partagent la hauteur : l'image occupe ce qui
+     * reste au-dessus de la première zone de texte affichée, et la reprend
+     * entièrement dès que le silence efface le texte. Pendant une
+     * conversation, l'écran alterne donc entre « on parle, je lis » et « on
+     * s'est tu, je regarde », ce qui est exactement le rythme d'un appel.
+     *
+     * ═══ POURQUOI EN PIXELS, ET PAS EN POIDS DE MISE EN PAGE ═══
+     *
+     * Un poids dans la pile des zones aurait été plus court à écrire, mais la
+     * vidéo n'est pas dans cette pile : c'est un calque plein écran, frère du
+     * diaporama et de la photo d'appelant, et l'y déplacer signifierait
+     * détruire puis recréer la surface de rendu — un écran noir à chaque
+     * apparition de texte.
+     *
+     * On lui donne donc une hauteur mesurée, prise sur la pile elle-même
+     * telle qu'elle est réellement empilée à cet instant : l'ordre des zones
+     * est réglable, et supposer que le texte est en bas serait faux le jour
+     * où quelqu'un change ce réglage.
+     *
+     * L'animation dure le temps du fondu du texte (voir RollingCaptionZone) :
+     * l'image s'agrandit pendant que la phrase s'efface, en un seul geste.
+     */
+    private fun fitVideoAboveCaptions(animate: Boolean = true) {
+        val renderer = remoteRendererRef ?: return
+        val root = findViewById<View>(R.id.callRoot) ?: return
+        if (root.height == 0) return
+        // Plancher indispensable, et pas seulement esthétique : l'ordre des
+        // zones est réglable, et rien n'interdit de mettre une zone de texte
+        // en tête — la bande libre au-dessus d'elle serait alors nulle. Un
+        // SurfaceViewRenderer de hauteur nulle ne crée jamais sa surface, ce
+        // qui donne un écran noir dont le projet a déjà payé le prix (voir le
+        // commentaire sur INVISIBLE plutôt que GONE, plus haut).
+        //
+        // Sous ce plancher, on revient au comportement d'avant : le texte se
+        // pose par-dessus l'image, qui est dessinée sous les zones. Une
+        // dégradation lisible, jamais un écran noir.
+        val minimum = root.height / 3
+        val cible = (zones.topOfVisibleTextZones() ?: root.height).coerceAtLeast(minimum)
+        val params = renderer.layoutParams as? FrameLayout.LayoutParams ?: return
+        if (params.height == cible) return
+        params.gravity = Gravity.TOP
+        if (!animate) {
+            params.height = cible
+            renderer.layoutParams = params
+            return
+        }
+        val départ = if (params.height > 0) params.height else root.height
+        videoHeightAnimator?.cancel()
+        videoHeightAnimator = ValueAnimator.ofInt(départ, cible).apply {
+            duration = VIDEO_RESIZE_MS
+            addUpdateListener { animation ->
+                params.height = animation.animatedValue as Int
+                renderer.layoutParams = params
+            }
+            start()
+        }
     }
 
     /**
@@ -636,6 +722,10 @@ class IncomingCallActivity : AppCompatActivity() {
         super.onConfigurationChanged(newConfig)
         if (!isConnected) return
         applyOrientationLayout(newConfig.orientation)
+        // La hauteur de l'écran et la position des zones viennent de changer :
+        // la bande vidéo se recalcule, une fois la nouvelle mise en page faite
+        // — la mesurer maintenant rendrait encore les valeurs d'avant.
+        remoteRendererRef?.post { fitVideoAboveCaptions(animate = false) }
         // Les proportions de l'écran viennent de changer : la réplique côté
         // PWA doit tourner avec, sans quoi le proche verrait des zones aux
         // mauvaises places jusqu'au prochain rafraîchissement horaire.
@@ -870,6 +960,8 @@ class IncomingCallActivity : AppCompatActivity() {
         // chauffe/marquage d'écran sinon.
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         screenStateHandler.removeCallbacks(screenStatePublisher)
+        videoHeightAnimator?.cancel()
+        videoHeightAnimator = null
         zones.release()
         // L'écoute de la pièce reprend, et l'écran d'accueil qui réapparaît
         // rebaissera les alertes (voir MainActivity.onResume) : le volume
@@ -901,6 +993,18 @@ class IncomingCallActivity : AppCompatActivity() {
         /** Piste du décompte : un voile clair sur fond sombre, sombre sur fond clair. */
         private const val COUNTDOWN_TRACK_ON_DARK = 0x33FFFFFF
         private const val COUNTDOWN_TRACK_ON_LIGHT = 0x22000000
+
+        /**
+         * Durée de l'agrandissement de la vidéo quand le texte s'efface.
+         *
+         * Volontairement égale au fondu des zones de texte (voir
+         * RollingCaptionZone.FADE_MS) : les deux mouvements doivent se lire
+         * comme un seul. Une valeur différente donnerait une image qui
+         * s'agrandit après coup, ou un texte qui s'efface sur une image déjà
+         * repositionnée — dans les deux cas un à-coup, sur un écran dont
+         * toute la règle est que rien ne surprenne Jean.
+         */
+        private const val VIDEO_RESIZE_MS = 400L
 
         private const val SCREEN_STATE_PUBLISH_MS = 1_000L
         private const val LAG_PUBLISH_THRESHOLD_SECONDS = 0.5f

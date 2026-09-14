@@ -261,6 +261,7 @@ const els = {
   volumeSlider: el("volumeSlider"),
   volumeWarning: el("volumeWarning"),
   captionToggle: el("captionToggle"),
+  captionStatus: el("captionStatus"),
   tabletMicMuteToggle: el("tabletMicMuteToggle"),
   slideshowInput: el("slideshowInput"),
   slideshowNav: el("slideshowNav"),
@@ -535,6 +536,13 @@ function applyScreenState(state) {
   setCaption(els.jeanRoomBox, els.jeanRoomText, state.roomText);
   setCaption(els.jeanCallBox, els.jeanCallText, state.callText);
 
+  // Le premier texte d'appel publié par la tablette confirme que le moteur a
+  // fini de démarrer (voir renderCaptionStatus).
+  if (state.callText && !captionTextSeen) {
+    captionTextSeen = true;
+    renderCaptionStatus();
+  }
+
   // En dessous d'une demi-seconde, l'écart ne se voit pas : le signaler
   // ferait clignoter un avertissement en permanence pendant une conversation
   // parfaitement normale.
@@ -557,6 +565,10 @@ on("callButton", "click", async () => {
   // rendrait Jean muet sans que personne ne comprenne pourquoi.
   els.tabletMicMuteToggle.checked = false;
   els.sameRoomToggle.checked = false;
+  // L'attente de la transcription recommence à chaque appel : le moteur est
+  // arrêté entre deux appels (voir renderCaptionStatus).
+  captionTextSeen = false;
+  renderCaptionStatus();
   els.sameRoomStatus.textContent = "";
   els.volumeSlider.disabled = false;
   els.micToRoomControl.classList.remove("hidden");
@@ -603,7 +615,47 @@ engine.onCountdown((remaining, total) => {
     remaining > 0 ? `${remaining}s avant connexion automatique` : "Connexion en cours…";
 });
 
+/**
+ * Dit où en est la transcription, parce qu'elle met du temps à démarrer.
+ *
+ * ═══ POURQUOI CETTE LIGNE EXISTE ═══
+ *
+ * Cocher la case ne fait pas apparaître du texte : elle démarre un moteur de
+ * reconnaissance vocale sur la tablette — chargement du modèle ou poignée de
+ * main avec le service distant — ce qui prend plusieurs secondes.
+ *
+ * Pendant ce temps, rien ne changeait à l'écran. Le proche en concluait que
+ * sa case n'avait rien fait et la décochait, ce qui ARRÊTE le moteur : le
+ * geste censé corriger le symptôme le provoquait. « Le toggle ne semble pas
+ * marcher » n'était pas une panne, c'était une attente que personne
+ * n'annonçait.
+ *
+ * Et le « ✅ » n'est pas une supposition sur le temps écoulé : il attend que
+ * du texte arrive VRAIMENT chez Jean — c'est la tablette qui publie ce
+ * qu'elle affiche (voir applyScreenState). Une confirmation posée sur une
+ * minuterie aurait menti le jour où le moteur échoue, c'est-à-dire le seul
+ * jour où elle compte.
+ */
+function renderCaptionStatus() {
+  if (!els.captionStatus) return;
+  if (!els.captionToggle.checked) {
+    els.captionStatus.textContent = "";
+    return;
+  }
+  els.captionStatus.textContent = captionTextSeen
+    ? "✅ Vos paroles s'affichent chez Jean."
+    : "⏳ Démarrage de la transcription… le texte apparaîtra dans quelques secondes.";
+}
+
+/** Vrai dès que la tablette a publié du texte d'appel pour l'appel en cours. */
+let captionTextSeen = false;
+
 on("captionToggle", "change", () => {
+  // Remis à zéro à chaque bascule : rallumer la transcription relance
+  // l'attente, et afficher « ✅ » hérité de la fois précédente ferait croire
+  // que le texte arrive déjà.
+  captionTextSeen = false;
+  renderCaptionStatus();
   engine.setCaptionMode(els.captionToggle.checked);
 });
 
