@@ -87,33 +87,6 @@ class RecueilStore(private val context: Context) {
         if (actif === this) actif = null
     }
 
-    companion object {
-        /**
-         * Le magasin en service, pour l'écran d'appel.
-         *
-         * ═══ POURQUOI CETTE RÉFÉRENCE GLOBALE, QUI N'EST PAS ANODINE ═══
-         *
-         * Le magasin est tenu par le service de premier plan : c'est lui qui
-         * vit en continu, écoute Firestore, télécharge et vérifie, y compris
-         * quand aucun appel n'est en cours. L'écran d'appel, lui, naît et
-         * meurt à chaque appel.
-         *
-         * En construire un second dans l'écran ne marcherait PAS — pas
-         * « marcherait moins bien » : son état est peuplé par l'écouteur, donc
-         * une instance neuve est vide, et le lecteur ne trouverait jamais
-         * aucun recueil. Le faire transiter par l'Intent ne marcherait pas non
-         * plus : un magasin n'est pas sérialisable, et il tient des fichiers.
-         *
-         * Reste à emprunter celui qui existe. La référence est posée au
-         * démarrage de l'écoute et retirée à son arrêt, donc elle vaut null
-         * exactement quand il n'y a rien à emprunter — et l'écran d'appel sait
-         * s'en passer (voir IncomingCallActivity).
-         */
-        @Volatile
-        var actif: RecueilStore? = null
-            private set
-    }
-
     /** Ce que le lecteur pourra ouvrir : uniquement ce qui est réellement là. */
     fun disponibles(): List<Recueil> = dernierÉtat.filter { it.prêts.isNotEmpty() }
 
@@ -264,27 +237,53 @@ class RecueilStore(private val context: Context) {
         ÉtatElement.entries.firstOrNull { it.name.equals(valeur, ignoreCase = true) }
             ?: ÉtatElement.À_VÉRIFIER
 
-    private companion object {
-        const val TAG = "RecueilStore"
-        const val COLLECTION = "recueils"
-        const val DOSSIER = "recueils"
+    companion object {
+
+        /**
+         * Le magasin en service, pour l'écran d'appel.
+         *
+         * ═══ POURQUOI CETTE RÉFÉRENCE GLOBALE, QUI N'EST PAS ANODINE ═══
+         *
+         * Le magasin est tenu par le service de premier plan : c'est lui qui
+         * vit en continu, écoute Firestore, télécharge et vérifie, y compris
+         * quand aucun appel n'est en cours. L'écran d'appel, lui, naît et
+         * meurt à chaque appel.
+         *
+         * En construire un second dans l'écran ne marcherait PAS — pas
+         * « marcherait moins bien » : son état est peuplé par l'écouteur, donc
+         * une instance neuve est vide, et le lecteur ne trouverait jamais
+         * aucun recueil. Le faire transiter par l'Intent ne marcherait pas non
+         * plus : un magasin n'est pas sérialisable, et il tient des fichiers.
+         *
+         * Reste à emprunter celui qui existe. La référence est posée au
+         * démarrage de l'écoute et retirée à son arrêt, donc elle vaut null
+         * exactement quand il n'y a rien à emprunter — et l'écran d'appel sait
+         * s'en passer (voir IncomingCallActivity).
+         */
+        @Volatile
+        var actif: RecueilStore? = null
+            private set
+
+        private const val TAG = "RecueilStore"
+        private const val COLLECTION = "recueils"
+        private const val DOSSIER = "recueils"
 
         /** Bornes de la définition de rangement, pour ne dépendre d'aucune dalle particulière. */
-        const val CÔTÉ_MIN = 720
-        const val CÔTÉ_PLAFOND = 1920
+        private const val CÔTÉ_MIN = 720
+        private const val CÔTÉ_PLAFOND = 1920
 
-        const val CHAMP_TITRE = "titre"
-        const val CHAMP_CRÉÉ_PAR = "crééPar"
-        const val CHAMP_ÉLÉMENTS = "elements"
-        const val CHAMP_ID = "id"
-        const val CHAMP_TYPE = "type"
-        const val CHAMP_NATURE = "nature"
-        const val CHAMP_SOURCE = "source"
-        const val CHAMP_ORDRE = "ordre"
-        const val CHAMP_VÉRIFICATION = "verification"
-        const val CHAMP_ÉTAT = "etat"
-        const val CHAMP_CAUSE = "cause"
-        const val CHAMP_ÉTAT_GLOBAL = "etatGlobal"
-        const val CHAMP_VÉRIFIÉ_PAR = "verifiePar"
+        private const val CHAMP_TITRE = "titre"
+        private const val CHAMP_CRÉÉ_PAR = "crééPar"
+        private const val CHAMP_ÉLÉMENTS = "elements"
+        private const val CHAMP_ID = "id"
+        private const val CHAMP_TYPE = "type"
+        private const val CHAMP_NATURE = "nature"
+        private const val CHAMP_SOURCE = "source"
+        private const val CHAMP_ORDRE = "ordre"
+        private const val CHAMP_VÉRIFICATION = "verification"
+        private const val CHAMP_ÉTAT = "etat"
+        private const val CHAMP_CAUSE = "cause"
+        private const val CHAMP_ÉTAT_GLOBAL = "etatGlobal"
+        private const val CHAMP_VÉRIFIÉ_PAR = "verifiePar"
     }
 }
