@@ -48,7 +48,7 @@ service firebase.storage {
       // embarquer le SDK Storage).
       allow read: if true;
 
-      // Écriture bornée. Ces deux limites ne sont pas cosmétiques :
+      // Dépôt borné. Ces deux limites ne sont pas cosmétiques :
       //
       //   - 25 Mo couvre une photo d'appareil moderne et une courte vidéo,
       //     et ferme la porte à un dépôt qui viderait le quota du projet ;
@@ -56,9 +56,31 @@ service firebase.storage {
       //     de toute façon en décodant pour de bon (voir VerificateurElement)
       //     — mais autant ne pas payer le téléchargement d'un fichier dont on
       //     sait déjà qu'il sera refusé.
-      allow write: if request.resource.size < 25 * 1024 * 1024
-                   && (request.resource.contentType.matches('image/.*')
-                       || request.resource.contentType.matches('video/.*'));
+      //
+      // ═══ POURQUOI create/update ET NON write ═══
+      //
+      // `write` couvre AUSSI la suppression. Or sur une suppression il n'y a
+      // pas de fichier entrant : `request.resource` vaut null, la condition
+      // ci-dessous déréférence null, la règle échoue — et une règle qui
+      // échoue refuse.
+      //
+      // Conséquence mesurée, pas supposée : un dépôt renvoyait HTTP 200 et la
+      // suppression du même objet HTTP 403. Le bouton « Retirer » d'un recueil
+      // n'aurait jamais effacé les fichiers, et ils se seraient accumulés sans
+      // que rien ne le signale — recueils.js ne fait d'ailleurs qu'avertir
+      // dans la console, délibérément, pour qu'un fichier orphelin n'empêche
+      // pas le recueil de disparaître de l'écran.
+      allow create, update: if request.resource.size < 25 * 1024 * 1024
+                            && (request.resource.contentType.matches('image/.*')
+                                || request.resource.contentType.matches('video/.*'));
+
+      // Suppression permise sans condition, faute de pouvoir en poser une qui
+      // ait un sens : sans authentification, ces règles ne distinguent pas
+      // celui qui a déposé le fichier de n'importe qui d'autre. Le refuser
+      // n'apporterait aucune sécurité — qui peut supprimer peut déjà écraser
+      // par-dessus — et coûterait l'accumulation sans fin de fichiers dont
+      // plus aucun recueil ne parle.
+      allow delete: if true;
     }
 
     // Tout le reste est refusé. Écrit explicitement plutôt que laissé au
