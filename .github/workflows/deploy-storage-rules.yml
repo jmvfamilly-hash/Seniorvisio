@@ -82,6 +82,26 @@ jobs:
           grep -v '^//' storage.rules | grep -v '^\s*//' | grep -v '^\s*$' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
+      # L'espace de stockage doit exister avant qu'on puisse y poser des
+      # règles. Sa création est une décision distincte du déploiement — et
+      # l'emplacement qu'elle fixe est DÉFINITIF (voir le script).
+      #
+      # Cette étape ne fait rien si l'espace est déjà là, et n'interrompt pas
+      # le workflow si elle échoue : l'étape suivante dira alors clairement
+      # qu'il faut passer une fois par la console.
+      - name: S'assurer que l'espace de stockage existe
+        continue-on-error: true
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+          FIREBASE_PROJECT: seniorvisio
+          # Belgique : les photos concernent une famille française, la donnée
+          # reste près d'elle. Ce choix ne se change jamais après coup.
+          STORAGE_LOCATION: europe-west1
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
+          npm install google-auth-library --no-save --silent
+          node scripts/creer_espace_storage.js
+
       - name: Déploie les règles Storage
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
