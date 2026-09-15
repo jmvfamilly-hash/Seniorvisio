@@ -42,7 +42,6 @@ class CallSignalingClient {
      * une reconnaissance visuelle immédiate — null si absente ou trop lourde.
      */
     fun listenForRingingCalls(
-        onIncoming: (callId: String, callerName: String, callerPhotoBase64: String?) -> Unit,
         /**
          * ═══ L'ERREUR N'EST PLUS JETÉE, ET C'EST UN CORRECTIF DE PANNE ═══
          *
@@ -62,6 +61,13 @@ class CallSignalingClient {
          * Celui qui appelle doit réarmer (voir CallListenerService).
          */
         onErreur: (Exception) -> Unit = {},
+        /**
+         * En DERNIER, et ce n'est pas un détail de style : en Kotlin la lambda
+         * écrite après la parenthèse se rattache au dernier paramètre. Placé
+         * avant onErreur, ce rappel-ci ne pouvait pas être fourni ainsi — le
+         * bloc allait remplir onErreur, et le compilateur réclamait onIncoming.
+         */
+        onIncoming: (callId: String, callerName: String, callerPhotoBase64: String?) -> Unit,
     ): ListenerRegistration {
         var isFirstSnapshot = true
         return db.collection(CALLS_COLLECTION)

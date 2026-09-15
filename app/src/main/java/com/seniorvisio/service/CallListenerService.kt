@@ -12,6 +12,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.google.firebase.firestore.ListenerRegistration
@@ -250,6 +251,7 @@ class CallListenerService : LifecycleService() {
     }
 
     companion object {
+        private const val TAG = "CallListenerService"
         private const val FOREGROUND_ID = 43
         private const val CHANNEL_ID = "senior_visio_listener"
         private const val HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000L
