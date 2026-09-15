@@ -54,11 +54,17 @@ video {
   background: black;
 }
 
+/* Aperçu de sa propre caméra, pendant l'appel.
+   DANS LE FLUX, et plus en position fixe. Il flottait au-dessus de la barre
+   de boutons — Réglages, Photos, Caméra, Raccrocher — qu'il recouvrait en
+   partie : une vignette de confort ne doit pas disputer sa place aux
+   commandes de l'appel. Aligné à droite au-dessus de la réplique de l'écran
+   de Jean, il ne passe désormais par-dessus rien. */
 #localVideo {
   width: 100px;
-  position: fixed;
-  bottom: 90px;
-  right: 24px;
+  display: block;
+  margin-left: auto;
+  margin-right: 0;
 }
 
 .stats {
@@ -308,10 +314,6 @@ body.video-mode #app {
 body.video-mode h1,
 body.video-mode .pwa-version {
   display: none;
-}
-
-body.video-mode #localVideo {
-  z-index: 2;
 }
 
 /* Panneaux repliés de l'écran d'attente : identité de l'appelant. Repliés
@@ -695,6 +697,23 @@ body.video-mode #localVideo {
    Volontairement voyant et volontairement en haut : ces deux situations
    étaient jusqu'ici entièrement muettes, et le proche découvrait la panne en
    constatant que Jean ne réagissait pas. */
+/* Conteneur des bandeaux, coiffant la page HORS DU FLUX.
+
+   `body` est une boîte flexible qui centre #app : un bandeau simplement
+   ajouté au début du corps y devenait un élément flexible de plus, posé À
+   CÔTÉ du contenu — il s'affichait sur la gauche et rétrécissait toute la
+   page. Une position fixe le retire du flux, il ne dispute donc plus sa
+   place à rien. Le décalage du contenu est posé en JavaScript, à la hauteur
+   réelle mesurée (voir ajusterDecalageDesBandeaux) : elle dépend du nombre
+   de bandeaux et de la largeur de l'écran. */
+#banners {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+}
+
 .wiring-warning {
   margin: 0;
   padding: 12px 16px;

@@ -81,6 +81,45 @@ function bloc(nom, action) {
  * jusqu'à ce qu'on touche la commande morte — au pire moment, c'est-à-dire
  * pendant l'appel.
  */
+/**
+ * Le bandeau qui coiffe la page, hors du flux.
+ *
+ * ═══ POURQUOI UN CONTENEUR EN POSITION FIXE ═══
+ *
+ * `body` est une boîte flexible qui centre `#app`. Un bandeau simplement
+ * ajouté au début du corps devient donc un ÉLÉMENT FLEXIBLE de plus, posé
+ * À CÔTÉ du contenu : il s'affichait sur la gauche et rétrécissait toute la
+ * page. Une position fixe le retire complètement du flux — il ne peut plus
+ * disputer sa place à quoi que ce soit.
+ *
+ * Un seul conteneur pour tous les bandeaux, et non un par message : il peut
+ * y en avoir deux à la fois (banc d'essai + consigne refusée), et deux
+ * éléments fixes indépendants se poseraient l'un sur l'autre.
+ *
+ * Le contenu est ensuite décalé de la hauteur réelle du conteneur, mesurée
+ * et non devinée : elle dépend du nombre de bandeaux et de la largeur de
+ * l'écran, où un même texte tient sur une ou trois lignes.
+ */
+function conteneurDesBandeaux() {
+  let conteneur = document.getElementById("banners");
+  if (!conteneur) {
+    conteneur = document.createElement("div");
+    conteneur.id = "banners";
+    document.body.prepend(conteneur);
+  }
+  return conteneur;
+}
+
+function ajusterDecalageDesBandeaux() {
+  const conteneur = document.getElementById("banners");
+  const hauteur = conteneur ? conteneur.offsetHeight : 0;
+  document.body.style.paddingTop = hauteur ? `${hauteur}px` : "";
+}
+
+// La hauteur change avec la largeur de l'écran (un texte qui passait sur une
+// ligne en passe sur trois en portrait) et à la rotation du téléphone.
+window.addEventListener("resize", ajusterDecalageDesBandeaux);
+
 function signalerPageIncomplète() {
   if (!élémentsManquants.length && !blocsEnPanne.length) return;
   const bandeau = document.createElement("p");
@@ -88,7 +127,8 @@ function signalerPageIncomplète() {
   bandeau.textContent =
     "⚠️ Cette page n'est pas complètement chargée : certaines commandes ne " +
     "répondront pas. Fermez l'onglet et rouvrez-le pour recharger.";
-  document.body.prepend(bandeau);
+  conteneurDesBandeaux().append(bandeau);
+  ajusterDecalageDesBandeaux();
   console.error("[Câblage] Éléments absents :", élémentsManquants);
   console.error("[Câblage] Blocs en panne :", blocsEnPanne);
 }
@@ -121,7 +161,8 @@ bloc("bandeau d'environnement", () => {
   bandeau.textContent =
     `🧪 BANC D'ESSAI — cette page appelle la tablette de test (${env.deviceDocId}), ` +
     "pas celle de Jean.";
-  document.body.prepend(bandeau);
+  conteneurDesBandeaux().append(bandeau);
+  ajusterDecalageDesBandeaux();
   document.title = `[TEST] ${document.title}`;
 });
 
@@ -769,15 +810,20 @@ function afficherConsigneRefusée(nom, cause) {
     bandeau = document.createElement("p");
     bandeau.id = "commandWarning";
     bandeau.className = "wiring-warning";
-    document.body.prepend(bandeau);
+    conteneurDesBandeaux().append(bandeau);
   }
   bandeau.textContent =
     `⚠️ « ${nom} » n'est pas arrivé chez Jean (${cause}). Réessayez ; si cela ` +
     `se reproduit, raccrochez et rappelez.`;
   bandeau.hidden = false;
+  ajusterDecalageDesBandeaux();
   clearTimeout(afficherConsigneRefusée.minuterie);
   afficherConsigneRefusée.minuterie = setTimeout(() => {
     bandeau.hidden = true;
+    // Le décalage se reprend en même temps que le bandeau s'efface : sans ça,
+    // une bande vide resterait réservée en haut de la page pour le reste de
+    // l'appel.
+    ajusterDecalageDesBandeaux();
   }, 8000);
 }
 

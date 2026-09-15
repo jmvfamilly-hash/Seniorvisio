@@ -573,7 +573,25 @@ class IncomingCallActivity : AppCompatActivity() {
         // marche par hasard est un ordre qui cassera à la prochaine montée de
         // version de la bibliothèque.
         remoteRenderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-        remoteRenderer.setEnableHardwareScaler(true)
+        // ═══ PAS DE MISE À L'ÉCHELLE MATÉRIELLE, ET C'EST UN RETRAIT ═══
+        //
+        // J'avais ajouté setEnableHardwareScaler(true) ici « par bonne
+        // pratique », sans que personne le demande. C'est très probablement
+        // lui qui annulait le letterboxing : il fait rendre la vidéo dans un
+        // tampon dont les proportions sont celles de la VUE, que l'affichage
+        // étire ensuite pour la remplir. Sur une dalle large recevant un flux
+        // de téléphone tenu à la verticale, cela revient exactement au
+        // symptôme constaté — l'image du proche élargie à toute la largeur.
+        //
+        // Ce réglage est fait pour les cas où la vue a déjà les proportions
+        // de la vidéo, ce qui n'est pas le nôtre et ne peut pas l'être : la
+        // bande vidéo suit la hauteur laissée libre par le texte, pas les
+        // proportions du flux.
+        //
+        // Ce qu'on perd : un peu de travail confié au processeur graphique
+        // plutôt qu'à l'affichage. Sur un flux de 720×1280, c'est sans
+        // conséquence mesurable — et une image juste vaut mieux qu'une image
+        // efficace.
         // AVANT answer(), et non après comme jusqu'ici. Même raison que pour la
         // coupure micro et le mode même pièce : la piste audio du proche peut
         // arriver dans la milliseconde qui suit answer(), et c'est à sa
@@ -661,6 +679,15 @@ class IncomingCallActivity : AppCompatActivity() {
         val cible = (zones.topOfVisibleTextZones() ?: root.height).coerceAtLeast(minimum)
         val params = renderer.layoutParams as? FrameLayout.LayoutParams ?: return
         if (params.height == cible) return
+        // Les proportions de la BANDE, à côté de celles du flux que le journal
+        // réseau donne déjà (« ↓ 720×1280@25 »). Les deux ensemble suffisent à
+        // trancher la prochaine fois : si la bande est large, le flux étroit,
+        // et que l'image remplit quand même la largeur, alors ce n'est ni la
+        // mise en page ni la source — c'est le rendu.
+        CallTrace.record(
+            "APPEL bande vidéo",
+            "${root.width}×$cible px" + if (cible == root.height) " (pleine hauteur)" else "",
+        )
         params.gravity = Gravity.TOP
         if (!animate) {
             params.height = cible
