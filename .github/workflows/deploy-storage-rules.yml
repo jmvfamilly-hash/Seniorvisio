@@ -150,3 +150,26 @@ jobs:
             exit $code
           fi
           echo "### Règles Storage déployées" >> "$GITHUB_STEP_SUMMARY"
+
+      # « released rules to firebase.storage » ne nomme AUCUN espace : cette
+      # phrase ne dit pas si les règles sont posées là où le PWA écrit. Si
+      # elles atterrissent ailleurs, le symptôme est un refus d'écriture sur un
+      # espace qui existe pourtant — indiscernable d'une règle trop stricte.
+      # Cette étape lève l'ambiguïté en lisant, plutôt qu'en supposant.
+      - name: Dire à quel espace les règles sont attachées
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+          FIREBASE_PROJECT: seniorvisio
+          # L'espace que le PWA utilise réellement, tel qu'écrit dans
+          # web-caller/firebase-config.js.
+          STORAGE_BUCKET: seniorvisio.firebasestorage.app
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
+          npm install google-auth-library --no-save --silent
+          node scripts/diagnostic_storage.js | tee /tmp/diag.txt
+          {
+            echo "### Où sont réellement les règles"
+            echo '```'
+            cat /tmp/diag.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
