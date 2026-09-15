@@ -65,6 +65,49 @@
         android:contentDescription="Photo partagée par le proche"
         android:visibility="gone" />
 
+    <!-- Élément d'un RECUEIL, que le proche fait défiler pendant l'appel (voir
+         LecteurRecueil et CallSignalingClient.listenForRecueilCommande).
+
+         ═══ POURQUOI UNE VUE À PART DU DIAPORAMA CI-DESSUS ═══
+
+         Les deux montrent une photo, mais pas au même endroit : le diaporama
+         prend tout l'écran, un recueil prend LA BANDE de la vidéo du proche —
+         la même que fitVideoAboveCaptions accorde au visage — pour que la
+         transcription reste lisible dessous pendant qu'il commente.
+
+         Une seule vue partagée obligerait à sauvegarder et restaurer sa
+         géométrie à chaque bascule. Ce projet a déjà cassé deux fois la mise
+         en page de cet écran dans la même journée ; deux vues distinctes, dont
+         une seule est visible à la fois, coûtent quelques octets et retirent
+         toute une classe d'erreurs.
+
+         La hauteur est posée par le code, comme pour la vidéo. wrap_content en
+         largeur avec adjustViewBounds : la vue prend les proportions de la
+         photo dans la bande accordée, plutôt que d'étirer. -->
+    <ImageView
+        android:id="@+id/imageRecueil"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_gravity="top|center_horizontal"
+        android:adjustViewBounds="true"
+        android:scaleType="fitCenter"
+        android:contentDescription="Photo d'un recueil, présentée par le proche"
+        android:visibility="gone" />
+
+    <!-- Ce que la tablette ne sait pas afficher, ou n'a pas trouvé : dit à
+         l'écran plutôt que laissé en noir. Un recueil dont une photo manque ne
+         doit pas donner l'impression que l'appel a planté. -->
+    <TextView
+        android:id="@+id/textRecueilImpossible"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:gravity="center"
+        android:padding="24dp"
+        android:textColor="#FFFFFF"
+        android:textSize="26sp"
+        android:visibility="gone" />
+
     <!-- Nom de l'appelant et décompte, le temps de la sonnerie uniquement :
          masqué dès la connexion. Le repère date/moment/météo qui vivait ici
          en double a disparu — c'est la zone 1, présente en permanence

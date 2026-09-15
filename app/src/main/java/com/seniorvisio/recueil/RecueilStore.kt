@@ -68,6 +68,7 @@ class RecueilStore(private val context: Context) {
      */
     fun démarrer() {
         if (écoute != null) return
+        actif = this
         écoute = collection.addSnapshotListener { instantané, erreur ->
             if (erreur != null) {
                 Log.e(TAG, "Lecture des recueils impossible", erreur)
@@ -83,6 +84,34 @@ class RecueilStore(private val context: Context) {
     fun arrêter() {
         écoute?.remove()
         écoute = null
+        if (actif === this) actif = null
+    }
+
+    companion object {
+        /**
+         * Le magasin en service, pour l'écran d'appel.
+         *
+         * ═══ POURQUOI CETTE RÉFÉRENCE GLOBALE, QUI N'EST PAS ANODINE ═══
+         *
+         * Le magasin est tenu par le service de premier plan : c'est lui qui
+         * vit en continu, écoute Firestore, télécharge et vérifie, y compris
+         * quand aucun appel n'est en cours. L'écran d'appel, lui, naît et
+         * meurt à chaque appel.
+         *
+         * En construire un second dans l'écran ne marcherait PAS — pas
+         * « marcherait moins bien » : son état est peuplé par l'écouteur, donc
+         * une instance neuve est vide, et le lecteur ne trouverait jamais
+         * aucun recueil. Le faire transiter par l'Intent ne marcherait pas non
+         * plus : un magasin n'est pas sérialisable, et il tient des fichiers.
+         *
+         * Reste à emprunter celui qui existe. La référence est posée au
+         * démarrage de l'écoute et retirée à son arrêt, donc elle vaut null
+         * exactement quand il n'y a rien à emprunter — et l'écran d'appel sait
+         * s'en passer (voir IncomingCallActivity).
+         */
+        @Volatile
+        var actif: RecueilStore? = null
+            private set
     }
 
     /** Ce que le lecteur pourra ouvrir : uniquement ce qui est réellement là. */

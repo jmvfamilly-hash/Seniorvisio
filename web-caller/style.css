@@ -798,3 +798,58 @@ body.verrouille { overflow: hidden; }
 }
 
 .access-box button { width: 100%; }
+
+/* ═══ PRÉSENTATION D'UN RECUEIL PENDANT L'APPEL ═══
+
+   Mêmes proportions compactes que les commandes du diaporama, et pour la même
+   raison : ces boutons vivent dans la fenêtre vidéo, entre la réplique de
+   l'écran de Jean et les textes. Trop hauts, ils repousseraient son visage
+   hors de l'écran d'un téléphone — or c'est lui qu'on est venu voir. */
+.recueil-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.recueil-bar.hidden,
+.recueil-nav.hidden { display: none; }
+
+.recueil-bar label {
+  font-size: 15px;
+  margin: 0;
+}
+
+/* La liste prend la place restante et se rétrécit : un titre de recueil peut
+   être long, et sans min-width:0 un flex refuse de passer sous la largeur de
+   son contenu — la barre déborderait vers la droite sur un téléphone. */
+.recueil-bar select {
+  flex: 1 1 120px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 15px;
+}
+
+.recueil-bar button,
+.recueil-nav button {
+  margin-top: 0;
+  font-size: 15px;
+  padding: 10px 16px;
+}
+
+.recueil-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* Un bouton de navigation désactivé ne disparaît pas : sa place resterait
+   vide et les deux autres se déplaceraient sous le doigt au moment précis où
+   on enchaîne les photos. Il s'éteint, et on comprend qu'on est au bout. */
+.recueil-nav button:disabled {
+  opacity: 0.4;
+}

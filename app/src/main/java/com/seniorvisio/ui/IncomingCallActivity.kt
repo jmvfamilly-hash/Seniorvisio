@@ -35,6 +35,9 @@ import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.core.UsageStats
 import com.seniorvisio.core.WebRtcCallEngine
+import com.seniorvisio.recueil.LecteurRecueil
+import com.seniorvisio.recueil.RecueilStore
+import com.seniorvisio.recueil.Rendu
 import com.seniorvisio.signaling.CallSignalingClient
 import com.seniorvisio.service.IncomingCallService
 import com.seniorvisio.service.RoomPresenceService
@@ -100,6 +103,12 @@ class IncomingCallActivity : AppCompatActivity() {
 
     /** Agrandissement/rétrécissement en cours de la vidéo (voir fitVideoAboveCaptions). */
     private var videoHeightAnimator: ValueAnimator? = null
+
+    /**
+     * Le lecteur de recueil de CET appel. Null tant qu'aucun magasin n'est
+     * en service — l'appel fonctionne alors normalement, sans recueils.
+     */
+    private var lecteurRecueil: LecteurRecueil? = null
 
     // Dernier état publié au PWA (voir publishScreenState) : sert à n'écrire
     // que lorsque quelque chose a réellement changé.
@@ -523,6 +532,86 @@ class IncomingCallActivity : AppCompatActivity() {
         }.start()
     }
 
+    /**
+     * Montre, ou retire, l'élément de recueil que le proche présente.
+     *
+     * ═══ LA PHOTO PREND LA PLACE DU VISAGE, PAS CELLE DU TEXTE ═══
+     *
+     * Elle occupe exactement la bande que fitVideoAboveCaptions accorde à la
+     * vidéo, et le visage du proche s'efface le temps de la présentation. Les
+     * zones de texte, elles, ne bougent pas d'un pixel.
+     *
+     * C'est le choix de l'administrateur, et il se défend : c'est précisément
+     * pendant qu'un proche commente ses photos qu'il y a le plus à lire pour
+     * Jean. Une photo en plein écran aurait emporté la transcription au pire
+     * moment.
+     *
+     * Le visage revient de lui-même à la fermeture, sans rien à relancer : la
+     * vidéo n'a jamais cessé de tourner derrière.
+     */
+    private fun afficherRecueil(état: LecteurRecueil.État) {
+        val image = findViewById<ImageView>(R.id.imageRecueil) ?: return
+        val message = findViewById<TextView>(R.id.textRecueilImpossible) ?: return
+        val renderer = remoteRendererRef
+
+        when (val rendu = état.rendu) {
+            null -> {
+                image.setImageDrawable(null)
+                image.visibility = View.GONE
+                message.visibility = View.GONE
+                // INVISIBLE et non GONE pour la vidéo, ici comme ailleurs dans
+                // cet écran : une surface de rendu retirée de la mise en page
+                // est détruite, et la recréer donne un écran noir de plusieurs
+                // centaines de millisecondes au retour.
+                renderer?.visibility = View.VISIBLE
+                zones.setBackground(HomeZonesController.Background.VIDEO)
+                CallTrace.record("APPEL recueil", "refermé")
+            }
+            is Rendu.Image -> {
+                message.visibility = View.GONE
+                image.setImageBitmap(rendu.bitmap)
+                image.visibility = View.VISIBLE
+                renderer?.visibility = View.INVISIBLE
+                zones.setBackground(HomeZonesController.Background.SLIDESHOW)
+                ajusterBandeRecueil()
+                CallTrace.record(
+                    "APPEL recueil",
+                    "« ${état.titre} » ${état.position}/${état.total}",
+                )
+            }
+            is Rendu.Impossible -> {
+                image.setImageDrawable(null)
+                image.visibility = View.GONE
+                message.text = rendu.raison
+                message.visibility = View.VISIBLE
+                renderer?.visibility = View.INVISIBLE
+                zones.setBackground(HomeZonesController.Background.SLIDESHOW)
+                CallTrace.record("APPEL recueil", "inaffichable : ${rendu.raison}")
+            }
+        }
+    }
+
+    /**
+     * Donne à la photo la même bande que la vidéo.
+     *
+     * La hauteur est recalculée comme pour le visage — même plancher d'un
+     * tiers d'écran, même repère pris sur les zones de texte réellement
+     * affichées. Recopier le calcul serait le condamner à diverger : les deux
+     * passent donc par topOfVisibleTextZones.
+     */
+    private fun ajusterBandeRecueil() {
+        val image = findViewById<ImageView>(R.id.imageRecueil) ?: return
+        if (image.visibility != View.VISIBLE) return
+        val root = findViewById<View>(R.id.callRoot) ?: return
+        if (root.height == 0) return
+        val minimum = root.height / 3
+        val cible = (zones.topOfVisibleTextZones() ?: root.height).coerceAtLeast(minimum)
+        val params = image.layoutParams as? FrameLayout.LayoutParams ?: return
+        if (params.height == cible) return
+        params.height = cible
+        image.layoutParams = params
+    }
+
     private fun connectVideoCall() {
         // Deux chemins mènent ici (fin du décompte et demande de connexion
         // immédiate) : sans ce garde-fou, ils pouvaient se déclencher tous les
@@ -616,8 +705,38 @@ class IncomingCallActivity : AppCompatActivity() {
         callEngine.onConnectionLost {
             runOnUiThread { if (!callHandled) finish() }
         }
-        // La vidéo cède la place au texte, et la reprend quand il s'efface.
-        zones.onTextZonesChanged = { fitVideoAboveCaptions() }
+        // ═══ LE RECUEIL, COMMANDÉ PAR LE PROCHE ═══
+        //
+        // Le lecteur ignore d'où vient la commande : c'est la couture qui
+        // permettra d'ajouter plus tard la navigation par Jean, du doigt ou de
+        // la voix, sans rouvrir ce fichier (docs/architecture-recueils.md § 5).
+        //
+        // Le magasin est celui du service de premier plan, emprunté : c'est
+        // lui qui a téléchargé et vérifié les photos, bien avant cet appel.
+        // Absent — service non démarré, tablette qui vient de redémarrer — le
+        // reste de l'appel fonctionne sans, et c'est dit une fois dans le
+        // journal plutôt que découvert à la première commande.
+        val magasin = RecueilStore.actif
+        if (magasin == null) {
+            CallTrace.record("APPEL recueil", "indisponible : aucun magasin en service")
+        } else {
+            val lecteur = LecteurRecueil(magasin)
+            lecteurRecueil = lecteur
+            lecteur.onAffichage = { état -> afficherRecueil(état) }
+            callEngine.listenForRecueilCommande { commande ->
+                runOnUiThread {
+                    val id = commande.recueilId
+                    if (id.isNullOrEmpty()) lecteur.fermer() else lecteur.ouvrir(id, commande.index)
+                }
+            }
+        }
+        // La vidéo cède la place au texte, et la reprend quand il s'efface. La
+        // photo d'un recueil suit la même bande, au même instant : les deux
+        // sont recalculées ensemble pour qu'elles ne puissent pas diverger.
+        zones.onTextZonesChanged = {
+            fitVideoAboveCaptions()
+            ajusterBandeRecueil()
+        }
         remoteRenderer.post { fitVideoAboveCaptions(animate = false) }
         connectedAtMs = System.currentTimeMillis()
         screenStateHandler.post(screenStatePublisher)
@@ -1026,6 +1145,12 @@ class IncomingCallActivity : AppCompatActivity() {
         screenStateHandler.removeCallbacks(screenStatePublisher)
         videoHeightAnimator?.cancel()
         videoHeightAnimator = null
+        // Le fil de décodage du lecteur est un fil démon, donc il n'empêcherait
+        // pas l'application de s'arrêter — mais il survivrait à l'appel, à
+        // décoder une photo dont plus personne ne veut. Un appel qui se termine
+        // ne doit rien laisser tourner derrière lui.
+        lecteurRecueil?.libérer()
+        lecteurRecueil = null
         zones.release()
         // L'écoute de la pièce reprend, et l'écran d'accueil qui réapparaît
         // rebaissera les alertes (voir MainActivity.onResume) : le volume

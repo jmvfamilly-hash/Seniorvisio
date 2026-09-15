@@ -182,6 +182,43 @@ class CallSignalingClient {
         }
     }
 
+    /**
+     * Ce que l'appelant demande de montrer d'un recueil : lequel, et à quel
+     * rang. `recueilId` à null signifie « referme ».
+     *
+     * DEUX NOMBRES, ET AUCUN OCTET D'IMAGE. C'est la leçon de la galerie qui
+     * ne s'affichait pas : une photo encodée dans le document d'appel le
+     * faisait dépasser le mébioctet, l'écriture était refusée, et le refus
+     * tombait dans un catch muet. Ici les photos sont déjà sur la tablette —
+     * ce qui circule pèse quelques octets, et le défilement ne dépend plus du
+     * réseau.
+     */
+    data class CommandeRecueil(val recueilId: String?, val index: Int)
+
+    /**
+     * Suit la consigne de lecture d'un recueil.
+     *
+     * Les deux champs sont lus dans le MÊME instantané et comparés ensemble :
+     * changer de rang ne doit pas produire deux notifications, dont une avec
+     * l'ancien recueil et le nouveau rang. L'égalité de la data class s'en
+     * charge, et c'est la raison de son existence ici plutôt que deux
+     * écouteurs séparés.
+     */
+    fun listenForRecueilCommande(
+        callId: String,
+        onCommande: (CommandeRecueil) -> Unit,
+    ): ListenerRegistration =
+        listenForFieldChange(
+            callId,
+            { snapshot ->
+                CommandeRecueil(
+                    recueilId = snapshot.getString(FIELD_RECUEIL_ID),
+                    index = (snapshot.getLong(FIELD_RECUEIL_INDEX) ?: 0L).toInt(),
+                )
+            },
+            onCommande,
+        )
+
     /** Niveau de volume choisi à distance par l'appelant (voir web-caller/webrtc-engine.js). */
     fun listenForRemoteVolume(callId: String, onVolume: (Double) -> Unit): ListenerRegistration =
         listenForFieldChange(callId, { it.getDouble(FIELD_REMOTE_VOLUME) }, onVolume)
@@ -432,6 +469,8 @@ class CallSignalingClient {
         private const val FIELD_CAPTION_LINES = "captionLines"
         private const val FIELD_SCREEN_ZONE_ORDER = "screenZoneOrder"
         private const val FIELD_SCREEN_IS_DARK = "screenIsDark"
+        private const val FIELD_RECUEIL_ID = "recueilId"
+        private const val FIELD_RECUEIL_INDEX = "recueilIndex"
         private const val FIELD_SCREEN_INFO_MOMENT = "screenInfoMoment"
         private const val FIELD_SCREEN_INFO_WEATHER = "screenInfoWeather"
         private const val FIELD_SCREEN_INFO_DATE = "screenInfoDate"

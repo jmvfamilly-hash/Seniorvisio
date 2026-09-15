@@ -60,6 +60,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var micMuteListener: ListenerRegistration? = null
     private var sameRoomListener: ListenerRegistration? = null
     private var slideshowListener: ListenerRegistration? = null
+    private var recueilListener: ListenerRegistration? = null
 
     /**
      * ═══ CES CHAMPS SONT LUS ET ÉCRITS PAR DEUX THREADS DIFFÉRENTS ═══
@@ -613,6 +614,20 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     fun listenForSlideshowPhoto(onPhoto: (String?) -> Unit) {
         val id = callId ?: return
         slideshowListener = signaling.listenForSlideshowPhoto(id, onPhoto)
+    }
+
+    /**
+     * Suit ce que le proche demande de montrer d'un recueil.
+     *
+     * Ne transporte que l'identifiant du recueil et un rang — jamais d'image.
+     * Les photos sont déjà sur la tablette, installées et vérifiées bien avant
+     * l'appel (voir RecueilStore) : le défilement est donc instantané, et il
+     * reste instantané sur un réseau médiocre, ce que le diaporama ne pouvait
+     * pas promettre.
+     */
+    fun listenForRecueilCommande(onCommande: (CallSignalingClient.CommandeRecueil) -> Unit) {
+        val id = callId ?: return
+        recueilListener = signaling.listenForRecueilCommande(id, onCommande)
     }
 
     /**
@@ -1784,6 +1799,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         sameRoomMode = false
         slideshowListener?.remove()
         slideshowListener = null
+        recueilListener?.remove()
+        recueilListener = null
         callerCandidatesListener?.remove()
         callerCandidatesListener = null
         volumeListener?.remove()

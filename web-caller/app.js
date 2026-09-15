@@ -496,6 +496,14 @@ const els = {
   identityRights: el("identityRights"),
   saveIdentityButton: el("saveIdentityButton"),
   identityStatus: el("identityStatus"),
+  recueilBar: el("recueilBar"),
+  recueilChoix: el("recueilChoix"),
+  recueilOuvrir: el("recueilOuvrir"),
+  recueilNav: el("recueilNav"),
+  recueilPrec: el("recueilPrec"),
+  recueilSuiv: el("recueilSuiv"),
+  recueilCompteur: el("recueilCompteur"),
+  recueilFermer: el("recueilFermer"),
   recueilTitre: el("recueilTitre"),
   recueilFichiers: el("recueilFichiers"),
   recueilEnvoyer: el("recueilEnvoyer"),
@@ -557,6 +565,18 @@ function showPane(name) {
   document.body.classList.toggle("video-mode", name === "paneVideo");
 }
 
+// État de la présentation de recueil en cours. Déclaré ICI, loin de son
+// câblage plus bas, et pas par goût du désordre : showState() y touche pour
+// remettre à zéro en fin d'appel. Une déclaration `let` en fin de fichier est
+// dans sa zone morte temporelle tant que le fichier n'a pas fini d'être
+// évalué — un appel de showState() pendant ce temps lèverait une
+// ReferenceError et emporterait tout ce qui suit. C'est exactement le défaut
+// que el()/on()/bloc() existent pour empêcher, et il ne coûte rien d'éviter
+// d'avoir à s'y fier.
+let recueilsPrésentables = [];
+let recueilOuvertId = null;
+let recueilRang = 0;
+
 function showState(name) {
   ["idle", "calling", "blocked", "connected"].forEach((s) => {
     els[s].classList.toggle("hidden", s !== name);
@@ -573,6 +593,16 @@ function showState(name) {
     showPane("paneVideo");
   } else {
     document.body.classList.remove("video-mode");
+    // L'appel est fini : plus rien n'est présenté. Sans cette remise à zéro,
+    // le prochain appel s'ouvrirait avec les flèches d'un recueil que la
+    // tablette a déjà refermé — le document d'appel précédent est mort avec
+    // lui, donc ces flèches n'atteindraient plus rien et échoueraient en
+    // silence. On ne demande pas la fermeture à la tablette ici : il n'y a
+    // plus de document où l'écrire, et elle a refermé de son côté en même
+    // temps que l'écran d'appel.
+    recueilOuvertId = null;
+    recueilRang = 0;
+    renderRecueilNav();
   }
 }
 
@@ -2314,7 +2344,15 @@ bloc("écoute des recueils", () => {
     }
     return;
   }
-  recueils.écouter(renderRecueils, () => {
+  recueils.écouter((liste) => {
+    // Une seule écoute pour les deux usages : le panneau de composition sur
+    // l'écran d'attente, et la barre de présentation pendant l'appel. En
+    // ouvrir une seconde doublerait les lectures Firestore et, surtout,
+    // laisserait les deux vues diverger le jour où l'une des deux tombe.
+    renderRecueils(liste);
+    majListeRecueils(liste);
+    renderRecueilNav();
+  }, () => {
     afficherRecueilEnÉchec(
       "La liste des recueils ne se met plus à jour. Rechargez la page pour " +
         "revoir leur état réel."
@@ -2391,5 +2429,107 @@ on("recueilEnvoyer", "click", async () => {
     els.recueilEnvoyer.disabled = false;
   }
 });
+
+// --- Présenter un recueil pendant l'appel -------------------------------
+// Voir LecteurRecueil et CallSignalingClient.listenForRecueilCommande côté
+// tablette. Cet écran ne fait qu'envoyer un identifiant et un rang : les
+// photos sont déjà là-bas depuis longtemps.
+
+/**
+ * Les recueils réellement présentables, et le nombre de photos de chacun.
+ *
+ * Seuls comptent les éléments que LA TABLETTE a marqués prêts. Un recueil dont
+ * l'installation traîne, ou dont rien n'a pu être décodé, n'apparaît pas :
+ * proposer de présenter des photos qui ne s'afficheront pas, c'est préparer
+ * une déception devant Jean.
+ */
+function majListeRecueils(liste) {
+  recueilsPrésentables = (liste || [])
+    .map((r) => ({
+      id: r.id,
+      titre: r.titre,
+      prêtes: (r.elements || []).filter((e) => e.etat === "prêt").length,
+    }))
+    .filter((r) => r.prêtes > 0);
+
+  if (!els.recueilChoix || !els.recueilBar) return;
+
+  // Le recueil déjà choisi doit le rester : reconstruire la liste à chaque
+  // notification de la tablette remettrait la sélection au premier, y compris
+  // en pleine présentation.
+  const choisi = els.recueilChoix.value;
+  els.recueilChoix.innerHTML = recueilsPrésentables
+    .map((r) => `<option value="${r.id}">${r.titre} (${r.prêtes})</option>`)
+    .join("");
+  if (recueilsPrésentables.some((r) => r.id === choisi)) els.recueilChoix.value = choisi;
+
+  // Rien d'installé : pas de barre. Elle prendrait la place de la vidéo pour
+  // ne rien dire d'utile, or c'est le visage de Jean qu'on est venu voir.
+  els.recueilBar.classList.toggle("hidden", recueilsPrésentables.length === 0);
+
+  // Le recueil en cours de présentation vient d'être retiré depuis un autre
+  // téléphone : on referme plutôt que de laisser des flèches qui ne mènent
+  // nulle part.
+  if (recueilOuvertId && !recueilsPrésentables.some((r) => r.id === recueilOuvertId)) {
+    fermerRecueilPrésenté();
+  }
+}
+
+function recueilCourant() {
+  return recueilsPrésentables.find((r) => r.id === recueilOuvertId) || null;
+}
+
+function renderRecueilNav() {
+  const courant = recueilCourant();
+  if (els.recueilNav) els.recueilNav.classList.toggle("hidden", !courant);
+  if (els.recueilBar) {
+    els.recueilBar.classList.toggle(
+      "hidden",
+      recueilsPrésentables.length === 0 || !!courant
+    );
+  }
+  if (!courant) return;
+  if (els.recueilCompteur) {
+    els.recueilCompteur.textContent = `${recueilRang + 1} / ${courant.prêtes}`;
+  }
+  // Pas de bouclage, ici comme côté tablette : un proche qui commente ses
+  // photos une par une doit voir qu'il est arrivé au bout. Un diaporama qui
+  // repart en boucle le lui cacherait, et Jean reverrait les mêmes photos sans
+  // comprendre pourquoi.
+  if (els.recueilPrec) els.recueilPrec.disabled = recueilRang <= 0;
+  if (els.recueilSuiv) els.recueilSuiv.disabled = recueilRang >= courant.prêtes - 1;
+}
+
+async function présenterRecueil(id, rang) {
+  const envoyé = await engine.montrerRecueil(id, rang);
+  // On n'avance l'affichage de CET écran qu'une fois la consigne acceptée.
+  // L'inverse — afficher d'abord, envoyer ensuite — est précisément ce qui
+  // avait fait chercher la panne du mauvais côté pour le diaporama : le proche
+  // voyait « 3 / 12 » alors que Jean était resté sur la première.
+  if (!envoyé) return;
+  recueilOuvertId = id;
+  recueilRang = rang;
+  renderRecueilNav();
+}
+
+async function fermerRecueilPrésenté() {
+  recueilOuvertId = null;
+  recueilRang = 0;
+  renderRecueilNav();
+  await engine.montrerRecueil(null, 0);
+}
+
+on("recueilOuvrir", "click", () => {
+  const id = els.recueilChoix && els.recueilChoix.value;
+  if (id) présenterRecueil(id, 0);
+});
+on("recueilSuiv", "click", () => {
+  const courant = recueilCourant();
+  if (courant && recueilRang < courant.prêtes - 1) présenterRecueil(recueilOuvertId, recueilRang + 1);
+});
+on("recueilPrec", "click", () => {
+  if (recueilRang > 0) présenterRecueil(recueilOuvertId, recueilRang - 1);
+});
+on("recueilFermer", "click", () => fermerRecueilPrésenté());
 
 signalerPageIncomplète();

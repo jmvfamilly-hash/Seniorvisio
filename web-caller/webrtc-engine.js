@@ -693,6 +693,29 @@ class RealCallEngine extends CallEngine {
   }
 
   /**
+   * Demande à la tablette de montrer un élément d'un recueil.
+   *
+   * ═══ DEUX NOMBRES, ET AUCUN OCTET D'IMAGE ═══
+   *
+   * C'est toute la différence avec le diaporama, et c'est la leçon de la
+   * galerie qui ne s'affichait pas chez Jean : une photo encodée dans le
+   * document d'appel le faisait dépasser le mébioctet, Firestore refusait
+   * l'écriture, et le refus tombait dans un catch muet.
+   *
+   * Les photos d'un recueil sont déjà sur la tablette, téléchargées et
+   * vérifiées avant l'appel. Ce qui circule ici pèse quelques octets : le
+   * défilement est instantané, et il le reste sur un réseau médiocre.
+   *
+   * @param recueilId null pour refermer et rendre l'écran au visage.
+   */
+  async montrerRecueil(recueilId, index = 0) {
+    return this._envoyerConsigne("présenter un recueil", {
+      recueilId: recueilId || null,
+      recueilIndex: Math.max(0, index | 0),
+    });
+  }
+
+  /**
    * Demande que la transcription écoute la pièce de Jean plutôt que la voix de
    * l'appelant (voir WebRtcCallEngine.setMicToRoom côté Android) — pour suivre
    * par écrit ce que dit quelqu'un présent auprès de lui.

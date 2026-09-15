@@ -150,6 +150,33 @@
         </div>
         <button id="slideshowStopButton" class="secondary hidden">⏹️ Arrêter le diaporama (revenir à la vidéo)</button>
 
+        <!-- ═══ PRÉSENTER UN RECUEIL ═══
+
+             Distinct du diaporama juste au-dessus, et pas par accident. Le
+             diaporama envoie une photo qu'on a sous la main, tout de suite,
+             par le réseau. Un recueil a été préparé à l'avance et vit DÉJÀ sur
+             la tablette : le défilement est instantané, et il le reste sur un
+             réseau médiocre.
+
+             Ici plutôt que dans les réglages, pour la même raison que le
+             bouton de caméra : on décide de montrer des photos en pleine
+             phrase, pas en traversant un panneau.
+
+             La barre n'apparaît que s'il existe au moins un recueil installé.
+             Sans recueil, elle ne dirait rien d'utile et prendrait la place de
+             la vidéo — or c'est le visage de Jean qu'on est venu voir. -->
+        <div class="recueil-bar hidden" id="recueilBar">
+          <label for="recueilChoix">📚 Présenter un recueil</label>
+          <select id="recueilChoix"></select>
+          <button id="recueilOuvrir" class="secondary">Présenter</button>
+        </div>
+        <div class="recueil-nav hidden" id="recueilNav">
+          <button id="recueilPrec" class="secondary">◀ Précédente</button>
+          <span class="slideshow-counter" id="recueilCompteur"></span>
+          <button id="recueilSuiv" class="secondary">Suivante ▶</button>
+          <button id="recueilFermer" class="secondary">⏹️ Refermer</button>
+        </div>
+
         <div class="jean-captions">
           <div class="jean-caption hidden" id="jeanRoomBox">
             <span class="jean-caption-label">👂 Dans la pièce</span>
