@@ -7,6 +7,19 @@ service cloud.firestore {
         allow read, write: if true;
       }
     }
+
+    // Les appels de la tablette d'essai (voir la variante "validation" dans
+    // app/build.gradle). Collection séparée et non un champ d'aiguillage dans
+    // `calls` : un filtre se contourne par une requête mal écrite ou un
+    // écouteur qui oublie la condition, une collection différente ne se
+    // confond avec rien. C'est ce qui garantit qu'un essai ne fera jamais
+    // sonner la tablette de Jean.
+    match /calls_test/{callId} {
+      allow read, write: if true;
+      match /{subcollection}/{docId} {
+        allow read, write: if true;
+      }
+    }
     match /devices/{deviceId} {
       allow read, write: if true;
       // Les règles Firestore ne descendent PAS dans les sous-collections : sans

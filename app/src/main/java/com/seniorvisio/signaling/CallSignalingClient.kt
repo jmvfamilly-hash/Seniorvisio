@@ -7,6 +7,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
+import com.seniorvisio.BuildConfig
 
 data class RemoteIceCandidate(
     val sdpMid: String?,
@@ -368,7 +369,17 @@ class CallSignalingClient {
     }
 
     companion object {
-        private const val CALLS_COLLECTION = "calls"
+        /**
+         * Boîte aux lettres des appels, propre à l'environnement (voir les
+         * variantes dans app/build.gradle).
+         *
+         * Partagée entre production et validation, un appel d'essai ferait
+         * sonner la tablette de Jean. Ce n'est pas une précaution de style :
+         * c'est la seule chose qui sépare une séance de mise au point d'un
+         * dérangement chez quelqu'un qui n'a aucun moyen de comprendre ce qui
+         * se passe.
+         */
+        private val CALLS_COLLECTION = BuildConfig.CALLS_COLLECTION
         private const val CALLER_CANDIDATES = "callerCandidates"
         private const val CALLEE_CANDIDATES = "calleeCandidates"
 
@@ -401,7 +412,16 @@ class CallSignalingClient {
         private const val FIELD_SAME_ROOM_MODE = "sameRoomMode"
         private const val FIELD_SLIDESHOW_PHOTO = "slideshowPhotoBase64"
 
-        private const val DEVICE_TOKEN_DOC = "devices/jean_tablet"
+        /**
+         * Document où la tablette dépose son jeton de notification.
+         *
+         * C'EST LE PLUS DANGEREUX DES QUATRE CHEMINS PARTAGÉS. Un seul jeton
+         * y tient à la fois : une tablette d'essai qui écrirait le sien
+         * VOLERAIT les appels de Jean, définitivement et sans le moindre
+         * signe — sa tablette cesserait simplement de sonner, et rien nulle
+         * part ne dirait pourquoi.
+         */
+        private val DEVICE_TOKEN_DOC = "devices/" + BuildConfig.DEVICE_ID
         private const val FIELD_FCM_TOKEN = "fcmToken"
 
         const val STATUS_RINGING = "ringing"

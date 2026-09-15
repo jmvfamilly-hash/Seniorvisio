@@ -1,0 +1,165 @@
+name: Build validation APK (tablette d'essai)
+
+# ═══ LA CHAÎNE D'ESSAI, ET POURQUOI ELLE EST SÉPARÉE ═══
+#
+# La tablette de Jean est en service chez lui. Toute mise au point se fait
+# donc sur une seconde tablette, avec une version qui ne peut pas atteindre la
+# sienne : autres documents Firestore, autre collection d'appels, pas de mode
+# kiosque (voir les variantes dans app/build.gradle).
+#
+# DEUX WORKFLOWS ET NON UNE MATRICE. Une matrice aurait factorisé du YAML, au
+# prix de faire dépendre la livraison chez Jean du bon fonctionnement du banc
+# d'essai — une erreur dans la branche de test aurait pu faire échouer, ou pire
+# réussir de travers, la livraison en production. Les deux chaînes sont
+# volontairement indépendantes l'une de l'autre.
+#
+# CE WORKFLOW NE PEUT PAS LIVRER CHEZ JEAN. Il ne connaît que test_tablet, et
+# scripts/request_remote_update.js refuse de deviner une cible.
+
+on:
+  push:
+    branches:
+      - validation
+    paths-ignore:
+      - 'papyrus/**'
+      - 'web-caller/**'
+      - '.github/workflows/build-papyrus-apk.yml'
+      - '.github/workflows/deploy-web-caller.yml'
+  # Depuis n'importe quelle branche : c'est tout l'intérêt d'un banc d'essai —
+  # éprouver un travail en cours sans avoir à le fusionner d'abord.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Android SDK platform & build-tools
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Vérifier la présence des secrets (sans jamais afficher leur valeur)
+        env:
+          ASSEMBLYAI_API_KEY: ${{ secrets.ASSEMBLYAI_API_KEY }}
+          GLADIA_API_KEY: ${{ secrets.GLADIA_API_KEY }}
+          PICOVOICE_ACCESS_KEY: ${{ secrets.PICOVOICE_ACCESS_KEY }}
+          SPEECH_TRACE_KEY: ${{ secrets.SPEECH_TRACE_KEY }}
+        run: |
+          echo "ASSEMBLYAI_API_KEY : ${#ASSEMBLYAI_API_KEY} caractère(s)"
+          echo "GLADIA_API_KEY : ${#GLADIA_API_KEY} caractère(s)"
+          echo "PICOVOICE_ACCESS_KEY : ${#PICOVOICE_ACCESS_KEY} caractère(s)"
+          echo "SPEECH_TRACE_KEY : ${#SPEECH_TRACE_KEY} caractère(s)"
+
+      # Les mêmes clés qu'en production, et c'est voulu : un banc d'essai qui
+      # n'éprouve pas la transcription payante n'éprouve pas grand-chose. Elles
+      # sont facturées à l'usage, donc quelques essais coûtent quelques
+      # centimes — et le panneau d'administration de la tablette d'essai suit
+      # cette dépense séparément (voir DeviceStatusReporter.publishUsage, qui
+      # écrit sous devices/test_tablet).
+      - name: Build validation APK
+        env:
+          ASSEMBLYAI_API_KEY: ${{ secrets.ASSEMBLYAI_API_KEY }}
+          GLADIA_API_KEY: ${{ secrets.GLADIA_API_KEY }}
+          PICOVOICE_ACCESS_KEY: ${{ secrets.PICOVOICE_ACCESS_KEY }}
+          SPEECH_TRACE_KEY: ${{ secrets.SPEECH_TRACE_KEY }}
+        run: |
+          gradle assembleValidationDebug --stacktrace \
+            "-PbuildRev=val${{ github.run_number }}" \
+            "-PassemblyAiApiKey=${ASSEMBLYAI_API_KEY}" \
+            "-PgladiaApiKey=${GLADIA_API_KEY}" \
+            "-PpicovoiceAccessKey=${PICOVOICE_ACCESS_KEY}" \
+            "-PspeechTraceKey=${SPEECH_TRACE_KEY}"
+
+      # Préfixe « val » et non « rev » : les deux numérotations sont
+      # indépendantes (deux workflows, deux compteurs), et un « rev47 » de
+      # validation à côté d'un « rev47 » de production serait la confusion la
+      # plus facile à faire et la plus pénible à défaire.
+      - name: Rename APK with revision number
+        run: |
+          apk_name="seniorvisio-validation-val${{ github.run_number }}.apk"
+          echo "APK_NAME=$apk_name" >> "$GITHUB_ENV"
+          cp app/build/outputs/apk/validation/debug/app-validation-debug.apk \
+            "app/build/outputs/apk/validation/debug/$apk_name"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: senior-visio-validation-apk
+          path: app/build/outputs/apk/validation/debug/${{ env.APK_NAME }}
+
+      - name: Publish APK as GitHub Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="validation-apk-${{ github.run_id }}"
+          # Notes dans un fichier plutôt qu'en ligne : une chaîne sur
+          # plusieurs lignes ramènerait ses lignes suivantes en colonne 0, ce
+          # qui casse le bloc YAML qui les contient.
+          cat > /tmp/notes.md <<'NOTES'
+          Variante de **VALIDATION** — banc d'essai, jamais la tablette de Jean.
+
+          - écrit dans `devices/test_tablet` et `calls_test` ;
+          - pas de mode kiosque : s'installe et s'utilise comme une application ordinaire ;
+          - s'appelle depuis le PWA de test, sous `/test/`.
+          NOTES
+          printf '\nBranche %s, commit %s.\n' "${{ github.ref_name }}" "${{ github.sha }}" >> /tmp/notes.md
+          gh release create "$tag" "app/build/outputs/apk/validation/debug/${{ env.APK_NAME }}" \
+            --title "Senior Visio — banc d'essai (val${{ github.run_number }})" \
+            --notes-file /tmp/notes.md \
+            --target "${{ github.sha }}"
+          echo "APK_URL=https://github.com/${{ github.repository }}/releases/download/$tag/${{ env.APK_NAME }}" >> "$GITHUB_ENV"
+
+      # ═══ L'INSTALLATION N'EST PAS SILENCIEUSE ICI, ET C'EST NORMAL ═══
+      #
+      # L'installation sans confirmation exige d'être Device Owner (voir
+      # DeviceStatusReporter.installUpdate, qui refuse proprement sinon). La
+      # tablette d'essai est une appli ordinaire : elle ne l'est pas, et ne
+      # doit pas l'être.
+      #
+      # On écrit quand même dans son document — d'où le panneau
+      # d'administration du PWA de test lit la version disponible — et la
+      # tablette journalise « pas Device Owner » au lieu d'installer. Le
+      # téléchargement se fait alors depuis le navigateur de la tablette, qui
+      # est accessible puisqu'il n'y a pas de kiosque. C'est précisément l'un
+      # des conforts que le mode appli standard achète.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Publie la version disponible sur la tablette d'essai
+        env:
+          BUILD_REV: val${{ github.run_number }}
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+          # La seule cible que cette chaîne connaisse. Écrite ici et nulle part
+          # ailleurs : scripts/request_remote_update.js refuse de deviner.
+          DEVICE_ID: test_tablet
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
+          npm install firebase-admin --no-save --silent
+          node scripts/request_remote_update.js
+
+      - name: Rappeler où télécharger
+        run: |
+          echo "### Banc d'essai — val${{ github.run_number }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "À ouvrir depuis le navigateur de la tablette d'essai :" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`${APK_URL}\`" >> "$GITHUB_STEP_SUMMARY"

@@ -704,3 +704,17 @@ body.video-mode #localVideo {
   line-height: 1.35;
   text-align: center;
 }
+
+/* Bandeau permanent du banc d'essai (voir app.js, « bandeau d'environnement »).
+   Couleur franchement différente du rouge d'alerte : ce n'est pas une panne,
+   c'est un lieu. On doit le reconnaître d'un coup d'œil sans le confondre avec
+   un avertissement. */
+.env-banner {
+  margin: 0;
+  padding: 10px 16px;
+  background: #6B4FBB;
+  color: #fff;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+}

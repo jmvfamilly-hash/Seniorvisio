@@ -89,6 +89,55 @@ android {
         }
     }
 
+    // ═══ DEUX ENVIRONNEMENTS, ET AUCUN PONT ENTRE EUX ═══
+    //
+    // La tablette de Jean est en service chez lui. Toute mise au point doit
+    // donc se faire ailleurs, sur une seconde tablette — et « ailleurs »
+    // n'est pas une intention, c'est une propriété du code : les deux
+    // variantes n'écrivent pas dans les mêmes documents Firestore, ne
+    // s'appellent pas par la même collection, et ne peuvent pas se réveiller
+    // l'une l'autre.
+    //
+    // Ce qui les sépare tient en quatre champs, et chacun ferme un chemin
+    // précis par lequel un essai pourrait atteindre le salon de Jean :
+    //
+    //   DEVICE_ID           le document d'appareil. C'est là que la tablette
+    //                       dépose son jeton de notification. Partagé, une
+    //                       tablette d'essai VOLERAIT les appels de Jean en
+    //                       écrasant le sien — la panne la plus grave que ce
+    //                       montage puisse produire, et la plus silencieuse.
+    //   CALLS_COLLECTION    la boîte aux lettres des appels. Partagée, un
+    //                       essai ferait sonner sa tablette.
+    //   KIOSK_ENABLED       le verrouillage kiosque et le masquage de la
+    //                       barre de navigation. Sur un appareil d'essai on
+    //                       doit pouvoir sortir de l'appli.
+    //   ENVIRONMENT         affiché à l'écran, pour qu'on sache toujours
+    //                       laquelle des deux on a sous les yeux.
+    //
+    // MÊME applicationId POUR LES DEUX, DÉLIBÉRÉMENT. google-services.json ne
+    // déclare qu'un seul package, et il n'est pas modifiable à la main : ses
+    // valeurs sont générées par la console Firebase. Un suffixe imposerait
+    // d'enregistrer une seconde application et de régénérer ce fichier, pour
+    // un bénéfice nul ici — les deux variantes vivent sur deux tablettes
+    // différentes, et n'ont jamais à cohabiter sur la même.
+    flavorDimensions += "environnement"
+    productFlavors {
+        production {
+            dimension "environnement"
+            buildConfigField "String", "ENVIRONMENT", "\"production\""
+            buildConfigField "String", "DEVICE_ID", "\"jean_tablet\""
+            buildConfigField "String", "CALLS_COLLECTION", "\"calls\""
+            buildConfigField "boolean", "KIOSK_ENABLED", "true"
+        }
+        validation {
+            dimension "environnement"
+            buildConfigField "String", "ENVIRONMENT", "\"validation\""
+            buildConfigField "String", "DEVICE_ID", "\"test_tablet\""
+            buildConfigField "String", "CALLS_COLLECTION", "\"calls_test\""
+            buildConfigField "boolean", "KIOSK_ENABLED", "false"
+        }
+    }
+
     buildTypes {
         debug {
             signingConfig signingConfigs.debug

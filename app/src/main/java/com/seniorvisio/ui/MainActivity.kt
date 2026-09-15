@@ -30,6 +30,7 @@ import com.seniorvisio.R
 import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.AlertVolume
+import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.service.CallListenerService
@@ -150,7 +151,7 @@ class MainActivity : AppCompatActivity() {
         applyWakeOnSoundRequest(intent)
 
         val textBuildRev = findViewById<TextView>(R.id.textBuildRev)
-        textBuildRev.text = BuildConfig.BUILD_REV
+        textBuildRev.text = Environnement.étiquetteVersion()
         // Point d'entrée discret vers les réglages admin (Wi-Fi, PIN, durée
         // du décompte) : une fois en mode kiosque, plus aucun autre moyen d'y
         // accéder (Réglages système bloqués), voir KioskManager.

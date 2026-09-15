@@ -97,13 +97,44 @@ bloc("version affichée", () => {
   el("pwaVersion").textContent = `v. ${window.PWA_VERSION || "?"}`;
 });
 
+/**
+ * Dit, en permanence et en grand, qu'on est sur le banc d'essai.
+ *
+ * ═══ POURQUOI UN BANDEAU ET PAS UNE MENTION DISCRÈTE ═══
+ *
+ * Les deux PWA sont identiques au pixel près. La seule chose qui les
+ * distingue est l'adresse, que personne ne relit après avoir mis un raccourci
+ * sur son écran d'accueil. Or les deux confusions possibles coûtent cher :
+ * régler la tablette de Jean en croyant essayer, ou chercher une demi-heure
+ * pourquoi un appel n'aboutit pas sur une tablette qui n'écoute pas la même
+ * boîte aux lettres.
+ *
+ * Rien n'est ajouté côté production : chez Jean, l'absence de bandeau EST
+ * l'information. Un bandeau « production » finirait par ne plus se lire, et
+ * son absence un jour de panne ne se remarquerait pas.
+ */
+bloc("bandeau d'environnement", () => {
+  const env = window.SENIORVISIO_ENV;
+  if (!env || env.name === "production") return;
+  const bandeau = document.createElement("p");
+  bandeau.className = "env-banner";
+  bandeau.textContent =
+    `🧪 BANC D'ESSAI — cette page appelle la tablette de test (${env.deviceDocId}), ` +
+    "pas celle de Jean.";
+  document.body.prepend(bandeau);
+  document.title = `[TEST] ${document.title}`;
+});
+
 // --- Paramètres, alignés avec AdminConfig côté Android ---
 const CONFIG = {
   targetDeviceId: "jean-tablette-01", // non utilisé par le signaling Firestore (un seul foyer), gardé pour usage futur multi-tablette
   // Document d'état de la tablette dans Firestore : signe de vie, batterie,
   // version installée, et réglages de transcription pilotés d'ici. Doit rester
   // identique à DEVICE_DOC_PATH dans core/DeviceStatusReporter.kt.
-  deviceDocId: "jean_tablet",
+  // Repli explicite sur la production si environment.js manque : ce fichier
+  // est ajouté au déploiement, et une page mise en cache avant son arrivée
+  // doit continuer de fonctionner (voir environment.js).
+  deviceDocId: (window.SENIORVISIO_ENV && window.SENIORVISIO_ENV.deviceDocId) || "jean_tablet",
   callerName: "Un proche",
 };
 

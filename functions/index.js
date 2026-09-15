@@ -5,14 +5,30 @@ const { getMessaging } = require("firebase-admin/messaging");
 
 initializeApp();
 
-// Document unique où la tablette enregistre son token FCM courant (voir
-// CallSignalingClient.registerDeviceToken côté Android). Une seule tablette
-// déployée pour l'instant : pas besoin d'une collection par appareil.
-const DEVICE_TOKEN_DOC = "devices/jean_tablet";
+/**
+ * Les deux environnements, chacun avec sa boîte aux lettres d'appels et son
+ * document d'appareil. Doit rester identique aux variantes déclarées dans
+ * app/build.gradle (DEVICE_ID et CALLS_COLLECTION) : c'est le seul endroit du
+ * projet où les deux côtés doivent s'accorder à la main.
+ *
+ * ═══ POURQUOI DEUX DÉCLENCHEURS ET NON UN SEUL PARAMÉTRÉ ═══
+ *
+ * Un déclencheur Firestore est attaché à un chemin figé au déploiement. On ne
+ * peut donc pas écouter « la collection d'appels de l'environnement courant »
+ * — il n'y a pas d'environnement courant côté serveur, les deux coexistent.
+ *
+ * Et c'est tant mieux : le jour où l'un des deux déclencheurs tombe, l'autre
+ * continue. Une fonction unique qui aiguillerait selon le chemin ferait
+ * dépendre les appels de Jean du bon fonctionnement du banc d'essai.
+ */
+const ENVIRONNEMENTS = [
+  { nom: "production", collection: "calls", deviceDoc: "devices/jean_tablet" },
+  { nom: "validation", collection: "calls_test", deviceDoc: "devices/test_tablet" },
+];
 
 /**
- * Réveille la tablette par notification push dès qu'un appel apparaît dans
- * Firestore, en complément de l'écoute Firestore permanente déjà en place
+ * Réveille une tablette par notification push dès qu'un appel apparaît dans
+ * sa collection, en complément de l'écoute Firestore permanente déjà en place
  * côté Android (CallListenerService). Cette écoute permanente peut être
  * suspendue par Android une fois l'écran éteint depuis un moment (Doze) ;
  * un message FCM en priorité haute est le seul mécanisme qu'Android garantit
@@ -23,14 +39,17 @@ const DEVICE_TOKEN_DOC = "devices/jean_tablet";
  * FCM limite chaque message à 4 Ko, largement dépassé par une photo encodée
  * en base64.
  */
-exports.notifyIncomingCall = onDocumentCreated("calls/{callId}", async (event) => {
+async function réveillerTablette(environnement, event) {
   const call = event.data?.data();
   if (!call || call.status !== "ringing") return;
 
-  const deviceSnap = await getFirestore().doc(DEVICE_TOKEN_DOC).get();
+  const deviceSnap = await getFirestore().doc(environnement.deviceDoc).get();
   const token = deviceSnap.get("fcmToken");
   if (!token) {
-    console.warn("Aucun token FCM enregistré pour la tablette : réveil push impossible pour cet appel.");
+    console.warn(
+      `[${environnement.nom}] Aucun token FCM enregistré dans ${environnement.deviceDoc} : ` +
+        "réveil push impossible pour cet appel."
+    );
     return;
   }
 
@@ -43,4 +62,23 @@ exports.notifyIncomingCall = onDocumentCreated("calls/{callId}", async (event) =
       callerName: String(call.callerName || "un proche"),
     },
   });
-});
+}
+
+const [PRODUCTION, VALIDATION] = ENVIRONNEMENTS;
+
+exports.notifyIncomingCall = onDocumentCreated(
+  `${PRODUCTION.collection}/{callId}`,
+  (event) => réveillerTablette(PRODUCTION, event)
+);
+
+/**
+ * Même mécanisme pour la tablette d'essai. Nom de fonction distinct : deux
+ * déclencheurs ne peuvent pas partager un nom, et surtout un déploiement qui
+ * remplacerait l'un par l'autre couperait les appels de Jean sans que rien ne
+ * le signale — le genre de panne qui ne se découvre qu'au moment où quelqu'un
+ * essaie de l'appeler.
+ */
+exports.notifyIncomingTestCall = onDocumentCreated(
+  `${VALIDATION.collection}/{callId}`,
+  (event) => réveillerTablette(VALIDATION, event)
+);

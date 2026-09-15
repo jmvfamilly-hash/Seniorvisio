@@ -116,7 +116,11 @@ class DeviceStatusReporter(private val context: Context) {
         val batteryPercent = batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
         deviceDoc.set(
             mapOf(
-                FIELD_APP_VERSION to BuildConfig.BUILD_REV,
+                // L'étiquette et non le numéro nu : « val47 · VALIDATION » au
+                // lieu de « val47 ». Le panneau d'administration du banc
+                // d'essai et celui de la production se ressemblent trait pour
+                // trait, et c'est cette ligne-là qu'on regarde en premier.
+                FIELD_APP_VERSION to Environnement.étiquetteVersion(),
                 FIELD_BATTERY_PERCENT to batteryPercent,
                 FIELD_COMPANION_APPS to companionAppVersions(),
                 FIELD_LAST_HEARTBEAT_AT to FieldValue.serverTimestamp(),
@@ -799,7 +803,8 @@ class DeviceStatusReporter(private val context: Context) {
 
     companion object {
         private const val TAG = "DeviceStatusReporter"
-        private const val DEVICE_DOC_PATH = "devices/jean_tablet"
+        /** Document d'état de cette tablette, propre à l'environnement (voir app/build.gradle). */
+        private val DEVICE_DOC_PATH = "devices/" + BuildConfig.DEVICE_ID
 
         /** Une journée d'usage par document (voir publishUsage, UsageStats). */
         private const val USAGE_COLLECTION = "usage"

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Ce que la variante PRODUCTION ajoute au manifeste commun : Senior Visio
+     est le lanceur de la tablette de Jean.
+
+     Le fusionneur de manifestes réunit ce fichier avec src/main : l'activité
+     est ici décrite à nouveau, uniquement pour lui accrocher un filtre
+     d'intention de plus. Tous ses autres attributs restent déclarés une seule
+     fois, dans src/main — les répéter ici les ferait diverger au premier
+     changement, et le fusionneur ne signalerait rien tant qu'ils resteraient
+     compatibles.
+
+     Deux raisons à cette déclaration, toutes deux propres à un appareil posé
+     au mur chez quelqu'un qui n'a rien à manipuler :
+
+       - donner au bouton Accueil un point de chute maîtrisé quand une
+         application compagne a été lancée depuis l'écran d'accueil ;
+       - empêcher la tablette de retomber sur le lanceur Samsung si le mode
+         kiosque lâche — processus tué, mise à jour, redémarrage.
+
+     Elle est absente de la variante de validation, et c'est le point : une
+     appli d'essai qui se propose comme lanceur d'une tablette ferait
+     apparaître une boîte « quelle application utiliser ? » à chaque appui sur
+     Accueil, et pourrait s'y installer pour de bon sur une fausse manœuvre.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

@@ -56,7 +56,7 @@ jobs:
           PICOVOICE_ACCESS_KEY: ${{ secrets.PICOVOICE_ACCESS_KEY }}
           SPEECH_TRACE_KEY: ${{ secrets.SPEECH_TRACE_KEY }}
         run: |
-          gradle assembleDebug --stacktrace \
+          gradle assembleProductionDebug --stacktrace \
             "-PbuildRev=rev${{ github.run_number }}" \
             "-PassemblyAiApiKey=${ASSEMBLYAI_API_KEY}" \
             "-PgladiaApiKey=${GLADIA_API_KEY}" \
@@ -67,20 +67,21 @@ jobs:
         run: |
           apk_name="seniorvisio-rev${{ github.run_number }}.apk"
           echo "APK_NAME=$apk_name" >> "$GITHUB_ENV"
-          cp app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/$apk_name"
+          cp app/build/outputs/apk/production/debug/app-production-debug.apk \
+            "app/build/outputs/apk/production/debug/$apk_name"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: senior-visio-debug-apk
-          path: app/build/outputs/apk/debug/${{ env.APK_NAME }}
+          path: app/build/outputs/apk/production/debug/${{ env.APK_NAME }}
 
       - name: Publish APK as GitHub Release asset
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="debug-apk-${{ github.run_id }}"
-          gh release create "$tag" "app/build/outputs/apk/debug/${{ env.APK_NAME }}" \
+          gh release create "$tag" "app/build/outputs/apk/production/debug/${{ env.APK_NAME }}" \
             --title "Senior Visio debug APK (run ${{ github.run_number }})" \
             --notes "Build automatique du module app/ en mode debug, commit ${{ github.sha }}." \
             --target "${{ github.sha }}"
@@ -119,6 +120,9 @@ jobs:
         env:
           BUILD_REV: rev${{ github.run_number }}
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+          # Nommée explicitement, jamais déduite : voir le refus de valeur par
+          # défaut dans scripts/request_remote_update.js.
+          DEVICE_ID: jean_tablet
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
           npm install firebase-admin --no-save --silent

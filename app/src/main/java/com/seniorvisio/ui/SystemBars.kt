@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.seniorvisio.BuildConfig
 
 /**
  * Masque la barre de navigation Android (le bandeau gris en bas de l'écran)
@@ -35,6 +36,11 @@ import androidx.core.view.WindowInsetsControllerCompat
  * écran, retour depuis un autre écran), et rien ne les remasque tout seul.
  */
 fun Activity.hideNavigationBar() {
+    // Sur la variante de validation, la barre reste en place : c'est une
+    // appli ordinaire sur une tablette ordinaire, dont on doit pouvoir sortir
+    // par Accueil ou Récents. Masquer la barre y serait la moitié d'un mode
+    // kiosque — celle qui gêne, sans celle qui protège.
+    if (!BuildConfig.KIOSK_ENABLED) return
     val controller = WindowCompat.getInsetsController(window, window.decorView)
     controller.systemBarsBehavior =
         WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE

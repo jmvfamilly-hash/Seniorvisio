@@ -149,6 +149,13 @@ object CallTrace {
         dirty = false
         return buildString {
             appendLine("Senior Visio — journal technique de la visiophonie ($buildRev)")
+            // De quelle tablette vient ce journal, et où elle écrit. Deux
+            // appareils font tourner ce code sur des documents différents
+            // (voir Environnement) : sans cette ligne, une trace relue
+            // quelques jours plus tard ne dit pas laquelle des deux l'a
+            // produite — et on cherche une panne de production dans un
+            // journal de banc d'essai.
+            appendLine("Environnement : ${Environnement.description()}")
             appendLine("Sans donnée personnelle : aucun texte prononcé n'entre ici (voir CallTrace).")
             appendLine("Colonnes : [temps depuis le démarrage, écart avec la ligne précédente] origine | contenu")
             appendLine()

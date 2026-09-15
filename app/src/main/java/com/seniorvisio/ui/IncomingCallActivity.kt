@@ -28,6 +28,7 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.AlertVolume
+import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.ScreenTheme
 import com.seniorvisio.core.CallTrace
@@ -193,7 +194,7 @@ class IncomingCallActivity : AppCompatActivity() {
         // Un appel se présente : les alertes retrouvent leur niveau, qu'elles
         // avaient quitté sur l'écran d'accueil (voir AlertVolume).
         AlertVolume.normal(this)
-        findViewById<TextView>(R.id.textBuildRev).text = BuildConfig.BUILD_REV
+        findViewById<TextView>(R.id.textBuildRev).text = Environnement.étiquetteVersion()
         KioskManager.startIfDeviceOwner(this)
 
         // Les trois zones sont en place dès la sonnerie, pas seulement une

@@ -115,6 +115,19 @@ class RealCallEngine extends CallEngine {
   onCommandRejected(callback) { this._consigneRefuséeCb = callback; }
 
   /**
+   * La collection d'appels de cet environnement (voir environment.js).
+   *
+   * Repli explicite sur la production si environment.js manque : ce fichier
+   * est ajouté au déploiement, et une copie de page mise en cache avant son
+   * arrivée doit continuer d'appeler Jean plutôt que d'échouer sur un
+   * `undefined` — ce serait une panne totale du PWA pour une nouveauté qui ne
+   * concerne que le banc d'essai.
+   */
+  _callsCollection() {
+    return (window.SENIORVISIO_ENV && window.SENIORVISIO_ENV.callsCollection) || "calls";
+  }
+
+  /**
    * Quelle caméra filme en ce moment : "user" (avant) ou "environment"
    * (arrière). Null tant qu'aucun appel n'est en cours.
    *
@@ -394,7 +407,7 @@ class RealCallEngine extends CallEngine {
       event.streams[0].getTracks().forEach((track) => remoteStream.addTrack(track));
     };
 
-    const callDocRef = this._db.collection("calls").doc();
+    const callDocRef = this._db.collection(this._callsCollection()).doc();
     const callerCandidates = callDocRef.collection("callerCandidates");
     const calleeCandidates = callDocRef.collection("calleeCandidates");
 

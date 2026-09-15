@@ -8,6 +8,7 @@ import android.util.Log
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.seniorvisio.BuildConfig
 
 /**
  * Reçoit le résultat (succès/échec) d'une installation silencieuse déclenchée
@@ -23,7 +24,7 @@ class UpdateStatusReceiver : BroadcastReceiver() {
         val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
         val success = status == PackageInstaller.STATUS_SUCCESS
         Log.i(TAG, "Résultat de la mise à jour à distance : ${if (success) "succès" else "échec ($message)"}")
-        FirebaseFirestore.getInstance().document("devices/jean_tablet").set(
+        FirebaseFirestore.getInstance().document("devices/" + BuildConfig.DEVICE_ID).set(
             mapOf(
                 "lastUpdateSucceeded" to success,
                 "lastUpdateMessage" to (message ?: ""),

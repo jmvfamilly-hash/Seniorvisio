@@ -118,17 +118,21 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Senior Visio est le lanceur de la tablette (voir
-                 KioskManager.registerAsHomeApp, qui rend le choix définitif sans
-                 jamais le demander à Jean). Deux raisons : donner au bouton
-                 Accueil un point de chute maîtrisé quand une application
-                 compagne est lancée depuis ici, et empêcher la tablette de
-                 retomber sur le lanceur Samsung si le mode kiosque lâche. -->
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.HOME" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
+            <!-- La déclaration de LANCEUR de la tablette ne vit plus ici mais
+                 dans src/production/AndroidManifest.xml, où le fusionneur de
+                 manifestes l'ajoute à cette même activité.
+
+                 Elle n'a de sens que chez Jean (voir
+                 KioskManager.registerAsHomeApp, qui rend le choix définitif
+                 sans jamais le lui demander) : donner au bouton Accueil un
+                 point de chute maîtrisé, et empêcher la tablette de retomber
+                 sur le lanceur Samsung si le mode kiosque lâche.
+
+                 Sur la tablette d'essai, la garder ferait apparaître, à
+                 chaque appui sur Accueil, une boîte « quelle application
+                 utiliser ? » — et une appli d'essai qui se propose comme
+                 lanceur du téléphone de quelqu'un est exactement ce qu'on ne
+                 veut pas installer à la légère. -->
         </activity>
 
         <activity

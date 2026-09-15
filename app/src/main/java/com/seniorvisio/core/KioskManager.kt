@@ -35,6 +35,24 @@ object KioskManager {
      *   écrans (ex. l'appel entrant) se contentent du verrouillage kiosque.
      */
     fun startIfDeviceOwner(activity: Activity, homeActivity: Class<out Activity>? = null) {
+        // ═══ LA VARIANTE DE VALIDATION NE VERROUILLE JAMAIS RIEN ═══
+        //
+        // Le test qui suit — être Device Owner — suffisait tant qu'il n'y
+        // avait qu'une tablette : un appareil de développement ne l'est pas,
+        // donc rien ne se verrouillait. Il ne suffit plus. La tablette
+        // d'essai peut parfaitement être provisionnée Device Owner un jour,
+        // pour éprouver l'installation silencieuse ou le provisionnement
+        // lui-même — et se retrouverait alors verrouillée sans qu'on l'ait
+        // demandé, sur un appareil dont on doit pouvoir sortir.
+        //
+        // Un refus à la compilation plutôt qu'une condition d'exécution :
+        // « pas de kiosque en validation » devient une propriété de la
+        // variante, pas un état qui dépend de la façon dont la tablette a
+        // été provisionnée.
+        if (!BuildConfig.KIOSK_ENABLED) {
+            Log.i(TAG, "Variante ${BuildConfig.ENVIRONMENT} : mode kiosque volontairement désactivé.")
+            return
+        }
         val dpm = activity.getSystemService(Activity.DEVICE_POLICY_SERVICE) as? DevicePolicyManager ?: return
         if (!dpm.isDeviceOwnerApp(activity.packageName)) return
         val admin = ComponentName(activity, SeniorVisioDeviceAdminReceiver::class.java)

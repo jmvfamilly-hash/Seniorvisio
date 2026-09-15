@@ -79,10 +79,48 @@ jobs:
           print(f"{n} fichier(s) local(aux) suffixé(s) en ?v={version}")
           PY
 
-      - name: Upload web-caller as Pages artifact
+      # ═══ DEUX PWA, UNE SEULE PUBLICATION ═══
+      #
+      # La racine pilote la tablette de Jean, /test/ celle du banc d'essai
+      # (voir web-caller/environment.js). Même code exactement : ce qui les
+      # distingue tient dans ce seul fichier, réécrit dans la copie.
+      #
+      # Deux adresses et non un sélecteur dans l'interface : un interrupteur
+      # « production / test » suffirait à appeler Jean sur une mauvaise
+      # manœuvre, ou sur un réglage mémorisé d'une session à l'autre. Deux
+      # adresses ne se confondent pas, et celle du banc d'essai porte en plus
+      # un bandeau permanent.
+      #
+      # La copie est faite APRÈS le suffixage des URL : les deux versions
+      # portent donc le même numéro de commit, et un même déploiement ne peut
+      # pas laisser l'une en avance sur l'autre.
+      # Dossier de publication distinct, et non une copie de web-caller/ dans
+      # lui-même : `cp -r web-caller web-caller/test` copie bien, mais rend un
+      # code d'erreur (« cannot copy a directory into itself »), et les étapes
+      # GitHub Actions tournent en `bash -e` — le déploiement aurait échoué.
+      - name: Prépare le site — production à la racine, banc d'essai sous /test/
+        run: |
+          rm -rf site
+          cp -r web-caller site
+          mkdir -p site/test
+          cp -r web-caller/. site/test/
+          cat > site/test/environment.js <<'JS'
+          // Réécrit au déploiement (voir deploy-web-caller.yml). L'original,
+          // à la racine du site, garde les valeurs de production.
+          window.SENIORVISIO_ENV = {
+            name: "validation",
+            deviceDocId: "test_tablet",
+            callsCollection: "calls_test",
+          };
+          JS
+          echo "Racine (production) :"; ls site
+          echo "Banc d'essai (/test/) :"; ls site/test
+          echo "--- site/test/environment.js ---"; cat site/test/environment.js
+
+      - name: Upload le site comme artefact Pages
         uses: actions/upload-pages-artifact@v3
         with:
-          path: web-caller
+          path: site
 
       - name: Deploy to GitHub Pages
         id: deployment
