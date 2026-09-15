@@ -1,0 +1,96 @@
+name: Deploy test PWA (Firebase Hosting)
+
+# ═══ UNE INFRASTRUCTURE VRAIMENT DISTINCTE, SANS COMPTE NI FACTURE EN PLUS ═══
+#
+# Le banc d'essai est publié sur Firebase Hosting, la production reste sur
+# GitHub Pages. Deux hébergeurs, donc deux ORIGINES — et c'est l'origine qui
+# compte, pas le chemin :
+#
+#   - un déploiement d'essai ne peut plus toucher la production. Ce n'est plus
+#     une question de discipline ou de branche : ce sont deux services
+#     différents, deux workflows, deux artefacts sans rien de commun ;
+#   - localStorage est cloisonné par origine. Les réglages mémorisés,
+#     l'identité de l'appelant et les photos du diaporama cessent d'être
+#     partagés entre essai et production. Un volume descendu à zéro puis
+#     « mémorisé » pendant un essai ne peut plus rendre Jean muet au prochain
+#     appel — c'est exactement le défaut qui a coûté une semaine de recherche ;
+#   - le PWA installé est une application distincte, avec son propre nom.
+#
+# COÛT : aucun compte à créer, aucun secret à ajouter. Le projet Firebase est
+# déjà sur le plan Blaze (les Cloud Functions v2 l'exigent), donc l'hébergement
+# multi-sites est disponible, et le quota gratuit — 10 Go de stockage, 360 Mo
+# de transfert par jour — représente plusieurs milliers de chargements
+# quotidiens pour une page de 64 Ko. L'usage réel n'en approche pas.
+
+on:
+  push:
+    branches:
+      - validation
+    paths:
+      - 'web-caller/**'
+      - 'scripts/prepare_pwa.py'
+      - 'firebase.json'
+      - '.firebaserc'
+      - '.github/workflows/deploy-test-pwa.yml'
+  # Depuis n'importe quelle branche : éprouver un travail en cours sans avoir
+  # à le fusionner d'abord, c'est tout l'intérêt d'un banc d'essai.
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Exactement la même préparation que la production, au jeu de documents
+      # et au nom du raccourci près. Un banc d'essai préparé autrement
+      # n'éprouve pas la production : il éprouve autre chose.
+      - name: Prépare le PWA du banc d'essai
+        run: |
+          python3 scripts/prepare_pwa.py \
+            --out site-test \
+            --environment validation \
+            --version "${GITHUB_SHA::7}"
+
+      # Garde-fou, et pas une formalité : ce workflow a le droit de déployer
+      # sur Firebase. Si jamais la configuration d'environnement partait avec
+      # les valeurs de production, ce site-ci appellerait la tablette de Jean
+      # depuis une adresse censée ne jamais la joindre — une confusion pire
+      # que celle qu'on cherche à éviter, puisque personne ne s'en méfierait.
+      - name: Vérifie que ce site ne vise pas la production
+        run: |
+          echo "--- site-test/environment.js ---"
+          cat site-test/environment.js
+          grep -q '"validation"' site-test/environment.js
+          grep -q 'test_tablet' site-test/environment.js
+          grep -q 'calls_test' site-test/environment.js
+          if grep -q 'jean_tablet' site-test/environment.js; then
+            echo "REFUS : le PWA d'essai désigne la tablette de production." >&2
+            exit 1
+          fi
+          echo "Vérifié : ce site ne peut atteindre que la tablette d'essai."
+
+      - name: Déploie sur Firebase Hosting
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
+          # --only hosting:test, jamais un déploiement nu : firebase.json
+          # décrit aussi les règles Firestore et les fonctions, et un `deploy`
+          # sans portée les republierait toutes les deux depuis cette branche.
+          npx firebase-tools deploy --only hosting:test \
+            --project seniorvisio --non-interactive --force
+
+      - name: Rappeler l'adresse
+        run: |
+          echo "### Banc d'essai déployé" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<https://seniorvisio-test.web.app>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Branche \`${{ github.ref_name }}\`, commit \`${{ github.sha }}\`." >> "$GITHUB_STEP_SUMMARY"

@@ -1,5 +1,12 @@
 {
   "projects": {
     "default": "seniorvisio"
+  },
+  "targets": {
+    "seniorvisio": {
+      "hosting": {
+        "test": ["seniorvisio-test"]
+      }
+    }
   }
 }

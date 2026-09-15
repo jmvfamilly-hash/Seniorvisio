@@ -25,6 +25,9 @@ on:
       - 'web-caller/**'
       - '.github/workflows/build-papyrus-apk.yml'
       - '.github/workflows/deploy-web-caller.yml'
+      - '.github/workflows/deploy-test-pwa.yml'
+      - 'scripts/prepare_pwa.py'
+      - 'docs/**'
   # Depuis n'importe quelle branche : c'est tout l'intérêt d'un banc d'essai —
   # éprouver un travail en cours sans avoir à le fusionner d'abord.
   workflow_dispatch:
@@ -117,7 +120,7 @@ jobs:
 
           - écrit dans `devices/test_tablet` et `calls_test` ;
           - pas de mode kiosque : s'installe et s'utilise comme une application ordinaire ;
-          - s'appelle depuis le PWA de test, sous `/test/`.
+          - s'appelle depuis le PWA de test : https://seniorvisio-test.web.app
           NOTES
           printf '\nBranche %s, commit %s.\n' "${{ github.ref_name }}" "${{ github.sha }}" >> /tmp/notes.md
           gh release create "$tag" "app/build/outputs/apk/validation/debug/${{ env.APK_NAME }}" \

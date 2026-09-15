@@ -3,11 +3,20 @@
  *
  * ═══ CE FICHIER EST RÉÉCRIT AU DÉPLOIEMENT ═══
  *
- * Les valeurs ci-dessous sont celles de la PRODUCTION, et c'est volontaire :
- * le dépôt doit décrire ce qui tourne chez Jean. Le déploiement publie deux
- * copies du même PWA (voir .github/workflows/deploy-web-caller.yml) — la
- * racine garde ce fichier tel quel, et la copie servie sous /test/ le
- * remplace par les valeurs de validation.
+ * Les valeurs ci-dessous ne servent qu'en développement local. Au
+ * déploiement, scripts/prepare_pwa.py réécrit ce fichier avec les valeurs de
+ * l'environnement publié. Elles décrivent la production parce que c'est le
+ * repli le moins surprenant : une page ouverte depuis le dépôt se comporte
+ * comme celle des proches.
+ *
+ * ═══ DEUX HÉBERGEURS, PAS DEUX DOSSIERS ═══
+ *
+ * La production est sur GitHub Pages, le banc d'essai sur Firebase Hosting
+ * (seniorvisio-test.web.app). Deux hôtes, donc deux ORIGINES — et l'origine
+ * est ce qui cloisonne localStorage. Les avoir mis dans deux dossiers d'un
+ * même site, comme c'était le cas un temps, laissait les réglages mémorisés
+ * et l'identité de l'appelant communs aux deux : un volume coupé pendant un
+ * essai ressortait au prochain appel réel.
  *
  * ═══ POURQUOI PAS UN INTERRUPTEUR DANS L'INTERFACE ═══
  *

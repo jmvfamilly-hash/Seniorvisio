@@ -2,6 +2,22 @@
   "firestore": {
     "rules": "firestore.rules"
   },
+  "hosting": [
+    {
+      "//": "Banc d'essai UNIQUEMENT. La production reste sur GitHub Pages, à son adresse habituelle : la déplacer ici casserait le raccourci installé sur l'écran d'accueil de chaque proche, pour un bénéfice nul.",
+      "//2": "Le dossier site-test est construit par scripts/prepare_pwa.py au moment du déploiement (voir deploy-test-pwa.yml) ; il n'existe pas dans le dépôt.",
+      "target": "test",
+      "public": "site-test",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "headers": [
+        {
+          "//": "index.html jamais mis en cache : c'est lui qui porte les URL suffixées des autres fichiers (?v=<commit>). Mis en cache, il continuerait de désigner l'ancienne version et une nouvelle livraison n'arriverait qu'au bon vouloir du navigateur — le défaut même que le suffixage corrige.",
+          "source": "/index.html",
+          "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        }
+      ]
+    }
+  ],
   "functions": [
     {
       "source": "functions",
