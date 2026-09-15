@@ -18,8 +18,6 @@ import com.seniorvisio.BuildConfig
 import com.seniorvisio.service.RoomPresenceService
 import java.time.LocalDate
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 
 /**
  * Remplace le tableau de bord Headwind (abandonné, voir README > Déploiement) :
@@ -747,38 +745,15 @@ class DeviceStatusReporter(private val context: Context) {
      * .apk sans s'en apercevoir, et obtenir un message d'échec précis (code HTTP,
      * en-tête manquant) au lieu d'une exception opaque en cas de problème.
      */
-    private fun downloadApk(apkUrl: String): File {
-        val outFile = File(context.cacheDir, "update.apk")
-        var url = URL(apkUrl)
-        var redirects = 0
-        while (true) {
-            val connection = url.openConnection() as HttpURLConnection
-            connection.instanceFollowRedirects = false
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 30_000
-            connection.setRequestProperty("User-Agent", "SeniorVisio-Tablette")
-            connection.connect()
-            val code = connection.responseCode
-            if (code in 300..399) {
-                val location = connection.getHeaderField("Location")
-                connection.disconnect()
-                if (location == null) throw java.io.IOException("Redirection sans en-tête Location (code $code)")
-                redirects++
-                if (redirects > 5) throw java.io.IOException("Trop de redirections lors du téléchargement de l'APK")
-                url = URL(location)
-                continue
-            }
-            if (code !in 200..299) {
-                connection.disconnect()
-                throw java.io.IOException("Téléchargement de l'APK refusé par le serveur (code HTTP $code)")
-            }
-            connection.inputStream.use { input ->
-                outFile.outputStream().use { output -> input.copyTo(output) }
-            }
-            connection.disconnect()
-            return outFile
-        }
-    }
+    /**
+     * Le téléchargement lui-même vit désormais dans TelechargementHttp :
+     * l'installation des recueils a exactement le même besoin, et deux copies
+     * d'un même traitement réseau finissent toujours par diverger — l'une
+     * gagne un correctif que l'autre n'a pas, et c'est celle qu'on ne regarde
+     * pas qui tombe en panne.
+     */
+    private fun downloadApk(apkUrl: String): File =
+        TelechargementHttp.vers(apkUrl, File(context.cacheDir, "update.apk"), "APK de mise à jour")
 
     private fun silentInstall(apkFile: File) {
         val packageInstaller = context.packageManager.packageInstaller

@@ -50,6 +50,22 @@ service cloud.firestore {
       match /diag/{name} {
         allow read, write: if true;
       }
+      // Les recueils composés depuis le PWA, et l'état de leur installation
+      // renvoyé par la tablette (voir docs/architecture-recueils.md).
+      //
+      // AUCUNE IMAGE N'ENTRE ICI — uniquement des titres, des URL de
+      // téléchargement et des états de vérification. C'est ce qui permet à ces
+      // documents de tenir en quelques centaines d'octets par élément, là où
+      // une photo en base64 en pèse cinq cent mille.
+      //
+      // Ces règles restent ouvertes comme toutes les autres de ce fichier, et
+      // ça devient plus gênant ici : une URL de téléchargement se suit. Le
+      // document d'architecture le dit sans détour — cette fonction ne devrait
+      // pas être mise en service avant que les règles Storage soient écrites,
+      // et celles-ci resserrées.
+      match /recueils/{recueilId} {
+        allow read, write: if true;
+      }
       match /traces/{traceId} {
         allow read, write: if true;
         match /chunks/{index} {

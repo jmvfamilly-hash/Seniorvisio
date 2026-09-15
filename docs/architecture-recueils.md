@@ -1,4 +1,7 @@
-# Albums photo — architecture
+# Recueils — architecture
+
+*(« albums photo » au départ ; le nom a changé quand il est devenu clair que
+le contenu ne serait pas seulement photographique — voir §5.)*
 
 Ce document décrit une fonction qui n'existe pas encore, et dont une partie
 seulement sera réalisée maintenant. Il est écrit d'abord parce que la moitié
@@ -109,41 +112,111 @@ contourner. C'est Android qui décode, et il en est capable.
 Quatre pièces, et la couture est entre la troisième et la deuxième — c'est
 elle qui permettra d'ajouter la navigation par Jean sans toucher au reste.
 
-**`AlbumStore`** — ce qui existe localement, où, dans quel état. Ne sait rien
-des appels ni de l'affichage. Sait installer, vérifier, élaguer.
+### Deux coutures, et non une
 
-**`LecteurAlbum`** — affiche une photo, tient l'index courant. Expose
-`ouvrir(album)`, `suivante()`, `précédente()`, `fermer()`. **Ne sait pas qui
-le commande.**
+La demande initiale portait sur des photos. Elle porte désormais aussi sur des
+vidéos, des fils d'information de type RSS ramenés à leur substance, et
+« d'autres formats à venir ». Ce n'est pas un détail d'implémentation : ça
+double le nombre d'axes selon lesquels l'ensemble doit pouvoir s'étendre.
 
-**Les sources de commande** — des greffons qui pilotent le lecteur :
+```
+                     ┌── RenduPhoto      (maintenant)
+   RecueilStore      ├── RenduVideo      (plus tard)
+        │            └── RenduTexte      (plus tard, RSS)
+        ▼                   ▲
+   LecteurRecueil ──────────┘
+        ▲
+        ├── CommandeAppelant   (maintenant)
+        ├── CommandeTactile    (plus tard)
+        └── CommandeVocale     (plus tard)
+```
 
-| source | quand | état |
-|---|---|---|
-| `CommandeAppelant` | pendant un appel, depuis le PWA | maintenant |
-| `CommandeTactile` | Jean touche l'écran | plus tard |
-| `CommandeVocale` | Jean parle | plus tard |
+**Axe vertical — QUOI est montré.** Un `Élément` porte un `TypeElement`. À
+chaque type correspond un `RenduÉlément` qui sait l'afficher, et un
+`VérificateurÉlément` qui sait dire si la tablette en est capable. Ajouter la
+vidéo, c'est écrire ces deux-là et rien d'autre.
 
-**`EnregistreurDeCommentaire`** — associe le texte transcrit à la photo
-affichée au moment où il a été dit.
+**Axe horizontal — QUI commande.** Le lecteur expose `ouvrir(recueil)`,
+`suivant()`, `précédent()`, `fermer()`, et **ne sait pas qui l'appelle**.
+Ajouter la voix, c'est écrire une source de plus.
+
+Aucun des deux axes ne connaît l'autre : un rendu vidéo n'a rien à savoir de
+la commande vocale, et réciproquement. C'est ce qui permet d'en ajouter un
+sans toucher au reste.
+
+### Les pièces
+
+**`RecueilStore`** — ce qui existe localement, où, dans quel état. Ne sait
+rien des appels ni de l'affichage. Sait installer, vérifier, élaguer.
+
+**`LecteurRecueil`** — tient le recueil ouvert et l'index courant, et délègue
+l'affichage au rendu correspondant au type de l'élément.
+
+**`RenduÉlément`** — une implémentation par type. Photo maintenant ; vidéo et
+texte déclarés mais non pris en charge, et **qui le disent** plutôt que
+d'échouer en silence.
+
+**`EnregistreurDeCommentaire`** — associe le texte transcrit à l'élément
+affiché au moment où il a été dit.
 
 Ce découpage n'est pas inventé pour l'occasion : c'est celui que
 `HomeZonesController` applique déjà, et qui lui permet d'ignorer délibérément
-s'il y a un appel en cours. Ajouter la voix plus tard consistera à écrire une
-source de plus. Le lecteur ne bougera pas.
+s'il y a un appel en cours.
 
-## 6. Le commentaire attaché à la photo
+### Un élément n'est pas toujours un fichier
 
-C'est la partie à **prévoir maintenant même si on ne l'utilise pas tout de
-suite**, parce qu'elle ne coûte presque rien ici et serait pénible à rajouter
-après.
+Une photo et une vidéo se téléchargent une fois. Un fil RSS, non : il se
+rafraîchit. Le modèle distingue donc deux natures :
 
-La tablette transcrit déjà la voix de l'appelant pendant l'appel, et sait déjà
-quelle photo est affichée. Il suffit d'attribuer chaque texte **figé** à la
-photo en cours au moment où il se clôt, et de ranger ça à côté de l'album.
+- **fichier** — téléchargé, vérifié, rangé, immuable ;
+- **flux** — rafraîchi périodiquement vers une forme simplifiée, elle-même
+  rangée localement.
 
-Rangé **localement uniquement**, et c'est délibéré : ce sont des paroles de
-famille. Voir la section 9.
+Les deux aboutissent au même endroit : quelque chose que la tablette sait
+afficher **hors ligne**. Le lecteur ne fait pas la différence.
+
+## 6. Le commentaire, et le consentement de celui qui l'a prononcé
+
+La tablette transcrit déjà la voix de l'appelant, et sait déjà quel élément est
+affiché. Il suffit d'attribuer chaque texte **figé** à l'élément en cours au
+moment où il se clôt.
+
+Mais ce texte n'appartient pas à la tablette : il appartient à la personne qui
+l'a dit. Elle doit donc décider s'il reste.
+
+### Trois règles, et la troisième est la plus importante
+
+**Rien n'est conservé sans un oui explicite.** Pendant l'appel, le commentaire
+est écrit dans un espace **provisoire**, lié à cet appel et à rien d'autre.
+
+**On demande à la fin de l'appel, pas au début.** Personne ne peut consentir à
+un texte qui n'existe pas encore. À la fin, l'appelant voit ce qui a été
+transcrit, et tranche : conserver ou effacer.
+
+**Le silence efface.** Appel coupé, onglet fermé, téléphone éteint, proche qui
+ne répond pas : le provisoire est détruit au démontage de l'appel. Un
+consentement se donne, il ne se présume pas — et c'est précisément le cas
+« l'appel a été coupé pendant la sélection des photos » qui rend cette règle
+nécessaire plutôt que théorique.
+
+### Ce que l'avertissement doit dire
+
+Trois choses, sans euphémisme, parce que chacune surprendrait si elle était
+découverte après :
+
+- **ça reste** sur la tablette de Jean, après la fin de l'appel ;
+- **Jean pourra le relire** quand il voudra, seul ;
+- **les autres proches le verront** en présentant le même recueil.
+
+Le troisième point est celui qu'on oublie, et c'est le plus lourd : ce qu'on
+dit à Jean en lui montrant des photos n'est pas nécessairement destiné au
+reste de la famille.
+
+### Où ça vit
+
+**Localement sur la tablette, et nulle part ailleurs.** Ces textes ne partent
+pas dans Firestore. Voir la section 9 : les règles actuelles laissent lire
+quiconque connaît un chemin, et des paroles de famille n'ont rien à y faire.
 
 ## 7. Ce que ça change pour le diaporama d'aujourd'hui
 
@@ -164,14 +237,16 @@ deux chemins coexistent sans se gêner.
 
 Chacune est livrable et vérifiable seule, sur le banc d'essai.
 
-1. **Le socle** — `AlbumStore`, installation, vérification par décodage réel,
-   état remonté au PWA. Rien de visible pour Jean.
-2. **La composition côté PWA** — créer un album, téléverser, suivre l'état.
-3. **Le lecteur et la commande par l'appelant** — choisir un album pendant un
-   appel et le faire défiler.
-4. **L'enregistrement des commentaires** — silencieux, rien à l'écran.
+1. **Le socle** — `RecueilStore`, installation, vérification par décodage
+   réel, état remonté au PWA. Rien de visible pour Jean.
+2. **La composition côté PWA** — créer un recueil, téléverser, suivre l'état.
+3. **Le lecteur et la commande par l'appelant** — choisir un recueil pendant
+   un appel et le faire défiler.
+4. **Le commentaire et son consentement** — enregistrement provisoire, puis
+   demande en fin d'appel avec l'avertissement de la section 6.
 5. *(chantier suivant)* **La navigation par Jean**, et la relecture des
    commentaires.
+6. *(chantier suivant)* **Les autres types** — vidéo, fils d'information.
 
 ## 9. Trois décisions qui vous reviennent
 
@@ -183,11 +258,12 @@ mise en service avant que les règles Storage soient écrites correctement — e
 à mon avis, les règles Firestore aussi. Je ne le fais pas sans que vous le
 décidiez, mais je ne l'écrirai pas non plus en silence.
 
-**Les commentaires enregistrés.** Attribuer la transcription à une photo, c'est
-garder une trace écrite de conversations familiales sur la tablette. C'est
-précisément ce qui donne sa valeur à la fonction, et c'est aussi quelque chose
-dont Jean et ses proches devraient être informés. À décider avant l'étape 4,
-pas après.
+**Les commentaires enregistrés.** Réglé par la section 6 : consentement
+explicite de l'appelant en fin d'appel, avertissement qui nomme les trois
+conséquences, et destruction par défaut si personne ne répond. Reste une
+question qui vous revient : **faut-il aussi en informer Jean** — une mention
+sur son écran quand un recueil porte des commentaires ? Je penche pour oui,
+mais ça ajoute à son écran, ce que ce projet évite par principe.
 
 **La place sur la tablette.** Une dalle ancienne n'a pas de place à gaspiller.
 Il faut un budget — disons deux cents photos, ou cinq cents mégaoctets — et une

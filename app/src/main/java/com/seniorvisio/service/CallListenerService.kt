@@ -17,6 +17,7 @@ import androidx.lifecycle.LifecycleService
 import com.google.firebase.firestore.ListenerRegistration
 import com.seniorvisio.core.CallerPhotoCache
 import com.seniorvisio.core.DeviceStatusReporter
+import com.seniorvisio.recueil.RecueilStore
 import com.seniorvisio.core.UsageStats
 import com.seniorvisio.signaling.CallSignalingClient
 
@@ -43,6 +44,16 @@ class CallListenerService : LifecycleService() {
     // plutôt qu'un composant séparé, pour ne pas dépendre d'un cycle de vie
     // supplémentaire à maintenir en vie.
     private val statusReporter = DeviceStatusReporter(this)
+
+    /**
+     * Installe et vérifie les recueils composés depuis le PWA.
+     *
+     * Ici plutôt que dans un écran : ce service tourne en permanence, donc
+     * l'installation se fait quand personne n'attend — la tablette au repos,
+     * la nuit, sur son Wi-Fi. Un téléchargement lancé à l'ouverture d'un écran
+     * se produirait au pire moment, celui où quelqu'un regarde.
+     */
+    private val recueils = RecueilStore(this)
 
     // Sans ce verrou, Android coupe l'économiseur d'énergie Wi-Fi une fois
     // l'écran éteint : l'association tombe au bout de quelques heures, et la
@@ -90,6 +101,7 @@ class CallListenerService : LifecycleService() {
         startForeground(FOREGROUND_ID, buildForegroundNotification())
         acquireWifiLock()
         UsageStats.init(this)
+        recueils.démarrer()
         // L'état de départ ne se déduit d'aucune diffusion : elles ne
         // signalent que les changements. Sans cette lecture initiale, tout le
         // temps précédant le premier basculement serait attribué au sommeil.
@@ -150,6 +162,7 @@ class CallListenerService : LifecycleService() {
         }
         callListener?.remove()
         callListener = null
+        recueils.arrêter()
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
         wifiLock?.let { if (it.isHeld) it.release() }
         wifiLock = null
