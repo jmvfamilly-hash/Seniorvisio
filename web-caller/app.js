@@ -1795,6 +1795,55 @@ const SLIDESHOW_FALLBACKS = [
  * alors franchement qu'il n'est pas passé, au lieu de faire disparaître la
  * photo en silence comme avant.
  */
+/**
+ * Dit POURQUOI aucune photo n'est passée, au lieu de le taire.
+ *
+ * ═══ « AUCUNE DE CES PHOTOS N'A PU ÊTRE LUE » NE SUFFIT PAS ═══
+ *
+ * Ce message a été affiché en usage réel, et il ne permettait rien : ni de
+ * savoir quel fichier, ni de quel format, ni si le décodage avait échoué ou
+ * si le fichier était vide. Le détail partait dans la console du téléphone,
+ * c'est-à-dire nulle part.
+ *
+ * C'est le même défaut de silence que les dix consignes avalées — dans du
+ * code que je venais d'écrire, et après l'avoir corrigé partout ailleurs.
+ *
+ * Deux causes expliquent presque tous les cas où TOUTES les photos échouent,
+ * et elles se reconnaissent au type et à la taille du fichier :
+ *
+ *   - le format HEIC/HEIF, celui des photos « haute efficacité » des
+ *     téléphones récents. Chrome sur Android ne sait pas le décoder ; iOS, lui,
+ *     convertit en JPEG tout seul à la sélection. D'où un échec TOTAL et non
+ *     partiel, qui dépend du téléphone et pas des photos ;
+ *   - un fichier de taille nulle, ce que renvoient les galeries qui gardent
+ *     les photos dans le nuage sans les avoir téléchargées.
+ */
+function expliquerLeRefus(refusées, total) {
+  if (!refusées.length) return "Aucune photo lisible dans cette sélection.";
+
+  const type = (r) => (r.type || "type inconnu").toLowerCase();
+  const heic = refusées.filter((r) => /hei[cf]/.test(type(r)) || /\.hei[cf]$/i.test(r.nom));
+  const vides = refusées.filter((r) => r.taille === 0);
+  const première = refusées[0];
+
+  let message = `Aucune des ${total} photo(s) n'a pu être lue. ` +
+    `Exemple : « ${première.nom} » (${type(première)}, ` +
+    `${Math.round((première.taille || 0) / 1024)} Ko).`;
+
+  if (heic.length === refusées.length) {
+    message +=
+      " Ce sont des photos au format HEIC, que ce navigateur ne sait pas ouvrir. " +
+      "Dans les réglages photo du téléphone, choisissez le format « Compatible » " +
+      "ou « JPEG » plutôt que « Haute efficacité », ou envoyez une capture d'écran.";
+  } else if (vides.length === refusées.length) {
+    message +=
+      " Ces fichiers sont vides : ce sont probablement des photos encore dans le " +
+      "nuage. Ouvrez-les une fois dans la galerie pour les télécharger, puis " +
+      "réessayez.";
+  }
+  return message;
+}
+
 async function encoderSousLaLimite(file) {
   let dernière = null;
   for (const palier of SLIDESHOW_FALLBACKS) {
@@ -1863,6 +1912,7 @@ on("slideshowInput", "change", async () => {
   els.slideshowStatus.textContent = `Préparation de ${files.length} photo(s)…`;
 
   const prepared = [];
+  const refusées = [];
   let réduites = 0;
   for (const file of files) {
     try {
@@ -1871,13 +1921,14 @@ on("slideshowInput", "change", async () => {
       prepared.push(ajustée.base64);
     } catch (e) {
       // Une photo illisible (format exotique, fichier corrompu) ne doit pas
-      // faire échouer toute la sélection.
-      console.warn("[Diaporama] Photo ignorée :", e);
+      // faire échouer toute la sélection — mais elle doit DIRE pourquoi.
+      refusées.push({ nom: file.name, type: file.type, taille: file.size, cause: e });
+      console.warn("[Diaporama] Photo ignorée :", file.name, file.type, file.size, e);
     }
   }
 
   if (!prepared.length) {
-    els.slideshowStatus.textContent = "Aucune de ces photos n'a pu être lue.";
+    els.slideshowStatus.textContent = expliquerLeRefus(refusées, files.length);
     return;
   }
 
