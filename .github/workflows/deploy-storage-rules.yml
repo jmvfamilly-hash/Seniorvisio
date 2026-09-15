@@ -16,11 +16,55 @@ name: Deploy Storage rules (déclenchement manuel)
 # actionner, après avoir lu storage.rules et su ce qu'elles protègent — et
 # surtout ce qu'elles ne protègent pas.
 
+# ═══ ET POURQUOI IL Y A UN DÉCLENCHEUR push ALORS ═══
+#
+# Parce que sans lui, le bouton « Run workflow » N'EXISTE PAS.
+#
+# GitHub n'enregistre un workflow en workflow_dispatch que s'il le voit sur la
+# BRANCHE PAR DÉFAUT du dépôt. Celle-ci est une ancienne branche de travail qui
+# ne contient pas ce fichier : le workflow était donc invisible — absent de
+# l'onglet Actions, et renvoyé en 404 par l'API. L'interrupteur délibéré que
+# j'avais conçu était inactionnable, et je l'ai annoncé comme disponible sans
+# l'avoir vérifié.
+#
+# Le déclencheur ci-dessous est limité à CE fichier, et le job de déploiement
+# est conditionné à workflow_dispatch. Autrement dit : pousser ce fichier ne
+# déploie RIEN, cela ne fait qu'inscrire le workflow auprès de GitHub pour que
+# le bouton apparaisse. Le geste délibéré reste la seule façon de publier les
+# règles — la propriété voulue est intacte, elle est simplement atteignable.
+#
+# C'est la convention déjà employée ici par functions-logs.yml et
+# generate-provisioning-qr.yml, pour exactement la même raison.
+
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/deploy-storage-rules.yml'
 
 jobs:
+  # Ne fait rien d'autre qu'exister, pour que GitHub enregistre le workflow.
+  # Sans un job qui tourne sur push, l'inscription n'a pas lieu.
+  inscription:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dire pourquoi ce passage n'a rien déployé
+        run: |
+          {
+            echo "### Aucune règle déployée — et c'est voulu"
+            echo
+            echo "Ce passage a été déclenché par un \`push\` sur le fichier du"
+            echo "workflow. Il ne sert qu'à le faire enregistrer par GitHub,"
+            echo "afin que le bouton **Run workflow** apparaisse dans l'onglet"
+            echo "Actions."
+            echo
+            echo "Pour publier réellement les règles Storage : Actions →"
+            echo "*Deploy Storage rules* → **Run workflow**."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -45,5 +89,31 @@ jobs:
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
           # --only storage, jamais un déploiement nu : firebase.json décrit
           # aussi les règles Firestore, l'hébergement et les fonctions.
-          npx firebase-tools deploy --only storage \
-            --project seniorvisio --non-interactive --force
+          #
+          # Le résultat est capturé pour pouvoir expliquer l'échec le plus
+          # probable au lieu de laisser lire une trace d'outil : si Firebase
+          # Storage n'a jamais été activé sur le projet, il n'existe aucun seau
+          # où poser ces règles, et cela ne se règle que dans la console.
+          set +e
+          sortie=$(npx firebase-tools deploy --only storage \
+            --project seniorvisio --non-interactive --force 2>&1)
+          code=$?
+          echo "$sortie"
+          set -e
+          if [ $code -ne 0 ]; then
+            {
+              echo "### Déploiement refusé"
+              echo
+              if echo "$sortie" | grep -qiE "bucket|storage.*not.*(found|exist|enabled)|no default bucket"; then
+                echo "**Firebase Storage n'a probablement jamais été activé sur ce projet.**"
+                echo "Des règles ne peuvent pas être posées sur un seau qui n'existe pas."
+                echo
+                echo "À faire une seule fois, dans la console Firebase :"
+                echo "Build → Storage → *Get started*. Puis relancer ce workflow."
+              else
+                echo "Voir la trace ci-dessus."
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit $code
+          fi
+          echo "### Règles Storage déployées" >> "$GITHUB_STEP_SUMMARY"

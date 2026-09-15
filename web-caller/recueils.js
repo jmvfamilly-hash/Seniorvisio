@@ -29,6 +29,60 @@
 
 const RECUEILS_TAILLE_MAX = 25 * 1024 * 1024;
 
+/**
+ * Combien de temps le SDK a le droit de réessayer un téléversement bloqué
+ * avant d'abandonner.
+ *
+ * Le défaut de Firebase est de DEUX MINUTES, et c'est ce qui a produit le
+ * symptôme « aucun retour, ni bon ni mauvais » : quand le seau Storage n'est
+ * pas joignable, le SDK ne rejette pas — il réessaie, sans rien dire, pendant
+ * deux minutes. Le proche voit un bouton grisé et conclut que rien ne marche.
+ *
+ * Ce délai ne concerne QUE les réessais après échec réseau : un téléversement
+ * qui progresse, même lentement depuis un téléphone en 3G, n'est jamais
+ * interrompu par cette valeur. Un refus de règle (storage/unauthorized), lui,
+ * n'est pas réessayé du tout et tombe immédiatement.
+ */
+const RECUEILS_DELAI_REESSAI_MS = 30 * 1000;
+
+/**
+ * Traduit un code d'erreur Firebase Storage en une phrase qui dit quoi faire.
+ *
+ * « FirebaseError: Firebase Storage: User does not have permission to access
+ * 'recueils/...' (storage/unauthorized) » n'apprend rien à quelqu'un qui
+ * voulait simplement montrer des photos à son père. Et surtout, cela ne dit
+ * pas la seule chose utile : que la cause n'est pas chez lui.
+ */
+function expliquerErreurStorage(e) {
+  const code = (e && e.code) || "";
+  switch (code) {
+    case "storage/unauthorized":
+    case "storage/unauthenticated":
+      return (
+        "le dépôt de photos n'est pas encore ouvert sur ce projet. " +
+        "C'est un réglage à faire une fois par l'administrateur, pas un " +
+        "problème de votre côté"
+      );
+    case "storage/bucket-not-found":
+    case "storage/project-not-found":
+      return (
+        "l'espace de stockage n'existe pas encore sur ce projet. " +
+        "L'administrateur doit l'activer une fois dans la console Firebase"
+      );
+    case "storage/retry-limit-exceeded":
+      return (
+        "l'envoi n'a pas abouti après plusieurs tentatives — connexion trop " +
+        "faible, ou espace de stockage injoignable"
+      );
+    case "storage/quota-exceeded":
+      return "l'espace de stockage est plein";
+    case "storage/canceled":
+      return "envoi interrompu";
+    default:
+      return (e && e.message) || "cause inconnue";
+  }
+}
+
 /** Types que la tablette sait afficher aujourd'hui (voir TypeElement côté Android). */
 function typeDeFichier(file) {
   const mime = (file.type || "").toLowerCase();
@@ -62,6 +116,16 @@ class Recueils {
     try {
       this._db = app.firestore();
       this._storage = app.storage();
+      // Voir RECUEILS_DELAI_REESSAI_MS : deux minutes de silence, c'est le
+      // défaut, et c'est trop long pour qu'on comprenne qu'il se passe quelque
+      // chose. setMaxUploadRetryTime n'existe pas dans toutes les versions du
+      // SDK — on ne fait pas échouer le module pour un réglage de confort.
+      if (typeof this._storage.setMaxUploadRetryTime === "function") {
+        this._storage.setMaxUploadRetryTime(RECUEILS_DELAI_REESSAI_MS);
+      }
+      if (typeof this._storage.setMaxOperationRetryTime === "function") {
+        this._storage.setMaxOperationRetryTime(RECUEILS_DELAI_REESSAI_MS);
+      }
       this._disponible = true;
     } catch (e) {
       // Le SDK Storage peut ne pas être chargé (page mise en cache avant son
@@ -87,7 +151,7 @@ class Recueils {
    * décodage). Le proche doit voir son recueil passer de « installation en
    * cours » à « installé » sans avoir à recharger la page.
    */
-  écouter(onRecueils) {
+  écouter(onRecueils, onErreur = () => {}) {
     if (!this._disponible) return () => {};
     return this._collection().onSnapshot(
       (instantané) => {
@@ -110,7 +174,15 @@ class Recueils {
         });
         onRecueils(recueils);
       },
-      (e) => console.error("[Recueils] Écoute impossible :", e)
+      (e) => {
+        // Comme côté tablette : un écouteur Firestore qui reçoit une erreur
+        // est DÉFINITIVEMENT terminé. La liste des recueils se figera donc sur
+        // son dernier état connu, sans que rien ne le montre — un recueil
+        // installé depuis continuerait d'afficher « installation en cours »
+        // pour toujours. Cela se dit.
+        console.error("[Recueils] Écoute impossible :", e);
+        onErreur(e);
+      }
     );
   }
 
@@ -158,12 +230,43 @@ class Recueils {
     const recueilId = `r${Date.now().toString(36)}`;
     const elements = [];
 
+    // Le total en octets, connu d'avance : c'est lui qui permet d'afficher une
+    // progression honnête. Compter en fichiers terminés donnait une barre qui
+    // ne bougeait pas du tout pendant la première photo — et une photo
+    // d'appareil peut peser huit mégaoctets.
+    const octetsTotal = retenus.reduce((somme, r) => somme + r.file.size, 0);
+    let octetsFinis = 0;
+
     for (let i = 0; i < retenus.length; i++) {
       const { file, type } = retenus[i];
       const elementId = identifiantÉlément();
       const chemin = `recueils/${this._deviceDocId}/${recueilId}/${elementId}`;
       const ref = this._storage.ref(chemin);
-      await ref.put(file, { contentType: file.type });
+
+      try {
+        await this._téléverser(ref, file, (octetsDuFichier) => {
+          onProgression({
+            fichier: file.name,
+            index: i + 1,
+            total: retenus.length,
+            octets: octetsFinis + octetsDuFichier,
+            octetsTotal,
+          });
+        });
+      } catch (e) {
+        // Traduit ici, au plus près de la cause, et non laissé à l'écran qui
+        // n'a aucun moyen de savoir ce qu'est un storage/unauthorized. Le code
+        // d'origine est conservé pour la console.
+        console.error("[Recueils] Téléversement refusé :", e);
+        const erreur = new Error(
+          `${file.name} n'a pas pu être envoyée : ${expliquerErreurStorage(e)}.`
+        );
+        erreur.code = (e && e.code) || "";
+        erreur.cause = e;
+        throw erreur;
+      }
+
+      octetsFinis += file.size;
       elements.push({
         id: elementId,
         type,
@@ -171,7 +274,6 @@ class Recueils {
         source: await ref.getDownloadURL(),
         ordre: i,
       });
-      onProgression(i + 1, retenus.length);
     }
 
     // Le document n'est écrit QU'APRÈS que tous les fichiers soient en place.
@@ -186,6 +288,35 @@ class Recueils {
     });
 
     return { id: recueilId, refusés };
+  }
+
+  /**
+   * Un fichier, en rendant compte pendant qu'il monte et non seulement à la
+   * fin.
+   *
+   * `put()` renvoie une promesse, et c'est ce que faisait la version d'avant :
+   * on l'attendait, puis on annonçait « 1/15 fait ». Entre le clic et la fin
+   * de la première photo, l'écran ne disait donc RIEN — et si cette première
+   * photo n'aboutissait jamais, il ne disait jamais rien du tout.
+   *
+   * La tâche renvoyée par `put()` émet aussi des événements de progression.
+   * On s'y abonne : l'écran bouge dès les premiers kilo-octets, et surtout un
+   * envoi bloqué se distingue d'un envoi lent, ce qui était impossible avant.
+   */
+  _téléverser(ref, file, onOctets) {
+    return new Promise((résoudre, rejeter) => {
+      const tâche = ref.put(file, { contentType: file.type });
+      onOctets(0); // Dire « ça commence » avant même le premier octet confirmé.
+      tâche.on(
+        "state_changed",
+        (état) => onOctets(état.bytesTransferred),
+        rejeter,
+        () => {
+          onOctets(file.size);
+          résoudre();
+        }
+      );
+    });
   }
 
   /**

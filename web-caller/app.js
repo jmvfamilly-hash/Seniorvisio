@@ -2261,6 +2261,51 @@ function renderRecueils(liste) {
   });
 }
 
+/**
+ * Un bandeau en haut de page pour ce qui ne doit pas pouvoir être manqué.
+ *
+ * Le panneau des recueils vit en bas de l'écran d'attente : sur un téléphone,
+ * son texte de statut est souvent hors champ au moment où il compte. Un envoi
+ * qui échoue pendant qu'on regarde ailleurs passait donc inaperçu — ce qui
+ * revient exactement au silence qu'on cherche à supprimer.
+ *
+ * Construit à la volée, comme afficherConsigneRefusée et pour la même raison :
+ * un bandeau d'alerte déclaré dans index.html est un bandeau qui manque le
+ * jour où la page est incomplète.
+ *
+ * Pas de minuterie ici, contrairement aux consignes d'appel : une consigne
+ * refusée se réessaie dans la seconde, un envoi refusé demande une action de
+ * l'administrateur. Le bandeau reste jusqu'à ce qu'un envoi réussisse.
+ */
+/**
+ * Au bout de combien de silence on dit que l'envoi n'avance plus.
+ *
+ * Assez long pour ne pas alarmer sur une photo lourde envoyée depuis un
+ * téléphone en bord de réseau, assez court pour qu'on ne reste pas à fixer un
+ * « 0 % » sans savoir s'il faut attendre ou recommencer.
+ */
+const DÉLAI_CONSTAT_DARRÊT_MS = 8000;
+
+function afficherRecueilEnÉchec(texte) {
+  let bandeau = document.getElementById("recueilWarning");
+  if (!bandeau) {
+    bandeau = document.createElement("p");
+    bandeau.id = "recueilWarning";
+    bandeau.className = "wiring-warning";
+    conteneurDesBandeaux().append(bandeau);
+  }
+  bandeau.textContent = `⚠️ ${texte}`;
+  bandeau.hidden = false;
+  ajusterDecalageDesBandeaux();
+}
+
+function effacerRecueilEnÉchec() {
+  const bandeau = document.getElementById("recueilWarning");
+  if (!bandeau || bandeau.hidden) return;
+  bandeau.hidden = true;
+  ajusterDecalageDesBandeaux();
+}
+
 bloc("écoute des recueils", () => {
   if (!recueils || !recueils.disponible) {
     if (els.recueilStatut) {
@@ -2269,7 +2314,12 @@ bloc("écoute des recueils", () => {
     }
     return;
   }
-  recueils.écouter(renderRecueils);
+  recueils.écouter(renderRecueils, () => {
+    afficherRecueilEnÉchec(
+      "La liste des recueils ne se met plus à jour. Rechargez la page pour " +
+        "revoir leur état réel."
+    );
+  });
 });
 
 on("recueilEnvoyer", "click", async () => {
@@ -2284,6 +2334,14 @@ on("recueilEnvoyer", "click", async () => {
     return;
   }
   els.recueilEnvoyer.disabled = true;
+  effacerRecueilEnÉchec();
+  let minuterieDArrêt = null;
+  // AVANT le premier octet, et c'est tout l'objet du correctif : la version
+  // d'avant n'écrivait ici qu'une fois la première photo terminée. Entre le
+  // clic et cet instant — plusieurs secondes sur un téléphone, l'éternité si
+  // le dépôt ne répond pas — l'écran gardait le texte de l'envoi PRÉCÉDENT, ou
+  // restait vide. « Aucun retour, ni bon ni mauvais » : c'était exactement ça.
+  els.recueilStatut.textContent = `Préparation de ${fichiers.length} fichier(s)…`;
   const identité = loadIdentity() || {};
   try {
     const { refusés } = await recueils.créer(
@@ -2292,8 +2350,21 @@ on("recueilEnvoyer", "click", async () => {
         crééPar: identité.name || "un proche",
         fichiers,
       },
-      (fait, total) => {
-        els.recueilStatut.textContent = `Envoi ${fait}/${total}…`;
+      ({ index, total, octets, octetsTotal }) => {
+        const pourcent = octetsTotal
+          ? Math.min(100, Math.round((octets / octetsTotal) * 100))
+          : 0;
+        els.recueilStatut.textContent = `Envoi ${index}/${total} — ${pourcent} %`;
+        // Un chiffre figé se lit comme une panne, et un chiffre figé À ZÉRO
+        // se lit comme rien du tout. Tant que les octets montent, on repousse
+        // le constat d'arrêt ; dès qu'ils cessent, il s'affiche de lui-même.
+        clearTimeout(minuterieDArrêt);
+        minuterieDArrêt = setTimeout(() => {
+          els.recueilStatut.textContent =
+            `Envoi ${index}/${total} — ${pourcent} % · rien ne progresse depuis ` +
+            `quelques secondes. Vérifiez votre connexion ; l'envoi s'arrêtera ` +
+            `de lui-même s'il n'aboutit pas.`;
+        }, DÉLAI_CONSTAT_DARRÊT_MS);
       }
     );
     // « Envoyées » et non « prêtes » : la tablette ne les a pas encore
@@ -2308,10 +2379,15 @@ on("recueilEnvoyer", "click", async () => {
     els.recueilTitre.value = "";
   } catch (e) {
     const détail = (e.refusés || []).map((r) => `${r.nom} (${r.raison})`).join(", ");
-    els.recueilStatut.textContent = détail
+    const texte = détail
       ? `Aucune photo envoyée. ${détail}`
-      : `Envoi impossible : ${e.message}`;
+      : `Envoi impossible. ${e.message}`;
+    els.recueilStatut.textContent = texte;
+    // Et pas seulement dans le panneau : sur un téléphone il est souvent hors
+    // champ au moment où l'envoi échoue.
+    afficherRecueilEnÉchec(texte);
   } finally {
+    clearTimeout(minuterieDArrêt);
     els.recueilEnvoyer.disabled = false;
   }
 });
