@@ -42,12 +42,35 @@ class CallSignalingClient {
      * une reconnaissance visuelle immédiate — null si absente ou trop lourde.
      */
     fun listenForRingingCalls(
-        onIncoming: (callId: String, callerName: String, callerPhotoBase64: String?) -> Unit
+        onIncoming: (callId: String, callerName: String, callerPhotoBase64: String?) -> Unit,
+        /**
+         * ═══ L'ERREUR N'EST PLUS JETÉE, ET C'EST UN CORRECTIF DE PANNE ═══
+         *
+         * Cette écoute ignorait son erreur. Or un écouteur Firestore qui en
+         * reçoit une est DÉFINITIVEMENT TERMINÉ : il ne se réarme jamais tout
+         * seul. Une coupure réseau mal tombée, un refus momentané, et la
+         * tablette cessait de voir les appels — sans rien afficher, sans rien
+         * journaliser, et sans que personne puisse le deviner.
+         *
+         * Constaté en usage réel sur la tablette d'essai : elle est devenue
+         * injoignable, et RELANCER L'APPLICATION N'A PAS SUFFI — seul un
+         * redémarrage l'a rétablie. C'est la signature exacte de ce défaut :
+         * l'écoute vit dans un service de premier plan qui survit à la
+         * fermeture de l'application, donc l'écouteur mort lui survivait
+         * aussi.
+         *
+         * Celui qui appelle doit réarmer (voir CallListenerService).
+         */
+        onErreur: (Exception) -> Unit = {},
     ): ListenerRegistration {
         var isFirstSnapshot = true
         return db.collection(CALLS_COLLECTION)
             .whereEqualTo(FIELD_STATUS, STATUS_RINGING)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, erreur ->
+                if (erreur != null) {
+                    onErreur(erreur)
+                    return@addSnapshotListener
+                }
                 val wasFirst = isFirstSnapshot
                 isFirstSnapshot = false
                 if (snapshot == null || wasFirst) return@addSnapshotListener

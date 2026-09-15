@@ -1420,6 +1420,7 @@ const ENGINE_SELECT_FIELDS = [
 ];
 
 let lastDeviceData = null;
+let dernierNombreDeRéarmements = 0;
 
 function applyDeviceSettings(data) {
   deviceSettingsLoaded = true;
@@ -1437,6 +1438,11 @@ function applyDeviceSettings(data) {
   // (voir DeviceStatusReporter.adminPinFingerprint). Elle arrive par le même
   // canal que les réglages : un seul abonnement au document d'appareil.
   adminPinFingerprint = data.adminPinFingerprint || null;
+
+  // Nombre de réarmements de l'écoute des appels (voir CallListenerService).
+  // Zéro est la valeur saine ; un nombre qui grimpe dit que la tablette se
+  // rétablit toute seule mais que quelque chose la coupe régulièrement.
+  dernierNombreDeRéarmements = Number(data.listenerRestarts) || 0;
 
   // Empreinte du mot de passe d'accès au PWA (voir
   // DeviceStatusReporter.accessFingerprint). Chaîne vide = aucune protection
@@ -1576,6 +1582,13 @@ function renderDeviceHealth(data) {
     ["Écoute de la pièce", data.roomListening || "—"],
     ["Modèle embarqué", data.voskModelState || "—"],
     ["Applications tierces", compagnes],
+    // Zéro est la valeur saine. Un nombre qui grimpe dit que la tablette se
+    // rétablit toute seule, mais que quelque chose coupe son écoute des
+    // appels régulièrement — l'information qui manquait exactement le jour où
+    // la tablette d'essai est devenue injoignable (voir CallListenerService).
+    ["Écoute des appels", dernierNombreDeRéarmements === 0
+      ? "<span class=\"health-ok\">jamais interrompue</span>"
+      : `<span class="health-warn">rétablie ${dernierNombreDeRéarmements} fois depuis le démarrage</span>`],
   ];
   els.deviceHealth.innerHTML =
     "<dl>" + lignes.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") + "</dl>";

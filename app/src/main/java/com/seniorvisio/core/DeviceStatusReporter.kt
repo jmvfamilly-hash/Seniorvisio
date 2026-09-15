@@ -108,8 +108,18 @@ class DeviceStatusReporter(private val context: Context) {
         }
     }
 
-    /** À appeler périodiquement (voir CallListenerService, déjà un foreground service permanent). */
-    fun reportHeartbeat() {
+    /**
+     * À appeler périodiquement (voir CallListenerService, déjà un foreground
+     * service permanent).
+     *
+     * @param échecsDÉcoute nombre de fois que l'écoute des appels a dû être
+     *   réarmée depuis le démarrage du service. Remonté au panneau
+     *   d'administration : sans ce chiffre, une écoute qui meurt et renaît
+     *   vingt fois par heure est indiscernable d'une qui n'a jamais bronché —
+     *   et c'est précisément l'information qui manquait quand la tablette
+     *   d'essai est devenue injoignable.
+     */
+    fun reportHeartbeat(échecsDÉcoute: Int = 0) {
         val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
         val batteryPercent = batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
         deviceDoc.set(
@@ -128,6 +138,7 @@ class DeviceStatusReporter(private val context: Context) {
                 FIELD_VOSK_MODEL_STATE to VoskModelProvider.describeState(),
                 FIELD_ADMIN_PIN_FINGERPRINT to adminPinFingerprint(),
                 FIELD_ACCESS_FINGERPRINT to accessFingerprint(),
+                FIELD_LISTENER_RESTARTS to échecsDÉcoute,
                 FIELD_ROOM_LISTENING to describeRoomListening(),
                 // Les mêmes messages que pendant un appel, mais lisibles hors
                 // appel : c'est là qu'on règle le moteur de la pièce, et c'est
@@ -817,6 +828,7 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_CAPTION_CLEAR_DELAY = "captionClearDelaySeconds"
         private const val FIELD_ADMIN_PIN_FINGERPRINT = "adminPinFingerprint"
         private const val FIELD_ACCESS_FINGERPRINT = "accessFingerprint"
+        private const val FIELD_LISTENER_RESTARTS = "listenerRestarts"
         private const val FIELD_ROOM_LISTENING = "roomListening"
 
         // --- Trace de reconnaissance ---

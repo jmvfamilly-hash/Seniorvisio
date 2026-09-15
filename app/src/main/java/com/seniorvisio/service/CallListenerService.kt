@@ -39,6 +39,15 @@ class CallListenerService : LifecycleService() {
     private val signaling = CallSignalingClient()
     private var callListener: ListenerRegistration? = null
 
+    /**
+     * Nombre de fois que l'écoute des appels a dû être réarmée depuis le
+     * démarrage. Remonté avec le signe de vie : sans ce chiffre, une écoute
+     * qui meurt et renaît vingt fois par heure est indiscernable d'une qui
+     * n'a jamais bronché.
+     */
+    @Volatile
+    private var échecsDÉcoute = 0
+
     // Remplace le tableau de bord Headwind (abandonné, voir README > Déploiement) :
     // statut régulier + mise à jour à distance, portés par ce service permanent
     // plutôt qu'un composant séparé, pour ne pas dépendre d'un cycle de vie
@@ -76,7 +85,24 @@ class CallListenerService : LifecycleService() {
             // s'accumuleraient indéfiniment sur une tablette qui tourne des
             // années. Le mois en cours et le précédent sont conservés.
             UsageStats.pruneOldMonths()
-            statusReporter.reportHeartbeat()
+            // ═══ DERNIER FILET : L'ÉCOUTE EST-ELLE SEULEMENT VIVANTE ? ═══
+            //
+            // Le réarmement sur erreur (voir réarmerAprèsErreur) couvre le cas
+            // où Firestore PRÉVIENT. Il ne couvre pas celui où le réarmement
+            // échoue lui-même, ni celui où l'écoute n'a jamais démarré faute
+            // de Firebase au lancement.
+            //
+            // Ce contrôle-ci ne suppose rien : il regarde s'il y a une écoute,
+            // et en recrée une sinon. Toutes les cinq minutes, sur un service
+            // qui tourne déjà — le coût est nul, et c'est la différence entre
+            // une tablette qui se rétablit seule et une tablette qu'il faut
+            // aller redémarrer chez quelqu'un.
+            if (callListener == null) {
+                Log.w(TAG, "Aucune écoute des appels active : rétablissement")
+                échecsDÉcoute++
+                startListening()
+            }
+            statusReporter.reportHeartbeat(échecsDÉcoute)
             heartbeatHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
         }
     }
@@ -137,9 +163,46 @@ class CallListenerService : LifecycleService() {
         return START_STICKY
     }
 
+    /**
+     * ═══ UNE ÉCOUTE MORTE DOIT SE RÉARMER, PAS ATTENDRE UN REDÉMARRAGE ═══
+     *
+     * Un écouteur Firestore qui reçoit une erreur est définitivement terminé.
+     * Celui-ci ignorait la sienne, et `onStartCommand` ne le recréait que
+     * `if (callListener == null)` — jamais remis à null. Le service continuait
+     * donc de tourner avec une écoute morte.
+     *
+     * Ce service est de PREMIER PLAN : il survit à la fermeture de
+     * l'application. Relancer l'application ne le recrée pas, donc ne
+     * ressuscitait pas l'écoute. Seul un redémarrage de la tablette y
+     * parvenait — exactement ce qui a été constaté sur la tablette d'essai,
+     * devenue injoignable jusqu'au redémarrage.
+     *
+     * Sur la tablette de Jean, ce défaut signifie : plus personne ne peut
+     * l'appeler, rien ne l'indique, et il n'a aucun moyen de s'en apercevoir
+     * ni de le corriger. C'est la panne la plus grave que ce projet puisse
+     * produire.
+     *
+     * Le réarmement est différé et croissant : une erreur vient souvent d'un
+     * réseau absent, et réessayer aussitôt en boucle ne ferait que vider la
+     * batterie sans rien rétablir.
+     */
+    private fun réarmerAprèsErreur(erreur: Exception) {
+        Log.e(TAG, "Écoute des appels interrompue par Firestore", erreur)
+        callListener?.remove()
+        callListener = null
+        échecsDÉcoute++
+        val délai = (DÉLAI_RÉARMEMENT_MS * échecsDÉcoute).coerceAtMost(DÉLAI_RÉARMEMENT_MAX_MS)
+        heartbeatHandler.postDelayed({
+            if (callListener == null) {
+                Log.i(TAG, "Réarmement de l'écoute des appels (tentative $échecsDÉcoute)")
+                startListening()
+            }
+        }, délai)
+    }
+
     private fun startListening() {
         if (!signaling.isAvailable()) return
-        callListener = signaling.listenForRingingCalls { callId, callerName, callerPhotoBase64 ->
+        callListener = signaling.listenForRingingCalls(onErreur = ::réarmerAprèsErreur) { callId, callerName, callerPhotoBase64 ->
             // La photo passe par un fichier, jamais par l'extra directement
             // (voir CallerPhotoCache) : au-delà d'une certaine taille, elle
             // fait planter ce démarrage de service avec
@@ -190,5 +253,13 @@ class CallListenerService : LifecycleService() {
         private const val FOREGROUND_ID = 43
         private const val CHANNEL_ID = "senior_visio_listener"
         private const val HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000L
+
+        /**
+         * Attente avant de réarmer l'écoute, multipliée par le nombre
+         * d'échecs. Une erreur vient souvent d'un réseau absent : réessayer
+         * aussitôt en boucle viderait la batterie sans rien rétablir.
+         */
+        private const val DÉLAI_RÉARMEMENT_MS = 5_000L
+        private const val DÉLAI_RÉARMEMENT_MAX_MS = 2 * 60 * 1000L
     }
 }
