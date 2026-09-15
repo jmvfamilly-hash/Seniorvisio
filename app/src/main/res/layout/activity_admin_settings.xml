@@ -48,6 +48,22 @@
         android:layout_height="wrap_content"
         android:inputType="numberPassword" />
 
+    <!-- Mot de passe d'accès au PWA, distinct du PIN ci-dessus : celui-là est
+         connu de toute la famille, l'autre d'une seule personne. Laissé vide,
+         l'application reste ouverte comme aujourd'hui. -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Mot de passe d'accès au PWA (vide = aucun)"
+        android:textSize="16sp" />
+
+    <EditText
+        android:id="@+id/inputAccessPassword"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textPassword" />
+
     <Button
         android:id="@+id/buttonSaveAdminSettings"
         android:layout_width="wrap_content"

@@ -153,6 +153,128 @@ bloc("version affichée", () => {
  * l'information. Un bandeau « production » finirait par ne plus se lire, et
  * son absence un jour de panne ne se remarquerait pas.
  */
+/**
+ * Porte d'entrée du PWA, quand l'administrateur en a posé une.
+ *
+ * ═══ CE QU'ELLE ARRÊTE, ET CE QU'ELLE N'ARRÊTE PAS ═══
+ *
+ * Un téléphone prêté, un enfant, un visiteur, une adresse retrouvée dans un
+ * historique. C'est un besoin réel, et c'est ce qu'elle traite.
+ *
+ * Elle n'arrête PAS quelqu'un de déterminé. Ce PWA est un site statique : sa
+ * configuration Firebase est lisible dans le code de la page, et les règles
+ * Firestore de ce projet laissent lire et écrire quiconque connaît l'adresse.
+ * On peut donc parler à la base sans jamais passer par cette page. La vraie
+ * protection des données est dans les règles, pas ici — et il ne faut pas
+ * faire dire à cette porte autre chose que ce qu'elle fait.
+ *
+ * ═══ POURQUOI ON MÉMORISE L'EMPREINTE VALIDÉE, ET PAS UN SIMPLE « OUVERT » ═══
+ *
+ * Retenir « ce téléphone a le droit » rendrait le mot de passe irrévocable :
+ * l'administrateur pourrait le changer sans que rien ne se reverrouille.
+ * On retient l'empreinte qui a été validée ; le jour où la tablette en publie
+ * une autre, elles ne correspondent plus et la porte se referme d'elle-même.
+ *
+ * ═══ ET POURQUOI COUPER LE RÉSEAU NE L'OUVRE PAS ═══
+ *
+ * L'empreinte vient du signe de vie de la tablette, donc du réseau. Une porte
+ * qui ne se fermerait qu'en présence de cette information s'ouvrirait en mode
+ * avion. On retient donc localement qu'un mot de passe EXISTE, dès la
+ * première fois qu'on l'apprend : à partir de là, la porte s'affiche même
+ * sans réseau, et se valide contre l'empreinte mémorisée.
+ */
+const ACCÈS_MÉMOIRE = "seniorvisio_acces_valide";
+const ACCÈS_CONNU = "seniorvisio_acces_exige";
+
+let empreinteDAccès = null;
+
+function empreinteValidéeLocalement() {
+  try {
+    return localStorage.getItem(ACCÈS_MÉMOIRE);
+  } catch (e) {
+    return null;
+  }
+}
+
+function appliquerEmpreinteDAccès(empreinte) {
+  empreinteDAccès = empreinte;
+  try {
+    if (empreinte) localStorage.setItem(ACCÈS_CONNU, empreinte);
+    else localStorage.removeItem(ACCÈS_CONNU);
+  } catch (e) {
+    // Navigation privée, stockage refusé : la porte fonctionnera quand même,
+    // elle redemandera simplement le mot de passe à chaque ouverture.
+  }
+  if (!empreinte) {
+    fermerLaPorte();
+    return;
+  }
+  if (empreinteValidéeLocalement() !== empreinte) ouvrirLaPorte();
+}
+
+function fermerLaPorte() {
+  document.getElementById("accessGate")?.remove();
+  document.body.classList.remove("verrouille");
+}
+
+function ouvrirLaPorte() {
+  if (document.getElementById("accessGate")) return;
+  const porte = document.createElement("div");
+  porte.id = "accessGate";
+  porte.innerHTML = `
+    <div class="access-box">
+      <h2>Appeler Jean</h2>
+      <p class="hint">Cette application est protégée. Demandez le mot de passe à la personne qui s'occupe de la tablette.</p>
+      <input type="password" id="accessInput" autocomplete="current-password" placeholder="Mot de passe">
+      <button id="accessButton">Entrer</button>
+      <p class="hint" id="accessStatus"></p>
+    </div>`;
+  document.body.appendChild(porte);
+  document.body.classList.add("verrouille");
+
+  const champ = porte.querySelector("#accessInput");
+  const statut = porte.querySelector("#accessStatus");
+  const tenter = async () => {
+    const saisi = champ.value.trim();
+    if (!saisi) return;
+    const attendue = empreinteDAccès || (() => {
+      try { return localStorage.getItem(ACCÈS_CONNU); } catch (e) { return null; }
+    })();
+    if (!attendue) {
+      statut.textContent = "Impossible de vérifier pour l'instant. Réessayez dans un instant.";
+      return;
+    }
+    try {
+      if ((await sha256Hex(saisi)) !== attendue) {
+        statut.textContent = "Mot de passe incorrect.";
+        champ.value = "";
+        return;
+      }
+    } catch (e) {
+      statut.textContent = "Vérification impossible sur cette page (connexion non sécurisée ?).";
+      return;
+    }
+    try { localStorage.setItem(ACCÈS_MÉMOIRE, attendue); } catch (e) { /* voir plus haut */ }
+    fermerLaPorte();
+  };
+  porte.querySelector("#accessButton").addEventListener("click", tenter);
+  champ.addEventListener("keydown", (e) => { if (e.key === "Enter") tenter(); });
+  champ.focus();
+}
+
+// Au chargement, AVANT que la tablette ait donné signe de vie : si ce
+// téléphone a déjà appris qu'un mot de passe existe, la porte se dresse tout
+// de suite. Sans ça, le contenu serait visible une seconde — et resterait
+// visible pour toujours en coupant le réseau.
+bloc("porte d'entrée", () => {
+  let connue = null;
+  try { connue = localStorage.getItem(ACCÈS_CONNU); } catch (e) { connue = null; }
+  if (connue && empreinteValidéeLocalement() !== connue) {
+    empreinteDAccès = connue;
+    ouvrirLaPorte();
+  }
+});
+
 bloc("bandeau d'environnement", () => {
   const env = window.SENIORVISIO_ENV;
   if (!env || env.name === "production") return;
@@ -1315,6 +1437,11 @@ function applyDeviceSettings(data) {
   // (voir DeviceStatusReporter.adminPinFingerprint). Elle arrive par le même
   // canal que les réglages : un seul abonnement au document d'appareil.
   adminPinFingerprint = data.adminPinFingerprint || null;
+
+  // Empreinte du mot de passe d'accès au PWA (voir
+  // DeviceStatusReporter.accessFingerprint). Chaîne vide = aucune protection
+  // demandée par l'administrateur.
+  appliquerEmpreinteDAccès(data.accessFingerprint || "");
 
   // Les curseurs reflètent ce que la tablette applique réellement, et pas la
   // dernière position touchée sur CE téléphone : plusieurs personnes peuvent

@@ -191,6 +191,7 @@ class AdminSettingsActivity : AppCompatActivity() {
 
         val inputCountdown = findViewById<EditText>(R.id.inputCountdownSeconds)
         val inputPin = findViewById<EditText>(R.id.inputAdminPin)
+        val inputAccess = findViewById<EditText>(R.id.inputAccessPassword)
         val buttonSave = findViewById<Button>(R.id.buttonSaveAdminSettings)
 
         val inputAssemblyAiKey = findViewById<EditText>(R.id.inputAssemblyAiKey)
@@ -204,6 +205,7 @@ class AdminSettingsActivity : AppCompatActivity() {
 
         inputCountdown.setText(adminConfig.countdownSeconds.toString())
         inputPin.setText(adminConfig.adminPin)
+        inputAccess.setText(adminConfig.accessPassword)
         inputAssemblyAiKey.setText(adminConfig.assemblyAiApiKey)
         inputGladiaKey.setText(adminConfig.gladiaApiKey)
         inputPicovoiceKey.setText(adminConfig.picovoiceAccessKey)
@@ -233,6 +235,10 @@ class AdminSettingsActivity : AppCompatActivity() {
             }
             adminConfig.countdownSeconds = seconds
             adminConfig.adminPin = inputPin.text.toString().ifBlank { adminConfig.adminPin }
+            // Le vide est accepté ici, contrairement au PIN : c'est ainsi
+            // qu'on RETIRE la protection du PWA. Reprendre l'ancienne valeur
+            // rendrait le retrait impossible depuis cet écran.
+            adminConfig.accessPassword = inputAccess.text.toString().trim()
             adminConfig.assemblyAiApiKey = inputAssemblyAiKey.text.toString().trim()
             adminConfig.gladiaApiKey = inputGladiaKey.text.toString().trim()
             adminConfig.picovoiceAccessKey = inputPicovoiceKey.text.toString().trim()
@@ -381,12 +387,17 @@ class AdminSettingsActivity : AppCompatActivity() {
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             )
+            inputAccess.inputType = plainOrPassword(
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            )
             // setInputType ramène sinon le curseur au tout début du champ.
             inputPin.setSelection(inputPin.text.length)
             inputWifiPassword.setSelection(inputWifiPassword.text.length)
             inputAssemblyAiKey.setSelection(inputAssemblyAiKey.text.length)
             inputGladiaKey.setSelection(inputGladiaKey.text.length)
             inputPicovoiceKey.setSelection(inputPicovoiceKey.text.length)
+            inputAccess.setSelection(inputAccess.text.length)
         }
     }
 

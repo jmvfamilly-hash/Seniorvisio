@@ -757,3 +757,44 @@ body.video-mode .pwa-version {
 }
 
 .recueil-supprimer { margin-top: 8px; font-size: 13px; padding: 8px 14px; }
+
+/* Porte d'entrée du PWA (voir app.js, « porte d'entrée »).
+
+   Couvre TOUT, y compris les bandeaux : une page à moitié visible derrière un
+   voile invite à chercher comment passer autour. `position: fixed` avec un
+   z-index au-dessus de tout le reste, et body.verrouille bloque le défilement
+   pour que rien ne se lise en faisant glisser la page. */
+#accessGate {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #1B2A4A;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+body.verrouille { overflow: hidden; }
+
+.access-box {
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+}
+
+.access-box h2 { margin: 0 0 8px; }
+
+.access-box input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 18px;
+  padding: 14px;
+  margin-top: 16px;
+  border-radius: 10px;
+  border: 1px solid #2C3E5C;
+  background: #22335A;
+  color: #fff;
+}
+
+.access-box button { width: 100%; }

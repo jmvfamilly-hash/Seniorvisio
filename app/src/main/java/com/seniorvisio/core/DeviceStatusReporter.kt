@@ -127,6 +127,7 @@ class DeviceStatusReporter(private val context: Context) {
                 // proche qui vient de demander le grand modèle.
                 FIELD_VOSK_MODEL_STATE to VoskModelProvider.describeState(),
                 FIELD_ADMIN_PIN_FINGERPRINT to adminPinFingerprint(),
+                FIELD_ACCESS_FINGERPRINT to accessFingerprint(),
                 FIELD_ROOM_LISTENING to describeRoomListening(),
                 // Les mêmes messages que pendant un appel, mais lisibles hors
                 // appel : c'est là qu'on règle le moteur de la pièce, et c'est
@@ -272,11 +273,26 @@ class DeviceStatusReporter(private val context: Context) {
      * manœuvre d'un proche qui explore l'application, pas contre quelqu'un de
      * mal intentionné — et il ne faut pas lui faire dire autre chose.
      */
-    private fun adminPinFingerprint(): String {
-        val pin = AdminConfig(context).adminPin
-        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(pin.toByteArray())
-        return digest.joinToString("") { "%02x".format(it) }
+    private fun adminPinFingerprint(): String = empreinte(AdminConfig(context).adminPin)
+
+    /**
+     * Empreinte du mot de passe d'accès au PWA, ou chaîne vide si l'admin n'en
+     * a pas posé.
+     *
+     * La chaîne vide n'est pas un oubli : c'est elle qui dit au PWA « aucune
+     * protection demandée ». Publier l'empreinte du mot de passe vide aurait
+     * verrouillé l'application derrière un secret que personne ne connaît, dès
+     * la première mise à jour.
+     */
+    private fun accessFingerprint(): String {
+        val motDePasse = AdminConfig(context).accessPassword
+        return if (motDePasse.isBlank()) "" else empreinte(motDePasse)
     }
+
+    private fun empreinte(valeur: String): String =
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(valeur.toByteArray())
+            .joinToString("") { "%02x".format(it) }
 
     /**
      * Version installée de chaque application compagne, remontée avec le signe
@@ -800,6 +816,7 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_CAPTION_SCROLL_SPEED = "captionScrollSpeedDp"
         private const val FIELD_CAPTION_CLEAR_DELAY = "captionClearDelaySeconds"
         private const val FIELD_ADMIN_PIN_FINGERPRINT = "adminPinFingerprint"
+        private const val FIELD_ACCESS_FINGERPRINT = "accessFingerprint"
         private const val FIELD_ROOM_LISTENING = "roomListening"
 
         // --- Trace de reconnaissance ---

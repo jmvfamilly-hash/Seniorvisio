@@ -62,6 +62,38 @@ class AdminConfig(context: Context) {
         get() = prefs.getString(KEY_ADMIN_PIN, "0000") ?: "0000"
         set(value) = prefs.edit().putString(KEY_ADMIN_PIN, value).apply()
 
+    /**
+     * Mot de passe d'accès au PWA, distinct du code admin ci-dessus.
+     *
+     * ═══ DEUX SECRETS, DEUX PUBLICS ═══
+     *
+     * Le code admin protège les réglages techniques : une personne le connaît.
+     * Celui-ci protège l'accès à l'application elle-même : toute la famille le
+     * connaît. Les confondre obligerait à donner les réglages de la tablette à
+     * quiconque veut appeler Jean.
+     *
+     * ═══ VIDE PAR DÉFAUT, ET C'EST VOULU ═══
+     *
+     * Aucun mot de passe tant que l'administrateur n'en pose pas un : rien ne
+     * change pour les proches qui appellent aujourd'hui. Poser une valeur par
+     * défaut aurait bloqué tout le monde à la première mise à jour, sans que
+     * personne sache quoi taper.
+     *
+     * ═══ CE QU'IL PROTÈGE, ET CE QU'IL NE PROTÈGE PAS ═══
+     *
+     * Le PWA est un site statique : sa configuration Firebase est lisible dans
+     * le code de la page, et les règles Firestore de ce projet laissent lire et
+     * écrire quiconque connaît l'adresse. On peut donc parler à la base sans
+     * jamais passer par l'application.
+     *
+     * Ce mot de passe arrête un téléphone prêté, un enfant, un visiteur, une
+     * adresse retrouvée dans un historique. Il n'arrête pas quelqu'un de
+     * déterminé, et il ne faut pas lui faire dire autre chose.
+     */
+    var accessPassword: String
+        get() = prefs.getString(KEY_ACCESS_PASSWORD, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_ACCESS_PASSWORD, value).apply()
+
     // --- Clé API AssemblyAI : utilisée par le labo de comparaison de
     // transcription (voir TranscriptionLabActivity) ET par la transcription
     // temps réel des sous-titres d'appel (voir WebRtcCallEngine.
@@ -365,6 +397,7 @@ class AdminConfig(context: Context) {
         private const val KEY_COUNTDOWN_SECONDS = "countdown_seconds"
         private const val KEY_BLOCKING_ENABLED = "blocking_enabled"
         private const val KEY_ADMIN_PIN = "admin_pin"
+        private const val KEY_ACCESS_PASSWORD = "access_password"
         private const val KEY_ASSEMBLYAI_API_KEY = "assemblyai_api_key"
         private const val KEY_GLADIA_API_KEY = "gladia_api_key"
         private const val KEY_QUOTA_PREFIX = "monthly_quota_hours_"
