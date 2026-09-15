@@ -104,12 +104,25 @@ jobs:
             {
               echo "### Déploiement refusé"
               echo
-              if echo "$sortie" | grep -qiE "bucket|storage.*not.*(found|exist|enabled)|no default bucket"; then
-                echo "**Firebase Storage n'a probablement jamais été activé sur ce projet.**"
-                echo "Des règles ne peuvent pas être posées sur un seau qui n'existe pas."
+              # Motif corrigé sur le message RÉELLEMENT observé. Le premier
+              # cherchait « bucket » ou « not found » ; firebase-tools écrit
+              # « Firebase Storage has not been set up on project » — aucun des
+              # deux. L'explication n'est donc pas sortie le seul jour où elle
+              # servait, et il a fallu lire la trace brute.
+              if echo "$sortie" | grep -qiE "has not been set up|bucket|get started|storage.*not.*(found|exist|enabled|set up)"; then
+                echo "**Firebase Storage n'a jamais été activé sur ce projet.**"
+                echo "Des règles ne peuvent pas être posées sur un espace qui n'existe pas,"
+                echo "et sa création ne se fait QUE dans la console — aucune commande ne"
+                echo "peut la remplacer."
                 echo
-                echo "À faire une seule fois, dans la console Firebase :"
-                echo "Build → Storage → *Get started*. Puis relancer ce workflow."
+                echo "À faire une seule fois :"
+                echo
+                echo "1. https://console.firebase.google.com/project/seniorvisio/storage"
+                echo "2. Bouton **Commencer** (*Get started*)"
+                echo "3. Accepter les règles proposées, puis choisir l'emplacement"
+                echo "   \`europe-west1\` — **ce choix est définitif**"
+                echo
+                echo "Puis relancer ce workflow."
               else
                 echo "Voir la trace ci-dessus."
               fi
