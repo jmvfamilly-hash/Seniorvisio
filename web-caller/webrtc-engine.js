@@ -218,7 +218,7 @@ class RealCallEngine extends CallEngine {
       // contrainte impérative que l'appareil ne sait pas satisfaire fait
       // échouer la demande entière. Sur un téléphone à une seule caméra, on
       // récupère simplement celle qu'il a.
-      video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: { ideal: facingMode }, ...this._définitionSouhaitée() },
       audio: false,
     });
     return flux.getVideoTracks()[0];
@@ -240,6 +240,39 @@ class RealCallEngine extends CallEngine {
     const aperçu = document.getElementById("localVideo");
     if (aperçu) aperçu.srcObject = this._localStream;
     if (ancienne) ancienne.stop();
+  }
+
+  /**
+   * Définition souhaitée pour la caméra, dans le SENS où l'appareil est tenu.
+   *
+   * ═══ POURQUOI UNE IMAGE CARRÉE ARRIVAIT CHEZ JEAN ═══
+   *
+   * On réclamait 1280 de large pour 720 de haut, quelle que soit
+   * l'orientation — c'est-à-dire une image PAYSAGE à un téléphone tenu
+   * verticalement. Le navigateur fait alors au mieux avec un capteur orienté
+   * portrait, et le compromis qu'il trouve est un carré recadré : le journal
+   * de la tablette relève « ↓ 720×720 », puis 480×480, puis 320×320.
+   *
+   * On perdait donc les côtés ET le cadrage vertical, et aucun réglage
+   * d'affichage côté tablette ne pouvait le rattraper — une image portrait
+   * n'était jamais envoyée.
+   *
+   * Lu à chaque appel et non mémorisé : le proche peut tourner son téléphone
+   * entre deux appels, et c'est au moment de la capture que la question se
+   * pose.
+   *
+   * Toujours `ideal`, jamais `exact` : une contrainte impérative que
+   * l'appareil ne sait pas satisfaire fait échouer getUserMedia EN ENTIER —
+   * l'appel n'aurait alors plus ni image ni son.
+   */
+  _définitionSouhaitée() {
+    const portrait =
+      typeof window.matchMedia === "function"
+        ? window.matchMedia("(orientation: portrait)").matches
+        : window.innerHeight >= window.innerWidth;
+    return portrait
+      ? { width: { ideal: 720 }, height: { ideal: 1280 } }
+      : { width: { ideal: 1280 }, height: { ideal: 720 } };
   }
 
   /** callback(reason) — "blocked" (Jean a refusé) ou "busy" (il est déjà en ligne). */
@@ -369,7 +402,7 @@ class RealCallEngine extends CallEngine {
       // raison. Sur un appareil qui ne sait pas faire 720p, on retombe
       // simplement sur ce qu'il sait faire.
       localStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: this._définitionSouhaitée(),
         audio: true,
       });
     } catch (e) {

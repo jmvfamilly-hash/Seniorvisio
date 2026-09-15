@@ -688,7 +688,36 @@ class IncomingCallActivity : AppCompatActivity() {
             "APPEL bande vidéo",
             "${root.width}×$cible px" + if (cible == root.height) " (pleine hauteur)" else "",
         )
-        params.gravity = Gravity.TOP
+        // ═══ LA LARGEUR DOIT RESTER LIBRE ═══
+        //
+        // SCALE_ASPECT_FIT ne dessine JAMAIS de bandes noires. EglRenderer
+        // recadre toujours la vidéo pour remplir la vue ; l'ajustement vient
+        // d'ailleurs — de VideoLayoutMeasure, qui redimensionne LA VUE aux
+        // proportions du flux. Et il contient ceci :
+        //
+        //     // If the measure specification is forcing a specific size - yield.
+        //     if (MeasureSpec.getMode(widthSpec) == MeasureSpec.EXACTLY)
+        //         layoutSize.x = maxWidth;
+        //
+        // En laissant la largeur à match_parent, je la forçais, et j'annulais
+        // ainsi le seul mécanisme qui produisait l'ajustement. La vue faisait
+        // toute la largeur, et le rendu prélevait la tranche centrale du flux
+        // pour l'y étirer : l'image zoomée constatée en usage réel, avec le
+        // haut et le bas du visage coupés.
+        //
+        // WRAP_CONTENT laisse un mode AT_MOST, borné par le parent : la vue
+        // prend alors la plus grande taille aux proportions du flux qui tienne
+        // dans la bande, et le rendu n'a plus rien à recadrer. Centrée
+        // horizontalement, elle laisse du fond de part et d'autre — ce qui
+        // était l'intention depuis le début.
+        params.width = FrameLayout.LayoutParams.WRAP_CONTENT
+        params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        // La taille réellement obtenue après mise en page, pour ne plus avoir à
+        // la déduire. Trois nombres suffisent désormais à tout trancher : le
+        // flux (journal réseau), la bande qu'on accorde, et ce que la vue prend.
+        renderer.post {
+            CallTrace.record("APPEL vue vidéo", "${renderer.width}×${renderer.height} px réellement occupés")
+        }
         if (!animate) {
             params.height = cible
             renderer.layoutParams = params
