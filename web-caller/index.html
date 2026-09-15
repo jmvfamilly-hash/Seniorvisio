@@ -52,6 +52,31 @@
         <p class="hint" id="identityStatus"></p>
       </details>
 
+      <!-- Composer un recueil se fait AVANT d'appeler, tranquillement, et non
+           pendant : téléverser quinze photos depuis un téléphone prend du
+           temps, et la tablette a besoin d'un moment pour les installer et
+           vérifier qu'elle sait les afficher. Voir
+           docs/architecture-recueils.md. -->
+      <details class="side-panel" id="recueilsPanel">
+        <summary>Préparer des photos pour Jean</summary>
+        <p class="hint">
+          Ces photos s'installent sur la tablette de Jean. Vous pourrez ensuite
+          les lui commenter pendant un appel — elles s'afficheront
+          instantanément, en pleine qualité, même si la connexion est mauvaise.
+        </p>
+
+        <label for="recueilTitre">Nom du recueil</label>
+        <input type="text" id="recueilTitre" maxlength="40" placeholder="Noël chez Marie">
+
+        <label for="recueilFichiers">Photos</label>
+        <input type="file" id="recueilFichiers" accept="image/*" multiple>
+
+        <button id="recueilEnvoyer" class="secondary">📤 Installer sur la tablette</button>
+        <p class="hint" id="recueilStatut"></p>
+
+        <div id="recueilListe"></div>
+      </details>
+
       <!-- Le panneau d'administration règle la tablette elle-même et non un
            appel : il est donc accessible d'ici, sans avoir à déranger Jean.
            Protégé par le code de la tablette (voir openAdmin dans app.js). -->
@@ -688,11 +713,13 @@
 
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-storage-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="version.js"></script>
   <script src="environment.js"></script>
   <script src="call-engine.js"></script>
   <script src="webrtc-engine.js"></script>
+  <script src="recueils.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

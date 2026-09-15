@@ -374,6 +374,11 @@ const els = {
   identityRights: el("identityRights"),
   saveIdentityButton: el("saveIdentityButton"),
   identityStatus: el("identityStatus"),
+  recueilTitre: el("recueilTitre"),
+  recueilFichiers: el("recueilFichiers"),
+  recueilEnvoyer: el("recueilEnvoyer"),
+  recueilStatut: el("recueilStatut"),
+  recueilListe: el("recueilListe"),
   roomEngineSelect: el("roomEngineSelect"),
   callEngineSelect: el("callEngineSelect"),
   voskModelSelect: el("voskModelSelect"),
@@ -2058,4 +2063,117 @@ engine.onError((message) => {
 // câblage a été tenté. Ce qui a manqué ou échoué en chemin a été retenu au
 // lieu d'interrompre la page, et c'est ici qu'on le dit — une fois, en clair,
 // au proche qui est devant l'écran.
+// --- Recueils : préparer des photos qui vivront sur la tablette -----------
+// Voir docs/architecture-recueils.md et web-caller/recueils.js. Ce câblage
+// ignore tout de la composition elle-même : il affiche et déclenche.
+// SOUS GARDE, et `let` plutôt que `const` : firebase.app() lève si le SDK
+// n'a pas été chargé — page mise en cache avant l'ajout du script Storage,
+// CDN injoignable. Une instruction de haut niveau qui lève emporte TOUT ce
+// qui suit, y compris le bandeau qui devait signaler la panne. C'est
+// précisément ce que bloc() existe pour empêcher, et je ne m'en étais pas
+// servi ici.
+let recueils = null;
+bloc("module des recueils", () => {
+  recueils = new Recueils(firebase.app(), CONFIG.deviceDocId);
+});
+
+/**
+ * Montre où en est chaque recueil, du point de vue de LA TABLETTE.
+ *
+ * C'est toute la valeur de l'étape : le proche sait avant d'appeler quelles
+ * photos ne passeront pas et pourquoi — au lieu de le découvrir devant Jean.
+ * L'état vient de la tablette, qui les a réellement décodées ; il n'est pas
+ * déduit du type de fichier, ce qui serait une supposition.
+ */
+function renderRecueils(liste) {
+  if (!els.recueilListe) return;
+  if (!liste.length) {
+    els.recueilListe.innerHTML = "";
+    return;
+  }
+  els.recueilListe.innerHTML = liste
+    .map((r) => {
+      const refusés = r.elements.filter((e) => e.etat === "refusé");
+      const prêts = r.elements.filter((e) => e.etat === "prêt").length;
+      const détail = refusés.length
+        ? `<ul class="recueil-refus">${refusés
+            .map((e) => `<li>${e.cause || "refusée par la tablette"}</li>`)
+            .join("")}</ul>`
+        : "";
+      return `<div class="recueil">
+        <strong>${r.titre}</strong>
+        <span class="hint">${prêts}/${r.elements.length} prêtes · ${r.etatGlobal}</span>
+        ${détail}
+        <button class="secondary recueil-supprimer" data-recueil="${r.id}">🗑️ Retirer</button>
+      </div>`;
+    })
+    .join("");
+  els.recueilListe.querySelectorAll(".recueil-supprimer").forEach((bouton) => {
+    bouton.addEventListener("click", async () => {
+      bouton.disabled = true;
+      try {
+        await recueils.supprimer(bouton.dataset.recueil);
+      } catch (e) {
+        els.recueilStatut.textContent = `Retrait impossible : ${e.message}`;
+        bouton.disabled = false;
+      }
+    });
+  });
+}
+
+bloc("écoute des recueils", () => {
+  if (!recueils || !recueils.disponible) {
+    if (els.recueilStatut) {
+      els.recueilStatut.textContent =
+        "Préparation de photos indisponible sur cette page — rouvrez l'onglet.";
+    }
+    return;
+  }
+  recueils.écouter(renderRecueils);
+});
+
+on("recueilEnvoyer", "click", async () => {
+  if (!recueils) {
+    els.recueilStatut.textContent =
+      "Préparation de photos indisponible sur cette page — rouvrez l'onglet.";
+    return;
+  }
+  const fichiers = Array.from(els.recueilFichiers.files || []);
+  if (!fichiers.length) {
+    els.recueilStatut.textContent = "Choisissez d'abord des photos.";
+    return;
+  }
+  els.recueilEnvoyer.disabled = true;
+  const identité = loadIdentity() || {};
+  try {
+    const { refusés } = await recueils.créer(
+      {
+        titre: els.recueilTitre.value.trim(),
+        crééPar: identité.name || "un proche",
+        fichiers,
+      },
+      (fait, total) => {
+        els.recueilStatut.textContent = `Envoi ${fait}/${total}…`;
+      }
+    );
+    // « Envoyées » et non « prêtes » : la tablette ne les a pas encore
+    // vérifiées. Annoncer « prêtes » ici serait promettre à la place de
+    // quelqu'un d'autre, et se tromper une fois sur dix.
+    els.recueilStatut.textContent =
+      `Envoyées. La tablette les installe et vérifie qu'elle sait les afficher.` +
+      (refusés.length
+        ? ` ${refusés.length} écartée(s) ici : ${refusés.map((r) => `${r.nom} (${r.raison})`).join(", ")}.`
+        : "");
+    els.recueilFichiers.value = "";
+    els.recueilTitre.value = "";
+  } catch (e) {
+    const détail = (e.refusés || []).map((r) => `${r.nom} (${r.raison})`).join(", ");
+    els.recueilStatut.textContent = détail
+      ? `Aucune photo envoyée. ${détail}`
+      : `Envoi impossible : ${e.message}`;
+  } finally {
+    els.recueilEnvoyer.disabled = false;
+  }
+});
+
 signalerPageIncomplète();

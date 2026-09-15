@@ -737,3 +737,23 @@ body.video-mode .pwa-version {
   line-height: 1.35;
   text-align: center;
 }
+
+/* Recueils préparés pour la tablette (voir recueils.js). L'état affiché vient
+   de la tablette, qui a réellement décodé les fichiers — pas d'une déduction
+   faite ici sur le type de fichier. */
+.recueil {
+  border-top: 1px solid #2C3E5C;
+  padding: 10px 0;
+  text-align: left;
+}
+
+.recueil .hint { display: block; margin-top: 2px; }
+
+.recueil-refus {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: #E8A87C;
+  font-size: 13px;
+}
+
+.recueil-supprimer { margin-top: 8px; font-size: 13px; padding: 8px 14px; }

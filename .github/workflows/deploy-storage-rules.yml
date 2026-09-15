@@ -1,0 +1,49 @@
+name: Deploy Storage rules (déclenchement manuel)
+
+# ═══ POURQUOI CELUI-CI NE PART PAS TOUT SEUL ═══
+#
+# Les règles Firestore se déploient à chaque push touchant firestore.rules.
+# Celles-ci, non : elles attendent un appui délibéré sur « Run workflow ».
+#
+# Publier ces règles, c'est ouvrir un espace où vont vivre des photos de
+# famille. Cette décision revient à l'administrateur du projet, pas au commit
+# qui écrit le code — et elle ne devrait pas se prendre par inadvertance en
+# poussant autre chose.
+#
+# Tant que ce workflow n'a pas tourné, Firebase Storage refuse tout par
+# défaut, et la composition des recueils ne fonctionne pas. C'est le
+# comportement voulu : un interrupteur que quelqu'un doit consciemment
+# actionner, après avoir lu storage.rules et su ce qu'elles protègent — et
+# surtout ce qu'elles ne protègent pas.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Rappeler ce qui va être publié
+        run: |
+          echo "### Règles Storage sur le point d'être déployées" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -v '^//' storage.rules | grep -v '^\s*//' | grep -v '^\s*$' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Déploie les règles Storage
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
+          # --only storage, jamais un déploiement nu : firebase.json décrit
+          # aussi les règles Firestore, l'hébergement et les fonctions.
+          npx firebase-tools deploy --only storage \
+            --project seniorvisio --non-interactive --force

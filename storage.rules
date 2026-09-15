@@ -1,0 +1,71 @@
+rules_version = '2';
+
+// Règles d'accès aux fichiers des recueils (voir docs/architecture-recueils.md).
+//
+// ═══ CE FICHIER N'EST PAS DÉPLOYÉ AUTOMATIQUEMENT ═══
+//
+// Contrairement à firestore.rules, il ne part pas à chaque push : il attend
+// un déclenchement manuel (voir .github/workflows/deploy-storage-rules.yml).
+// C'est délibéré. Publier ces règles, c'est ouvrir un espace où vont vivre
+// des photos de famille, et cette décision revient à l'administrateur du
+// projet, pas au commit qui écrit le code.
+//
+// Tant qu'elles ne sont pas déployées, Firebase Storage refuse tout, et
+// l'étape 2 ne fonctionne pas. C'est le comportement voulu : un interrupteur
+// que quelqu'un doit consciemment actionner.
+//
+// ═══ CE QU'ELLES PROTÈGENT, ET CE QU'ELLES NE PROTÈGENT PAS ═══
+//
+// Elles PROTÈGENT contre : l'écriture hors des chemins prévus, les fichiers
+// démesurés qui rempliraient le quota, et les types qui n'ont rien à faire là
+// — un exécutable déposé sous couvert de photo.
+//
+// Elles NE PROTÈGENT PAS contre quelqu'un qui connaît l'adresse du site. Le
+// PWA n'a aucune authentification : chaque proche appelle depuis son propre
+// téléphone, sans compte à créer, et c'est un choix d'ergonomie assumé depuis
+// le début du projet. Exiger `request.auth != null` rendrait simplement le
+// téléversement impossible.
+//
+// La vraie protection à ce stade tient à ce que les noms de chemins ne sont
+// pas devinables — c'est mince, et il faut le savoir plutôt que de le croire
+// résolu. Le jour où ça ne suffira plus, la marche à suivre est l'inscription
+// anonyme Firebase, qui ne demande rien au proche et permet de restreindre à
+// « quelqu'un qui est passé par le site ».
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Les éléments des recueils, rangés par appareil puis par recueil :
+    //   recueils/{appareil}/{recueilId}/{elementId}
+    //
+    // Le premier segment est l'appareil (jean_tablet ou test_tablet) : la
+    // séparation production / banc d'essai vaut ici comme partout ailleurs.
+    match /recueils/{appareil}/{recueilId}/{elementId} {
+
+      // Lecture ouverte : c'est la tablette qui télécharge, et elle n'a pas
+      // d'identité Firebase — elle fait une simple requête HTTPS avec le
+      // jeton contenu dans l'URL (voir RecueilStore, et le choix de ne pas
+      // embarquer le SDK Storage).
+      allow read: if true;
+
+      // Écriture bornée. Ces deux limites ne sont pas cosmétiques :
+      //
+      //   - 25 Mo couvre une photo d'appareil moderne et une courte vidéo,
+      //     et ferme la porte à un dépôt qui viderait le quota du projet ;
+      //   - le type doit être une image ou une vidéo. La tablette vérifiera
+      //     de toute façon en décodant pour de bon (voir VerificateurElement)
+      //     — mais autant ne pas payer le téléchargement d'un fichier dont on
+      //     sait déjà qu'il sera refusé.
+      allow write: if request.resource.size < 25 * 1024 * 1024
+                   && (request.resource.contentType.matches('image/.*')
+                       || request.resource.contentType.matches('video/.*'));
+    }
+
+    // Tout le reste est refusé. Écrit explicitement plutôt que laissé au
+    // défaut : une règle absente et une règle qui refuse se comportent
+    // pareil, mais seule la seconde dit qu'on y a pensé.
+    match /{chemin=**} {
+      allow read, write: if false;
+    }
+  }
+}
