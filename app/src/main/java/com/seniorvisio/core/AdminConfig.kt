@@ -314,6 +314,27 @@ class AdminConfig(context: Context) {
      * trois fois — et remplacerait trois fois les titres sous les yeux de
      * Jean, ce que « une fois par jour » interdit précisément.
      */
+    /**
+     * L'administrateur vient-il de changer la liste des fils ?
+     *
+     * Ce drapeau lève, pour UN seul rafraîchissement, la règle « ne jamais
+     * écraser un flux qui marche par du vide » (voir RafraichisseurFlux).
+     *
+     * Cette règle protège d'une panne passagère. Appliquée à un ordre
+     * explicite, elle se retourne contre son but : une nouvelle liste qui ne
+     * donne rien laisserait l'ancien fil à l'écran, et le réglage aurait l'air
+     * d'avoir été ignoré. Un ordre doit produire un effet visible, même quand
+     * cet effet est un écran vide — c'est la seule façon d'apprendre quelque
+     * chose de son essai.
+     *
+     * Rangé dans les préférences et non en mémoire : le réglage peut arriver
+     * juste avant un redémarrage, et l'intention ne doit pas se perdre avec le
+     * processus.
+     */
+    var fluxListeChangee: Boolean
+        get() = prefs.getBoolean(KEY_FLUX_LISTE_CHANGEE, false)
+        set(value) = prefs.edit().putBoolean(KEY_FLUX_LISTE_CHANGEE, value).apply()
+
     var fluxDernierRafraichissementMs: Long
         get() = prefs.getLong(KEY_FLUX_DERNIER_JOUR, 0L)
         set(value) = prefs.edit().putLong(KEY_FLUX_DERNIER_JOUR, value).apply()
@@ -516,6 +537,7 @@ class AdminConfig(context: Context) {
         private const val KEY_FLUX_ACTUALITES = "flux_actualites"
         private const val KEY_COMMANDES_VOCALES = "commandes_vocales_actives"
         private const val KEY_FLUX_DERNIER_JOUR = "flux_dernier_rafraichissement"
+        private const val KEY_FLUX_LISTE_CHANGEE = "flux_liste_changee"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
         private const val KEY_DIM_JEAN_SPEECH = "dim_jean_speech"
         private const val KEY_ROOM_HANDOFF_ENABLED = "room_handoff_enabled"

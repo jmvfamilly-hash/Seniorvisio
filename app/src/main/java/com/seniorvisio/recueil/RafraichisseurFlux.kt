@@ -87,8 +87,27 @@ class RafraichisseurFlux(private val context: Context) {
         // Un contrôle au quart d'heure ne coûte rien — il ne fait que comparer
         // deux dates — et il rattrape le cas d'une tablette allumée en continu
         // qui doit basculer à 7 h sans que personne ne la touche.
+        // ═══ ENVELOPPÉ, ET CE N'EST PAS UNE PRÉCAUTION DE STYLE ═══
+        //
+        // scheduleWithFixedDelay ANNULE DÉFINITIVEMENT la tâche si elle lève,
+        // et sans un mot. Une seule exception — un serveur qui rend du XML
+        // illisible, une écriture Firestore refusée — et le fil d'information
+        // s'arrêterait pour toujours, jusqu'au prochain redémarrage de la
+        // tablette. Le symptôme serait « les news ne changent plus », des
+        // jours après la cause, sans rien pour les relier.
         ordonnanceur.scheduleWithFixedDelay(
-            ::siDûRafraîchir, 0, INTERVALLE_CONTROLE_MINUTES, TimeUnit.MINUTES
+            {
+                runCatching { siDûRafraîchir() }
+                    .onFailure { e ->
+                        Log.e(TAG, "Rafraîchissement du fil en échec", e)
+                        CallTrace.record(
+                            "FLUX ÉCHEC",
+                            "${e.javaClass.simpleName} : ${e.message ?: "sans message"} — " +
+                                "nouvel essai au prochain contrôle",
+                        )
+                    }
+            },
+            0, INTERVALLE_CONTROLE_MINUTES, TimeUnit.MINUTES,
         )
     }
 
@@ -203,12 +222,35 @@ class RafraichisseurFlux(private val context: Context) {
         )
 
         if (titres.isEmpty()) {
-            // On ne PUBLIE PAS un flux vide par-dessus un flux qui marchait.
-            // Une panne passagère des serveurs, ou un matin où rien n'est
-            // encore paru, effacerait les titres déjà installés — et Jean se
-            // retrouverait devant un recueil vide au lieu des titres d'hier,
-            // qui, eux, étaient lisibles.
+            // ═══ SAUF QUAND L'ADMINISTRATEUR VIENT DE CHANGER LA LISTE ═══
             //
+            // La règle « ne jamais écraser un flux qui marche par du vide »
+            // protège d'une panne passagère : un matin où rien n'est paru, ou
+            // des serveurs muets, ne doivent pas laisser Jean devant un écran
+            // vide alors que les titres d'hier étaient lisibles.
+            //
+            // Appliquée à un changement de liste, elle se retourne contre son
+            // but. L'administrateur remplace France Info par deux autres fils,
+            // ceux-ci ne donnent rien — ils ne datent pas leurs articles, par
+            // exemple — et l'écran continue d'afficher France Info. Vu de
+            // dehors, le réglage a été IGNORÉ : rien ne distingue « votre
+            // liste a été lue et n'a rien donné » de « votre liste n'est
+            // jamais arrivée », et on cherche la panne du mauvais côté.
+            //
+            // Un ordre explicite doit donc produire un effet visible, même
+            // quand cet effet est un écran vide. C'est la seule façon que
+            // l'administrateur apprenne quelque chose de son essai.
+            if (config.fluxListeChangee) {
+                publier(emptyList())
+                config.fluxListeChangee = false
+                config.fluxDernierRafraichissementMs = System.currentTimeMillis()
+                CallTrace.record(
+                    "FLUX vidé",
+                    "la nouvelle liste ne donne aucun titre du jour — l'ancien fil est retiré",
+                )
+                Log.w(TAG, "Nouvelle liste sans titre du jour : l'ancien fil est retiré")
+                return
+            }
             // La date du dernier remplacement n'est PAS mise à jour : la
             // tentative recommencera au prochain contrôle, dans le quart
             // d'heure, au lieu d'attendre demain 7 h.
@@ -217,6 +259,7 @@ class RafraichisseurFlux(private val context: Context) {
         }
 
         publier(titres)
+        config.fluxListeChangee = false
         config.fluxDernierRafraichissementMs = System.currentTimeMillis()
         Log.i(TAG, "${titres.size} titres publiés")
     }

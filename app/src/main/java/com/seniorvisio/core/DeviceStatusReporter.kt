@@ -528,6 +528,11 @@ class DeviceStatusReporter(private val context: Context) {
             if (adminConfig.fluxActualites != liste) {
                 adminConfig.fluxActualites = liste
                 adminConfig.fluxDernierRafraichissementMs = 0L
+                // Lève, pour ce rafraîchissement-là seulement, la protection
+                // contre l'écrasement par du vide : un ordre explicite doit
+                // produire un effet visible, même si la nouvelle liste ne
+                // donne aucun titre.
+                adminConfig.fluxListeChangee = true
                 val nombre = liste.split(",", "\n", ";").count { it.isNotBlank() }
                 Log.i(TAG, "Fils d'information réglés à distance : $nombre")
                 CallTrace.record("FLUX réglé", "$nombre fil(s) — relecture au prochain contrôle")
