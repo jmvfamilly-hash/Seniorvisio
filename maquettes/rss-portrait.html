@@ -1,0 +1,786 @@
+<title>Titres chez Jean</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Roboto:wght@400;500&display=swap">
+
+<style>
+  /* ═══ PALETTE ═══
+     Deux mondes distincts, et la distinction est fonctionnelle : la SCÈNE
+     reproduit l'écran de Jean et ne suit donc jamais le thème du navigateur —
+     sa tablette est sombre, point. Le PANNEAU, lui, est un outil qu'on lit
+     dans un salon ou dans un train, et suit le thème du lecteur.
+     Les confondre ferait juger la lisibilité sur les mauvaises couleurs. */
+  :root {
+    /* L'écran de Jean — valeurs fixes, jamais redéfinies plus bas. */
+    --dalle: #10131a;
+    --dalle-texte: #f4f2ec;
+    --dalle-discret: #8a93a6;
+
+    /* Le panneau, en clair. */
+    --fond: #f2f1ec;
+    --carte: #fbfaf7;
+    --encre: #1b2026;
+    --encre-douce: #5d6670;
+    --trait: #d8d5cd;
+    --accent: #1f5f5b;
+    --accent-doux: #e3ecea;
+    --alerte: #8a3d1b;
+
+    color-scheme: light;
+  }
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --fond: #14171b;
+      --carte: #1c2025;
+      --encre: #e8e6e0;
+      --encre-douce: #98a0a8;
+      --trait: #2f353c;
+      --accent: #6cbdb5;
+      --accent-doux: #1e2c2b;
+      --alerte: #d98a5f;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --fond: #14171b;
+    --carte: #1c2025;
+    --encre: #e8e6e0;
+    --encre-douce: #98a0a8;
+    --trait: #2f353c;
+    --accent: #6cbdb5;
+    --accent-doux: #1e2c2b;
+    --alerte: #d98a5f;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--fond);
+    color: var(--encre);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .page {
+    padding-block: 28px 48px;
+    padding-inline: 20px;
+    max-width: 1180px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }
+
+  /* ── En-tête ─────────────────────────────────────────────── */
+  header { display: flex; flex-direction: column; gap: 8px; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(24px, 4.4vw, 33px);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+  .chapo {
+    margin: 0;
+    max-width: 62ch;
+    color: var(--encre-douce);
+  }
+
+  /* ── Disposition principale ──────────────────────────────── */
+  .atelier {
+    display: grid;
+    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+    gap: 26px;
+    align-items: start;
+  }
+  @media (max-width: 760px) {
+    .atelier { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  /* ── LA SCÈNE : l'écran de Jean ──────────────────────────── */
+  /* Collante : on règle la taille du titre EN LE REGARDANT. Sans ça, la
+     scène sort de l'écran dès qu'on descend vers les réglages, et on juge
+     de mémoire — ce qui est exactement ce qu'une maquette doit éviter.
+     Retombe en flux normal sous 760 px, où la colonne passe au-dessus. */
+  .scene-bloc {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    position: sticky;
+    top: calc(env(safe-area-inset-top, 0px) + 20px);
+  }
+  @media (max-width: 760px) {
+    .scene-bloc { position: static; }
+  }
+
+  .scene {
+    position: relative;
+    aspect-ratio: 10 / 16;   /* tablette 1200×1920, tenue en portrait */
+    width: 100%;
+    max-width: 100%;
+    background: var(--dalle);
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    /* La police d'Android, pas celle du navigateur : une maquette qui juge la
+       lisibilité doit rendre avec les mêmes formes de lettres. */
+    font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--dalle-texte);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.18), 0 10px 26px rgb(0 0 0 / 0.14);
+  }
+
+  /* Bandeau d'accueil, aux tailles réelles du projet (48 sp / 30 sp). */
+  .bandeau {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4.2% 5% 0;
+    color: var(--dalle-discret);
+  }
+  .bandeau[hidden] { display: none !important; }
+  .bandeau .jour { font-size: var(--px48); font-weight: 500; color: var(--dalle-texte); }
+  .bandeau .moment { font-size: var(--px30); }
+
+  .titre-zone {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 5%;
+    gap: 3%;
+    min-height: 0;
+  }
+
+  .titre {
+    margin: 0;
+    font-size: var(--pxTitre);
+    line-height: 1.24;
+    font-weight: 400;
+    text-wrap: pretty;
+    overflow-wrap: break-word;
+  }
+  .titre.change { animation: entree 260ms ease-out; }
+  @keyframes entree { from { opacity: 0; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .titre.change { animation: none; }
+  }
+
+  .marque-exemple {
+    align-self: flex-start;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--px20);
+    letter-spacing: 0.1em;
+    color: #f0b27a;
+    border: 1px solid #7a5230;
+    border-radius: 3px;
+    padding: 0.15em 0.5em;
+  }
+
+  .pied-scene {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 5% 4.2%;
+    font-size: var(--px30);
+    color: var(--dalle-discret);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .echelle {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--encre-douce);
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  /* ── LE PANNEAU : la feuille d'épreuve ───────────────────── */
+  .panneau { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+
+  .bloc {
+    background: var(--carte);
+    border: 1px solid var(--trait);
+    border-radius: 8px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .bloc-titre {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--encre-douce);
+    margin: 0;
+  }
+
+  /* Navigation */
+  .nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  button {
+    font: inherit;
+    font-weight: 500;
+    color: var(--encre);
+    background: var(--carte);
+    border: 1px solid var(--trait);
+    border-radius: 6px;
+    padding: 9px 14px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: 0.38; cursor: default; }
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  button.primaire {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--carte);
+  }
+  button.primaire:hover:not(:disabled) { opacity: 0.9; color: var(--carte); }
+
+  .compteur {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--encre-douce);
+    min-width: 5.5ch;
+    text-align: center;
+  }
+
+  /* Réglages */
+  .reglage { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .reglage label { font-size: 13px; color: var(--encre-douce); min-width: 9.5em; }
+  .reglage input[type="range"] { flex: 1 1 140px; min-width: 0; accent-color: var(--accent); }
+  .valeur {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    min-width: 5ch;
+    text-align: right;
+  }
+
+  .case { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .case input { accent-color: var(--accent); }
+
+  /* Mesures : la feuille d'épreuve proprement dite */
+  .mesures {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: 1px;
+    background: var(--trait);
+    border: 1px solid var(--trait);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .mesure {
+    background: var(--carte);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .mesure dt {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--encre-douce);
+  }
+  .mesure dd {
+    margin: 0;
+    font-size: 21px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .mesure dd .unite { font-size: 12px; font-weight: 400; color: var(--encre-douce); }
+  .mesure.tendu dd { color: var(--alerte); }
+
+  /* Source */
+  textarea {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    width: 100%;
+    min-height: 92px;
+    resize: vertical;
+    padding: 10px;
+    border: 1px solid var(--trait);
+    border-radius: 6px;
+    background: var(--fond);
+    color: var(--encre);
+  }
+
+  .note {
+    margin: 0;
+    font-size: 13px;
+    color: var(--encre-douce);
+  }
+  .note strong { color: var(--encre); font-weight: 500; }
+
+  .avis {
+    margin: 0;
+    font-size: 13px;
+    border-left: 3px solid var(--accent);
+    background: var(--accent-doux);
+    padding: 10px 12px;
+    border-radius: 0 6px 6px 0;
+  }
+  .avis.probleme { border-left-color: var(--alerte); background: transparent; }
+
+  .liste-titres {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    max-height: 210px;
+    overflow-y: auto;
+  }
+  .liste-titres li { display: flex; }
+  .liste-titres button {
+    flex: 1;
+    text-align: left;
+    border: 0;
+    border-radius: 4px;
+    padding: 7px 9px;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.35;
+    background: transparent;
+  }
+  .liste-titres button[aria-current="true"] {
+    background: var(--accent-doux);
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .liste-titres .rang {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--encre-douce);
+    margin-right: 8px;
+  }
+
+  footer {
+    border-top: 1px solid var(--trait);
+    padding-top: 16px;
+    font-size: 13px;
+    color: var(--encre-douce);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.92em;
+    background: var(--accent-doux);
+    color: var(--accent);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+  }
+</style>
+
+<div class="page">
+
+  <header>
+    <span class="eyebrow">Maquette · banc d'essai Senior Visio</span>
+    <h1>Un titre à la fois, sur l'écran mural</h1>
+    <p class="chapo">
+      Ce que donnerait un fil d'information sur la tablette de Jean, tenue en
+      portrait. La scène est à ses proportions réelles, rendue en Roboto — la
+      police d'Android — et mesurée en <strong>sp</strong>, l'unité de sa
+      tablette. Les flèches font défiler ; les mesures à droite disent si le
+      titre tient.
+    </p>
+  </header>
+
+  <div class="atelier">
+
+    <!-- ══════ LA SCÈNE ══════ -->
+    <div class="scene-bloc">
+      <div class="scene" id="scene">
+        <div class="bandeau" id="bandeau">
+          <span class="jour">Mardi 16</span>
+          <span class="moment">après-midi</span>
+        </div>
+
+        <div class="titre-zone">
+          <span class="marque-exemple" id="marqueExemple">EXEMPLE FICTIF</span>
+          <p class="titre" id="titre">Chargement…</p>
+        </div>
+
+        <div class="pied-scene">
+          <span id="piedSource">exemples</span>
+          <span id="piedRang">1 / 6</span>
+        </div>
+      </div>
+
+      <p class="echelle">
+        <span>Tablette 1200 × 1920 px</span>
+        <span id="echelleTexte">échelle 1 : —</span>
+      </p>
+    </div>
+
+    <!-- ══════ LE PANNEAU ══════ -->
+    <div class="panneau">
+
+      <section class="bloc">
+        <h2 class="bloc-titre">Navigation</h2>
+        <div class="nav">
+          <button id="prec" type="button">◀ Précédent</button>
+          <span class="compteur" id="compteur">1 / 6</span>
+          <button id="suiv" type="button">Suivant ▶</button>
+        </div>
+        <label class="case">
+          <input type="checkbox" id="auto">
+          Défilement automatique
+        </label>
+        <div class="reglage">
+          <label for="delai">Toutes les</label>
+          <input type="range" id="delai" min="4" max="40" step="1" value="12">
+          <span class="valeur"><span id="delaiVal">12</span> s</span>
+        </div>
+        <p class="note">
+          Les flèches ← et → du clavier font la même chose.
+        </p>
+      </section>
+
+      <section class="bloc">
+        <h2 class="bloc-titre">Feuille d'épreuve</h2>
+        <div class="reglage">
+          <label for="taille">Taille du titre</label>
+          <input type="range" id="taille" min="24" max="72" step="2" value="44">
+          <span class="valeur"><span id="tailleVal">44</span> sp</span>
+        </div>
+        <p class="note">
+          Repères du projet : <strong>32 sp</strong> pour les sous-titres
+          d'appel, <strong>48 sp</strong> pour les grands titres de zone.
+        </p>
+        <label class="case">
+          <input type="checkbox" id="avecBandeau" checked>
+          Garder le bandeau date et moment
+        </label>
+
+        <dl class="mesures">
+          <div class="mesure" id="mSignes">
+            <dt>Signes</dt>
+            <dd><span id="vSignes">—</span></dd>
+          </div>
+          <div class="mesure" id="mLignes">
+            <dt>Lignes</dt>
+            <dd><span id="vLignes">—</span></dd>
+          </div>
+          <div class="mesure" id="mLecture">
+            <dt>Lecture</dt>
+            <dd><span id="vLecture">—</span> <span class="unite">s</span></dd>
+          </div>
+          <div class="mesure" id="mPlace">
+            <dt>Place prise</dt>
+            <dd><span id="vPlace">—</span> <span class="unite">%</span></dd>
+          </div>
+        </dl>
+        <p class="note" id="verdict"></p>
+      </section>
+
+      <section class="bloc">
+        <h2 class="bloc-titre">Source des titres</h2>
+
+        <p class="avis" id="avisSource">
+          Les titres affichés sont des <strong>exemples fictifs</strong>, écrits
+          pour couvrir les longueurs qu'on rencontre dans un fil d'information.
+          Ce ne sont pas de vrais titres de France Info.
+        </p>
+
+        <div class="nav">
+          <button id="essayerReseau" type="button">Essayer de charger le vrai flux</button>
+          <button id="revenirExemples" type="button" disabled>Revenir aux exemples</button>
+        </div>
+
+        <p class="note">
+          Pour juger sur du réel : ouvrez
+          <code>francetvinfo.fr/titres.rss</code> dans un onglet, copiez toute
+          la page, collez-la ici.
+        </p>
+        <textarea id="collage" placeholder="Collez ici le contenu du flux RSS (XML)…" spellcheck="false"></textarea>
+        <div class="nav">
+          <button id="lireCollage" class="primaire" type="button">Lire ce flux</button>
+        </div>
+        <p class="note" id="etatSource"></p>
+
+        <ul class="liste-titres" id="listeTitres"></ul>
+      </section>
+
+    </div>
+  </div>
+
+  <footer>
+    <p>
+      <strong>Pourquoi le chargement direct échoue ici.</strong> Un serveur RSS
+      n'autorise pas les pages d'autres sites à le lire — c'est la règle des
+      origines croisées, et elle vaut pour tout navigateur. La tablette, elle,
+      est une application Android : elle n'y est pas soumise et pourra charger
+      le flux directement. L'obstacle est donc propre à cette maquette, pas à
+      l'architecture.
+    </p>
+    <p>
+      Maquette d'évaluation, sans lien avec France&nbsp;Info ni avec
+      france·tv. Aucun contenu réel n'est reproduit ici.
+    </p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ═══ EXEMPLES FICTIFS ═══
+  //
+  // Écrits pour ce que la maquette doit éprouver : la RÉPARTITION DES
+  // LONGUEURS. Un fil d'information réel va d'une quarantaine de signes à
+  // plus de cent trente, et c'est le long qui casse une mise en page, pas le
+  // moyen. Volontairement génériques : aucun événement, aucune personne, rien
+  // qui puisse se lire comme une information véritable.
+  const EXEMPLES = [
+    "Grève des transports jeudi",
+    "Le conseil municipal vote la rénovation de la halle du marché",
+    "Météo : un épisode de fortes pluies attendu sur le quart sud-est du pays à partir de mercredi soir",
+    "Trois questions sur la réforme annoncée hier",
+    "Le pont de la rivière rouvre à la circulation après quatorze mois de travaux et un dépassement de budget de 12 %",
+    "Football : la finale se jouera à guichets fermés"
+  ];
+
+  const $ = (id) => document.getElementById(id);
+
+  const scene = $("scene");
+  const titreEl = $("titre");
+  const bandeauEl = $("bandeau");
+  const marqueEl = $("marqueExemple");
+
+  let titres = EXEMPLES.slice();
+  let source = "exemples";       // "exemples" | "collé" | "réseau"
+  let rang = 0;
+  let minuterie = null;
+
+  // ── L'échelle : 1 sp de la tablette vaut 2 px sur sa dalle (densité ×2),
+  // et la scène est une réduction de cette dalle. Tout le rendu passe par ce
+  // facteur, sinon les tailles affichées seraient des chiffres décoratifs.
+  const LARGEUR_DALLE = 1200;
+  const DENSITE = 2;
+
+  function appliquerEchelle() {
+    const facteur = scene.clientWidth / LARGEUR_DALLE;
+    const px = (sp) => (sp * DENSITE * facteur).toFixed(2) + "px";
+    scene.style.setProperty("--pxTitre", px(Number($("taille").value)));
+    scene.style.setProperty("--px48", px(48));
+    scene.style.setProperty("--px30", px(30));
+    scene.style.setProperty("--px20", px(20));
+    $("echelleTexte").textContent =
+      "échelle 1 : " + (1 / facteur).toFixed(1).replace(".", ",");
+    mesurer();
+  }
+
+  // ── Mesures ────────────────────────────────────────────────
+  function mesurer() {
+    const texte = titres[rang] || "";
+    const signes = texte.length;
+    $("vSignes").textContent = signes;
+
+    const hauteurLigne = parseFloat(getComputedStyle(titreEl).lineHeight) || 1;
+    const lignes = Math.max(1, Math.round(titreEl.getBoundingClientRect().height / hauteurLigne));
+    $("vLignes").textContent = lignes;
+
+    // 120 mots par minute : une lecture posée, à voix haute, telle qu'on lit
+    // à 88 ans. Les barèmes habituels (240 mots/min, lecture silencieuse d'un
+    // adulte pressé) donneraient un chiffre rassurant et faux.
+    const mots = texte.trim() ? texte.trim().split(/\s+/).length : 0;
+    const secondes = Math.max(2, Math.ceil((mots / 120) * 60));
+    $("vLecture").textContent = secondes;
+
+    const zone = titreEl.parentElement.getBoundingClientRect().height;
+    const part = zone ? Math.round((titreEl.getBoundingClientRect().height / zone) * 100) : 0;
+    $("vPlace").textContent = part;
+
+    // Un titre qui occupe plus des trois quarts de sa zone est à la limite :
+    // le suivant, un peu plus long, débordera.
+    $("mPlace").classList.toggle("tendu", part > 78);
+    $("mLignes").classList.toggle("tendu", lignes > 4);
+
+    const délai = Number($("delai").value);
+    let verdict;
+    if (part > 96) {
+      verdict = "Le titre déborde de sa zone à cette taille.";
+    } else if (part > 78) {
+      verdict = "Le titre remplit presque toute la zone : un titre plus long débordera.";
+    } else if (secondes > délai) {
+      verdict = "Le défilement change de titre avant qu'il soit lu (" +
+        secondes + " s de lecture pour " + délai + " s d'affichage).";
+    } else {
+      verdict = "Tient dans la zone, et laisse le temps de le lire.";
+    }
+    $("verdict").textContent = verdict;
+  }
+
+  // ── Affichage ──────────────────────────────────────────────
+  function afficher() {
+    if (!titres.length) return;
+    rang = ((rang % titres.length) + titres.length) % titres.length;
+    titreEl.textContent = titres[rang];
+    titreEl.classList.remove("change");
+    void titreEl.offsetWidth;   // relance l'animation
+    titreEl.classList.add("change");
+
+    const position = (rang + 1) + " / " + titres.length;
+    $("compteur").textContent = position;
+    $("piedRang").textContent = position;
+    $("piedSource").textContent =
+      source === "exemples" ? "exemples" : "france info";
+    marqueEl.hidden = source !== "exemples";
+
+    majListe();
+    mesurer();
+  }
+
+  function majListe() {
+    const liste = $("listeTitres");
+    liste.textContent = "";
+    titres.forEach((t, i) => {
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.type = "button";
+      if (i === rang) b.setAttribute("aria-current", "true");
+      const rangSpan = document.createElement("span");
+      rangSpan.className = "rang";
+      rangSpan.textContent = String(i + 1).padStart(2, "0");
+      b.append(rangSpan, document.createTextNode(t));
+      b.addEventListener("click", () => { rang = i; afficher(); });
+      li.append(b);
+      liste.append(li);
+    });
+  }
+
+  function aller(pas) { rang += pas; afficher(); }
+
+  // ── Défilement automatique ─────────────────────────────────
+  function reglerMinuterie() {
+    clearInterval(minuterie);
+    minuterie = null;
+    if ($("auto").checked) {
+      minuterie = setInterval(() => aller(1), Number($("delai").value) * 1000);
+    }
+  }
+
+  // ── Source ─────────────────────────────────────────────────
+  function poser(nouveaux, provenance, message) {
+    titres = nouveaux;
+    source = provenance;
+    rang = 0;
+    $("avisSource").hidden = provenance !== "exemples";
+    $("revenirExemples").disabled = provenance === "exemples";
+    $("etatSource").textContent = message || "";
+    afficher();
+  }
+
+  function lireXml(xml) {
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    if (doc.querySelector("parsererror")) return null;
+    const trouvés = [...doc.querySelectorAll("item > title, entry > title")]
+      .map((n) => (n.textContent || "").trim())
+      .filter(Boolean);
+    return trouvés.length ? trouvés : null;
+  }
+
+  $("lireCollage").addEventListener("click", () => {
+    const brut = $("collage").value.trim();
+    if (!brut) {
+      $("etatSource").textContent = "Rien à lire : le champ est vide.";
+      return;
+    }
+    const lus = lireXml(brut);
+    if (!lus) {
+      $("etatSource").textContent =
+        "Aucun titre trouvé. Le texte collé doit être le XML du flux, " +
+        "avec ses balises <item><title>.";
+      return;
+    }
+    poser(lus, "collé", lus.length + " titres lus depuis le flux collé.");
+  });
+
+  $("essayerReseau").addEventListener("click", async () => {
+    $("etatSource").textContent = "Tentative de chargement…";
+    try {
+      const r = await fetch("https://www.francetvinfo.fr/titres.rss");
+      const lus = lireXml(await r.text());
+      if (!lus) throw new Error("Flux illisible");
+      poser(lus, "réseau", lus.length + " titres chargés depuis le flux.");
+    } catch (e) {
+      // Attendu, et c'est justement l'enseignement : le navigateur refuse.
+      $("etatSource").textContent =
+        "Refusé par le navigateur (" + (e && e.message ? e.message : "origine croisée") +
+        "). C'est la limite expliquée en bas de page — collez le flux à la place.";
+      $("etatSource").style.color = "var(--alerte)";
+    }
+  });
+
+  $("revenirExemples").addEventListener("click", () => {
+    $("etatSource").style.color = "";
+    poser(EXEMPLES.slice(), "exemples", "");
+  });
+
+  // ── Branchements ───────────────────────────────────────────
+  $("prec").addEventListener("click", () => aller(-1));
+  $("suiv").addEventListener("click", () => aller(1));
+  $("auto").addEventListener("change", reglerMinuterie);
+  $("delai").addEventListener("input", () => {
+    $("delaiVal").textContent = $("delai").value;
+    reglerMinuterie();
+    mesurer();
+  });
+  $("taille").addEventListener("input", () => {
+    $("tailleVal").textContent = $("taille").value;
+    appliquerEchelle();
+  });
+  $("avecBandeau").addEventListener("change", () => {
+    bandeauEl.hidden = !$("avecBandeau").checked;
+    mesurer();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target.matches("textarea, input")) return;
+    if (e.key === "ArrowLeft") { aller(-1); e.preventDefault(); }
+    if (e.key === "ArrowRight") { aller(1); e.preventDefault(); }
+  });
+
+  new ResizeObserver(appliquerEchelle).observe(scene);
+
+  // Une date réelle dans le bandeau : une maquette qui affiche « Lundi 1 »
+  // pour l'éternité laisse douter du reste.
+  (function dater() {
+    const d = new Date();
+    const jours = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+    scene.querySelector(".jour").textContent = jours[d.getDay()] + " " + d.getDate();
+    const h = d.getHours();
+    scene.querySelector(".moment").textContent =
+      h < 12 ? "matin" : h < 18 ? "après-midi" : h < 22 ? "soir" : "nuit";
+  })();
+
+  afficher();
+  appliquerEchelle();
+})();
+</script>
