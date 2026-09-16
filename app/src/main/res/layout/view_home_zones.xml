@@ -189,10 +189,21 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="2"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:baselineAligned="false"
         android:padding="20dp"
         android:visibility="gone">
+
+    <!-- La rangée image + texte, qui prend toute la place restante une fois
+         la barre de navigation servie. Elle garde exactement la mise en page
+         d'avant : c'est le conteneur au-dessus qui est devenu vertical. -->
+    <LinearLayout
+        android:id="@+id/rangeeActualite"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
 
         <ImageView
             android:id="@+id/imageActualiteAccueil"
@@ -215,6 +226,75 @@
             android:autoSizeMinTextSize="22sp"
             android:autoSizeMaxTextSize="64sp"
             android:autoSizeStepGranularity="2sp" />
+    </LinearLayout>
+
+        <!-- ═══ JEAN PEUT AVANCER DANS LES TITRES ═══
+
+             Le fil défile tout seul au rythme de la journée (voir
+             CadenceurActualites) : Jean n'a rien à faire, et ces boutons ne
+             changent rien à ça. Ils lui donnent seulement de quoi revenir sur
+             un titre entrevu, ou passer celui qui ne l'intéresse pas.
+
+             Un choix fait à la main tient jusqu'au prochain créneau, puis le
+             fil reprend sa route (voir MainActivity). Rien à annuler, rien à
+             refermer : l'écran se remet d'aplomb tout seul, ce qui est la
+             seule façon acceptable qu'une manipulation se termine ici.
+
+             L'espaceur central garantit le vide entre les deux cibles, quelles
+             que soient la police et la longueur des libellés. -->
+        <LinearLayout
+            android:id="@+id/barreNavigationActualite"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:baselineAligned="false"
+            android:layout_marginTop="16dp">
+
+            <Button
+                android:id="@+id/boutonActualitePrecedente"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Précédent"
+                android:textSize="24sp"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:drawableStart="@drawable/ic_precedent"
+                android:drawablePadding="16dp"
+                android:paddingStart="28dp"
+                android:paddingEnd="28dp"
+                android:paddingTop="16dp"
+                android:paddingBottom="16dp"
+                android:minHeight="88dp"
+                android:minWidth="240dp"
+                android:elevation="6dp"
+                android:background="@drawable/fond_bouton_navigation" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1"
+                android:minWidth="24dp" />
+
+            <Button
+                android:id="@+id/boutonActualiteSuivante"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Suivant"
+                android:textSize="24sp"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:drawableEnd="@drawable/ic_suivant"
+                android:drawablePadding="16dp"
+                android:paddingStart="28dp"
+                android:paddingEnd="28dp"
+                android:paddingTop="16dp"
+                android:paddingBottom="16dp"
+                android:minHeight="88dp"
+                android:minWidth="240dp"
+                android:elevation="6dp"
+                android:background="@drawable/fond_bouton_navigation" />
+        </LinearLayout>
+
     </LinearLayout>
 
 </LinearLayout>

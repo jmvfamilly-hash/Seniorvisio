@@ -30,10 +30,12 @@ import com.seniorvisio.R
 import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.AlertVolume
+import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.service.CallListenerService
+import com.seniorvisio.recueil.Element
 import com.seniorvisio.recueil.RecueilStore
 import com.seniorvisio.recueil.Rendu
 import com.seniorvisio.recueil.renduPour
@@ -313,7 +315,33 @@ class MainActivity : AppCompatActivity() {
      * sur le fil principal fait sauter l'animation des zones, et sur cette
      * tablette-ci cela se voit.
      */
+    /**
+     * Les titres installés, et celui que Jean regarde en ce moment.
+     *
+     * ═══ POURQUOI L'ÉCRAN TIENT SON PROPRE RANG ═══
+     *
+     * L'ordonnanceur décide du titre de l'heure ; il ne sait pas, et n'a pas à
+     * savoir, que Jean a peut-être touché un bouton. Si cet écran se contentait
+     * de montrer ce que l'ordonnanceur lui envoie, un geste de Jean serait
+     * effacé au prochain battement du service.
+     *
+     * L'écran garde donc sa propre position. L'ordonnanceur la repose au
+     * changement de créneau, et seulement là — ce qui donne exactement le
+     * comportement voulu : un choix fait à la main tient, puis le fil reprend
+     * sa route tout seul. Rien à annuler, rien à refermer.
+     */
+    private var titresActualite: List<Element> = emptyList()
+    private var recueilActualiteId: String? = null
+    private var rangActualite = 0
+
     private fun brancherActualites() {
+        zones.brancherNavigationActualite(
+            surPrécédent = { déplacerActualite(-1) },
+            surSuivant = { déplacerActualite(+1) },
+            // Glissement vers la gauche = on avance, comme on tourne une page.
+            surSwipe = { versLAvant -> déplacerActualite(if (versLAvant) +1 else -1) },
+        )
+
         val service = CallListenerService.enService
         if (service == null) {
             // Le service n'est pas encore là au tout premier lancement. Rien à
@@ -322,24 +350,61 @@ class MainActivity : AppCompatActivity() {
         }
         service.actualites.observateur = OrdonnanceurActualites.Observateur { element, recueilId ->
             if (element == null || recueilId == null) {
-                runOnUiThread { zones.masquerActualite() }
+                runOnUiThread {
+                    titresActualite = emptyList()
+                    zones.masquerActualite()
+                }
                 return@Observateur
             }
             val magasin = RecueilStore.actif
             val recueil = magasin?.disponibles()?.firstOrNull { it.id == recueilId }
-            val fichier = if (recueil != null) magasin.fichier(recueil, element) else null
-            Thread {
-                val rendu = renduPour(element.type).préparer(element, fichier)
-                runOnUiThread {
-                    when (rendu) {
-                        is Rendu.Texte -> zones.afficherActualite(rendu.texte, rendu.vignette)
-                        is Rendu.Impossible -> zones.masquerActualite()
-                        else -> zones.masquerActualite()
-                    }
-                }
-            }.apply { isDaemon = true; name = "SeniorVisio-ActualiteAccueil" }.start()
+            val prêts = recueil?.prêts.orEmpty()
+            runOnUiThread {
+                titresActualite = prêts
+                recueilActualiteId = recueilId
+                // L'ordonnanceur impose SA position : c'est un changement de
+                // créneau, donc le fil a repris la main sur le choix de Jean.
+                rangActualite = prêts.indexOf(element).coerceAtLeast(0)
+                afficherActualiteCourante()
+            }
         }
         service.actualites.réévaluer(réveillerLÉcran = false)
+    }
+
+    /**
+     * Un cran en avant ou en arrière, sans jamais boucler.
+     *
+     * Pas de rebouclage aux extrémités, volontairement : arriver au dernier
+     * titre et retomber sur le premier donne l'impression d'une liste sans fin,
+     * où l'on ne sait plus si l'on a tout vu. Le bouton se grise, et c'est
+     * clair.
+     */
+    private fun déplacerActualite(pas: Int) {
+        if (titresActualite.isEmpty()) return
+        val nouveau = (rangActualite + pas).coerceIn(0, titresActualite.size - 1)
+        if (nouveau == rangActualite) return
+        rangActualite = nouveau
+        CallTrace.record("ACCUEIL actualité main", "titre ${nouveau + 1}/${titresActualite.size}")
+        afficherActualiteCourante()
+    }
+
+    private fun afficherActualiteCourante() {
+        val element = titresActualite.getOrNull(rangActualite) ?: return
+        val magasin = RecueilStore.actif
+        val recueil = magasin?.disponibles()?.firstOrNull { it.id == recueilActualiteId }
+        val fichier = if (recueil != null) magasin.fichier(recueil, element) else null
+        Thread {
+            val rendu = renduPour(element.type).préparer(element, fichier)
+            runOnUiThread {
+                when (rendu) {
+                    is Rendu.Texte -> {
+                        zones.afficherActualite(rendu.texte, rendu.vignette)
+                        zones.majNavigationActualite(rangActualite, titresActualite.size)
+                    }
+                    else -> zones.masquerActualite()
+                }
+            }
+        }.apply { isDaemon = true; name = "SeniorVisio-ActualiteAccueil" }.start()
     }
 
     override fun onPause() {

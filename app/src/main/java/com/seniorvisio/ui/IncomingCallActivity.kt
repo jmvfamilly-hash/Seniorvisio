@@ -627,6 +627,111 @@ class IncomingCallActivity : AppCompatActivity() {
                 CallTrace.record("APPEL recueil", "inaffichable : ${rendu.raison}")
             }
         }
+        majBarreNavigationRecueil(état)
+        publierPositionRecueil(état)
+    }
+
+    /**
+     * Montre ou cache les boutons de Jean, et grise celui qui ne mène nulle part.
+     *
+     * La barre n'existe que tant qu'il y a quelque chose à faire défiler : deux
+     * boutons posés sur la vidéo du proche, sans rien à commander, invitent à
+     * les toucher puis à les croire cassés.
+     *
+     * Grisé plutôt que masqué aux extrémités, pour la même raison que sur
+     * l'accueil : un bouton qui disparaît déplace son voisin, et la cible que
+     * Jean visait n'est plus là où il l'a vue.
+     */
+    private fun majBarreNavigationRecueil(état: LecteurRecueil.État) {
+        val barre = findViewById<View>(R.id.barreNavigationRecueil) ?: return
+        val précédent = findViewById<Button>(R.id.boutonRecueilPrecedent) ?: return
+        val suivant = findViewById<Button>(R.id.boutonRecueilSuivant) ?: return
+
+        val visible = état.rendu != null && état.total > 1
+        barre.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) return
+
+        val rang = état.position - 1
+        précédent.isEnabled = rang > 0
+        suivant.isEnabled = rang < état.total - 1
+        précédent.alpha = if (précédent.isEnabled) 1f else 0.4f
+        suivant.alpha = if (suivant.isEnabled) 1f else 0.4f
+    }
+
+    /**
+     * Branche les deux boutons et le glissement sur le lecteur.
+     *
+     * ═══ LE LECTEUR IGNORE QUI COMMANDE, ET C'ÉTAIT PRÉVU ═══
+     *
+     * LecteurRecueil expose suivant() et précédent() sans savoir d'où vient
+     * l'ordre. C'est la couture posée dès l'origine pour ce moment précis (voir
+     * docs/architecture-recueils.md, § 5) : ajouter la main de Jean à côté de
+     * celle du proche n'a donc demandé aucune modification du lecteur.
+     *
+     * Les deux commandes cohabitent sans arbitrage particulier : la dernière
+     * reçue gagne, ce qui est le comportement naturel d'une conversation où
+     * l'un dit « reviens en arrière » pendant que l'autre avance.
+     *
+     * La position part ensuite vers le PWA (voir publierPositionRecueil) : sans
+     * ça, le proche commenterait la photo précédente sans comprendre pourquoi
+     * Jean ne suit pas.
+     */
+    private fun brancherNavigationRecueil() {
+        val précédent = findViewById<Button>(R.id.boutonRecueilPrecedent) ?: return
+        val suivant = findViewById<Button>(R.id.boutonRecueilSuivant) ?: return
+        précédent.setOnClickListener { déplacerRecueil(-1) }
+        suivant.setOnClickListener { déplacerRecueil(+1) }
+
+        // Le glissement est branché sur les deux vues qui portent un contenu —
+        // la photo et le bloc d'actualité — et pas sur la racine de l'écran :
+        // sur la racine, il capterait aussi les gestes faits au-dessus des
+        // boutons et des zones de texte.
+        findViewById<View>(R.id.imageRecueil)?.let { vue ->
+            GlissementHorizontal.brancher(vue) { versLAvant -> déplacerRecueil(if (versLAvant) +1 else -1) }
+        }
+        findViewById<View>(R.id.blocActualite)?.let { vue ->
+            GlissementHorizontal.brancher(vue) { versLAvant -> déplacerRecueil(if (versLAvant) +1 else -1) }
+        }
+    }
+
+    /**
+     * Un cran, demandé par Jean.
+     *
+     * Ne publie rien ici : suivant() et précédent() ne renvoient pas d'état,
+     * l'affichage étant asynchrone — une photo se décode hors du fil principal.
+     * La position part donc depuis afficherRecueil, qui est le rappel
+     * d'affichage et le seul endroit où l'état est réellement connu. Publier
+     * ici aurait annoncé au proche une photo que Jean ne voit pas encore.
+     */
+    private fun déplacerRecueil(pas: Int) {
+        val lecteur = lecteurRecueil ?: return
+        CallTrace.record("APPEL recueil main", "Jean demande la ${if (pas > 0) "suivante" else "précédente"}")
+        if (pas > 0) lecteur.suivant() else lecteur.précédent()
+    }
+
+    /**
+     * Dit au proche ce que Jean a sous les yeux.
+     *
+     * ═══ SANS ÇA, LA FONCTION SE RETOURNE CONTRE SON BUT ═══
+     *
+     * Le proche fait défiler les photos EN LES COMMENTANT. Si Jean avance de
+     * son côté sans que le PWA ne l'apprenne, le proche continue de raconter
+     * la photo précédente pendant que Jean en regarde une autre — et aucun des
+     * deux ne comprend pourquoi l'autre ne suit pas. Donner la main à Jean
+     * sans ce retour aurait donc rendu la conversation plus difficile, pas
+     * moins.
+     *
+     * Publié à chaque affichage, y compris quand c'est le proche qui a
+     * commandé : cela lui confirme ce qui est arrivé à l'écran, plutôt que ce
+     * qu'il a demandé. Les deux diffèrent quand une photo est illisible.
+     */
+    private fun publierPositionRecueil(état: LecteurRecueil.État) {
+        if (état.position <= 0) return
+        // Par le moteur, qui détient l'identifiant d'appel et le client de
+        // signalisation — comme reportPreparationError. Cet écran n'a ni l'un
+        // ni l'autre, et lui donner les deux pour une ligne aurait ajouté un
+        // second chemin d'écriture vers le document d'appel.
+        callEngine.publierPositionRecueil(état.position - 1, état.total)
     }
 
     /**
@@ -781,6 +886,11 @@ class IncomingCallActivity : AppCompatActivity() {
             val lecteur = LecteurRecueil(magasin)
             lecteurRecueil = lecteur
             lecteur.onAffichage = { état -> afficherRecueil(état) }
+            // Les boutons de Jean, sur le même lecteur que les commandes du
+            // proche. Branchés ici et non dans onCreate : sans magasin il n'y a
+            // pas de lecteur, donc rien à commander, et des boutons inertes
+            // valent moins que pas de boutons.
+            brancherNavigationRecueil()
             callEngine.listenForRecueilCommande { commande ->
                 runOnUiThread {
                     val id = commande.recueilId

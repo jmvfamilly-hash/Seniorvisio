@@ -6,6 +6,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -100,6 +101,8 @@ class HomeZonesController(
     private val zoneActualite: View = root.findViewById(R.id.zoneActualite)
     private val imageActualite: ImageView = root.findViewById(R.id.imageActualiteAccueil)
     private val texteActualite: TextView = root.findViewById(R.id.texteActualiteAccueil)
+    private val boutonActualitePrecedente: Button = root.findViewById(R.id.boutonActualitePrecedente)
+    private val boutonActualiteSuivante: Button = root.findViewById(R.id.boutonActualiteSuivante)
 
     private val textMomentIcon: TextView = root.findViewById(R.id.textMomentIcon)
     private val textMomentLabel: TextView = root.findViewById(R.id.textMomentLabel)
@@ -181,6 +184,38 @@ class HomeZonesController(
     }
 
     val actualiteAffichee: Boolean get() = modeActualite
+
+    /**
+     * Branche la navigation de Jean sur le fil d'information.
+     *
+     * Les rappels sont fournis par l'écran d'accueil, qui seul sait où en est
+     * la liste : ce contrôleur dessine, il ne décide pas de ce qui s'affiche.
+     *
+     * [surSwipe] reçoit vrai pour « suivant », faux pour « précédent ».
+     */
+    fun brancherNavigationActualite(
+        surPrécédent: () -> Unit,
+        surSuivant: () -> Unit,
+        surSwipe: (Boolean) -> Unit,
+    ) {
+        boutonActualitePrecedente.setOnClickListener { surPrécédent() }
+        boutonActualiteSuivante.setOnClickListener { surSuivant() }
+        GlissementHorizontal.brancher(zoneActualite, surSwipe)
+    }
+
+    /**
+     * Grise le bouton qui ne mène nulle part.
+     *
+     * Grisé et non masqué : un bouton qui disparaît déplace celui d'à côté, et
+     * la cible que Jean visait n'est plus là où il l'a vue. Sur une main qui
+     * tremble, un déplacement de dernière seconde est pire qu'un bouton inerte.
+     */
+    fun majNavigationActualite(rang: Int, total: Int) {
+        boutonActualitePrecedente.isEnabled = rang > 0
+        boutonActualiteSuivante.isEnabled = rang < total - 1
+        boutonActualitePrecedente.alpha = if (rang > 0) 1f else 0.4f
+        boutonActualiteSuivante.alpha = if (rang < total - 1) 1f else 0.4f
+    }
 
     /** Vide les deux zones de texte immédiatement (fin d'appel, sortie d'écran). */
     fun clearTranscriptions() {

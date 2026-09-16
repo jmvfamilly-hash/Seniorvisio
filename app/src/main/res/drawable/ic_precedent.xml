@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Flèche vers la gauche — « Précédent ».
+
+     48dp, soit 96 px sur cette dalle : les consignes demandent au moins 72 px
+     pour un pictogramme, et une flèche trop menue redevient un détail qu'on ne
+     distingue plus depuis un fauteuil.
+
+     Une flèche pleine, et non un chevron fin : la surface compte autant que la
+     forme quand la sensibilité aux contrastes a baissé.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M15.5,3.5L7,12l8.5,8.5l2.5,-2.5L12,12l6,-6z" />
+</vector>

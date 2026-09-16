@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Fond du bouton « Bloquer l'appel ».
+
+     ═══ UN BOUTON DOIT RESSEMBLER À UN BOUTON ═══
+
+     Les consignes d'accessibilité retenues pour ce projet écartent le design
+     entièrement plat : sans relief, rien ne dit au cerveau que l'élément est
+     touchable, et ce public hésite ou n'essaie pas. Trois signaux sont donc
+     posés explicitement plutôt que laissés au thème :
+
+       - une BORDURE d'un ton plus clair que le fond, qui détache le bouton de
+         ce qu'il recouvre — ici une vidéo d'appel aux couleurs quelconques ;
+       - des COINS arrondis, qui referment la forme ;
+       - un ÉTAT PRESSÉ nettement plus sombre et sans bordure claire, pour que
+         l'appui se voie. Un appui sans retour visible se répète, et un double
+         appui sur « Bloquer l'appel » n'est pas anodin.
+
+     L'élévation est posée sur la vue elle-même (android:elevation), pas ici :
+     l'ombre portée suit l'ombre de la forme, qu'Android déduit de ce fichier.
+
+     Les deux couleurs sont mesurées, pas choisies à l'œil : 8,03:1 au repos, 11,66:1 pressé, texte blanc.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#6B1C13" />
+            <corners android:radius="16dp" />
+            <stroke android:width="2dp" android:color="#6B1C13" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#96281B" />
+            <corners android:radius="16dp" />
+            <stroke android:width="3dp" android:color="#D4563F" />
+        </shape>
+    </item>
+</selector>

@@ -135,6 +135,21 @@ class CallSignalingClient {
             }
     }
 
+    /**
+     * Où en est Jean dans le recueil présenté, quel que soit celui des deux
+     * qui a commandé le déplacement.
+     *
+     * Écrit sans écouteur d'échec, contrairement à la réponse SDP : un rang
+     * perdu désynchronise l'affichage du proche pendant quelques secondes,
+     * là où une réponse perdue empêche l'appel d'exister. La position
+     * suivante corrigera d'elle-même.
+     */
+    fun publierPositionRecueil(callId: String, rang: Int, total: Int) {
+        callDoc(callId).update(
+            mapOf(FIELD_RECUEIL_RANG_AFFICHE to rang, FIELD_RECUEIL_TOTAL_AFFICHE to total)
+        )
+    }
+
     fun updateStatus(callId: String, status: String) {
         callDoc(callId).update(FIELD_STATUS, status)
             .addOnFailureListener { e ->
@@ -492,6 +507,8 @@ class CallSignalingClient {
         private const val FIELD_CALLER_PHOTO = "callerPhotoBase64"
         private const val FIELD_OFFER_SDP = "offerSdp"
         private const val FIELD_ANSWER_SDP = "answerSdp"
+        private const val FIELD_RECUEIL_RANG_AFFICHE = "recueilRangAffiche"
+        private const val FIELD_RECUEIL_TOTAL_AFFICHE = "recueilTotalAffiche"
         private const val FIELD_REMOTE_VOLUME = "remoteVolume"
         private const val FIELD_ALERT_STARTED_AT = "alertStartedAt"
         private const val FIELD_ALERT_DURATION = "alertDurationSeconds"

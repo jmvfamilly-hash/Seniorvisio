@@ -158,6 +158,90 @@
         android:textSize="26sp"
         android:visibility="gone" />
 
+    <!-- ═══ JEAN NAVIGUE LUI-MÊME ═══
+
+         Jusqu'ici, seul le proche faisait défiler les photos et les titres
+         depuis le PWA. Ces deux boutons ouvrent le même chemin à Jean, sans
+         rien retirer à l'autre : LecteurRecueil ignore d'où vient la commande,
+         c'est la couture prévue pour ça dès l'origine (voir
+         docs/architecture-recueils.md, § 5).
+
+         Cela ne contredit pas « Jean n'a jamais rien à faire » : il n'a
+         toujours RIEN À FAIRE — l'appel se connecte seul, les photos défilent
+         si le proche les fait défiler. Il a maintenant quelque chose qu'il
+         PEUT faire, ce qui n'est pas la même chose.
+
+         Visible seulement quand une photo ou un titre est à l'écran (voir
+         IncomingCallActivity) : deux boutons qui ne commandent rien invitent à
+         les toucher, puis à les croire cassés.
+
+         ═══ L'ESPACEMENT N'EST PAS DE LA MISE EN PAGE ═══
+
+         L'espaceur central porte une largeur minimale et un poids : les deux
+         boutons ne peuvent donc jamais se toucher, quels que soient la police
+         choisie et la longueur des libellés. Les consignes demandent 16 à
+         24 dp de vide entre deux cibles parce que les erreurs de visée sont
+         fréquentes — un tremblement suffit à déclencher l'action voisine, et
+         ici la voisine est « photo précédente », pas « quitter ». Le vide est
+         donc garanti par la structure, pas obtenu par hasard sur une dalle
+         large. -->
+    <LinearLayout
+        android:id="@+id/barreNavigationRecueil"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:orientation="horizontal"
+        android:baselineAligned="false"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="24dp"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/boutonRecueilPrecedent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Précédente"
+            android:textSize="24sp"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:drawableStart="@drawable/ic_precedent"
+            android:drawablePadding="16dp"
+            android:paddingStart="28dp"
+            android:paddingEnd="28dp"
+            android:paddingTop="20dp"
+            android:paddingBottom="20dp"
+            android:minHeight="88dp"
+            android:minWidth="240dp"
+            android:elevation="6dp"
+            android:background="@drawable/fond_bouton_navigation" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1"
+            android:minWidth="24dp" />
+
+        <Button
+            android:id="@+id/boutonRecueilSuivant"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Suivante"
+            android:textSize="24sp"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:drawableEnd="@drawable/ic_suivant"
+            android:drawablePadding="16dp"
+            android:paddingStart="28dp"
+            android:paddingEnd="28dp"
+            android:paddingTop="20dp"
+            android:paddingBottom="20dp"
+            android:minHeight="88dp"
+            android:minWidth="240dp"
+            android:elevation="6dp"
+            android:background="@drawable/fond_bouton_navigation" />
+    </LinearLayout>
+
     <!-- Nom de l'appelant et décompte, le temps de la sonnerie uniquement :
          masqué dès la connexion. Le repère date/moment/météo qui vivait ici
          en double a disparu — c'est la zone 1, présente en permanence
@@ -293,7 +377,10 @@
         android:paddingRight="32dp"
         android:paddingTop="20dp"
         android:paddingBottom="20dp"
-        android:backgroundTint="#145A31" />
+        android:minHeight="88dp"
+        android:minWidth="280dp"
+        android:elevation="6dp"
+        android:background="@drawable/fond_bouton_vert" />
 
     <!-- Même traitement, mêmes raisons (voir le bouton ci-dessus). Le rouge
          passe de #C0392B (5,44:1) à #96281B (8,03:1).
@@ -318,6 +405,9 @@
         android:paddingRight="32dp"
         android:paddingTop="20dp"
         android:paddingBottom="20dp"
-        android:backgroundTint="#96281B" />
+        android:minHeight="88dp"
+        android:minWidth="280dp"
+        android:elevation="6dp"
+        android:background="@drawable/fond_bouton_rouge" />
 
 </FrameLayout>

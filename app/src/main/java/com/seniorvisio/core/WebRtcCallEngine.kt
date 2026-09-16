@@ -308,6 +308,19 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         signaling.reportCalleeError(id, message)
     }
 
+    /**
+     * Le rang de l'élément que Jean a réellement sous les yeux.
+     *
+     * Remonté au PWA pour que le proche sache où en est Jean quand celui-ci
+     * navigue lui-même (voir les boutons de IncomingCallActivity) : sans ce
+     * retour, le proche commenterait la photo précédente sans comprendre
+     * pourquoi Jean ne suit pas.
+     */
+    fun publierPositionRecueil(rang: Int, total: Int) {
+        val id = callId ?: return
+        signaling.publierPositionRecueil(id, rang, total)
+    }
+
     override fun hangUp() {
         // La pile d'appel est journalisée, et ce n'est pas du luxe : « l'appel
         // s'est arrêté tout seul » a plusieurs causes possibles — le chien de

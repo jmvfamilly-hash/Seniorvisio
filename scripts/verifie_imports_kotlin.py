@@ -43,6 +43,9 @@ IMPLICITES = {
     "Triple", "Unit", "UnsupportedOperationException", "OutOfMemoryError",
     "NumberFormatException", "ArithmeticException", "ClassCastException",
     "IndexOutOfBoundsException", "NullPointerException", "Runnable", "Thread",
+    "SecurityException", "InterruptedException", "NoSuchElementException",
+    "ConcurrentModificationException", "StackOverflowError", "AssertionError",
+    "CloneNotSupportedException", "ArrayIndexOutOfBoundsException",
     "System", "Math", "Object", "Class", "Comparator", "Deprecated",
     "JvmStatic", "JvmField", "JvmOverloads", "Volatile", "Synchronized",
     "Suppress", "SuppressLint", "Throws", "Transient", "Byte", "UByte",
@@ -52,6 +55,8 @@ IMPLICITES = {
     "Character", "Integer", "Void", "Iterable", "Runtime", "System",
     # kotlin.text et kotlin.io, importés d'office comme kotlin.collections.
     "RegexOption", "MatchResult", "StringBuilder", "Appendable", "Typography",
+    # kotlin.ranges, implicite également.
+    "IntRange", "LongRange", "CharRange", "ClosedRange", "IntProgression",
 }
 
 # Les annotations et mots-clés qu'on rencontre en tête de ligne et qui ne
@@ -63,6 +68,34 @@ IGNORÉS = IMPLICITES | {"T", "R", "K", "V", "E"}
 # constantes de companion, jamais des classes à importer dans ce dépôt, et
 # les inclure ne produisait que du bruit.
 USAGE = re.compile(r"(?<![\w.@\"'])([A-Z][A-Za-z0-9_]*[a-z][A-Za-z0-9_]*)\s*(?=[.(<])")
+
+# ═══ LES TYPES CACHÉS DANS LES GÉNÉRIQUES ═══
+#
+# USAGE ci-dessus exige que l'identifiant soit suivi de « . », « ( » ou « < ».
+# Dans « List<Element> », « List » est donc vu et « Element » ne l'est pas : il
+# est suivi de « > ». Un import manquant sur un type qui n'apparaît QU'À
+# L'INTÉRIEUR d'un générique passait droit à travers le filet.
+#
+# C'est arrivé, sur exactement cette forme. Plutôt qu'élargir USAGE aux « > »
+# et aux « , » — ce qui ramasserait les entrées de « when », les listes de
+# paramètres et beaucoup de bruit — on regarde à l'intérieur des chevrons, et
+# là seulement.
+# ═══ ET LES TYPES EN POSITION D'ANNOTATION ═══
+#
+# « private val bouton: Button = ... », « fun f(): Recueil », « x as Element ».
+# L'identifiant suit un « : » ou un « as » et n'est suivi de rien de
+# particulier : ni USAGE ni GENERIQUE ne le voyaient. Deux imports manquants
+# ont franchi le filet par cette porte le même jour — Element dans un
+# générique, Button dans une annotation de type.
+#
+# Le « ? » optionnel couvre « Bitmap? ». Le « (?!:) » écarte les « :: » des
+# références de fonction, et le « (?<!\?) » les élvis mal espacés.
+ANNOTATION = re.compile(
+    r"(?::\s*|\bas\s+|\bis\s+)([A-Z][A-Za-z0-9_]*[a-z][A-Za-z0-9_]*)\b(?!\s*\()"
+)
+
+GENERIQUE = re.compile(r"<([^<>\n]{1,200})>")
+DANS_GENERIQUE = re.compile(r"(?<![\w.@\"'])([A-Z][A-Za-z0-9_]*[a-z][A-Za-z0-9_]*)")
 IMPORT = re.compile(r"^import\s+(?:[\w.]+\.)?([\w*]+)", re.M)
 PAQUET = re.compile(r"^package\s+([\w.]+)", re.M)
 # Déclarations locales au fichier : class, object, interface, enum, typealias…
@@ -74,7 +107,7 @@ TYPE_RACINE = re.compile(
 )
 COMPANION = re.compile(r"^\s*(?:private\s+|internal\s+|protected\s+)?companion\s+object\b", re.M)
 DÉCLARATION = re.compile(
-    r"^\s*(?:@\w+\s+)*(?:public\s+|internal\s+|private\s+|abstract\s+|sealed\s+|open\s+|data\s+|enum\s+|annotation\s+|inner\s+|value\s+)*"
+    r"^\s*(?:@\w+\s+)*(?:public\s+|internal\s+|private\s+|abstract\s+|sealed\s+|open\s+|data\s+|enum\s+|annotation\s+|inner\s+|value\s+|fun\s+)*"
     r"(?:class|object|interface|typealias)\s+([A-Z][A-Za-z0-9_]*)",
     re.M,
 )
@@ -164,7 +197,11 @@ def main() -> int:
             # Un import étoilé rend le fichier indécidable ici : on s'abstient.
             continue
         for ligne_no, ligne in enumerate(code.splitlines(), start=1):
-            for nom in USAGE.findall(ligne):
+            noms = list(USAGE.findall(ligne))
+            for contenu in GENERIQUE.findall(ligne):
+                noms.extend(DANS_GENERIQUE.findall(contenu))
+            noms.extend(ANNOTATION.findall(ligne))
+            for nom in noms:
                 if nom in connus:
                     continue
                 signalements.append(
