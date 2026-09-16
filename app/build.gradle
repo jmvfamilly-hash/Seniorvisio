@@ -142,6 +142,10 @@ android {
             buildConfigField "String", "DEVICE_ID", "\"test_tablet\""
             buildConfigField "String", "CALLS_COLLECTION", "\"calls_test\""
             buildConfigField "boolean", "KIOSK_ENABLED", "false"
+            // UNE LISTE, séparée par des virgules. L'administrateur peut la
+            // remplacer à distance sans reconstruire (voir
+            // AdminConfig.fluxActualites) ; celle-ci n'est que le défaut
+            // livré avec l'APK.
             buildConfigField "String", "FLUX_ACTUALITES", "\"https://www.francetvinfo.fr/titres.rss\""
         }
     }

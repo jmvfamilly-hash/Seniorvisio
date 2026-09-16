@@ -4,10 +4,15 @@ import android.content.Context
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.seniorvisio.BuildConfig
+import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.TelechargementHttp
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
 
 /**
  * Tient à jour un recueil fait des titres d'un fil d'information.
@@ -53,17 +58,85 @@ class RafraichisseurFlux(private val context: Context) {
     }
     private var démarré = false
 
-    val actif: Boolean get() = BuildConfig.FLUX_ACTUALITES.isNotBlank()
+    private val config: AdminConfig by lazy { AdminConfig(context) }
+
+    /**
+     * Les adresses à lire, dans l'ordre. Cet ORDRE compte : c'est lui qui
+     * départage deux articles publiés à la même seconde (voir
+     * SelectionActualites).
+     *
+     * La liste de l'administrateur l'emporte sur celle livrée avec l'APK. Les
+     * lignes vides et les espaces sont écartés — une liste saisie à la main
+     * dans un champ de texte en contient toujours.
+     */
+    private fun adresses(): List<String> {
+        val brut = config.fluxActualites.takeIf { it.isNotBlank() }
+            ?: BuildConfig.FLUX_ACTUALITES
+        return brut.split(",", "\n", ";")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+    }
+
+    val actif: Boolean get() = adresses().isNotEmpty()
 
     fun démarrer() {
         if (démarré || !actif) return
         démarré = true
-        // Premier passage tout de suite : sans lui, un redémarrage de tablette
-        // laisserait le flux vide jusqu'à la première demi-heure, c'est-à-dire
-        // précisément pendant l'appel du matin.
+        // Le contrôle passe souvent, le remplacement rarement : c'est
+        // siDûRafraîchir qui décide, et il ne décide qu'une fois par jour.
+        // Un contrôle au quart d'heure ne coûte rien — il ne fait que comparer
+        // deux dates — et il rattrape le cas d'une tablette allumée en continu
+        // qui doit basculer à 7 h sans que personne ne la touche.
         ordonnanceur.scheduleWithFixedDelay(
-            ::rafraîchir, 0, INTERVALLE_MINUTES, TimeUnit.MINUTES
+            ::siDûRafraîchir, 0, INTERVALLE_CONTROLE_MINUTES, TimeUnit.MINUTES
         )
+    }
+
+    /**
+     * Le fil est-il périmé ?
+     *
+     * ═══ UNE SEULE BORNE, PAS UNE LISTE DE CAS ═══
+     *
+     * L'administrateur a demandé un remplacement complet « une fois par jour, à
+     * partir de 7 h le matin ou au démarrage ». Écrit comme une suite de cas —
+     * au démarrage, à 7 h, sauf si déjà fait, sauf si redémarré entre-temps —
+     * cela produit des règles qui se contredisent aux heures creuses.
+     *
+     * Une seule comparaison suffit : le dernier remplacement est-il antérieur à
+     * la DERNIÈRE ÉCHÉANCE DE 7 H DÉJÀ PASSÉE ? Elle couvre tout :
+     *
+     *   - tablette allumée depuis hier, il est 7 h 01 → échéance = aujourd'hui
+     *     7 h, dernier remplacement hier → on remplace ;
+     *   - elle redémarre à 15 h, remplacement déjà fait ce matin → échéance =
+     *     aujourd'hui 7 h, remplacement à 7 h 02 → on ne fait rien ;
+     *   - elle redémarre à 6 h → échéance = HIER 7 h, remplacement d'hier
+     *     matin → on ne fait rien, et les titres d'hier restent jusqu'à 7 h ;
+     *   - tablette neuve, jamais rafraîchie → zéro est antérieur à tout → on
+     *     remplace, quelle que soit l'heure.
+     *
+     * Le dernier cas est la raison pour laquelle « ou au démarrage » figure
+     * dans la demande : une tablette qui sort du carton ne doit pas attendre le
+     * lendemain matin pour montrer quelque chose.
+     */
+    private fun siDûRafraîchir() {
+        val échéance = dernièreÉchéanceDe7h()
+        if (config.fluxDernierRafraichissementMs >= échéance) return
+        rafraîchir()
+    }
+
+    /** L'instant de la dernière échéance de 7 h déjà passée, en millisecondes. */
+    private fun dernièreÉchéanceDe7h(): Long {
+        val zone = ZoneId.systemDefault()
+        val maintenant = java.time.ZonedDateTime.now(zone)
+        val septHeuresAujourdhui = maintenant.toLocalDate()
+            .atTime(LocalTime.of(HEURE_REMPLACEMENT, 0))
+            .atZone(zone)
+        val échéance = if (maintenant.isBefore(septHeuresAujourdhui)) {
+            septHeuresAujourdhui.minusDays(1)
+        } else {
+            septHeuresAujourdhui
+        }
+        return échéance.toInstant().toEpochMilli()
     }
 
     fun arrêter() {
@@ -71,27 +144,76 @@ class RafraichisseurFlux(private val context: Context) {
         ordonnanceur.shutdownNow()
     }
 
+    /**
+     * Lit tous les fils, n'en garde que le jour, et remplace le recueil.
+     *
+     * ═══ REMPLACEMENT COMPLET, ET NON AJOUT ═══
+     *
+     * Le document est réécrit entièrement : ce qui n'est plus dans les fils
+     * disparaît de l'écran. C'est ce que « remplacer complètement » veut dire,
+     * et c'est ce qui permet au filtre sur la date du jour d'avoir un effet —
+     * accumuler aurait gardé les titres d'hier à côté de ceux d'aujourd'hui,
+     * exactement ce que le filtre cherche à éviter.
+     *
+     * Un fil injoignable ne fait pas échouer les autres : on lit ce qu'on peut.
+     * Sur trois fils dont un serveur est en panne, mieux vaut vingt titres que
+     * zéro.
+     */
     private fun rafraîchir() {
-        val brut = File(dossierCache, "flux-actualites.xml")
-        try {
-            TelechargementHttp.vers(BuildConfig.FLUX_ACTUALITES, brut, "fil d'information")
-            val titres = brut.inputStream().use { FluxRss.analyser(it) }
-            if (titres.isEmpty()) {
-                // On ne PUBLIE PAS un flux vide par-dessus un flux qui marchait.
-                // Une panne passagère du serveur effacerait alors les titres
-                // déjà installés, et Jean se retrouverait devant un recueil
-                // vide au lieu des titres d'hier — qui, eux, étaient lisibles.
-                Log.w(TAG, "Aucun titre lu : l'état précédent est conservé")
-                return
+        val adresses = adresses()
+        if (adresses.isEmpty()) return
+
+        val parFlux = mutableListOf<List<FluxRss.Titre>>()
+        var injoignables = 0
+        adresses.forEachIndexed { rang, adresse ->
+            val brut = File(dossierCache, "flux-actualites-$rang.xml")
+            try {
+                TelechargementHttp.vers(adresse, brut, "fil d'information $rang")
+                // Pas de plafond par fil : le plafond de trente s'applique
+                // APRÈS la fusion. Couper chaque fil à trente avant de les
+                // réunir jetterait des articles récents d'un fil abondant pour
+                // garder des articles anciens d'un fil pauvre.
+                parFlux += brut.inputStream().use { FluxRss.analyser(it, maximum = Int.MAX_VALUE) }
+            } catch (e: Exception) {
+                // Un réseau absent ou un serveur en panne : on note et on
+                // continue. La liste doit garder sa place dans l'ordre, sinon
+                // la répartition à égalité de date changerait de sens.
+                Log.w(TAG, "Fil $rang injoignable ($adresse)", e)
+                injoignables++
+                parFlux += emptyList()
+            } finally {
+                brut.delete()
             }
-            publier(titres)
-            Log.i(TAG, "${titres.size} titres publiés")
-        } catch (e: Exception) {
-            // Même raison : un réseau absent ne doit rien effacer.
-            Log.w(TAG, "Fil d'information injoignable — état précédent conservé", e)
-        } finally {
-            brut.delete()
         }
+
+        val zone = ZoneId.systemDefault()
+        val titres = SelectionActualites.choisir(parFlux, LocalDate.now(zone), zone)
+        val sansDate = SelectionActualites.écartésFauteDeDate(parFlux)
+
+        CallTrace.record(
+            "FLUX lecture",
+            "${adresses.size} fil(s), $injoignables injoignable(s) · " +
+                "lus ${parFlux.sumOf { it.size }} · sans date ${sansDate.sum()} · " +
+                "retenus du jour ${titres.size}",
+        )
+
+        if (titres.isEmpty()) {
+            // On ne PUBLIE PAS un flux vide par-dessus un flux qui marchait.
+            // Une panne passagère des serveurs, ou un matin où rien n'est
+            // encore paru, effacerait les titres déjà installés — et Jean se
+            // retrouverait devant un recueil vide au lieu des titres d'hier,
+            // qui, eux, étaient lisibles.
+            //
+            // La date du dernier remplacement n'est PAS mise à jour : la
+            // tentative recommencera au prochain contrôle, dans le quart
+            // d'heure, au lieu d'attendre demain 7 h.
+            Log.w(TAG, "Aucun titre du jour : l'état précédent est conservé")
+            return
+        }
+
+        publier(titres)
+        config.fluxDernierRafraichissementMs = System.currentTimeMillis()
+        Log.i(TAG, "${titres.size} titres publiés")
     }
 
     /**
@@ -136,10 +258,24 @@ class RafraichisseurFlux(private val context: Context) {
         const val RECUEIL_ID = "flux-actualites"
 
         /**
-         * Une demi-heure. Un fil de titres bouge quelques fois par heure au
-         * plus ; interroger plus souvent userait la batterie et le forfait
-         * pour réécrire les mêmes titres.
+         * Le contrôle, pas le téléchargement.
+         *
+         * Passer au quart d'heure ne coûte rien — deux dates comparées — et
+         * c'est ce qui permet à une tablette allumée en continu de basculer
+         * à 7 h sans que personne ne la touche. Le téléchargement, lui, n'a
+         * lieu qu'une fois par jour (voir siDûRafraîchir).
          */
-        const val INTERVALLE_MINUTES = 30L
+        const val INTERVALLE_CONTROLE_MINUTES = 15L
+
+        /**
+         * Sept heures, comme demandé par l'administrateur.
+         *
+         * Volontairement NON relié à nightEndHour, qui vaut aussi sept par
+         * défaut : ce sont deux réglages sans rapport — l'un dit quand la
+         * journée de Jean commence, l'autre quand les titres du jour sont
+         * disponibles chez les éditeurs. Les coudre ensemble ferait qu'avancer
+         * l'un déplacerait l'autre sans qu'on l'ait voulu.
+         */
+        const val HEURE_REMPLACEMENT = 7
     }
 }

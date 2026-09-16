@@ -443,6 +443,9 @@ const els = {
   cancelButton: el("cancelButton"),
   forceConnectButton: el("forceConnectButton"),
   policeSelect: el("policeSelect"),
+  fluxActualites: el("fluxActualites"),
+  fluxActualitesSave: el("fluxActualitesSave"),
+  fluxActualitesStatus: el("fluxActualitesStatus"),
   retryButton: el("retryButton"),
   blockedMessage: el("blockedMessage"),
   hangupButton: el("hangupButton"),
@@ -1109,6 +1112,23 @@ function renderVolumeWarning() {
   els.volumeWarning.classList.toggle("hidden", !muted);
 }
 
+on("fluxActualitesSave", "click", async () => {
+  const liste = els.fluxActualites.value.trim();
+  els.fluxActualitesStatus.textContent = "Envoi…";
+  try {
+    await engine.setDeviceSetting(CONFIG.deviceDocId, "fluxActualites", liste);
+    const nombre = liste.split(/[\n,;]/).filter((l) => l.trim()).length;
+    els.fluxActualitesStatus.textContent =
+      nombre === 0
+        ? "Liste vidée : la tablette revient aux fils livrés avec l'application."
+        : `${nombre} fil(s) enregistré(s). Relecture dans le quart d'heure.`;
+  } catch (e) {
+    // Dit, et non avalé : une liste qui n'arrive pas ressemble en tout point à
+    // une liste arrivée mais sans effet, et on chercherait du mauvais côté.
+    els.fluxActualitesStatus.textContent = "Non transmis (réseau ?) : " + e.message;
+  }
+});
+
 on("forceConnectButton", "click", () => {
   els.forceConnectButton.disabled = true;
   engine.forceConnect();
@@ -1485,6 +1505,14 @@ function applyDeviceSettings(data) {
   // demandée : un <select> qui montre un choix jamais reçu ferait croire la
   // bascule faite, et on jugerait la lisibilité d'une police qui n'est pas à
   // l'écran.
+  // La liste des fils, telle que la tablette la rapporte. Jamais réécrite
+  // pendant que l'administrateur est en train de taper : un rafraîchissement
+  // du signe de vie, qui arrive chaque minute, effacerait sa saisie en cours.
+  if (typeof data.fluxActualites === "string" &&
+      document.activeElement !== els.fluxActualites) {
+    els.fluxActualites.value = data.fluxActualites;
+  }
+
   if (data.policeSenior) {
     els.policeSelect.value = data.policeSenior;
     els.policeSelect.dataset.appliedValue = data.policeSenior;

@@ -432,6 +432,19 @@
             En attente du premier signe de vie de la tablette…
           </p>
 
+          <h3 class="admin-section">Fils d'information</h3>
+          <p class="hint">
+            Une adresse RSS par ligne. La tablette les lit toutes une fois par
+            jour, à partir de 7 h, ne garde que les articles publiés
+            <em>aujourd'hui</em>, et affiche les 30 plus récents — répartis
+            entre les fils quand ils portent la même date. Changer cette liste
+            déclenche une relecture dans le quart d'heure, sans attendre demain.
+          </p>
+          <textarea id="fluxActualites" rows="4"
+                    placeholder="https://www.francetvinfo.fr/titres.rss"></textarea>
+          <button id="fluxActualitesSave" type="button">Enregistrer les fils</button>
+          <p class="hint" id="fluxActualitesStatus"></p>
+
           <h3 class="admin-section">Police des écrans de Jean</h3>
           <p class="hint">
             Trois familles retenues pour l'accessibilité, chacune pour une raison

@@ -510,6 +510,23 @@ class DeviceStatusReporter(private val context: Context) {
         // et une valeur inconnue rangée telle quelle laisserait la tablette
         // dans un état qu'aucun écran n'affiche. On ignore ce qu'on ne
         // reconnaît pas, et le réglage précédent tient.
+        // La liste des fils d'information, réglée depuis le PWA.
+        //
+        // Changer la liste remet la date du dernier remplacement à zéro : sans
+        // ça, l'administrateur qui retire un fil qui renvoie n'importe quoi
+        // devrait attendre 7 h le lendemain pour en voir l'effet — et
+        // conclurait entre-temps que son réglage n'a pas été reçu. Le
+        // remplacement a lieu au prochain contrôle, dans le quart d'heure.
+        snapshot.getString(FIELD_FLUX_ACTUALITES)?.let { liste ->
+            if (adminConfig.fluxActualites != liste) {
+                adminConfig.fluxActualites = liste
+                adminConfig.fluxDernierRafraichissementMs = 0L
+                val nombre = liste.split(",", "\n", ";").count { it.isNotBlank() }
+                Log.i(TAG, "Fils d'information réglés à distance : $nombre")
+                CallTrace.record("FLUX réglé", "$nombre fil(s) — relecture au prochain contrôle")
+            }
+        }
+
         PoliceSenior.depuisValeurDistante(snapshot.getString(FIELD_POLICE_SENIOR))?.let {
             if (adminConfig.policeSenior != it.valeurDistante) {
                 adminConfig.policeSenior = it.valeurDistante
@@ -857,6 +874,7 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_LAST_UPDATE_AT = "lastUpdateAt"
         private const val FIELD_ROOM_ENGINE = "roomTranscriptionEngine"
         private const val FIELD_POLICE_SENIOR = "policeSenior"
+        private const val FIELD_FLUX_ACTUALITES = "fluxActualites"
         private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"
         private const val FIELD_VOSK_MODEL_SIZE = "voskModelSize"
         private const val FIELD_VOSK_MODEL_STATE = "voskModelState"

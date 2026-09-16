@@ -4,6 +4,10 @@ import android.util.Log
 import android.util.Xml
 import org.xmlpull.v1.XmlPullParser
 import java.io.InputStream
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 /**
  * Lit un fil d'information et n'en garde que ce que Jean verra.
@@ -30,8 +34,18 @@ object FluxRss {
 
     private const val TAG = "FluxRss"
 
-    /** Un titre, et l'illustration qui l'accompagne quand le flux en donne une. */
-    data class Titre(val texte: String, val vignette: String?)
+    /**
+     * Un titre, son illustration quand le flux en donne une, et sa date de
+     * publication.
+     *
+     * [date] est null quand le flux n'en donne pas, ou en donne une que ni le
+     * format RSS ni le format Atom ne permettent de lire. Ce n'est pas un
+     * détail : la sélection ne garde que les articles DU JOUR, et un article
+     * sans date ne peut pas prouver qu'il en est. Il est donc écarté — mais le
+     * nombre d'écartés est journalisé, pour qu'un flux entier qui disparaîtrait
+     * faute de dates se voie au lieu de s'évaporer.
+     */
+    data class Titre(val texte: String, val vignette: String?, val date: Instant? = null)
 
     /**
      * Analyse un flux RSS ou Atom.
@@ -59,6 +73,7 @@ object FluxRss {
             var enclosure: String? = null
             var autreImage: String? = null
             var description: String? = null
+            var date: Instant? = null
 
             var événement = p.eventType
             while (événement != XmlPullParser.END_DOCUMENT) {
@@ -72,11 +87,21 @@ object FluxRss {
                             dansUnArticle = true
                             texte = null; description = null
                             enclosure = null; autreImage = null
+                            date = null
                         }
                         !dansUnArticle -> Unit   // titre du flux lui-même : ignoré
                         nom == "title" -> texte = p.nextText().trim()
                         nom == "description" || nom == "summary" ->
                             description = p.nextText()
+
+                        // RSS dit « pubDate », Atom dit « published » ou
+                        // « updated ». Les trois sont acceptés, et « updated »
+                        // en dernier recours seulement : un article corrigé à
+                        // 18 h aurait sinon l'air d'être paru à 18 h.
+                        nom == "pubdate" || nom == "date" ->
+                            date = analyserDate(p.nextText())
+                        nom == "published" -> date = analyserDate(p.nextText())
+                        nom == "updated" -> if (date == null) date = analyserDate(p.nextText())
 
                         // ═══ L'IMAGE EST DANS L'ENCLOSURE ═══
                         //
@@ -114,7 +139,7 @@ object FluxRss {
                         dansUnArticle = false
                         val t = texte
                         if (!t.isNullOrBlank()) {
-                            titres += Titre(t, enclosure ?: autreImage ?: imageDans(description))
+                            titres += Titre(t, enclosure ?: autreImage ?: imageDans(description), date)
                             if (titres.size >= maximum) return titres
                         }
                     }
@@ -127,6 +152,34 @@ object FluxRss {
             Log.w(TAG, "Flux interrompu après ${titres.size} titre(s)", e)
         }
         return titres
+    }
+
+    /**
+     * La date de publication, quel que soit le format employé.
+     *
+     * ═══ DEUX FORMATS, ET AUCUN N'EST OPTIONNEL ═══
+     *
+     * RSS impose le format des courriels (RFC 822/1123) : « Tue, 16 Sep 2026
+     * 18:30:00 +0200 ». Atom impose l'ISO 8601 : « 2026-09-16T18:30:00+02:00 ».
+     * Un fil d'information change de moteur de publication sans prévenir, et
+     * n'accepter qu'un des deux ferait disparaître tous ses articles du jour au
+     * lendemain — sans erreur, sans trace, juste un écran qui ne montre plus
+     * rien.
+     *
+     * Les deux sont donc essayés, et un échec rend null plutôt que de lever :
+     * une date illisible fait perdre UN article, pas le flux entier.
+     */
+    private fun analyserDate(brut: String?): Instant? {
+        val texte = brut?.trim().orEmpty()
+        if (texte.isEmpty()) return null
+        // RFC 1123 d'abord : c'est le format de RSS, donc le cas courant ici.
+        runCatching {
+            return ZonedDateTime.parse(texte, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant()
+        }
+        runCatching { return OffsetDateTime.parse(texte).toInstant() }
+        runCatching { return Instant.parse(texte) }
+        Log.w(TAG, "Date de publication illisible : « $texte »")
+        return null
     }
 
     /** Dernier recours : l'image glissée dans le HTML du chapô. */

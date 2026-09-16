@@ -272,6 +272,35 @@ class AdminConfig(context: Context) {
      * jour où l'on insère une quatrième police au milieu de la liste, et la
      * tablette se mettrait alors dans une autre police que celle affichée.
      */
+    /**
+     * Les adresses des fils d'information, une par ligne.
+     *
+     * Vide = on s'en tient à la liste livrée avec l'APK (voir
+     * BuildConfig.FLUX_ACTUALITES), elle-même vide en production. Renseignée,
+     * elle la remplace entièrement.
+     *
+     * Réglable à distance, et il le faut : un fil d'information change
+     * d'adresse, disparaît, ou se révèle mal écrit. Attendre une reconstruction
+     * d'APK pour en retirer un qui renvoie n'importe quoi laisserait Jean
+     * devant n'importe quoi pendant ce temps.
+     */
+    var fluxActualites: String
+        get() = prefs.getString(KEY_FLUX_ACTUALITES, null).orEmpty()
+        set(value) = prefs.edit().putString(KEY_FLUX_ACTUALITES, value).apply()
+
+    /**
+     * Instant du dernier remplacement complet du fil, en millisecondes.
+     *
+     * Rangé dans les préférences et non en mémoire : c'est ce qui permet à la
+     * règle « une fois par jour » de survivre à un redémarrage. Sans ça, une
+     * tablette qui redémarre trois fois dans l'après-midi retéléchargerait
+     * trois fois — et remplacerait trois fois les titres sous les yeux de
+     * Jean, ce que « une fois par jour » interdit précisément.
+     */
+    var fluxDernierRafraichissementMs: Long
+        get() = prefs.getLong(KEY_FLUX_DERNIER_JOUR, 0L)
+        set(value) = prefs.edit().putLong(KEY_FLUX_DERNIER_JOUR, value).apply()
+
     var policeSenior: String
         get() = prefs.getString(KEY_POLICE_SENIOR, null) ?: PoliceSenior.PAR_DÉFAUT.valeurDistante
         set(value) = prefs.edit().putString(KEY_POLICE_SENIOR, value).apply()
@@ -467,6 +496,8 @@ class AdminConfig(context: Context) {
         private const val KEY_DUREE_EVEIL_ACTUALITE = "duree_eveil_actualite_s"
         private const val KEY_TRANSCRIPTION_PIECE_AFFICHEE = "transcription_piece_affichee"
         private const val KEY_POLICE_SENIOR = "police_senior"
+        private const val KEY_FLUX_ACTUALITES = "flux_actualites"
+        private const val KEY_FLUX_DERNIER_JOUR = "flux_dernier_rafraichissement"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
         private const val KEY_DIM_JEAN_SPEECH = "dim_jean_speech"
         private const val KEY_ROOM_HANDOFF_ENABLED = "room_handoff_enabled"
