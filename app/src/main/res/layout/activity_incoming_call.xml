@@ -248,6 +248,35 @@
          Disparaît dès la connexion (voir connectVideoCall) : il n'a plus de
          sens une fois l'appel établi, et deux boutons côte à côte pendant la
          conversation invitent à en toucher un par erreur. -->
+    <!-- ═══ REFAIT SELON LES CONSIGNES D'ACCESSIBILITÉ ═══
+
+         Quatre exigences tenaient sur ce seul bouton, et il en manquait trois.
+
+         1. PAS DE CAPITALES. Le thème de cette application est
+            Theme.AppCompat, dont Widget.AppCompat.Button impose
+            textAllCaps : ce bouton affichait « RÉPONDRE MAINTENANT ». Or le
+            cerveau reconnaît un mot à sa silhouette globale ; en capitales,
+            tous les mots deviennent des blocs rectangulaires de même hauteur,
+            et il faut les déchiffrer lettre par lettre. C'est coûteux pour
+            tout le monde et davantage en cas de trouble cognitif.
+            Posé en XML ici ET dans le code (voir MiseEnFormeSenior) : le
+            défaut venant du thème, une mise en page qui ne dit rien repart en
+            capitales.
+
+         2. 24 sp, contre 22 auparavant. Les consignes fixent ce corps pour
+            les boutons d'action critiques, et la mesure porte : c'est le seuil
+            au-delà duquel l'abandon de tâche diminue nettement.
+
+         3. CONTRASTE. #1E8449 sous du texte blanc donnait 4,72:1, là où la
+            norme AAA visée par les consignes en demande 7. Le vert est
+            assombri à #145A31, soit 8,28:1 — mesuré, pas estimé — et reste
+            franchement vert.
+
+         4. PICTOGRAMME + TEXTE. Des analyses par oculométrie chez des seniors
+            avec troubles cognitifs légers montrent que la paire icône large +
+            texte descriptif accélère la reconnaissance et réduit les erreurs.
+            La paire, pas l'un des deux : le texte reste donc à côté de
+            l'icône, il ne la remplace pas et elle ne le remplace pas. -->
     <Button
         android:id="@+id/buttonAnswerNow"
         android:layout_width="wrap_content"
@@ -256,13 +285,23 @@
         android:layout_marginBottom="24dp"
         android:layout_marginStart="24dp"
         android:text="Répondre maintenant"
-        android:textSize="22sp"
+        android:textSize="24sp"
+        android:textAllCaps="false"
+        android:drawableStart="@drawable/ic_repondre"
+        android:drawablePadding="20dp"
         android:paddingLeft="32dp"
         android:paddingRight="32dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="16dp"
-        android:backgroundTint="#1E8449" />
+        android:paddingTop="20dp"
+        android:paddingBottom="20dp"
+        android:backgroundTint="#145A31" />
 
+    <!-- Même traitement, mêmes raisons (voir le bouton ci-dessus). Le rouge
+         passe de #C0392B (5,44:1) à #96281B (8,03:1).
+
+         Gabarit identique à son voisin, délibérément : deux boutons côte à
+         côte de tailles différentes suggèrent que l'un compte plus que
+         l'autre, alors que les deux gestes sont symétriques — et que celui-ci
+         est le seul moyen pour Jean d'écarter un appel. -->
     <Button
         android:id="@+id/buttonBlock"
         android:layout_width="wrap_content"
@@ -271,11 +310,14 @@
         android:layout_marginBottom="24dp"
         android:layout_marginEnd="24dp"
         android:text="Bloquer l'appel"
-        android:textSize="22sp"
+        android:textSize="24sp"
+        android:textAllCaps="false"
+        android:drawableStart="@drawable/ic_bloquer"
+        android:drawablePadding="20dp"
         android:paddingLeft="32dp"
         android:paddingRight="32dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="16dp"
-        android:backgroundTint="#C0392B" />
+        android:paddingTop="20dp"
+        android:paddingBottom="20dp"
+        android:backgroundTint="#96281B" />
 
 </FrameLayout>

@@ -256,6 +256,26 @@ class AdminConfig(context: Context) {
         get() = prefs.getBoolean(KEY_TRANSCRIPTION_PIECE_AFFICHEE, false)
         set(value) = prefs.edit().putBoolean(KEY_TRANSCRIPTION_PIECE_AFFICHEE, value).apply()
 
+    /**
+     * La police employée sur tous les écrans que Jean voit.
+     *
+     * Réglable à distance, et c'est le point : les consignes d'accessibilité
+     * retiennent trois familles pour des raisons différentes — lever la
+     * confusion entre caractères ambigus, réduire l'encombrement visuel,
+     * confort de lecture en français. Laquelle soulage le plus dépend de la
+     * personne, et cela se constate à l'usage.
+     *
+     * Une valeur imposée à la compilation aurait donc demandé un APK par essai.
+     * Ici, l'administrateur bascule depuis le PWA et regarde l'écran.
+     *
+     * Stocké en texte et non en rang : un ordinal se décale silencieusement le
+     * jour où l'on insère une quatrième police au milieu de la liste, et la
+     * tablette se mettrait alors dans une autre police que celle affichée.
+     */
+    var policeSenior: String
+        get() = prefs.getString(KEY_POLICE_SENIOR, null) ?: PoliceSenior.PAR_DÉFAUT.valeurDistante
+        set(value) = prefs.edit().putString(KEY_POLICE_SENIOR, value).apply()
+
     // --- Réveil de l'écran au moindre son de la pièce (voir RoomPresenceService) ---
     var roomWakeEnabled: Boolean
         get() = prefs.getBoolean(KEY_ROOM_WAKE_ENABLED, true)
@@ -446,6 +466,7 @@ class AdminConfig(context: Context) {
         private const val KEY_ROOM_WAKE_ENABLED = "room_wake_enabled"
         private const val KEY_DUREE_EVEIL_ACTUALITE = "duree_eveil_actualite_s"
         private const val KEY_TRANSCRIPTION_PIECE_AFFICHEE = "transcription_piece_affichee"
+        private const val KEY_POLICE_SENIOR = "police_senior"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
         private const val KEY_DIM_JEAN_SPEECH = "dim_jean_speech"
         private const val KEY_ROOM_HANDOFF_ENABLED = "room_handoff_enabled"

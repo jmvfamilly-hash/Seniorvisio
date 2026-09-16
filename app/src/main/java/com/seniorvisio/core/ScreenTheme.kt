@@ -51,7 +51,16 @@ object ScreenTheme {
         // le texte noir illisible dès que la scène filmée était claire.
         zoneBackground = Color.parseColor("#F0FFFFFF"),
         primaryText = Color.parseColor("#101A2E"),
-        secondaryText = Color.parseColor("#4A5A75"),
+        // Assombri de #4A5A75 à #41506A : l'ancien donnait 6,98:1 sur le fond
+        // de zone, sous le seuil de 7:1 que visent les consignes
+        // d'accessibilité retenues pour ce projet (WCAG AAA). Il manquait deux
+        // centièmes — c'est-à-dire que personne ne l'aurait jamais trouvé à
+        // l'œil, et que seule la mesure le dit.
+        //
+        // La nouvelle valeur donne 8,14:1 et reste le même gris bleuté :
+        // assombrir davantage aurait rapproché le secondaire du principal, et
+        // c'est justement leur écart qui dit lequel est lequel.
+        secondaryText = Color.parseColor("#41506A"),
     )
 
     /**

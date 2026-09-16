@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Lexend — The Lexend Project Authors, SIL Open Font License 1.1 (texte
+     complet dans assets/licences-polices/).
+
+     Retenue par les consignes pour fluidifier la lecture et réduire la
+     sensation d'encombrement visuel — le « crowding », où les caractères
+     fusionnent à l'œil, qui est un problème majeur de l'attention visuelle
+     chez les personnes âgées.
+
+     ═══ UN SEUL FICHIER POUR DEUX GRAISSES, ET POURQUOI ═══
+
+     Lexend n'est distribuée qu'en police VARIABLE : un unique fichier qui
+     porte un axe de graisse continu, de Thin à Black. Il n'existe pas de
+     fichier « Lexend-Bold.ttf » à télécharger.
+
+     Les deux entrées ci-dessous désignent donc le même fichier, en demandant
+     deux positions différentes sur cet axe. `fontVariationSettings` existe
+     depuis Android 8.0, et ce projet exige déjà Android 8.0 au minimum (voir
+     minSdk dans app/build.gradle) : la construction est donc sûre ici, alors
+     qu'elle ne le serait pas dans une application visant plus ancien.
+
+     Sans ces réglages, les deux entrées rendraient exactement la même
+     graisse, et le gras de l'interface deviendrait indiscernable du normal —
+     or c'est le gras qui porte la hiérarchie sur l'écran de Jean.
+-->
+<font-family xmlns:android="http://schemas.android.com/apk/res/android">
+    <font
+        android:font="@font/lexend_variable"
+        android:fontStyle="normal"
+        android:fontWeight="400"
+        android:fontVariationSettings="'wght' 400" />
+    <font
+        android:font="@font/lexend_variable"
+        android:fontStyle="normal"
+        android:fontWeight="700"
+        android:fontVariationSettings="'wght' 700" />
+</font-family>

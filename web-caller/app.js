@@ -442,6 +442,7 @@ const els = {
   callButton: el("callButton"),
   cancelButton: el("cancelButton"),
   forceConnectButton: el("forceConnectButton"),
+  policeSelect: el("policeSelect"),
   retryButton: el("retryButton"),
   blockedMessage: el("blockedMessage"),
   hangupButton: el("hangupButton"),
@@ -1443,6 +1444,12 @@ on("rebootDeviceButton", "click", () =>
 let deviceSettingsLoaded = false;
 
 const ENGINE_SELECT_FIELDS = [
+  // La police des écrans de Jean voyage par le même chemin que les moteurs de
+  // transcription : un <select>, un champ du document d'appareil, et la
+  // tablette qui l'applique (voir DeviceStatusReporter.applyTranscriptionSettings).
+  // Un second mécanisme pour un seul réglage n'aurait rien apporté, sinon une
+  // deuxième façon de tomber en panne.
+  ["policeSelect", "policeSenior"],
   ["roomEngineSelect", "roomTranscriptionEngine"],
   ["callEngineSelect", "callTranscriptionEngine"],
   ["voskModelSelect", "voskModelSize"],
@@ -1473,6 +1480,15 @@ function applyDeviceSettings(data) {
   // Zéro est la valeur saine ; un nombre qui grimpe dit que la tablette se
   // rétablit toute seule mais que quelque chose la coupe régulièrement.
   dernierNombreDeRéarmements = Number(data.listenerRestarts) || 0;
+
+  // La police telle que la tablette la rapporte, et non telle qu'on l'a
+  // demandée : un <select> qui montre un choix jamais reçu ferait croire la
+  // bascule faite, et on jugerait la lisibilité d'une police qui n'est pas à
+  // l'écran.
+  if (data.policeSenior) {
+    els.policeSelect.value = data.policeSenior;
+    els.policeSelect.dataset.appliedValue = data.policeSenior;
+  }
 
   // Empreinte du mot de passe d'accès au PWA (voir
   // DeviceStatusReporter.accessFingerprint). Chaîne vide = aucune protection
@@ -1659,12 +1675,12 @@ async function writeDeviceSetting(field, value, select) {
     await engine.setDeviceSetting(CONFIG.deviceDocId, field, value);
     select.dataset.appliedValue = value;
   } catch (e) {
-    console.warn("[app] Réglage de transcription non transmis :", e);
+    console.warn("[app] Réglage non transmis :", e);
     // Remis dans son état précédent : laisser le <select> afficher un choix
     // que la tablette n'a jamais reçu ferait croire la bascule faite.
     if (previous) select.value = previous;
     els.engineStatus.textContent =
-      "Réglage non transmis (réseau ?). La tablette garde son moteur actuel.";
+      "Réglage non transmis (réseau ?). La tablette garde son réglage actuel.";
   } finally {
     select.disabled = false;
   }

@@ -182,6 +182,7 @@ class IncomingCallActivity : AppCompatActivity() {
             .cancel(IncomingCallService.CALL_NOTIFICATION_ID)
 
         setContentView(R.layout.activity_incoming_call)
+        appliquerMiseEnFormeSenior()
         hideNavigationBar()
 
         // Une demande de connexion, et le micro change de main tout de suite —

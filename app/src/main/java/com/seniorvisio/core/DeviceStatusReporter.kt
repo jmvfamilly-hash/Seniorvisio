@@ -503,6 +503,21 @@ class DeviceStatusReporter(private val context: Context) {
         val adminConfig = AdminConfig(context)
         applyTraceSwitch(snapshot)
 
+        // La police des écrans de Jean, choisie depuis le PWA.
+        //
+        // Validée contre l'énumération avant d'être retenue : ce document est
+        // ouvert en écriture à qui en connaît l'adresse (voir firestore.rules),
+        // et une valeur inconnue rangée telle quelle laisserait la tablette
+        // dans un état qu'aucun écran n'affiche. On ignore ce qu'on ne
+        // reconnaît pas, et le réglage précédent tient.
+        PoliceSenior.depuisValeurDistante(snapshot.getString(FIELD_POLICE_SENIOR))?.let {
+            if (adminConfig.policeSenior != it.valeurDistante) {
+                adminConfig.policeSenior = it.valeurDistante
+                Log.i(TAG, "Police réglée à distance : ${it.libellé}")
+                CallTrace.record("POLICE réglée", "${it.libellé} — visible au prochain affichage d'écran")
+            }
+        }
+
         TranscriptionEngineChoice.fromRemoteValue(snapshot.getString(FIELD_ROOM_ENGINE))?.let {
             if (adminConfig.roomEngine != it) {
                 adminConfig.roomEngine = it
@@ -841,6 +856,7 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_LAST_UPDATE_MESSAGE = "lastUpdateMessage"
         private const val FIELD_LAST_UPDATE_AT = "lastUpdateAt"
         private const val FIELD_ROOM_ENGINE = "roomTranscriptionEngine"
+        private const val FIELD_POLICE_SENIOR = "policeSenior"
         private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"
         private const val FIELD_VOSK_MODEL_SIZE = "voskModelSize"
         private const val FIELD_VOSK_MODEL_STATE = "voskModelState"

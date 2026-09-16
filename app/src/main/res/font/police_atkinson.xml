@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Atkinson Hyperlegible — Braille Institute of America, SIL Open Font
+     License 1.1 (texte complet dans assets/licences-polices/).
+
+     Choisie par les consignes d'accessibilité pour une raison précise : elle
+     exagère volontairement la différence entre les caractères ambigus — le
+     « I » majuscule, le « l » minuscule et le « 1 », le « O » et le « 0 ».
+     Sur une dalle lue de loin, c'est la confusion entre ces formes qui coûte
+     le plus cher en effort de décodage.
+-->
+<font-family xmlns:android="http://schemas.android.com/apk/res/android">
+    <font
+        android:font="@font/atkinson_regular"
+        android:fontStyle="normal"
+        android:fontWeight="400" />
+    <font
+        android:font="@font/atkinson_bold"
+        android:fontStyle="normal"
+        android:fontWeight="700" />
+</font-family>

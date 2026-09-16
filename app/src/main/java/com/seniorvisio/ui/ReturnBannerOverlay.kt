@@ -69,6 +69,11 @@ class ReturnBannerOverlay(private val context: Context) {
             }
             setOnClickListener { onReturn() }
         }
+        // Créé à la volée, donc hors de portée du parcours d'arbre fait au
+        // gonflage des écrans (voir appliquerMiseEnFormeSenior) : sans cette
+        // ligne, ce bandeau serait le seul texte de l'interface de Jean à
+        // rester dans la police système, et l'écart se verrait.
+        MiseEnFormeSenior.appliquer(view, policeChoisie(context))
 
         val layout = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,

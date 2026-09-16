@@ -159,6 +159,10 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        // Juste après le gonflage, avant que quoi que ce soit ne soit mesuré :
+        // la police et l'interligne changent la hauteur des textes, donc toute
+        // mise en page calculée avant serait à refaire.
+        appliquerMiseEnFormeSenior()
         hideNavigationBar()
         applyWakeOnSoundRequest(intent)
 
