@@ -8,6 +8,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
 import com.seniorvisio.BuildConfig
+import com.seniorvisio.core.CallTrace
 
 data class RemoteIceCandidate(
     val sdpMid: String?,
@@ -96,12 +97,49 @@ class CallSignalingClient {
             .addOnFailureListener { onResult(null) }
     }
 
+    /**
+     * La réponse SDP de la tablette, et le passage en « connecté ».
+     *
+     * ═══ L'ÉCRITURE LA PLUS IMPORTANTE DE TOUT L'APPEL ═══
+     *
+     * Sans elle, le proche reste sur un écran d'attente pendant que Jean, lui,
+     * voit bien la visio démarrer : la tablette passe à l'état ACTIVE que
+     * cette écriture aboutisse ou non. Les deux côtés racontent alors des
+     * choses opposées, et celui qui appelle conclut que « ça ne marche pas »
+     * sans qu'aucun des deux ne sache où ça s'est arrêté.
+     *
+     * Elle était écrite sans le moindre écouteur — ni succès, ni échec, ni
+     * trace. Un refus disparaissait donc entièrement, exactement comme les
+     * consignes du proche disparaissaient avant qu'on ne les instrumente
+     * (voir _envoyerConsigne dans web-caller/webrtc-engine.js, et l'accident
+     * du diaporama qu'il raconte).
+     *
+     * La taille est journalisée avec, et ce n'est pas décoratif : ce document
+     * porte DÉJÀ l'offre SDP et la photo de l'appelant encodée. Firestore
+     * refuse au-delà d'un mébioctet, et c'est précisément ainsi que la panne
+     * du diaporama s'était produite. Si la cause est là, ce chiffre le dira
+     * du premier coup au lieu de coûter une semaine.
+     */
     fun sendAnswer(callId: String, sdp: String) {
+        CallTrace.record("APPEL réponse envoi", "${sdp.length} caractères de SDP")
         callDoc(callId).update(mapOf(FIELD_ANSWER_SDP to sdp, FIELD_STATUS to STATUS_CONNECTED))
+            .addOnSuccessListener {
+                CallTrace.record("APPEL réponse envoi", "acceptée par Firestore — le proche peut se connecter")
+            }
+            .addOnFailureListener { e ->
+                CallTrace.record(
+                    "APPEL réponse ÉCHEC",
+                    "${e.javaClass.simpleName} : ${e.message ?: "sans message"} — " +
+                        "le proche ne recevra jamais la réponse",
+                )
+            }
     }
 
     fun updateStatus(callId: String, status: String) {
         callDoc(callId).update(FIELD_STATUS, status)
+            .addOnFailureListener { e ->
+                CallTrace.record("APPEL état ÉCHEC", "« $status » non écrit : ${e.message ?: e.javaClass.simpleName}")
+            }
     }
 
     /**

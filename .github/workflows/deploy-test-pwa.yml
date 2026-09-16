@@ -134,9 +134,14 @@ jobs:
           # l'ancienne version pendant une poignée de secondes.
           sleep 10
           echo "### Cache de la page d'entrée" >> "$GITHUB_STEP_SUMMARY"
+          # Noms de variables SANS ACCENT : bash n'accepte que [A-Za-z0-9_]
+          # dans un identifiant. « entêtes=... » n'était pas une affectation
+          # mais une commande à exécuter, et ce pas est mort sur « No such
+          # file or directory » — en emportant le déploiement avec lui. Le
+          # reste du dépôt écrit en français ; ici, le shell impose l'ASCII.
           for chemin in "/" "/index.html"; do
-            entêtes=$(curl -sS -D - -o /dev/null "https://seniorvisio-test.web.app${chemin}" || true)
-            cache=$(printf '%s' "$entêtes" | grep -i '^cache-control:' | tr -d '\r' || true)
+            entetes=$(curl -sS -D - -o /dev/null "https://seniorvisio-test.web.app${chemin}" || true)
+            cache=$(printf '%s' "$entetes" | grep -i '^cache-control:' | tr -d '\r' || true)
             echo "$chemin → ${cache:-aucun en-tête Cache-Control}"
             echo "- \`${chemin}\` → \`${cache:-aucun}\`" >> "$GITHUB_STEP_SUMMARY"
           done
@@ -147,6 +152,19 @@ jobs:
           servie=$(curl -sS "https://seniorvisio-test.web.app/version.js?ci=${GITHUB_SHA}" || true)
           echo "version.js servi : $servie"
           echo "- servi : \`$(printf '%s' "$servie" | tr -d '\n')\`" >> "$GITHUB_STEP_SUMMARY"
+
+          # Le seul verdict qui compte, et il échoue bruyamment.
+          #
+          # Le déploiement, lui, a déjà eu lieu : ce rouge ne défait rien, il
+          # signale que la prochaine livraison n'arrivera pas dans les
+          # navigateurs. Sans ce garde-fou, l'en-tête a pu viser une adresse
+          # que personne n'ouvre pendant des semaines, en silence.
+          racine=$(curl -sS -D - -o /dev/null "https://seniorvisio-test.web.app/" || true)
+          if ! printf '%s' "$racine" | grep -iq '^cache-control:.*no-cache'; then
+            echo "::error::La page d'entrée « / » n'est PAS servie en no-cache. Les navigateurs continueront de servir l'ancienne version." >&2
+            exit 1
+          fi
+          echo "Vérifié : « / » est servi en no-cache."
 
       - name: Rappeler l'adresse
         run: |

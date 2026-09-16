@@ -259,18 +259,40 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             "consigneVolume=$pendingVolume microCoupé=$pendingMicMuted mêmePièce=$sameRoomMode",
         )
         startLocalMedia(pc)
-        pc.createAnswer(SimpleSdpObserver(onCreate = { desc ->
-            pc.setLocalDescription(
-                SimpleSdpObserver(onSet = {
-                    signaling.sendAnswer(id, desc.description)
-                    listenForCallerCandidates(id)
-                    drainPendingCandidates()
-                    startMediaWatchdog()
-                    state = CallState.ACTIVE
-                }),
-                desc
-            )
-        }), MediaConstraints())
+        // ═══ LES DEUX ÉCHECS QUI NE DISAIENT RIEN ═══
+        //
+        // SimpleSdpObserver a un onFailure dont la valeur par défaut est vide,
+        // et ni createAnswer ni setLocalDescription ne le fournissaient. Une
+        // réponse SDP qui ne se crée pas, ou qui ne s'applique pas, ne
+        // laissait donc AUCUNE trace : la suite du bloc — envoi de la réponse,
+        // écoute des candidats, passage à ACTIVE — ne s'exécutait simplement
+        // jamais, et rien ne distinguait ça d'un appel qui n'a pas été
+        // décroché. Vu du proche, c'est le même écran d'attente muet.
+        pc.createAnswer(
+            SimpleSdpObserver(
+                onCreate = { desc ->
+                    pc.setLocalDescription(
+                        SimpleSdpObserver(
+                            onSet = {
+                                signaling.sendAnswer(id, desc.description)
+                                listenForCallerCandidates(id)
+                                drainPendingCandidates()
+                                startMediaWatchdog()
+                                state = CallState.ACTIVE
+                            },
+                            onFailure = { erreur ->
+                                CallTrace.record("APPEL answer ÉCHEC", "réponse non appliquée : $erreur")
+                            },
+                        ),
+                        desc
+                    )
+                },
+                onFailure = { erreur ->
+                    CallTrace.record("APPEL answer ÉCHEC", "réponse non créée : $erreur")
+                },
+            ),
+            MediaConstraints(),
+        )
     }
 
     /**
