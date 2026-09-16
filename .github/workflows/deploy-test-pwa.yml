@@ -118,6 +118,36 @@ jobs:
           npx firebase-tools deploy --only hosting:test \
             --project seniorvisio --non-interactive --force
 
+      # ═══ VÉRIFIER CE QUI EST SERVI, ET NON CE QU'ON A DEMANDÉ ═══
+      #
+      # Un déploiement « réussi » dit seulement que les fichiers sont partis.
+      # Il ne dit pas que la page d'entrée sera rechargée par les navigateurs
+      # — or c'est exactement là que ça s'est cassé : l'en-tête anti-cache
+      # visait « /index.html » alors que tout le monde ouvre « / ».
+      #
+      # Ce pas interroge l'adresse réelle et imprime ce qui en revient. Un
+      # en-tête absent n'apparaît pas dans un fichier de configuration : il
+      # n'apparaît que dans une réponse.
+      - name: Vérifie que la page d'entrée n'est pas mise en cache
+        run: |
+          # Laisser la release se propager : Firebase répond parfois encore
+          # l'ancienne version pendant une poignée de secondes.
+          sleep 10
+          echo "### Cache de la page d'entrée" >> "$GITHUB_STEP_SUMMARY"
+          for chemin in "/" "/index.html"; do
+            entêtes=$(curl -sS -D - -o /dev/null "https://seniorvisio-test.web.app${chemin}" || true)
+            cache=$(printf '%s' "$entêtes" | grep -i '^cache-control:' | tr -d '\r' || true)
+            echo "$chemin → ${cache:-aucun en-tête Cache-Control}"
+            echo "- \`${chemin}\` → \`${cache:-aucun}\`" >> "$GITHUB_STEP_SUMMARY"
+          done
+          # La version réellement servie, à comparer avec le commit ci-dessous :
+          # deux nombres qui divergent disent une livraison qui n'a pas pris.
+          # Suffixe unique : sans lui on interrogerait le cache du réseau de
+          # diffusion, et le pas confirmerait joyeusement l'ancienne version.
+          servie=$(curl -sS "https://seniorvisio-test.web.app/version.js?ci=${GITHUB_SHA}" || true)
+          echo "version.js servi : $servie"
+          echo "- servi : \`$(printf '%s' "$servie" | tr -d '\n')\`" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Rappeler l'adresse
         run: |
           echo "### Banc d'essai déployé" >> "$GITHUB_STEP_SUMMARY"

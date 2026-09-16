@@ -18,8 +18,19 @@
       ],
       "headers": [
         {
-          "//": "index.html jamais mis en cache : c'est lui qui porte les URL suffixées des autres fichiers (?v=<commit>). Mis en cache, il continuerait de désigner l'ancienne version et une nouvelle livraison n'arriverait qu'au bon vouloir du navigateur — le défaut même que le suffixage corrige.",
-          "source": "/index.html",
+          "//": "La page d'entrée n'est JAMAIS mise en cache : c'est elle qui porte les URL suffixées des autres fichiers (?v=<commit>). Mise en cache, elle continue de désigner l'ancienne version, et une nouvelle livraison n'arrive qu'au bon vouloir du navigateur — le défaut même que le suffixage corrige.",
+          "//2": "TROIS MOTIFS, ET LE PREMIER EST CELUI QUI MANQUAIT. Firebase Hosting fait correspondre ses en-têtes au CHEMIN DEMANDÉ, pas au fichier finalement servi. Or personne ne demande « /index.html » : on ouvre « / », et plus encore depuis un raccourci d'écran d'accueil. Le motif « /index.html » seul ne s'appliquait donc jamais en usage réel, et la page retombait sur le cache par défaut de l'hébergeur. Tout le dispositif anti-cache reposait sur cet en-tête.",
+          "source": "/",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "//": "Toute page HTML, quelle que soit son adresse — y compris les maquettes.",
+          "source": "**/*.html",
           "headers": [
             {
               "key": "Cache-Control",
