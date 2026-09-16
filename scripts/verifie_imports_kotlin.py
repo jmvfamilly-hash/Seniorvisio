@@ -113,6 +113,23 @@ DÉCLARATION = re.compile(
 )
 
 
+# ═══ « += » SUR UNE LISTE DE LISTES ═══
+#
+# « val x = mutableListOf<List<T>>() » puis « x += uneListe » ne compile pas :
+# Kotlin doit choisir entre plusAssign(élément) et plus(collection), et choisit
+# plus() — qui construit une nouvelle liste et tente de la réassigner à un val.
+# Le message est « Val cannot be reassigned », qui ne désigne pas la cause et
+# envoie chercher du côté de la déclaration.
+#
+# Le piège n'existe QUE quand les éléments sont eux-mêmes des collections : la
+# détection est donc étroite, et « liste += élément » ordinaire n'est jamais
+# signalé. Écrire .add() lève l'ambiguïté.
+DECL_LISTE_DE_LISTES = re.compile(
+    r"\bval\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*mutableListOf\s*<\s*"
+    r"(?:List|MutableList|Set|MutableSet|Collection|Array)\s*<"
+)
+
+
 def sans_commentaires_ni_chaines(texte: str) -> str:
     """Neutralise ce qui n'est pas du code, pour ne pas signaler un nom cité
     dans un commentaire français — ce fichier en est plein."""
@@ -162,6 +179,20 @@ def main() -> int:
                 )
             else:
                 vus[nettoyé] = n
+
+    for f in fichiers:
+        _, code = contenus[f]
+        suspects = set(DECL_LISTE_DE_LISTES.findall(code))
+        if not suspects:
+            continue
+        for n, ligne in enumerate(code.splitlines(), start=1):
+            for nom in suspects:
+                if re.search(rf"^\s*{re.escape(nom)}\s*\+=", ligne):
+                    signalements.append(
+                        f"{f.relative_to(RACINE)}:{n}: « {nom} += … » sur une liste "
+                        f"de collections — Kotlin choisit plus() et refuse de "
+                        f"réassigner un val. Écrire {nom}.add(…)"
+                    )
 
     # Une classe Kotlin ne peut avoir qu'UN companion object.
     #

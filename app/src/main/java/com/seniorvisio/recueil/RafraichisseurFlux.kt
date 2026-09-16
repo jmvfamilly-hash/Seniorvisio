@@ -173,14 +173,19 @@ class RafraichisseurFlux(private val context: Context) {
                 // APRÈS la fusion. Couper chaque fil à trente avant de les
                 // réunir jetterait des articles récents d'un fil abondant pour
                 // garder des articles anciens d'un fil pauvre.
-                parFlux += brut.inputStream().use { FluxRss.analyser(it, maximum = Int.MAX_VALUE) }
+                // .add() et non « += » : parFlux est une liste DE LISTES, donc
+                // « += uneListe » se résout vers plus() — qui construit une
+                // nouvelle liste et tente de la réassigner à un val — au lieu
+                // de plusAssign(). Le compilateur répond « Val cannot be
+                // reassigned », ce qui ne désigne pas du tout la vraie cause.
+                parFlux.add(brut.inputStream().use { FluxRss.analyser(it, maximum = Int.MAX_VALUE) })
             } catch (e: Exception) {
                 // Un réseau absent ou un serveur en panne : on note et on
                 // continue. La liste doit garder sa place dans l'ordre, sinon
                 // la répartition à égalité de date changerait de sens.
                 Log.w(TAG, "Fil $rang injoignable ($adresse)", e)
                 injoignables++
-                parFlux += emptyList()
+                parFlux.add(emptyList())
             } finally {
                 brut.delete()
             }
