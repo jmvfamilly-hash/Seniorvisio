@@ -51,7 +51,13 @@ object FluxRss {
 
             var dansUnArticle = false
             var texte: String? = null
-            var vignette: String? = null
+            // Deux réservoirs, et pas un seul : l'enclosure L'EMPORTE, parce
+            // que c'est là que ce flux-ci met son image. Avec une seule
+            // variable prise par le premier arrivé, un media:thumbnail placé
+            // avant dans le document gagnerait — et on afficherait une
+            // miniature là où l'illustration existe.
+            var enclosure: String? = null
+            var autreImage: String? = null
             var description: String? = null
 
             var événement = p.eventType
@@ -64,35 +70,43 @@ object FluxRss {
                     XmlPullParser.START_TAG -> when {
                         nom == "item" || nom == "entry" -> {
                             dansUnArticle = true
-                            texte = null; vignette = null; description = null
+                            texte = null; description = null
+                            enclosure = null; autreImage = null
                         }
                         !dansUnArticle -> Unit   // titre du flux lui-même : ignoré
                         nom == "title" -> texte = p.nextText().trim()
                         nom == "description" || nom == "summary" ->
                             description = p.nextText()
 
-                        // ═══ QUATRE FAÇONS DE PORTER UNE IMAGE ═══
+                        // ═══ L'IMAGE EST DANS L'ENCLOSURE ═══
                         //
-                        // Il n'existe pas de manière unique de joindre une
-                        // illustration à un article : selon le moteur, c'est
-                        // media:thumbnail, media:content, une enclosure, ou
-                        // rien du tout — l'image étant alors noyée dans le
-                        // HTML du chapô. Les quatre sont essayées parce que je
-                        // n'ai pas pu aller voir ce que ce flux-ci emploie,
-                        // et qu'en écrire une seule serait parier.
-                        nom == "thumbnail" || nom == "content" -> {
-                            val url = p.getAttributeValue(null, "url")
-                            val type = p.getAttributeValue(null, "type") ?: ""
-                            if (vignette == null && url != null &&
-                                (nom == "thumbnail" || type.startsWith("image"))
-                            ) vignette = url
-                        }
+                        // Confirmé par l'administrateur pour ce flux-ci. Le
+                        // type n'est donc PAS exigé : plusieurs moteurs de
+                        // publication omettent l'attribut, et le réclamer
+                        // reviendrait à jeter l'image dans ces cas-là. On
+                        // écarte en revanche ce qui s'annonce comme autre
+                        // chose qu'une image — un fil peut joindre un son ou
+                        // une vidéo à un article, et la tablette ne saurait
+                        // pas l'afficher.
                         nom == "enclosure" -> {
                             val url = p.getAttributeValue(null, "url")
-                            val type = p.getAttributeValue(null, "type") ?: ""
-                            if (vignette == null && url != null && type.startsWith("image")) {
-                                vignette = url
-                            }
+                            val type = p.getAttributeValue(null, "type").orEmpty()
+                            if (enclosure == null && !url.isNullOrBlank() &&
+                                (type.isBlank() || type.startsWith("image"))
+                            ) enclosure = url
+                        }
+
+                        // Replis, pour les flux qui font autrement. Gardés
+                        // parce qu'ils ne coûtent rien et qu'un fil
+                        // d'information change de moteur de publication sans
+                        // prévenir — un lundi matin, chez quelqu'un qui n'a
+                        // aucun moyen de le signaler.
+                        nom == "thumbnail" || nom == "content" -> {
+                            val url = p.getAttributeValue(null, "url")
+                            val type = p.getAttributeValue(null, "type").orEmpty()
+                            if (autreImage == null && !url.isNullOrBlank() &&
+                                (nom == "thumbnail" || type.startsWith("image"))
+                            ) autreImage = url
                         }
                     }
 
@@ -100,7 +114,7 @@ object FluxRss {
                         dansUnArticle = false
                         val t = texte
                         if (!t.isNullOrBlank()) {
-                            titres += Titre(t, vignette ?: imageDans(description))
+                            titres += Titre(t, enclosure ?: autreImage ?: imageDans(description))
                             if (titres.size >= maximum) return titres
                         }
                     }
