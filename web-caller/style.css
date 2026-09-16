@@ -357,6 +357,27 @@ body.video-mode .pwa-version {
   font-size: 16px;
 }
 
+/* La liste des fils d'information (voir index.html, « Fils d'information »).
+   Sans cette règle, le navigateur lui donnait sa taille par défaut : une boîte
+   étroite en police à chasse fixe, sur un téléphone où l'on vient coller des
+   adresses longues. Alignée sur les champs de texte voisins, à la coupure de
+   ligne près — une URL ne doit pas être coupée au milieu, on ne saurait plus
+   où elle se termine. */
+#fluxActualites {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #2C3E5C;
+  background: #16233D;
+  color: #FFFFFF;
+  font-size: 16px;
+  font-family: inherit;
+  white-space: pre;
+  overflow-x: auto;
+  resize: vertical;
+}
+
 .side-panel .checkbox-label {
   display: flex;
   align-items: flex-start;
