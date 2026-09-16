@@ -83,12 +83,38 @@ jobs:
           PICOVOICE_ACCESS_KEY: ${{ secrets.PICOVOICE_ACCESS_KEY }}
           SPEECH_TRACE_KEY: ${{ secrets.SPEECH_TRACE_KEY }}
         run: |
+          # ═══ LES ERREURS DE COMPILATION DOIVENT ÊTRE LISIBLES ═══
+          #
+          # Gradle imprime les erreurs Kotlin (« e: fichier:ligne … ») PUIS,
+          # en cas d'échec, cent cinquante lignes de trace interne. Lues par
+          # la fin — ce que fait tout outil de consultation de journal — on ne
+          # voit que la trace, et l'erreur reste hors de portée. Trois
+          # aller-retours ont été perdus à la chercher.
+          #
+          # On la répète donc TOUT À LA FIN, et dans le résumé du passage.
+          # Le coût est nul, et ça change une recherche à l'aveugle en une
+          # lecture.
+          set +e
           gradle assembleValidationDebug --stacktrace \
             "-PbuildRev=val${{ github.run_number }}" \
             "-PassemblyAiApiKey=${ASSEMBLYAI_API_KEY}" \
             "-PgladiaApiKey=${GLADIA_API_KEY}" \
             "-PpicovoiceAccessKey=${PICOVOICE_ACCESS_KEY}" \
-            "-PspeechTraceKey=${SPEECH_TRACE_KEY}"
+            "-PspeechTraceKey=${SPEECH_TRACE_KEY}" 2>&1 | tee /tmp/gradle.log
+          code=${PIPESTATUS[0]}
+          set -e
+          if [ $code -ne 0 ]; then
+            erreurs=$(grep -E "^e: |^\s+> .*\.(kt|xml):" /tmp/gradle.log | head -60)
+            {
+              echo
+              echo "════════════ ERREURS DE COMPILATION ════════════"
+              if [ -n "$erreurs" ]; then echo "$erreurs"; else
+                echo "(aucune ligne « e: » — l'échec vient d'ailleurs, voir plus haut)"
+              fi
+              echo "════════════════════════════════════════════════"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          exit $code
 
       # Préfixe « val » et non « rev » : les deux numérotations sont
       # indépendantes (deux workflows, deux compteurs), et un « rev47 » de
