@@ -29,6 +29,8 @@ on:
     paths:
       - 'web-caller/**'
       - 'scripts/prepare_pwa.py'
+      - 'maquettes/**'
+      - 'scripts/enveloppe_maquette.py'
       - 'firebase.json'
       - '.firebaserc'
       - '.github/workflows/deploy-test-pwa.yml'
@@ -75,6 +77,35 @@ jobs:
             exit 1
           fi
           echo "Vérifié : ce site ne peut atteindre que la tablette d'essai."
+
+      # Les maquettes voyagent avec le banc d'essai plutôt que sur un
+      # hébergeur de plus. Elles servent à juger une lisibilité ou une
+      # disposition AVANT de les écrire en Kotlin, et cela se fait sur un
+      # téléphone — donc il leur faut une adresse publique, sans compte à
+      # ouvrir ni fichier à télécharger.
+      #
+      # Enveloppées à la publication : écrites pour le service d'artefacts,
+      # elles n'ont pas de doctype, et un navigateur les rendrait en mode de
+      # compatibilité — une géométrie différente de celle qui a été vérifiée
+      # (voir scripts/enveloppe_maquette.py).
+      - name: Publie les maquettes
+        run: |
+          shopt -s nullglob
+          fichiers=(maquettes/*.html)
+          if [ ${#fichiers[@]} -eq 0 ]; then
+            echo "Aucune maquette à publier."
+            exit 0
+          fi
+          for f in "${fichiers[@]}"; do
+            python3 scripts/enveloppe_maquette.py "$f" site-test/maquettes
+          done
+          {
+            echo "### Maquettes publiées"
+            echo
+            for f in "${fichiers[@]}"; do
+              echo "- <https://seniorvisio-test.web.app/maquettes/$(basename "$f")>"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Déploie sur Firebase Hosting
         env:
