@@ -168,4 +168,53 @@
         </ScrollView>
     </LinearLayout>
 
+
+    <!-- ═══ L'ACTUALITÉ : ELLE PREND LES DEUX ZONES DU BAS ═══
+
+         Poids 2, soit exactement la place de zoneRoom et zoneCall réunies :
+         elle ne s'ajoute pas à la pile, elle s'y substitue (voir
+         HomeZonesController.modeActualite). L'écran de Jean garde donc
+         seulement deux surfaces — le bandeau de la date, et le titre.
+
+         Cette hauteur double n'est pas un confort : un titre de fil
+         d'information fait 156 signes en moyenne sur ce flux, et la vignette
+         qui l'accompagne est en 16/9. Dans une seule bande, l'image aurait
+         été réduite à un timbre-poste.
+
+         autoSizeTextType uniform : le texte rétrécit jusqu'à tenir plutôt que
+         d'être tronqué. Plancher à 22 sp — en dessous, plus personne ne lit
+         cet écran depuis un fauteuil. -->
+    <LinearLayout
+        android:id="@+id/zoneActualite"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="2"
+        android:orientation="horizontal"
+        android:baselineAligned="false"
+        android:padding="20dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/imageActualiteAccueil"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="4"
+            android:layout_marginEnd="20dp"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
+            android:contentDescription="Illustration de l'article"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/texteActualiteAccueil"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="6"
+            android:gravity="center_vertical"
+            android:autoSizeTextType="uniform"
+            android:autoSizeMinTextSize="22sp"
+            android:autoSizeMaxTextSize="64sp"
+            android:autoSizeStepGranularity="2sp" />
+    </LinearLayout>
+
 </LinearLayout>

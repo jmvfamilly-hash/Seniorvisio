@@ -1,10 +1,12 @@
 package com.seniorvisio.ui
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -73,6 +75,16 @@ class HomeZonesController(
 
     private var currentBackground = Background.SOLID
 
+    /**
+     * Vrai quand un titre d'actualité occupe les deux zones du bas.
+     *
+     * Ce n'est pas un affichage de plus posé par-dessus : l'actualité REMPLACE
+     * les deux zones de texte dans la pile. L'écran de Jean n'a alors que deux
+     * surfaces — le bandeau de la date, et le titre — ce qui est exactement la
+     * règle de cet écran : jamais plus de choses à regarder qu'il n'en faut.
+     */
+    private var modeActualite = false
+
     /** Ordre courant des zones, sous la forme attendue par le PWA ("INFO,ROOM,CALL"). */
     fun zoneOrderNames(): String = adminConfig.zoneOrder.joinToString(",") { it.name }
 
@@ -85,6 +97,9 @@ class HomeZonesController(
     private val zoneInfo: View = root.findViewById(R.id.zoneInfo)
     private val zoneRoom: View = root.findViewById(R.id.zoneRoom)
     private val zoneCall: View = root.findViewById(R.id.zoneCall)
+    private val zoneActualite: View = root.findViewById(R.id.zoneActualite)
+    private val imageActualite: ImageView = root.findViewById(R.id.imageActualiteAccueil)
+    private val texteActualite: TextView = root.findViewById(R.id.texteActualiteAccueil)
 
     private val textMomentIcon: TextView = root.findViewById(R.id.textMomentIcon)
     private val textMomentLabel: TextView = root.findViewById(R.id.textMomentLabel)
@@ -128,6 +143,44 @@ class HomeZonesController(
     ) {
         zoneFor(source).submit(text, isFinal, fromJean)
     }
+
+    /**
+     * Montre un titre d'actualité à la place des deux zones de texte.
+     *
+     * La vignette n'apparaît QUE si l'article en fournit une : réserver sa
+     * place quand elle manque donnerait un titre serré à droite d'un vide
+     * inexpliqué, et ce flux-ci n'illustre pas tous ses articles.
+     *
+     * Les zones de texte sont vidées au passage. Sans ça, une phrase de la
+     * pièce restée en mémoire réapparaîtrait telle quelle à la fin de
+     * l'actualité, des heures après avoir été prononcée.
+     */
+    fun afficherActualite(texte: String, vignette: Bitmap?) {
+        texteActualite.text = texte
+        if (vignette != null) {
+            imageActualite.setImageBitmap(vignette)
+            imageActualite.visibility = View.VISIBLE
+        } else {
+            imageActualite.setImageDrawable(null)
+            imageActualite.visibility = View.GONE
+        }
+        if (!modeActualite) {
+            modeActualite = true
+            roomZone.clear()
+            callZone.clear()
+            applyZoneOrder()
+        }
+    }
+
+    /** Rend la place aux deux zones de texte. */
+    fun masquerActualite() {
+        if (!modeActualite) return
+        modeActualite = false
+        imageActualite.setImageDrawable(null)
+        applyZoneOrder()
+    }
+
+    val actualiteAffichee: Boolean get() = modeActualite
 
     /** Vide les deux zones de texte immédiatement (fin d'appel, sortie d'écran). */
     fun clearTranscriptions() {
@@ -292,11 +345,21 @@ class HomeZonesController(
      * état d'affichage et l'animation en cours survivent au changement.
      */
     private fun applyZoneOrder() {
-        val views = mapOf(HomeZone.INFO to zoneInfo, HomeZone.ROOM to zoneRoom, HomeZone.CALL to zoneCall)
-        val ordered = adminConfig.zoneOrder.mapNotNull { views[it] }
-        if (ordered.size != views.size) return
-        val alreadyInOrder = ordered.withIndex().all { (index, view) -> zoneStack.getChildAt(index) === view }
-        if (alreadyInOrder) return
+        // En mode actualité, la pile ne contient plus que deux surfaces. Le
+        // choix se fait ICI et nulle part ailleurs : c'est déjà la seule
+        // fonction qui décide de la composition de la pile, et un second
+        // endroit qui y toucherait finirait par la contredire.
+        val ordered = if (modeActualite) {
+            listOf(zoneInfo, zoneActualite)
+        } else {
+            val views = mapOf(HomeZone.INFO to zoneInfo, HomeZone.ROOM to zoneRoom, HomeZone.CALL to zoneCall)
+            adminConfig.zoneOrder.mapNotNull { views[it] }
+                .takeIf { it.size == views.size } ?: return
+        }
+        zoneActualite.visibility = if (modeActualite) View.VISIBLE else View.GONE
+        val déjàEnPlace = zoneStack.childCount == ordered.size &&
+            ordered.withIndex().all { (index, view) -> zoneStack.getChildAt(index) === view }
+        if (déjàEnPlace) return
         zoneStack.removeAllViews()
         ordered.forEach { zoneStack.addView(it) }
     }
@@ -317,6 +380,11 @@ class HomeZonesController(
         }
         textMomentIcon.setTextColor(palette.primaryText)
         textWeatherIcon.setTextColor(palette.primaryText)
+        texteActualite.setTextColor(palette.primaryText)
+        zoneActualite.background = GradientDrawable().apply {
+            cornerRadius = ZONE_CORNER_RADIUS_DP * context.resources.displayMetrics.density
+            setColor(palette.zoneBackground)
+        }
         roomZone.applyColors(palette.primaryText, palette.zoneBackground)
         callZone.applyColors(palette.primaryText, palette.zoneBackground)
         onPalette(palette)

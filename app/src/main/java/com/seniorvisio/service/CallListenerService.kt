@@ -38,6 +38,7 @@ import com.seniorvisio.signaling.CallSignalingClient
  */
 class CallListenerService : LifecycleService() {
 
+
     private val signaling = CallSignalingClient()
     private var callListener: ListenerRegistration? = null
 
@@ -74,6 +75,17 @@ class CallListenerService : LifecycleService() {
      * Jean serait un changement d'écran que personne ne lui a demandé.
      */
     private val flux = RafraichisseurFlux(this)
+
+    /**
+     * Cadence l'affichage des titres sur l'écran d'accueil et réveille la
+     * dalle à chaque changement.
+     *
+     * Porté par ce service et non par l'écran : l'écran naît et meurt, ce
+     * service vit en permanence. Un titre doit changer à l'heure dite même
+     * quand personne ne regarde — c'est justement la condition pour qu'il soit
+     * déjà en place quand la dalle s'allume.
+     */
+    val actualites = OrdonnanceurActualites(this)
 
     // Sans ce verrou, Android coupe l'économiseur d'énergie Wi-Fi une fois
     // l'écran éteint : l'association tombe au bout de quelques heures, et la
@@ -113,6 +125,11 @@ class CallListenerService : LifecycleService() {
                 échecsDÉcoute++
                 startListening()
             }
+            // Rattrapage du fil d'information : si un réveil programmé
+            // s'est perdu — système qui a repoussé l'alarme, tablette éteinte
+            // à l'heure dite — le titre se remet d'aplomb ici. Sans réveiller
+            // la dalle : un rattrapage n'est pas un changement.
+            actualites.réévaluer(réveillerLÉcran = false)
             statusReporter.reportHeartbeat(échecsDÉcoute)
             heartbeatHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
         }
@@ -135,11 +152,13 @@ class CallListenerService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
+        enService = this
         startForeground(FOREGROUND_ID, buildForegroundNotification())
         acquireWifiLock()
         UsageStats.init(this)
         recueils.démarrer()
         flux.démarrer()
+        actualites.démarrer()
         // L'état de départ ne se déduit d'aucune diffusion : elles ne
         // signalent que les changements. Sans cette lecture initiale, tout le
         // temps précédant le premier basculement serait attribué au sommeil.
@@ -239,6 +258,8 @@ class CallListenerService : LifecycleService() {
         callListener = null
         recueils.arrêter()
         flux.arrêter()
+        actualites.arrêter()
+        if (enService === this) enService = null
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
         wifiLock?.let { if (it.isHeld) it.release() }
         wifiLock = null
@@ -263,6 +284,19 @@ class CallListenerService : LifecycleService() {
     }
 
     companion object {
+        /**
+         * Le service en cours, pour que l'écran d'accueil s'abonne au fil
+         * d'information sans avoir à se lier à lui.
+         *
+         * Même raison que RecueilStore.actif : ce service est permanent,
+         * l'écran est éphémère, et c'est l'éphémère qui emprunte au permanent.
+         * Posé au démarrage, retiré à l'arrêt — donc null exactement quand il
+         * n'y a rien à emprunter.
+         */
+        @Volatile
+        var enService: CallListenerService? = null
+            private set
+
         private const val TAG = "CallListenerService"
         private const val FOREGROUND_ID = 43
         private const val CHANNEL_ID = "senior_visio_listener"

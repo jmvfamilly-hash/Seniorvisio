@@ -226,6 +226,36 @@ class AdminConfig(context: Context) {
         get() = prefs.getString(KEY_LAST_COMMAND_ID, "") ?: ""
         set(value) = prefs.edit().putString(KEY_LAST_COMMAND_ID, value).apply()
 
+    // --- Fil d'information sur l'écran d'accueil (voir OrdonnanceurActualites) ---
+
+    /**
+     * Combien de temps la dalle reste allumée quand un nouveau titre arrive.
+     *
+     * Cinq minutes au départ, et réglable : c'est le nombre qu'il faudra
+     * corriger si la tablette s'allume trop souvent ou trop brièvement chez
+     * Jean, et le corriger ne doit pas demander de reconstruire l'application.
+     * Borné à l'usage entre 30 secondes et une heure — un écran allumé plus
+     * longtemps ne se distinguerait plus d'un écran jamais éteint.
+     */
+    var dureeEveilActualiteSecondes: Int
+        get() = prefs.getInt(KEY_DUREE_EVEIL_ACTUALITE, 300)
+        set(value) = prefs.edit().putInt(KEY_DUREE_EVEIL_ACTUALITE, value).apply()
+
+    /**
+     * La transcription de la PIÈCE s'affiche-t-elle encore sur l'accueil ?
+     *
+     * Mise de côté à la demande de l'administrateur : c'est sa zone que le fil
+     * d'information occupe désormais. Le réglage reste, plutôt qu'un
+     * retrait pur et simple du code — « jusqu'à nouvel ordre » veut dire qu'un
+     * ordre contraire peut venir, et il ne doit pas coûter une reconstruction.
+     *
+     * Sans effet sur l'écoute de la pièce PENDANT un appel, que le proche
+     * déclenche depuis le PWA : c'est un autre chemin, et il n'est pas touché.
+     */
+    var transcriptionPieceAffichee: Boolean
+        get() = prefs.getBoolean(KEY_TRANSCRIPTION_PIECE_AFFICHEE, false)
+        set(value) = prefs.edit().putBoolean(KEY_TRANSCRIPTION_PIECE_AFFICHEE, value).apply()
+
     // --- Réveil de l'écran au moindre son de la pièce (voir RoomPresenceService) ---
     var roomWakeEnabled: Boolean
         get() = prefs.getBoolean(KEY_ROOM_WAKE_ENABLED, true)
@@ -414,6 +444,8 @@ class AdminConfig(context: Context) {
         private const val KEY_CAPTION_CLEAR_DELAY_SECONDS = "caption_clear_delay_seconds"
         private const val KEY_LAST_COMMAND_ID = "last_command_id"
         private const val KEY_ROOM_WAKE_ENABLED = "room_wake_enabled"
+        private const val KEY_DUREE_EVEIL_ACTUALITE = "duree_eveil_actualite_s"
+        private const val KEY_TRANSCRIPTION_PIECE_AFFICHEE = "transcription_piece_affichee"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
         private const val KEY_DIM_JEAN_SPEECH = "dim_jean_speech"
         private const val KEY_ROOM_HANDOFF_ENABLED = "room_handoff_enabled"

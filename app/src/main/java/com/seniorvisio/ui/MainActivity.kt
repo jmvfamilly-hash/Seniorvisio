@@ -34,6 +34,11 @@ import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.service.CallListenerService
+import com.seniorvisio.recueil.RecueilStore
+import com.seniorvisio.recueil.Rendu
+import com.seniorvisio.recueil.renduPour
+import com.seniorvisio.service.CallListenerService
+import com.seniorvisio.service.OrdonnanceurActualites
 import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.signaling.CallSignalingClient
 
@@ -78,7 +83,15 @@ class MainActivity : AppCompatActivity() {
             service.startRoomTranscription(
                 onText = { text, isFinal, fromJean ->
                     runOnUiThread {
-                        zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal, fromJean)
+                        // La transcription de la pièce est mise de côté : c'est
+                        // sa zone que le fil d'information occupe désormais
+                        // (voir AdminConfig.transcriptionPieceAffichee). Le
+                        // réglage est relu à chaque phrase plutôt que mémorisé
+                        // au démarrage, pour qu'un retour en arrière prenne
+                        // effet sans relancer l'application.
+                        if (adminConfig.transcriptionPieceAffichee && !zones.actualiteAffichee) {
+                            zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal, fromJean)
+                        }
                     }
                 },
             )
@@ -243,6 +256,11 @@ class MainActivity : AppCompatActivity() {
         // le bandeau de retour continuerait de flotter par-dessus, et le micro
         // ne serait jamais repris (voir RoomHandoffController).
         RoomPresenceService.running?.noteBackOnHomeScreen()
+        // L'écran revient au premier plan : il redemande le titre du créneau
+        // en cours plutôt que d'attendre le prochain changement. C'est ce qui
+        // fait qu'une dalle allumée par un bruit, ou par Jean lui-même, montre
+        // déjà l'actualité de l'heure au lieu d'un écran vide.
+        brancherActualites()
         // Cet écran, c'est la définition de « pas en appel » : la tablette y
         // revient dès qu'une conversation se termine. Les alertes y
         // descendent au plus bas, ce qui fait taire les sons du moteur de
@@ -285,7 +303,47 @@ class MainActivity : AppCompatActivity() {
         zones.clearTranscriptions()
     }
 
+    /**
+     * S'abonne au fil d'information tenu par le service permanent.
+     *
+     * Le décodage de la vignette part sur un fil à part : une image décodée
+     * sur le fil principal fait sauter l'animation des zones, et sur cette
+     * tablette-ci cela se voit.
+     */
+    private fun brancherActualites() {
+        val service = CallListenerService.enService
+        if (service == null) {
+            // Le service n'est pas encore là au tout premier lancement. Rien à
+            // faire : il appellera de lui-même dès son démarrage.
+            return
+        }
+        service.actualites.observateur = OrdonnanceurActualites.Observateur { element, recueilId ->
+            if (element == null || recueilId == null) {
+                runOnUiThread { zones.masquerActualite() }
+                return@Observateur
+            }
+            val magasin = RecueilStore.actif
+            val recueil = magasin?.disponibles()?.firstOrNull { it.id == recueilId }
+            val fichier = if (recueil != null) magasin.fichier(recueil, element) else null
+            Thread {
+                val rendu = renduPour(element.type).préparer(element, fichier)
+                runOnUiThread {
+                    when (rendu) {
+                        is Rendu.Texte -> zones.afficherActualite(rendu.texte, rendu.vignette)
+                        is Rendu.Impossible -> zones.masquerActualite()
+                        else -> zones.masquerActualite()
+                    }
+                }
+            }.apply { isDaemon = true; name = "SeniorVisio-ActualiteAccueil" }.start()
+        }
+        service.actualites.réévaluer(réveillerLÉcran = false)
+    }
+
     override fun onPause() {
+        // Le service est permanent, cet écran ne l'est pas : lui laisser un
+        // rappel qui capture l'Activity la retiendrait en mémoire bien après sa
+        // fermeture. On se débranche, et on se rebranchera à onResume.
+        CallListenerService.enService?.actualites?.observateur = null
         super.onPause()
         zones.onPause()
         screenAwakeHandler.removeCallbacks(screenAwakeTicker)
