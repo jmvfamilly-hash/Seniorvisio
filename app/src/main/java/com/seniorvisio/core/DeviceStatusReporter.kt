@@ -109,6 +109,27 @@ class DeviceStatusReporter(private val context: Context) {
     }
 
     /**
+     * Publie le journal laissé par le processus précédent, quand il est mort
+     * sans avoir pu le faire lui-même (voir CallTrace.récupérerJournalPrécédent).
+     *
+     * Dans un document à part, et non par-dessus le journal courant : sinon le
+     * premier appel qui suit le redémarrage effacerait le récit du plantage,
+     * c'est-à-dire la seule chose qu'on cherchait.
+     */
+    fun publierJournalPrécédent(texte: String) {
+        deviceDoc.collection(DIAG_COLLECTION).document(DIAG_PREVIOUS_LOG).set(
+            mapOf(
+                // Un document Firestore plafonne à un mégaoctet. Le journal
+                // est borné bien en dessous, mais on garde la fin plutôt que
+                // de risquer une écriture refusée en silence : après un
+                // plantage, c'est la fin qui porte la pile d'appels.
+                FIELD_DIAG_TEXT to texte.takeLast(700_000),
+                FIELD_DIAG_AT to FieldValue.serverTimestamp(),
+            )
+        ).addOnFailureListener { e -> Log.e(TAG, "Échec de publication du journal précédent", e) }
+    }
+
+    /**
      * À appeler périodiquement (voir CallListenerService, déjà un foreground
      * service permanent).
      *
@@ -849,6 +870,7 @@ class DeviceStatusReporter(private val context: Context) {
         // --- Journal technique de la visiophonie, en clair (voir CallTrace) ---
         private const val DIAG_COLLECTION = "diag"
         private const val DIAG_CALL_LOG = "journal-appel"
+        private const val DIAG_PREVIOUS_LOG = "journal-precedent"
         private const val FIELD_DIAG_TEXT = "texte"
         private const val FIELD_DIAG_AT = "at"
 

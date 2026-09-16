@@ -968,11 +968,19 @@ class RealCallEngine extends CallEngine {
    */
   async readCallLog(deviceId) {
     if (!this._available) return null;
-    const doc = await this._db
-      .collection("devices").doc(deviceId).collection("diag").doc("journal-appel")
-      .get();
-    if (!doc.exists) return null;
-    return { text: doc.data().texte || "", at: doc.data().at || null };
+    const diag = this._db.collection("devices").doc(deviceId).collection("diag");
+    // Les deux d'un coup : le journal courant, et celui qu'un processus mort
+    // pendant un appel a laissé derrière lui (voir CallTrace côté Android).
+    // C'est ce second qui porte le plantage — le premier ne contient alors que
+    // le redémarrage qui a suivi.
+    const [courant, précédent] = await Promise.all([
+      diag.doc("journal-appel").get(),
+      diag.doc("journal-precedent").get().catch(() => null),
+    ]);
+    if (!courant.exists && !(précédent && précédent.exists)) return null;
+    const lire = (d) =>
+      d && d.exists ? { text: d.data().texte || "", at: d.data().at || null } : null;
+    return { ...(lire(courant) || { text: "", at: null }), précédent: lire(précédent) };
   }
 
   async cancelCall() {

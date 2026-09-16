@@ -16,8 +16,11 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.google.firebase.firestore.ListenerRegistration
+import com.seniorvisio.BuildConfig
+import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.CallerPhotoCache
 import com.seniorvisio.core.DeviceStatusReporter
+import com.seniorvisio.core.Environnement
 import com.seniorvisio.recueil.RafraichisseurFlux
 import com.seniorvisio.recueil.RecueilStore
 import com.seniorvisio.core.UsageStats
@@ -153,6 +156,37 @@ class CallListenerService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         enService = this
+
+        // ═══ LA PREMIÈRE LIGNE DU JOURNAL EST ÉCRITE ICI, ET C'EST VOULU ═══
+        //
+        // Le journal technique n'était publié que s'il avait changé, et rien
+        // n'y écrivait hors appel. Après une mise à jour, le document
+        // Firestore gardait donc le texte — en-tête et NUMÉRO DE VERSION
+        // compris — laissé par l'application précédente, parfois pendant des
+        // jours. On a cherché une tablette non mise à jour qui l'était.
+        //
+        // Une ligne au démarrage suffit à refermer ce trou : une installation
+        // d'APK redémarre toujours le processus, donc le journal repart dans
+        // les vingt secondes avec le bon numéro. Et elle vaut par elle-même —
+        // savoir qu'un service a redémarré à quatre heures du matin est
+        // exactement ce que ce journal devrait dire, et ne disait pas.
+        //
+        // L'ordre compte : on relit ce que le processus précédent a laissé
+        // AVANT d'installer la persistance, qui écrasera ce fichier.
+        val journalPrécédent = CallTrace.récupérerJournalPrécédent(this)
+        CallTrace.installerPersistance(this, BuildConfig.BUILD_REV)
+        CallTrace.record(
+            "DÉMARRAGE",
+            "${Environnement.étiquetteVersion()} · ${Environnement.description()}",
+        )
+        if (journalPrécédent != null) {
+            CallTrace.record(
+                "DÉMARRAGE journal précédent",
+                "${journalPrécédent.length} caractères récupérés — publiés à part",
+            )
+            statusReporter.publierJournalPrécédent(journalPrécédent)
+        }
+
         startForeground(FOREGROUND_ID, buildForegroundNotification())
         acquireWifiLock()
         UsageStats.init(this)

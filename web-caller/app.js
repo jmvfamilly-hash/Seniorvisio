@@ -1678,6 +1678,66 @@ for (const [elementKey, field] of ENGINE_SELECT_FIELDS) {
 }
 
 // --- Journal technique de l'appel, en clair -------------------------------
+//
+// ═══ UN JOURNAL PEUT ÊTRE PLUS VIEUX QUE L'APPLICATION QUI TOURNE ═══
+//
+// Il n'est republié que lorsqu'il change, et il ne change que pendant un
+// appel. Un appel qui tue l'application ne laisse donc rien partir : le
+// document reste celui d'avant, en-tête et numéro de version compris. On a
+// cherché pendant un moment pourquoi une tablette à jour « portait une
+// ancienne version » — elle ne la portait pas, son journal si.
+//
+// La tablette écrit maintenant une ligne à chaque démarrage, ce qui referme
+// le trou à la source. Ceci en est la ceinture : le numéro lu dans l'en-tête
+// est confronté à celui du signe de vie, qui, lui, est réécrit chaque minute
+// et ne peut pas mentir. Un écart est dit, au lieu d'être laissé à deviner.
+
+/** Le numéro de version annoncé par l'en-tête du journal, s'il y en a un. */
+function versionDuJournal(texte) {
+  return texte.match(/journal technique de la visiophonie \(([^)]+)\)/)?.[1] || null;
+}
+
+/** Ce que la tablette a publié avec son dernier signe de vie : « val24 · VALIDATION ». */
+function versionInstallée() {
+  return (lastDeviceData?.appVersion || "").split(" ")[0] || null;
+}
+
+function dater(at) {
+  return at?.toDate ? at.toDate().toLocaleString("fr-FR") : "date inconnue";
+}
+
+function composerJournal(log) {
+  const morceaux = [];
+
+  // Le journal du processus précédent d'abord : il est plus ancien, et après
+  // un plantage c'est lui qui porte le récit. Celui d'après ne contient que
+  // le redémarrage.
+  if (log.précédent?.text) {
+    morceaux.push(
+      "════════ JOURNAL DU PROCESSUS PRÉCÉDENT ════════\n" +
+      `Récupéré au redémarrage, publié le ${dater(log.précédent.at)}.\n` +
+      "L'application s'est arrêtée sans pouvoir publier ce journal elle-même :\n" +
+      "s'il y a eu plantage, il est décrit ci-dessous (chercher « PLANTAGE »).\n\n" +
+      log.précédent.text
+    );
+  }
+
+  if (log.text) {
+    const journal = versionDuJournal(log.text);
+    const installée = versionInstallée();
+    let entête = `Publié le ${dater(log.at)}`;
+    if (journal && installée && journal !== installée) {
+      entête +=
+        `\n⚠ Ce journal a été écrit par la version ${journal}, ` +
+        `alors que la tablette exécute ${installée}.\n` +
+        "Il décrit donc un état antérieur, pas celui d'aujourd'hui.";
+    }
+    morceaux.push(`${entête}\n\n${log.text}`);
+  }
+
+  return morceaux.join("\n\n\n") || "Journal vide.";
+}
+
 // Sans clé et sans interrupteur, parce qu'il n'y a rien à protéger dedans
 // (voir CallTrace côté Android). Affiché à l'écran plutôt que téléchargé : on
 // le consulte juste après un appel qui s'est mal passé, souvent debout, et
@@ -1698,8 +1758,7 @@ on("callLogRefresh", "click", async () => {
       els.callLogDownload.hidden = true;
       return;
     }
-    const when = log.at?.toDate ? log.at.toDate().toLocaleString("fr-FR") : "date inconnue";
-    els.callLogText.textContent = `Publié le ${when}\n\n${log.text}`;
+    els.callLogText.textContent = composerJournal(log);
     // Les deux gestes de sortie n'apparaissent qu'une fois qu'il y a quelque
     // chose à sortir : un bouton qui ne peut rien faire est un bouton qu'on
     // touche quand même, puis qu'on croit cassé.
