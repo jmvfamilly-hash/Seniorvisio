@@ -45,7 +45,20 @@ object FluxRss {
      * nombre d'écartés est journalisé, pour qu'un flux entier qui disparaîtrait
      * faute de dates se voie au lieu de s'évaporer.
      */
-    data class Titre(val texte: String, val vignette: String?, val date: Instant? = null)
+    data class Titre(
+        val texte: String,
+        val vignette: String?,
+        val date: Instant? = null,
+        /**
+         * Comment le fil se nomme lui-même, lu dans <channel><generator>.
+         *
+         * Porté par chaque titre plutôt que rendu à part : la sélection mélange
+         * les articles de plusieurs fils et les trie par date, donc à la sortie
+         * plus rien ne dit de quel fil vient quoi. L'information doit voyager
+         * AVEC l'article, ou elle est perdue au premier tri.
+         */
+        val origine: String? = null,
+    )
 
     /**
      * Analyse un flux RSS ou Atom.
@@ -74,6 +87,11 @@ object FluxRss {
             var autreImage: String? = null
             var description: String? = null
             var date: Instant? = null
+            // Au niveau du CANAL, donc lu une fois et valable pour tous les
+            // articles du fil. Déclaré ici et non dans la boucle : le
+            // réinitialiser à chaque <item> l'effacerait, puisqu'il apparaît
+            // avant le premier.
+            var générateur: String? = null
 
             var événement = p.eventType
             while (événement != XmlPullParser.END_DOCUMENT) {
@@ -89,6 +107,12 @@ object FluxRss {
                             enclosure = null; autreImage = null
                             date = null
                         }
+                        // AVANT le garde ci-dessous, et c'est indispensable :
+                        // <generator> est un élément du canal, pas d'un
+                        // article. Placé après, il n'aurait jamais été lu.
+                        nom == "generator" && !dansUnArticle ->
+                            générateur = p.nextText().trim().takeIf { it.isNotBlank() }
+
                         !dansUnArticle -> Unit   // titre du flux lui-même : ignoré
                         nom == "title" -> texte = p.nextText().trim()
                         nom == "description" || nom == "summary" ->
@@ -139,7 +163,12 @@ object FluxRss {
                         dansUnArticle = false
                         val t = texte
                         if (!t.isNullOrBlank()) {
-                            titres += Titre(t, enclosure ?: autreImage ?: imageDans(description), date)
+                            titres += Titre(
+                                t,
+                                enclosure ?: autreImage ?: imageDans(description),
+                                date,
+                                générateur,
+                            )
                             if (titres.size >= maximum) return titres
                         }
                     }

@@ -131,17 +131,48 @@
             android:contentDescription="Illustration de l'article"
             android:visibility="gone" />
 
-        <TextView
-            android:id="@+id/texteActualite"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="6"
-            android:gravity="center_vertical"
-            android:textColor="#FFFFFF"
-            android:autoSizeTextType="uniform"
-            android:autoSizeMinTextSize="20sp"
-            android:autoSizeMaxTextSize="56sp"
-            android:autoSizeStepGranularity="2sp" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/texteActualite"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:textColor="#FFFFFF"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="20sp"
+                android:autoSizeMaxTextSize="56sp"
+                android:autoSizeStepGranularity="2sp" />
+
+            <!-- ═══ D'OÙ SORT CETTE NOUVELLE ═══
+
+                 Le fil se nomme lui-même dans <channel><generator>. Depuis que
+                 plusieurs fils cohabitent, c'est une question qu'on se pose en
+                 lisant un titre, et à laquelle rien ne répondait.
+
+                 Discrètement, et le mot est à prendre au sérieux : c'est le
+                 TITRE que Jean doit lire. Petit corps, transparence réduite,
+                 sous le texte. Masqué quand le fil ne se nomme pas, plutôt
+                 qu'une mention vide ou un « source inconnue » qui prendrait de
+                 la place pour ne rien dire. -->
+            <TextView
+                android:id="@+id/origineActualite"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textSize="16sp"
+                android:alpha="0.55"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:visibility="gone"
+                android:textColor="#FFFFFF"
+                android:text="" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Ce que la tablette ne sait pas afficher, ou n'a pas trouvé : dit à

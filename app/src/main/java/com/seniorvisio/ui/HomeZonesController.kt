@@ -103,6 +103,8 @@ class HomeZonesController(
     private val texteActualite: TextView = root.findViewById(R.id.texteActualiteAccueil)
     private val boutonActualitePrecedente: Button = root.findViewById(R.id.boutonActualitePrecedente)
     private val boutonActualiteSuivante: Button = root.findViewById(R.id.boutonActualiteSuivante)
+    private val origineActualite: TextView = root.findViewById(R.id.origineActualiteAccueil)
+    private val boutonSommeil: Button = root.findViewById(R.id.boutonSommeil)
 
     private val textMomentIcon: TextView = root.findViewById(R.id.textMomentIcon)
     private val textMomentLabel: TextView = root.findViewById(R.id.textMomentLabel)
@@ -158,8 +160,18 @@ class HomeZonesController(
      * pièce restée en mémoire réapparaîtrait telle quelle à la fin de
      * l'actualité, des heures après avoir été prononcée.
      */
-    fun afficherActualite(texte: String, vignette: Bitmap?) {
+    fun afficherActualite(texte: String, vignette: Bitmap?, origine: String? = null) {
         texteActualite.text = texte
+        // Masquée quand le fil ne se nomme pas — le cas de beaucoup de flux.
+        // Une ligne vide sous le titre prendrait de la hauteur sur une zone qui
+        // en manque déjà, et le titre descendrait d'autant vers son plancher de
+        // taille.
+        if (origine.isNullOrBlank()) {
+            origineActualite.visibility = View.GONE
+        } else {
+            origineActualite.text = origine
+            origineActualite.visibility = View.VISIBLE
+        }
         if (vignette != null) {
             imageActualite.setImageBitmap(vignette)
             imageActualite.visibility = View.VISIBLE
@@ -193,6 +205,16 @@ class HomeZonesController(
      *
      * [surSwipe] reçoit vrai pour « suivant », faux pour « précédent ».
      */
+    /**
+     * Le bouton de sommeil, à droite du bandeau de la date.
+     *
+     * Branché par l'écran hôte : c'est lui qui possède la fenêtre dont il faut
+     * retirer le maintien allumé (voir MiseEnVeille).
+     */
+    fun brancherSommeil(surSommeil: () -> Unit) {
+        boutonSommeil.setOnClickListener { surSommeil() }
+    }
+
     fun brancherNavigationActualite(
         surPrécédent: () -> Unit,
         surSuivant: () -> Unit,

@@ -284,6 +284,23 @@ class AdminConfig(context: Context) {
      * d'APK pour en retirer un qui renvoie n'importe quoi laisserait Jean
      * devant n'importe quoi pendant ce temps.
      */
+    /**
+     * Jean peut-il commander la tablette à la voix ?
+     *
+     * Actif par défaut : les trois mots reconnus doublent des boutons présents
+     * à l'écran, ils n'ouvrent donc aucun pouvoir nouveau (voir
+     * CommandesVocales).
+     *
+     * Débrayable, et c'est nécessaire : une commande qui se déclencherait à
+     * tort pendant une visite se manifesterait par « l'écran fait n'importe
+     * quoi », sans que personne puisse relier l'effet à sa cause. Pouvoir
+     * l'éteindre à distance est ce qui permet de trancher en trente secondes
+     * entre « la détection est trop permissive » et « autre chose ne va pas ».
+     */
+    var commandesVocalesActives: Boolean
+        get() = prefs.getBoolean(KEY_COMMANDES_VOCALES, true)
+        set(value) = prefs.edit().putBoolean(KEY_COMMANDES_VOCALES, value).apply()
+
     var fluxActualites: String
         get() = prefs.getString(KEY_FLUX_ACTUALITES, null).orEmpty()
         set(value) = prefs.edit().putString(KEY_FLUX_ACTUALITES, value).apply()
@@ -497,6 +514,7 @@ class AdminConfig(context: Context) {
         private const val KEY_TRANSCRIPTION_PIECE_AFFICHEE = "transcription_piece_affichee"
         private const val KEY_POLICE_SENIOR = "police_senior"
         private const val KEY_FLUX_ACTUALITES = "flux_actualites"
+        private const val KEY_COMMANDES_VOCALES = "commandes_vocales_actives"
         private const val KEY_FLUX_DERNIER_JOUR = "flux_dernier_rafraichissement"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
         private const val KEY_DIM_JEAN_SPEECH = "dim_jean_speech"

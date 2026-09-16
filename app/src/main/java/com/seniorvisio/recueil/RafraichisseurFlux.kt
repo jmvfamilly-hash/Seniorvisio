@@ -238,6 +238,7 @@ class RafraichisseurFlux(private val context: Context) {
                 "nature" to "flux",
                 "source" to (titre.vignette ?: ""),
                 "texte" to titre.texte,
+                "origine" to (titre.origine ?: ""),
                 "ordre" to index,
             )
         }

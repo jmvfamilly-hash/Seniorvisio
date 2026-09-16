@@ -510,6 +510,13 @@ class DeviceStatusReporter(private val context: Context) {
         // et une valeur inconnue rangée telle quelle laisserait la tablette
         // dans un état qu'aucun écran n'affiche. On ignore ce qu'on ne
         // reconnaît pas, et le réglage précédent tient.
+        snapshot.getBoolean(FIELD_COMMANDES_VOCALES)?.let {
+            if (adminConfig.commandesVocalesActives != it) {
+                adminConfig.commandesVocalesActives = it
+                Log.i(TAG, "Commandes vocales : ${if (it) "actives" else "éteintes"}")
+            }
+        }
+
         // La liste des fils d'information, réglée depuis le PWA.
         //
         // Changer la liste remet la date du dernier remplacement à zéro : sans
@@ -875,6 +882,7 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_ROOM_ENGINE = "roomTranscriptionEngine"
         private const val FIELD_POLICE_SENIOR = "policeSenior"
         private const val FIELD_FLUX_ACTUALITES = "fluxActualites"
+        private const val FIELD_COMMANDES_VOCALES = "commandesVocales"
         private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"
         private const val FIELD_VOSK_MODEL_SIZE = "voskModelSize"
         private const val FIELD_VOSK_MODEL_STATE = "voskModelState"

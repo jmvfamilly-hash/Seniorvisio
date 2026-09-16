@@ -31,6 +31,8 @@ import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.AlertVolume
 import com.seniorvisio.core.CallTrace
+import com.seniorvisio.core.CommandesVocales
+import com.seniorvisio.core.MiseEnVeille
 import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.TranscriptionSource
@@ -90,6 +92,22 @@ class MainActivity : AppCompatActivity() {
                         // réglage est relu à chaque phrase plutôt que mémorisé
                         // au démarrage, pour qu'un retour en arrière prenne
                         // effet sans relancer l'application.
+                        // ═══ LES COMMANDES D'ABORD, ET SEULEMENT SUR DU
+                        //     TEXTE DÉFINITIF ═══
+                        //
+                        // Avant le filtre d'affichage : les commandes doivent
+                        // marcher même quand la transcription de la pièce est
+                        // masquée, ce qui est le réglage par défaut depuis que
+                        // le fil d'information occupe sa place. Placées après,
+                        // elles n'auraient jamais été atteintes.
+                        //
+                        // isFinal seulement : un moteur de reconnaissance
+                        // corrige sa phrase en cours de route, et « suit… »
+                        // devient « suivant » puis « suivante » en trois
+                        // rendus. Agir sur les résultats provisoires
+                        // déclencherait donc plusieurs fois la même commande —
+                        // trois titres d'un coup pour un mot prononcé.
+                        if (isFinal) traiterCommandeVocale(text)
                         if (adminConfig.transcriptionPieceAffichee && !zones.actualiteAffichee) {
                             zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal, fromJean)
                         }
@@ -335,6 +353,7 @@ class MainActivity : AppCompatActivity() {
     private var rangActualite = 0
 
     private fun brancherActualites() {
+        zones.brancherSommeil { endormir() }
         zones.brancherNavigationActualite(
             surPrécédent = { déplacerActualite(-1) },
             surSuivant = { déplacerActualite(+1) },
@@ -372,6 +391,49 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Exécute une commande dite à voix haute, s'il y en a une.
+     *
+     * ═══ TROIS MOTS, ET AUCUN POUVOIR NOUVEAU ═══
+     *
+     * Chacune de ces commandes double un bouton présent à l'écran. C'est la
+     * même règle que pour le glissement du doigt, et pour la même raison : une
+     * fonction qui n'existerait qu'à la voix serait invisible — rien à l'écran
+     * ne dirait qu'elle existe — et perdue le jour où la reconnaissance
+     * bronche, ce qui arrive.
+     *
+     * Débrayable depuis le panneau d'administration, et il le faut : une
+     * commande vocale qui se déclencherait à tort pendant les visites se
+     * manifesterait par « l'écran fait n'importe quoi », sans que personne
+     * puisse relier l'effet à sa cause. Pouvoir l'éteindre à distance est ce
+     * qui permet de trancher en trente secondes.
+     */
+    private fun traiterCommandeVocale(texte: String) {
+        if (!adminConfig.commandesVocalesActives) return
+        val commande = CommandesVocales.détecter(texte) ?: return
+        CallTrace.record("VOIX commande", commande.name.lowercase())
+        when (commande) {
+            CommandesVocales.Commande.SUIVANT -> déplacerActualite(+1)
+            CommandesVocales.Commande.PRECEDENT -> déplacerActualite(-1)
+            CommandesVocales.Commande.SOMMEIL -> endormir()
+        }
+    }
+
+    /**
+     * Éteint la dalle, à la demande de Jean — bouton ou voix.
+     *
+     * Le compteur d'inactivité est remis à zéro AVANT : sans ça, le battement
+     * qui garde l'écran allumé tant qu'il reste du texte (voir
+     * screenAwakeTicker) reposerait son drapeau à la seconde suivante, et
+     * l'écran se rallumerait tout seul. Le bouton aurait alors l'air de ne rien
+     * faire, ce qui est pire que de ne pas exister.
+     */
+    private fun endormir() {
+        textGoneSinceMs = 1L
+        zones.clearTranscriptions()
+        MiseEnVeille.endormir(this, window)
+    }
+
+    /**
      * Un cran en avant ou en arrière, sans jamais boucler.
      *
      * Pas de rebouclage aux extrémités, volontairement : arriver au dernier
@@ -398,7 +460,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 when (rendu) {
                     is Rendu.Texte -> {
-                        zones.afficherActualite(rendu.texte, rendu.vignette)
+                        zones.afficherActualite(rendu.texte, rendu.vignette, rendu.origine)
                         zones.majNavigationActualite(rangActualite, titresActualite.size)
                     }
                     else -> zones.masquerActualite()

@@ -608,6 +608,19 @@ class IncomingCallActivity : AppCompatActivity() {
                     } else {
                         imageActu.visibility = View.GONE
                     }
+                    // La provenance, sous le titre, ou rien. Cherchée par
+                    // findViewById plutôt que retenue : cette mise en page a
+                    // déjà changé plusieurs fois, et une référence gardée sur
+                    // une vue disparue ferait planter l'écran d'appel au lieu
+                    // de simplement ne pas afficher une mention secondaire.
+                    findViewById<TextView>(R.id.origineActualite)?.let { vue ->
+                        if (rendu.origine.isNullOrBlank()) {
+                            vue.visibility = View.GONE
+                        } else {
+                            vue.text = rendu.origine
+                            vue.visibility = View.VISIBLE
+                        }
+                    }
                     blocActu.visibility = View.VISIBLE
                     ajusterBandeActualite()
                 }

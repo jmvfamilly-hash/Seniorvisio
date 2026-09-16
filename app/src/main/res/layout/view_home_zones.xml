@@ -39,10 +39,23 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="vertical"
-        android:gravity="top|center_horizontal"
+        android:orientation="horizontal"
+        android:baselineAligned="false"
+        android:gravity="top"
         android:layout_marginTop="8dp"
         android:padding="16dp">
+
+    <!-- Le bandeau proprement dit, inchangé, mais désormais dans une colonne à
+         part : le bouton de sommeil vit à sa droite, et sans cette colonne il
+         aurait décentré la date et la météo. Poids 1 pour que le bandeau reste
+         centré sur la largeur qui lui reste, quelle que soit celle du bouton. -->
+    <LinearLayout
+        android:id="@+id/blocInfoCentre"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="top|center_horizontal">
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -103,6 +116,43 @@
             android:textSize="38sp"
             android:gravity="center"
             android:text="" />
+    </LinearLayout>
+
+        <!-- ═══ « SOMMEIL » : JEAN ÉTEINT SA DALLE QUAND IL VEUT ═══
+
+             Pas d'interrupteur, pas de bouton physique à trouver derrière la
+             tablette : le geste le plus courant de la journée — « je ne veux
+             plus de lumière » — n'avait aucune réponse à l'écran.
+
+             Rien d'irréversible : l'écran se rallume au premier appel, à la
+             première parole dans la pièce si le réveil au son est actif, et au
+             prochain titre d'actualité. C'est pourquoi le pictogramme est une
+             lune et non un symbole d'extinction, qui aurait laissé croire à
+             Jean qu'il vient de fermer quelque chose qu'il ne saurait pas
+             rouvrir.
+
+             Aux dimensions des consignes comme les autres — 88 dp de côté,
+             relief déclaré, texte sans capitales — mais sans libellé étalé :
+             dans le bandeau de la date, une pastille carrée se distingue mieux
+             d'un texte qu'un bouton large qui lui ressemblerait. -->
+        <Button
+            android:id="@+id/boutonSommeil"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="88dp"
+            android:minHeight="88dp"
+            android:text="Sommeil"
+            android:textSize="20sp"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:drawableTop="@drawable/ic_sommeil"
+            android:drawablePadding="4dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:elevation="6dp"
+            android:background="@drawable/fond_bouton_navigation" />
     </LinearLayout>
 
     <!-- Zone 2 : tout ce que le microphone de la tablette entend — ce qui se
@@ -216,16 +266,46 @@
             android:contentDescription="Illustration de l'article"
             android:visibility="gone" />
 
-        <TextView
-            android:id="@+id/texteActualiteAccueil"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="6"
-            android:gravity="center_vertical"
-            android:autoSizeTextType="uniform"
-            android:autoSizeMinTextSize="22sp"
-            android:autoSizeMaxTextSize="64sp"
-            android:autoSizeStepGranularity="2sp" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/texteActualiteAccueil"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="22sp"
+                android:autoSizeMaxTextSize="64sp"
+                android:autoSizeStepGranularity="2sp" />
+
+            <!-- ═══ D'OÙ SORT CETTE NOUVELLE ═══
+
+                 Le fil se nomme lui-même dans <channel><generator>. Depuis que
+                 plusieurs fils cohabitent, c'est une question qu'on se pose en
+                 lisant un titre, et à laquelle rien ne répondait.
+
+                 Discrètement, et le mot est à prendre au sérieux : c'est le
+                 TITRE que Jean doit lire. Petit corps, transparence réduite,
+                 sous le texte. Masqué quand le fil ne se nomme pas, plutôt
+                 qu'une mention vide ou un « source inconnue » qui prendrait de
+                 la place pour ne rien dire. -->
+            <TextView
+                android:id="@+id/origineActualiteAccueil"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textSize="16sp"
+                android:alpha="0.55"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:visibility="gone"
+                android:text="" />
+        </LinearLayout>
     </LinearLayout>
 
         <!-- ═══ JEAN PEUT AVANCER DANS LES TITRES ═══

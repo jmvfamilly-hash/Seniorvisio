@@ -108,6 +108,19 @@ data class Element(
      * document du recueil le porte sans effort.
      */
     val texte: String? = null,
+    /**
+     * D'où vient ce titre, tel que le fil se nomme lui-même.
+     *
+     * Lu dans <channel><generator> du flux RSS. Affiché discrètement à côté du
+     * titre : depuis que plusieurs fils cohabitent, « d'où sort cette
+     * nouvelle » est une question qu'on se pose en la lisant, et à laquelle
+     * rien ne répondait.
+     *
+     * Null quand le fil ne se nomme pas — auquel cas rien ne s'affiche, plutôt
+     * qu'une mention vide ou un « source inconnue » qui prendrait de la place
+     * pour ne rien dire.
+     */
+    val origine: String? = null,
 )
 
 /**

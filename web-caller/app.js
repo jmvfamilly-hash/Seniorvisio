@@ -517,6 +517,7 @@ const els = {
   callEngineSelect: el("callEngineSelect"),
   voskModelSelect: el("voskModelSelect"),
   engineStatus: el("engineStatus"),
+  commandesVocalesToggle: el("commandesVocalesToggle"),
   roomWakeEnabledToggle: el("roomWakeEnabledToggle"),
   roomWakeThresholdSlider: el("roomWakeThresholdSlider"),
   blockWakeAtNightToggle: el("blockWakeAtNightToggle"),
@@ -1022,6 +1023,7 @@ const ADMIN_SLIDER_FIELDS = [
 
 // Mêmes réglages d'appareil, mais en tout ou rien.
 const ADMIN_TOGGLE_FIELDS = [
+  ["commandesVocalesToggle", "commandesVocales"],
   ["roomWakeEnabledToggle", "roomWakeEnabled"],
   ["blockWakeAtNightToggle", "blockWakeAtNight"],
   ["voiceGateToggle", "voiceGateEnabled"],
@@ -1545,6 +1547,10 @@ function applyDeviceSettings(data) {
     // un champ absent veut donc dire « jamais réglé d'ici », pas « désactivé ».
     if (typeof data[field] === "boolean") els[elementKey].checked = data[field];
   }
+  // !== false et non === true : le champ est absent tant que personne n'a
+  // touché au réglage, et la tablette l'a alors à sa valeur par défaut, qui
+  // est active. Montrer la case décochée ferait croire à une fonction éteinte.
+  els.commandesVocalesToggle.checked = data.commandesVocales !== false;
   els.roomWakeEnabledToggle.checked = data.roomWakeEnabled !== false;
   // Vrai par défaut côté tablette : un champ absent veut dire « jamais réglé
   // d'ici », pas « désactivé ».
