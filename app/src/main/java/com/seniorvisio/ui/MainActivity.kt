@@ -83,6 +83,15 @@ class MainActivity : AppCompatActivity() {
             roomService = service
             // Argument nommé, pas un lambda en fin d'appel : celui-ci se
             // rattacherait au DERNIER paramètre (onError), pas à onText.
+            // Dit que l'écoute a été DEMANDÉE. Sans cette ligne, « aucune
+            // commande ne marche » ne distingue pas « le moteur ne rend rien »
+            // de « rien n'a jamais été lancé » — deux pannes qui se cherchent
+            // à des endroits opposés.
+            CallTrace.record(
+                "VOIX écoute",
+                "transcription de la pièce demandée · commandes=" +
+                    if (adminConfig.commandesVocalesActives) "actives" else "éteintes",
+            )
             service.startRoomTranscription(
                 onText = { text, isFinal, fromJean ->
                     runOnUiThread {
@@ -101,13 +110,26 @@ class MainActivity : AppCompatActivity() {
                         // le fil d'information occupe sa place. Placées après,
                         // elles n'auraient jamais été atteintes.
                         //
-                        // isFinal seulement : un moteur de reconnaissance
-                        // corrige sa phrase en cours de route, et « suit… »
-                        // devient « suivant » puis « suivante » en trois
-                        // rendus. Agir sur les résultats provisoires
-                        // déclencherait donc plusieurs fois la même commande —
-                        // trois titres d'un coup pour un mot prononcé.
-                        if (isFinal) traiterCommandeVocale(text)
+                        // ═══ PROVISOIRE COMPRIS, ET C'EST UN CORRECTIF ═══
+                        //
+                        // Ce traitement n'acceptait que les résultats marqués
+                        // DÉFINITIFS, pour éviter qu'un moteur corrigeant sa
+                        // phrase en route — « suit… », « suivant »,
+                        // « suivante » — ne déclenche trois fois la même
+                        // commande.
+                        //
+                        // C'était se rendre dépendant d'un drapeau que rien
+                        // n'oblige le moteur de la pièce à lever. Selon le
+                        // moteur réglé par l'administrateur, un flux continu
+                        // peut ne produire que des résultats provisoires : les
+                        // commandes n'étaient alors JAMAIS atteintes, sans que
+                        // rien ne le signale.
+                        //
+                        // La répétition est désormais empêchée là où elle se
+                        // produit — un délai de garde après chaque commande
+                        // reconnue (voir traiterCommandeVocale) — plutôt qu'en
+                        // refusant une catégorie entière de résultats.
+                        traiterCommandeVocale(text)
                         if (adminConfig.transcriptionPieceAffichee && !zones.actualiteAffichee) {
                             zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal, fromJean)
                         }
@@ -408,8 +430,27 @@ class MainActivity : AppCompatActivity() {
      * qui permet de trancher en trente secondes.
      */
     private fun traiterCommandeVocale(texte: String) {
-        if (!adminConfig.commandesVocalesActives) return
-        val commande = CommandesVocales.détecter(texte) ?: return
+        if (!adminConfig.commandesVocalesActives) {
+            noterÉcouteVocale(texte, "réglage éteint")
+            return
+        }
+        val commande = CommandesVocales.détecter(texte)
+        if (commande == null) {
+            noterÉcouteVocale(texte, "aucune commande")
+            return
+        }
+        // Délai de garde : un moteur rend la même phrase plusieurs fois en la
+        // corrigeant, et « suivant » arrive alors deux ou trois fois de suite.
+        // C'est ici que la répétition se traite, et non en refusant les
+        // résultats provisoires — ce qui rendait les commandes tributaires
+        // d'un drapeau que le moteur n'est pas obligé de lever.
+        val maintenant = System.currentTimeMillis()
+        if (commande == dernièreCommande && maintenant - dernièreCommandeMs < GARDE_COMMANDE_MS) {
+            noterÉcouteVocale(texte, "répétition ignorée")
+            return
+        }
+        dernièreCommande = commande
+        dernièreCommandeMs = maintenant
         CallTrace.record("VOIX commande", commande.name.lowercase())
         when (commande) {
             CommandesVocales.Commande.SUIVANT -> déplacerActualite(+1)
@@ -417,6 +458,40 @@ class MainActivity : AppCompatActivity() {
             CommandesVocales.Commande.SOMMEIL -> endormir()
         }
     }
+
+    private var dernièreCommande: CommandesVocales.Commande? = null
+    private var dernièreCommandeMs = 0L
+
+    /**
+     * Dit que de la parole est arrivée jusqu'ici, et ce qu'on en a fait.
+     *
+     * ═══ SANS UN SEUL MOT PRONONCÉ ═══
+     *
+     * CallTrace ne contient AUCUNE donnée personnelle, et cette garantie tient
+     * à ce qu'aucun texte reconnu n'y entre jamais — pas à une consigne qu'on
+     * se donne. Cette ligne compte donc des mots et des signes ; elle n'en
+     * transporte aucun.
+     *
+     * C'est déjà ce qu'il faut pour trancher entre trois causes qui demandent
+     * des recherches opposées : si aucune ligne n'apparaît, la transcription de
+     * la pièce ne produit rien et c'est le moteur qu'il faut regarder ; si des
+     * lignes apparaissent sans jamais de commande, le texte arrive mais ne
+     * correspond pas, et ce sont les formulations qu'il faut revoir ; si le
+     * réglage est éteint, la ligne le dit en toutes lettres.
+     *
+     * Espacé de deux secondes : un moteur en flux continu rend plusieurs
+     * résultats par seconde, et le journal n'a pas à être noyé par son propre
+     * instrument.
+     */
+    private fun noterÉcouteVocale(texte: String, issue: String) {
+        val maintenant = System.currentTimeMillis()
+        if (maintenant - dernièreÉcouteNotéeMs < ÉCOUTE_NOTÉE_MS) return
+        dernièreÉcouteNotéeMs = maintenant
+        val mots = texte.trim().split(Regex("\\s+")).count { it.isNotEmpty() }
+        CallTrace.record("VOIX entendue", "$mots mot(s), ${texte.length} signe(s) — $issue")
+    }
+
+    private var dernièreÉcouteNotéeMs = 0L
 
     /**
      * Éteint la dalle, à la demande de Jean — bouton ou voix.
@@ -573,5 +648,18 @@ class MainActivity : AppCompatActivity() {
          * jetait un œil.
          */
         private const val READING_GRACE_MS = 20_000L
+
+        /**
+         * Après une commande reconnue, la même est ignorée pendant ce délai.
+         *
+         * Deux secondes : un moteur qui corrige sa phrase rend ses versions
+         * successives en quelques centaines de millisecondes, et personne ne
+         * dit « suivant » deux fois de suite en moins de deux secondes en
+         * s'attendant à avancer de deux crans.
+         */
+        private const val GARDE_COMMANDE_MS = 2_000L
+
+        /** Espacement des lignes de diagnostic vocal, pour ne pas noyer le journal. */
+        private const val ÉCOUTE_NOTÉE_MS = 2_000L
     }
 }
