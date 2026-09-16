@@ -50,6 +50,8 @@ IMPLICITES = {
     "ArrayDeque", "LinkedHashMap", "LinkedHashSet", "HashMap", "HashSet",
     "ArrayList", "Charsets", "Sequence", "ShortArray", "BooleanArray",
     "Character", "Integer", "Void", "Iterable",
+    # kotlin.text et kotlin.io, importés d'office comme kotlin.collections.
+    "RegexOption", "MatchResult", "StringBuilder", "Appendable", "Typography",
 }
 
 # Les annotations et mots-clés qu'on rencontre en tête de ligne et qui ne

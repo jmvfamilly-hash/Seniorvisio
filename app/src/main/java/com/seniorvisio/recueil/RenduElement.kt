@@ -30,6 +30,18 @@ sealed class Rendu {
     data class Image(val bitmap: Bitmap) : Rendu()
 
     /**
+     * Un texte à lire, et l'illustration qui l'accompagne — ou rien.
+     *
+     * La vignette est FACULTATIVE, et ce n'est pas une précaution de style :
+     * tous les fils d'information n'en fournissent pas, et rien ne garantit
+     * qu'un article donné en ait une. Un écran qui réserverait la moitié de sa
+     * place à une image absente donnerait un titre serré à côté d'un trou.
+     * L'écran d'appel s'en sert donc pour choisir sa disposition (voir
+     * IncomingCallActivity.afficherRecueil).
+     */
+    data class Texte(val texte: String, val vignette: Bitmap?) : Rendu()
+
+    /**
      * Rien à montrer, et une phrase qui dit pourquoi.
      *
      * Écrite pour être lue par Jean s'il faut, donc sans terme technique : un
@@ -87,6 +99,41 @@ class RenduPhoto : RenduElement {
 }
 
 /**
+ * Les titres d'un fil d'information, et leur vignette si le flux en donne une.
+ *
+ * Le texte voyage dans le document du recueil, pas dans un fichier : un titre
+ * pèse cent octets. La vignette, elle, est un vrai fichier image, rangée et
+ * vérifiée par le même chemin qu'une photo de famille — un flux public n'a pas
+ * plus le droit qu'un proche d'envoyer à cette tablette une image qu'elle ne
+ * sait pas décoder.
+ */
+class RenduTexte : RenduElement {
+    override fun préparer(element: Element, fichier: File?): Rendu {
+        val texte = element.texte?.takeIf { it.isNotBlank() }
+            ?: return Rendu.Impossible("Ce texte est arrivé vide")
+
+        // L'absence de vignette n'est PAS un échec : c'est le cas courant.
+        // Un titre sans image reste un titre, et il occupera toute la largeur.
+        val vignette = fichier?.takeIf { it.exists() }?.let {
+            try {
+                BitmapFactory.decodeFile(it.absolutePath)
+            } catch (e: OutOfMemoryError) {
+                Log.w(TAG, "Vignette trop lourde pour ${element.id}", e)
+                null
+            } catch (e: Exception) {
+                Log.w(TAG, "Vignette illisible pour ${element.id}", e)
+                null
+            }
+        }
+        return Rendu.Texte(texte, vignette)
+    }
+
+    private companion object {
+        const val TAG = "RenduTexte"
+    }
+}
+
+/**
  * Les types déclarés mais pas encore affichables.
  *
  * Existe DÈS MAINTENANT, et ce n'est pas de la place perdue : un recueil
@@ -109,6 +156,6 @@ class RenduNonPrisEnCharge(private val quoi: String) : RenduElement {
 fun renduPour(type: TypeElement): RenduElement = when (type) {
     TypeElement.PHOTO -> RenduPhoto()
     TypeElement.VIDEO -> RenduNonPrisEnCharge("Une vidéo")
-    TypeElement.TEXTE -> RenduNonPrisEnCharge("Un texte")
+    TypeElement.TEXTE -> RenduTexte()
     TypeElement.INCONNU -> RenduNonPrisEnCharge("Un contenu d'un type inconnu")
 }

@@ -94,6 +94,56 @@
         android:contentDescription="Photo d'un recueil, présentée par le proche"
         android:visibility="gone" />
 
+    <!-- ═══ UN TITRE D'ACTUALITÉ : VIGNETTE À GAUCHE, TEXTE À DROITE ═══
+
+         Occupe la même bande que la vidéo et que les photos d'un recueil, pour
+         que la transcription reste lisible dessous.
+
+         La vignette est à poids fixe et le texte prend le reste : c'est le
+         texte qui doit être lu, l'image ne fait que l'accompagner. Quand le
+         flux ne fournit pas d'illustration — le cas le plus courant —, la
+         vignette est masquée et le texte récupère toute la largeur plutôt que
+         de se serrer à côté d'un trou (voir IncomingCallActivity).
+
+         autoSizeTextType="uniform" répond à la contrainte « le texte doit
+         rentrer dans l'espace qui lui est donné » : Android réduit la taille
+         jusqu'à ce que le titre tienne, au lieu de le tronquer. Un titre de
+         fil d'information va de quarante à plus de cent trente signes, et
+         c'est le long qui déborde. Le plancher de 20 sp n'est pas décoratif :
+         en dessous, plus personne ne lit cet écran depuis un fauteuil. -->
+    <LinearLayout
+        android:id="@+id/blocActualite"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal"
+        android:baselineAligned="false"
+        android:padding="24dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/imageActualite"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="4"
+            android:layout_marginEnd="24dp"
+            android:scaleType="fitCenter"
+            android:adjustViewBounds="true"
+            android:contentDescription="Illustration de l'article"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/texteActualite"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="6"
+            android:gravity="center_vertical"
+            android:textColor="#FFFFFF"
+            android:autoSizeTextType="uniform"
+            android:autoSizeMinTextSize="20sp"
+            android:autoSizeMaxTextSize="56sp"
+            android:autoSizeStepGranularity="2sp" />
+    </LinearLayout>
+
     <!-- Ce que la tablette ne sait pas afficher, ou n'a pas trouvé : dit à
          l'écran plutôt que laissé en noir. Un recueil dont une photo manque ne
          doit pas donner l'impression que l'appel a planté. -->

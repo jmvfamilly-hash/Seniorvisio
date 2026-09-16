@@ -552,13 +552,24 @@ class IncomingCallActivity : AppCompatActivity() {
     private fun afficherRecueil(état: LecteurRecueil.État) {
         val image = findViewById<ImageView>(R.id.imageRecueil) ?: return
         val message = findViewById<TextView>(R.id.textRecueilImpossible) ?: return
+        val blocActu = findViewById<View>(R.id.blocActualite)
+        val imageActu = findViewById<ImageView>(R.id.imageActualite)
+        val texteActu = findViewById<TextView>(R.id.texteActualite)
         val renderer = remoteRendererRef
+
+        // Trois affichages possibles se partagent la même bande. Les masquer
+        // TOUS avant d'en montrer un : sans ça, passer d'une photo à un titre
+        // laisserait la photo derrière le texte. Le coût est nul, et la règle
+        // survit à l'ajout d'un quatrième rendu — ce qui n'est pas le cas
+        // d'une bascule écrite à la main entre deux vues connues.
+        image.setImageDrawable(null)
+        image.visibility = View.GONE
+        message.visibility = View.GONE
+        blocActu?.visibility = View.GONE
+        imageActu?.setImageDrawable(null)
 
         when (val rendu = état.rendu) {
             null -> {
-                image.setImageDrawable(null)
-                image.visibility = View.GONE
-                message.visibility = View.GONE
                 // INVISIBLE et non GONE pour la vidéo, ici comme ailleurs dans
                 // cet écran : une surface de rendu retirée de la mise en page
                 // est détruite, et la recréer donne un écran noir de plusieurs
@@ -568,7 +579,6 @@ class IncomingCallActivity : AppCompatActivity() {
                 CallTrace.record("APPEL recueil", "refermé")
             }
             is Rendu.Image -> {
-                message.visibility = View.GONE
                 image.setImageBitmap(rendu.bitmap)
                 image.visibility = View.VISIBLE
                 renderer?.visibility = View.INVISIBLE
@@ -579,9 +589,36 @@ class IncomingCallActivity : AppCompatActivity() {
                     "« ${état.titre} » ${état.position}/${état.total}",
                 )
             }
+            is Rendu.Texte -> {
+                if (blocActu == null || texteActu == null || imageActu == null) {
+                    // La mise en page de cet écran est réglable et a déjà
+                    // changé plusieurs fois : mieux vaut le dire que d'afficher
+                    // un titre invisible et laisser chercher pourquoi.
+                    message.text = "Cet écran ne sait pas afficher ce titre"
+                    message.visibility = View.VISIBLE
+                } else {
+                    texteActu.text = rendu.texte
+                    // L'image n'apparaît QUE si le flux en a fourni une.
+                    // Réserver sa place quand elle manque donnerait un titre
+                    // serré à droite d'un vide inexpliqué.
+                    if (rendu.vignette != null) {
+                        imageActu.setImageBitmap(rendu.vignette)
+                        imageActu.visibility = View.VISIBLE
+                    } else {
+                        imageActu.visibility = View.GONE
+                    }
+                    blocActu.visibility = View.VISIBLE
+                    ajusterBandeActualite()
+                }
+                renderer?.visibility = View.INVISIBLE
+                zones.setBackground(HomeZonesController.Background.SLIDESHOW)
+                CallTrace.record(
+                    "APPEL actualité",
+                    "${état.position}/${état.total} · ${rendu.texte.length} signes · " +
+                        (if (rendu.vignette != null) "avec vignette" else "sans vignette"),
+                )
+            }
             is Rendu.Impossible -> {
-                image.setImageDrawable(null)
-                image.visibility = View.GONE
                 message.text = rendu.raison
                 message.visibility = View.VISIBLE
                 renderer?.visibility = View.INVISIBLE
@@ -599,6 +636,26 @@ class IncomingCallActivity : AppCompatActivity() {
      * affichées. Recopier le calcul serait le condamner à diverger : les deux
      * passent donc par topOfVisibleTextZones.
      */
+    /**
+     * Donne au bloc d'actualité la même bande que la vidéo et que les photos.
+     *
+     * Même calcul, même plancher, même repère pris sur les zones de texte
+     * réellement affichées : les trois passent par topOfVisibleTextZones, pour
+     * qu'aucun ne puisse dériver des deux autres.
+     */
+    private fun ajusterBandeActualite() {
+        val bloc = findViewById<View>(R.id.blocActualite) ?: return
+        if (bloc.visibility != View.VISIBLE) return
+        val root = findViewById<View>(R.id.callRoot) ?: return
+        if (root.height == 0) return
+        val cible = (zones.topOfVisibleTextZones() ?: root.height)
+            .coerceAtLeast(root.height / 3)
+        val params = bloc.layoutParams as? FrameLayout.LayoutParams ?: return
+        if (params.height == cible) return
+        params.height = cible
+        bloc.layoutParams = params
+    }
+
     private fun ajusterBandeRecueil() {
         val image = findViewById<ImageView>(R.id.imageRecueil) ?: return
         if (image.visibility != View.VISIBLE) return
@@ -736,6 +793,7 @@ class IncomingCallActivity : AppCompatActivity() {
         zones.onTextZonesChanged = {
             fitVideoAboveCaptions()
             ajusterBandeRecueil()
+            ajusterBandeActualite()
         }
         remoteRenderer.post { fitVideoAboveCaptions(animate = false) }
         connectedAtMs = System.currentTimeMillis()

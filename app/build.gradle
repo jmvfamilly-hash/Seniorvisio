@@ -128,6 +128,13 @@ android {
             buildConfigField "String", "DEVICE_ID", "\"jean_tablet\""
             buildConfigField "String", "CALLS_COLLECTION", "\"calls\""
             buildConfigField "boolean", "KIOSK_ENABLED", "true"
+            // VIDE, ET C'EST LE GARDE-FOU. Un fil d'information qui
+            // apparaîtrait de lui-même sur la tablette de Jean serait un
+            // changement d'écran que personne ne lui a demandé — et il n'a
+            // aucun moyen de le faire disparaître. L'adresse vide éteint la
+            // fonction entièrement (voir RafraichisseurFlux). Le jour où on
+            // la voudra chez lui, c'est cette ligne, et elle seule.
+            buildConfigField "String", "FLUX_ACTUALITES", "\"\""
         }
         validation {
             dimension "environnement"
@@ -135,6 +142,7 @@ android {
             buildConfigField "String", "DEVICE_ID", "\"test_tablet\""
             buildConfigField "String", "CALLS_COLLECTION", "\"calls_test\""
             buildConfigField "boolean", "KIOSK_ENABLED", "false"
+            buildConfigField "String", "FLUX_ACTUALITES", "\"https://www.francetvinfo.fr/titres.rss\""
         }
     }
 

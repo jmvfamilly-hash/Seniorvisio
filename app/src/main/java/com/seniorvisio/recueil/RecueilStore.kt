@@ -105,22 +105,24 @@ class RecueilStore(private val context: Context) {
     private fun installerCeQuiManque(recueils: List<Recueil>) {
         recueils.forEach { recueil ->
             val dossier = dossierDe(recueil.id).apply { mkdirs() }
-            var modifié = false
             val misÀJour = recueil.éléments.map { element ->
-                // Déjà vérifié ET toujours présent sur le disque : on ne
-                // retélécharge pas. Le « toujours présent » n'est pas un excès
-                // de prudence — un nettoyage système ou une restauration peut
-                // vider filesDir sans que Firestore en sache rien, et un
-                // recueil déclaré installé mais vide serait une panne muette.
-                if (element.état == ÉtatElement.PRÊT &&
-                    element.fichierLocal != null &&
-                    File(dossier, element.fichierLocal).exists()
-                ) return@map element
+                if (estInstallé(element, dossier)) return@map element
                 if (element.état == ÉtatElement.REFUSÉ) return@map element
-                modifié = true
                 installer(element, dossier)
             }
-            if (modifié) {
+            // ═══ ON NE PUBLIE QUE CE QUI A RÉELLEMENT CHANGÉ ═══
+            //
+            // Comparé au résultat, et non « on a appelé installer, donc c'est
+            // modifié ». La nuance évite une BOUCLE INFINIE, et elle n'est pas
+            // théorique : un titre de fil d'information sans vignette n'a
+            // aucun fichier local à montrer. Avec l'ancien critère, le magasin
+            // le croyait à installer à chaque instantané, le réinstallait,
+            // republiait le document — ce qui déclenchait l'instantané suivant,
+            // et ainsi de suite, indéfiniment, contre Firestore.
+            //
+            // L'égalité des data classes tranche sans qu'on ait à énumérer les
+            // cas : si l'installation n'a rien appris de neuf, rien ne part.
+            if (misÀJour != recueil.éléments) {
                 val complet = recueil.copy(éléments = misÀJour)
                 publierÉtat(complet)
                 dernierÉtat = dernierÉtat.filter { it.id != complet.id } + complet
@@ -131,7 +133,27 @@ class RecueilStore(private val context: Context) {
         élaguer(recueils.map { it.id }.toSet())
     }
 
+    /**
+     * Cet élément est-il déjà en place, ou reste-t-il quelque chose à faire ?
+     *
+     * Le « toujours présent sur le disque » n'est pas un excès de prudence :
+     * un nettoyage système ou une restauration peut vider filesDir sans que
+     * Firestore en sache rien, et un recueil déclaré installé mais vide serait
+     * une panne muette.
+     *
+     * Le cas d'un élément SANS fichier attendu — un titre que le flux livre
+     * sans illustration — est traité explicitement : il est complet tel quel,
+     * et le croire inachevé reviendrait à le réinstaller sans fin.
+     */
+    private fun estInstallé(element: Element, dossier: File): Boolean = when {
+        element.état != ÉtatElement.PRÊT -> false
+        element.source.isBlank() -> true
+        element.fichierLocal == null -> false
+        else -> File(dossier, element.fichierLocal).exists()
+    }
+
     private fun installer(element: Element, dossier: File): Element {
+        if (element.type == TypeElement.TEXTE) return installerTexte(element, dossier)
         if (element.nature == NatureElement.FLUX) {
             return element.copy(
                 état = ÉtatElement.REFUSÉ,
@@ -151,6 +173,46 @@ class RecueilStore(private val context: Context) {
         } finally {
             // Le brut ne sert qu'à la vérification : le garder doublerait la
             // place occupée, pour un fichier que personne ne relira jamais.
+            brut.delete()
+        }
+    }
+
+    /**
+     * Un titre de fil d'information, et sa vignette quand il y en a une.
+     *
+     * ═══ UNE VIGNETTE MANQUANTE NE REFUSE JAMAIS LE TITRE ═══
+     *
+     * C'est la règle qui compte ici. Le texte est ce que Jean doit lire ;
+     * l'image n'est qu'un accompagnement. Un serveur d'illustrations lent,
+     * une adresse périmée, un format exotique — et le titre serait écarté
+     * alors qu'il s'affiche parfaitement sans image.
+     *
+     * L'échec du téléchargement est donc avalé à dessein, et l'élément reste
+     * PRÊT sans fichier local. L'écran d'appel le voit et donne alors toute la
+     * largeur au texte (voir RenduTexte et Rendu.Texte.vignette).
+     */
+    private fun installerTexte(element: Element, dossier: File): Element {
+        if (element.texte.isNullOrBlank()) {
+            return element.copy(état = ÉtatElement.REFUSÉ, cause = "Titre vide.")
+        }
+        if (element.source.isBlank()) {
+            return element.copy(état = ÉtatElement.PRÊT, fichierLocal = null)
+        }
+        val brut = File(context.cacheDir, "vignette-${element.id}")
+        return try {
+            TelechargementHttp.vers(element.source, brut, "vignette ${element.id}")
+            // Vérifiée comme une photo de famille, par le même chemin : un flux
+            // public n'a pas plus le droit qu'un proche de déposer ici une
+            // image que cette tablette ne sait pas décoder.
+            val vérifiée = VerificateurPhoto(côtéMax).vérifier(element, brut, dossier)
+            element.copy(
+                état = ÉtatElement.PRÊT,
+                fichierLocal = vérifiée.fichierLocal.takeIf { vérifiée.état == ÉtatElement.PRÊT },
+            )
+        } catch (e: Exception) {
+            Log.i(TAG, "Vignette indisponible pour ${element.id} — le titre reste affichable", e)
+            element.copy(état = ÉtatElement.PRÊT, fichierLocal = null)
+        } finally {
             brut.delete()
         }
     }
@@ -210,7 +272,10 @@ class RecueilStore(private val context: Context) {
             ?.associateBy { it[CHAMP_ID] as? String ?: "" } ?: emptyMap()
         val éléments = bruts.mapIndexedNotNull { index, brut ->
             val élémentId = brut[CHAMP_ID] as? String ?: return@mapIndexedNotNull null
-            val source = brut[CHAMP_SOURCE] as? String ?: return@mapIndexedNotNull null
+            // La source peut manquer, et ce n'est plus une anomalie : un titre
+            // de fil d'information sans illustration n'a aucune URL à porter.
+            // La refuser ici écarterait silencieusement la moitié d'un flux.
+            val source = brut[CHAMP_SOURCE] as? String ?: ""
             val vu = déjàVus[élémentId]
             Element(
                 id = élémentId,
@@ -221,8 +286,10 @@ class RecueilStore(private val context: Context) {
                 ordre = (brut[CHAMP_ORDRE] as? Number)?.toInt() ?: index,
                 état = étatDepuis(vu?.get(CHAMP_ÉTAT) as? String),
                 cause = vu?.get(CHAMP_CAUSE) as? String,
-                fichierLocal = if (étatDepuis(vu?.get(CHAMP_ÉTAT) as? String) == ÉtatElement.PRÊT)
-                    "$élémentId.jpg" else null,
+                fichierLocal = if (étatDepuis(vu?.get(CHAMP_ÉTAT) as? String) == ÉtatElement.PRÊT &&
+                    File(dossierDe(id), "$élémentId.jpg").exists()
+                ) "$élémentId.jpg" else null,
+                texte = brut[CHAMP_TEXTE] as? String,
             )
         }
         return Recueil(
@@ -283,6 +350,7 @@ class RecueilStore(private val context: Context) {
         private const val CHAMP_VÉRIFICATION = "verification"
         private const val CHAMP_ÉTAT = "etat"
         private const val CHAMP_CAUSE = "cause"
+        private const val CHAMP_TEXTE = "texte"
         private const val CHAMP_ÉTAT_GLOBAL = "etatGlobal"
         private const val CHAMP_VÉRIFIÉ_PAR = "verifiePar"
     }

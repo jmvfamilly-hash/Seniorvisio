@@ -89,8 +89,25 @@ data class Element(
     val ordre: Int,
     val état: ÉtatElement = ÉtatElement.À_VÉRIFIER,
     val cause: String? = null,
-    /** Nom du fichier local une fois rangé. Null tant qu'il ne l'est pas. */
+    /**
+     * Nom du fichier local une fois rangé. Null tant qu'il ne l'est pas.
+     *
+     * Pour un élément TEXTE issu d'un flux, c'est la VIGNETTE — l'illustration
+     * qui accompagne le titre. Le même champ pour les deux : dans les deux cas
+     * c'est une image rangée sur la tablette, vérifiée par le même
+     * vérificateur, et lui en donner un second nom obligerait chaque lecteur à
+     * savoir de quel genre d'élément il s'occupe.
+     */
     val fichierLocal: String? = null,
+    /**
+     * Le texte à afficher, pour un élément TEXTE. Null pour une photo.
+     *
+     * Il vit ICI plutôt que dans un fichier : un titre de fil d'information
+     * pèse cent octets, et le ranger sur le disque pour le relire ensuite
+     * coûterait deux entrées-sorties par changement de titre, là où le
+     * document du recueil le porte sans effort.
+     */
+    val texte: String? = null,
 )
 
 /**

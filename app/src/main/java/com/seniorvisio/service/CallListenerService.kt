@@ -18,6 +18,7 @@ import androidx.lifecycle.LifecycleService
 import com.google.firebase.firestore.ListenerRegistration
 import com.seniorvisio.core.CallerPhotoCache
 import com.seniorvisio.core.DeviceStatusReporter
+import com.seniorvisio.recueil.RafraichisseurFlux
 import com.seniorvisio.recueil.RecueilStore
 import com.seniorvisio.core.UsageStats
 import com.seniorvisio.signaling.CallSignalingClient
@@ -64,6 +65,15 @@ class CallListenerService : LifecycleService() {
      * se produirait au pire moment, celui où quelqu'un regarde.
      */
     private val recueils = RecueilStore(this)
+
+    /**
+     * Tient à jour le recueil fait des titres de l'actualité.
+     *
+     * Éteint en production, faute d'adresse de flux (voir app/build.gradle) :
+     * un fil d'information qui apparaîtrait de lui-même sur la tablette de
+     * Jean serait un changement d'écran que personne ne lui a demandé.
+     */
+    private val flux = RafraichisseurFlux(this)
 
     // Sans ce verrou, Android coupe l'économiseur d'énergie Wi-Fi une fois
     // l'écran éteint : l'association tombe au bout de quelques heures, et la
@@ -129,6 +139,7 @@ class CallListenerService : LifecycleService() {
         acquireWifiLock()
         UsageStats.init(this)
         recueils.démarrer()
+        flux.démarrer()
         // L'état de départ ne se déduit d'aucune diffusion : elles ne
         // signalent que les changements. Sans cette lecture initiale, tout le
         // temps précédant le premier basculement serait attribué au sommeil.
@@ -227,6 +238,7 @@ class CallListenerService : LifecycleService() {
         callListener?.remove()
         callListener = null
         recueils.arrêter()
+        flux.arrêter()
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
         wifiLock?.let { if (it.isHeld) it.release() }
         wifiLock = null
