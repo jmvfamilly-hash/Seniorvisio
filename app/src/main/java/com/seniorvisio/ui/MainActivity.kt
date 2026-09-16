@@ -37,7 +37,6 @@ import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.recueil.RecueilStore
 import com.seniorvisio.recueil.Rendu
 import com.seniorvisio.recueil.renduPour
-import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.service.OrdonnanceurActualites
 import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.signaling.CallSignalingClient

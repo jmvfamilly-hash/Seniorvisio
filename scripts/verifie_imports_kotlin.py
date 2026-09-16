@@ -111,6 +111,25 @@ def main() -> int:
 
     signalements: list[str] = []
 
+    # Un import écrit deux fois n'est pas une redondance inoffensive : Kotlin
+    # refuse de compiler (« Conflicting import, imported name is ambiguous »).
+    # Arrivé en ajoutant un import déjà présent plus haut dans une liste de
+    # quarante lignes, ce qu'aucune relecture ne rattrape de façon fiable.
+    for f in fichiers:
+        _, code = contenus[f]
+        vus: dict[str, int] = {}
+        for n, ligne in enumerate(code.splitlines(), start=1):
+            if not ligne.startswith("import "):
+                continue
+            nettoyé = ligne.strip()
+            if nettoyé in vus:
+                signalements.append(
+                    f"{f.relative_to(RACINE)}:{n}: « {nettoyé} » déjà importé "
+                    f"ligne {vus[nettoyé]} — Kotlin refuse un import en double"
+                )
+            else:
+                vus[nettoyé] = n
+
     # Une classe Kotlin ne peut avoir qu'UN companion object.
     #
     # Compté par TYPE et non par fichier : un fichier de ce dépôt en déclare
