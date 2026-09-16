@@ -111,7 +111,7 @@ data class Element(
     /**
      * D'où vient ce titre, tel que le fil se nomme lui-même.
      *
-     * Lu dans <channel><generator> du flux RSS. Affiché discrètement à côté du
+     * Lu dans <channel><title> du flux RSS. Affiché discrètement à côté du
      * titre : depuis que plusieurs fils cohabitent, « d'où sort cette
      * nouvelle » est une question qu'on se pose en la lisant, et à laquelle
      * rien ne répondait.

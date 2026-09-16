@@ -50,7 +50,7 @@ object FluxRss {
         val vignette: String?,
         val date: Instant? = null,
         /**
-         * Comment le fil se nomme lui-même, lu dans <channel><generator>.
+         * Comment le fil se nomme lui-même, lu dans <channel><title>.
          *
          * Porté par chaque titre plutôt que rendu à part : la sélection mélange
          * les articles de plusieurs fils et les trie par date, donc à la sortie
@@ -91,7 +91,7 @@ object FluxRss {
             // articles du fil. Déclaré ici et non dans la boucle : le
             // réinitialiser à chaque <item> l'effacerait, puisqu'il apparaît
             // avant le premier.
-            var générateur: String? = null
+            var nomDuFil: String? = null
 
             var événement = p.eventType
             while (événement != XmlPullParser.END_DOCUMENT) {
@@ -107,13 +107,25 @@ object FluxRss {
                             enclosure = null; autreImage = null
                             date = null
                         }
+                        // ═══ LE NOM DU FIL : <channel><title> ═══
+                        //
                         // AVANT le garde ci-dessous, et c'est indispensable :
-                        // <generator> est un élément du canal, pas d'un
-                        // article. Placé après, il n'aurait jamais été lu.
-                        nom == "generator" && !dansUnArticle ->
-                            générateur = p.nextText().trim().takeIf { it.isNotBlank() }
+                        // ce titre-là est un élément du canal, pas d'un
+                        // article. Placé après, il serait tombé dans la ligne
+                        // « ignoré » qui suit et n'aurait jamais été lu.
+                        //
+                        // LE PREMIER SEULEMENT, et ce n'est pas une précaution
+                        // de principe : RSS autorise <channel><image><title>,
+                        // qui est le texte de remplacement du logo du site.
+                        // Sans cette garde, ce libellé-là écraserait le nom du
+                        // fil — et la mention affichée sous les titres de Jean
+                        // deviendrait celle de l'image, sans que rien ne
+                        // signale l'échange. Le titre du canal vient toujours
+                        // avant son image et avant ses articles.
+                        nom == "title" && !dansUnArticle && nomDuFil == null ->
+                            nomDuFil = p.nextText().trim().takeIf { it.isNotBlank() }
 
-                        !dansUnArticle -> Unit   // titre du flux lui-même : ignoré
+                        !dansUnArticle -> Unit   // le reste de l'en-tête : ignoré
                         nom == "title" -> texte = p.nextText().trim()
                         nom == "description" || nom == "summary" ->
                             description = p.nextText()
@@ -167,7 +179,7 @@ object FluxRss {
                                 t,
                                 enclosure ?: autreImage ?: imageDans(description),
                                 date,
-                                générateur,
+                                nomDuFil,
                             )
                             if (titres.size >= maximum) return titres
                         }
