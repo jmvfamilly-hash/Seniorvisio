@@ -236,7 +236,7 @@ class IncomingCallActivity : AppCompatActivity() {
 
         val callId = intent.getStringExtra(EXTRA_CALL_ID)
         if (callId == null) {
-            finish()
+            terminer("aucun identifiant d'appel dans l'intention reçue")
             return
         }
         handledCallId = callId
@@ -281,7 +281,7 @@ class IncomingCallActivity : AppCompatActivity() {
             } else {
                 callEngine.blockCall()
             }
-            finish()
+            terminer(if (isConnected) "bouton de la tablette : raccroché" else "bouton de la tablette : appel bloqué")
         }
 
         callEngine.prepareIncomingCall(
@@ -309,7 +309,7 @@ class IncomingCallActivity : AppCompatActivity() {
                 callEngine.reportPreparationError(error.message ?: error.javaClass.simpleName)
                 runOnUiThread {
                     Toast.makeText(this, "Appel indisponible", Toast.LENGTH_SHORT).show()
-                    finish()
+                    terminer("préparation impossible : ${error.message ?: error.javaClass.simpleName}")
                 }
             }
         )
@@ -352,7 +352,7 @@ class IncomingCallActivity : AppCompatActivity() {
         // WebRTC) exactement comme pour le bouton "Bloquer"/"Raccrocher".
         callEngine.listenForRemoteHangup {
             runOnUiThread {
-                if (!callHandled) finish()
+                if (!callHandled) terminer("raccroché demandé par le proche depuis le PWA")
             }
         }
 
@@ -760,7 +760,7 @@ class IncomingCallActivity : AppCompatActivity() {
         // engagés indéfiniment côté tablette (voir WebRtcCallEngine.
         // onConnectionLost et le commentaire dans cleanup()).
         callEngine.onConnectionLost {
-            runOnUiThread { if (!callHandled) finish() }
+            runOnUiThread { if (!callHandled) terminer("connexion WebRTC perdue sans raccroché explicite") }
         }
         // ═══ LE RECUEIL, COMMANDÉ PAR LE PROCHE ═══
         //
@@ -1195,7 +1195,38 @@ class IncomingCallActivity : AppCompatActivity() {
      * qui évite déjà cette destruction pour les cas courants (rotation...) ;
      * ce garde-fou couvre les cas non listés là-bas.
      */
+    /**
+     * Ferme l'écran d'appel en DISANT pourquoi.
+     *
+     * ═══ LA PILE D'APPEL NE SUFFIT PAS, ET ON L'A CRU ═══
+     *
+     * [WebRtcCallEngine.hangUp] journalise sa pile d'appel pour distinguer les
+     * causes d'un appel qui « s'arrête tout seul ». Sauf qu'il est appelé
+     * depuis [onDestroy], et que la destruction arrive bien après le geste qui
+     * l'a demandée : la pile relevée décrit le chemin du framework, pas le
+     * nôtre. Cinq `finish()` très différents — raccroché du proche, connexion
+     * perdue, préparation impossible, bouton de la tablette, intention sans
+     * identifiant — produisaient donc TOUS la même ligne.
+     *
+     * La raison est donc notée là où elle est connue : au moment de la
+     * décision, pas au moment de ses conséquences.
+     */
+    private fun terminer(raison: String) {
+        CallTrace.record("APPEL fermeture", raison)
+        finish()
+    }
+
     override fun onDestroy() {
+        // Ces deux booléens tranchent une question que le journal laissait
+        // ouverte : une activité qui disparaît a-t-elle été fermée, ou
+        // seulement recréée pour un changement de configuration ? Les deux se
+        // ressemblent trait pour trait dans une pile d'appel, et mènent à des
+        // recherches opposées.
+        CallTrace.record(
+            "APPEL écran détruit",
+            "fermeture=$isFinishing changementDeConfig=$isChangingConfigurations " +
+                "déjàTraité=$callHandled connecté=$isConnected",
+        )
         // Ne garde jamais l'écran forcé allumé hors de la fenêtre d'appel
         // (voir le flag posé dans onCreate) — usage 24/7, risque batterie/
         // chauffe/marquage d'écran sinon.
