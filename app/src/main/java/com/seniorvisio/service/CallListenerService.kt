@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -220,6 +221,47 @@ class CallListenerService : LifecycleService() {
             setReferenceCounted(false)
             acquire()
         }
+    }
+
+    /**
+     * Android prévient AVANT de tuer. Ce projet n'écoutait pas.
+     *
+     * ═══ LA SEULE PREUVE QUI TRANCHE ═══
+     *
+     * Une application qui disparaît sans ligne PLANTAGE n'a pas levé
+     * d'exception : elle a été tuée. Reste à savoir par quoi — un plantage
+     * natif, ou le système qui reprend la mémoire. Les deux demandent des
+     * recherches opposées, et rien ne permettait de choisir.
+     *
+     * Or le système ne tue pas sans prévenir : il réclame d'abord, par
+     * paliers. TRIM_MEMORY_COMPLETE signifie littéralement « vous êtes le
+     * prochain sur la liste ». Cette ligne, juste avant un journal qui
+     * s'arrête net, est un verdict — et son ABSENCE en est un aussi, qui
+     * innocente la mémoire et désigne le code natif.
+     *
+     * La mesure accompagne le palier : savoir qu'on a été prévenu ne vaut que
+     * si l'on sait à quel niveau de consommation ça s'est produit.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        CallTrace.record("MÉMOIRE réclamée", "${nomDuPalier(level)} · ${CallTrace.mesureMémoire()}")
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        CallTrace.record("MÉMOIRE critique", "le système manque de mémoire · ${CallTrace.mesureMémoire()}")
+    }
+
+    /** Le palier en toutes lettres : un entier nu ne se relit pas six mois plus tard. */
+    private fun nomDuPalier(level: Int): String = when (level) {
+        ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> "COMPLET — prochaine application tuée"
+        ComponentCallbacks2.TRIM_MEMORY_MODERATE -> "MODÉRÉ — tuée si la pression continue"
+        ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> "ARRIÈRE-PLAN — en bout de liste"
+        ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> "INTERFACE MASQUÉE"
+        ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> "CRITIQUE — au premier plan, le système va tuer des services"
+        ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> "BAS — au premier plan"
+        ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE -> "MODÉRÉ — au premier plan"
+        else -> "palier $level"
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

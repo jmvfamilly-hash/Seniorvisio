@@ -896,6 +896,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             if (changement) "APPEL réseau CHANGE" else "APPEL réseau",
             sample.ligne + débit,
         )
+        // Sur le même battement, et pas sur une minuterie à part : une mesure
+        // de mémoire ne vaut que comparée à la précédente, et elle doit être
+        // lisible SUR LA MÊME LIGNE DE TEMPS que le reste. Un relevé isolé ne
+        // dit rien ; une colonne qui monte d'un relevé à l'autre nomme une
+        // fuite sans qu'on ait à la chercher.
+        CallTrace.record("APPEL mémoire", CallTrace.mesureMémoire())
     }
 
     /**

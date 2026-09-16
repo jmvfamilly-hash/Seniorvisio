@@ -223,6 +223,37 @@ object CallTrace {
     // se raconte donc au redémarrage, sans que personne ait eu à prévoir de
     // l'enregistrer.
 
+    /**
+     * Où en est la mémoire de cette application, en une ligne.
+     *
+     * ═══ POURQUOI CETTE MESURE MANQUAIT, ET CE QU'ELLE TRANCHE ═══
+     *
+     * Une application qui disparaît sans laisser de ligne PLANTAGE n'a pas
+     * levé d'exception Java : elle a été tuée. Deux causes seulement, et elles
+     * demandent des recherches opposées — un plantage dans du code natif
+     * (WebRTC, décodage vidéo), ou le système qui reprend la mémoire.
+     *
+     * Rien ici ne mesurait la mémoire, nulle part. On ne pouvait donc pas
+     * distinguer les deux, et c'est exactement l'arbitrage sur lequel on
+     * butait : une courbe qui monte nomme une fuite, une courbe plate
+     * l'innocente et désigne le natif.
+     *
+     * Le tas natif est mesuré séparément du tas Java, et c'est essentiel
+     * ici : depuis Android 8 les images vivent dans le tas NATIF. Une
+     * application qui en accumule voit donc sa mémoire croître sans que le
+     * tas Java bouge — et sans jamais lever d'OutOfMemoryError. Elle est
+     * simplement tuée, en silence. Regarder le seul tas Java aurait conclu
+     * « la mémoire va bien » au moment précis où elle ne va pas.
+     */
+    fun mesureMémoire(): String {
+        val r = Runtime.getRuntime()
+        val moOctets = 1024L * 1024L
+        val javaUtilisé = (r.totalMemory() - r.freeMemory()) / moOctets
+        val javaMax = r.maxMemory() / moOctets
+        val natif = android.os.Debug.getNativeHeapAllocatedSize() / moOctets
+        return "java=${javaUtilisé}/${javaMax} Mo · natif=$natif Mo"
+    }
+
     private const val FICHIER = "journal-appel-precedent.txt"
 
     /**

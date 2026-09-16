@@ -49,7 +49,7 @@ IMPLICITES = {
     # collections et utilitaires kotlin.collections / kotlin.text
     "ArrayDeque", "LinkedHashMap", "LinkedHashSet", "HashMap", "HashSet",
     "ArrayList", "Charsets", "Sequence", "ShortArray", "BooleanArray",
-    "Character", "Integer", "Void", "Iterable",
+    "Character", "Integer", "Void", "Iterable", "Runtime", "System",
     # kotlin.text et kotlin.io, importés d'office comme kotlin.collections.
     "RegexOption", "MatchResult", "StringBuilder", "Appendable", "Typography",
 }
