@@ -845,31 +845,98 @@ class IncomingCallActivity : AppCompatActivity() {
      * réellement affichées : les trois passent par topOfVisibleTextZones, pour
      * qu'aucun ne puisse dériver des deux autres.
      */
-    private fun ajusterBandeActualite() {
-        val bloc = findViewById<View>(R.id.blocActualite) ?: return
-        if (bloc.visibility != View.VISIBLE) return
-        val root = findViewById<View>(R.id.callRoot) ?: return
-        if (root.height == 0) return
-        val cible = (zones.topOfVisibleTextZones() ?: root.height)
-            .coerceAtLeast(root.height / 3)
-        val params = bloc.layoutParams as? FrameLayout.LayoutParams ?: return
-        if (params.height == cible) return
-        params.height = cible
-        bloc.layoutParams = params
+    /**
+     * La bande où Jean regarde : titres d'actualité ET photos d'un recueil.
+     *
+     * ═══ DU BAS DU BOUTON DE SOMMEIL AU HAUT DU BOUTON « SUIVANT » ═══
+     *
+     * Elle partait du pixel zéro et descendait jusqu'aux zones de
+     * transcription. Deux conséquences, toutes deux visibles :
+     *
+     * EN HAUT, elle passait sous la bande d'information — l'heure, la météo,
+     * le bouton de sommeil, l'aperçu de la caméra. Ces vues sont déclarées
+     * APRÈS elle dans le FrameLayout, donc dessinées par-dessus : le titre ne
+     * débordait pas sur les boutons, il courait dessous. Vu de la chambre,
+     * c'est la même chose en pire — le texte est là, illisible, et rien ne dit
+     * pourquoi.
+     *
+     * EN BAS, topOfVisibleTextZones() rend null tant qu'AUCUNE transcription
+     * n'est affichée, et le repli valait alors toute la hauteur de l'écran. Au
+     * début d'un appel, avant le premier mot prononcé, la bande couvrait donc
+     * aussi la barre de navigation et les boutons du bas.
+     *
+     * Les deux bornes sont désormais des vues, et non des fractions : sous le
+     * contenu de la bande d'information (voir
+     * HomeZonesController.basDuContenuInfo), au-dessus de la barre de
+     * navigation. La transcription, quand elle apparaît, remonte la borne
+     * basse — la bande se réduit d'elle-même pour lui laisser la place, ce qui
+     * est bien le comportement voulu.
+     *
+     * UNE SEULE FONCTION POUR LES DEUX. Il y en avait deux, presque
+     * identiques, l'une pour les titres et l'autre pour les photos. Elles ont
+     * déjà divergé une fois ; elles ne le peuvent plus.
+     */
+    private fun bandeDeConsultation(): Pair<Int, Int>? {
+        val root = findViewById<View>(R.id.callRoot) ?: return null
+        if (root.height == 0) return null
+
+        val haut = zones.basDuContenuInfo()
+
+        val barre = findViewById<View>(R.id.barreNavigationRecueil)
+        val basBarre = if (barre != null && barre.visibility == View.VISIBLE && barre.height > 0) {
+            barre.top
+        } else {
+            root.height
+        }
+        val basTexte = zones.topOfVisibleTextZones() ?: root.height
+        val bas = minOf(basBarre, basTexte)
+
+        // Un plancher, pour le cas où les bornes se croiseraient — une
+        // transcription haute et une bande d'information épaisse peuvent, sur
+        // une dalle courte, ne rien laisser entre elles. Mieux vaut une bande
+        // serrée qu'une hauteur nulle, qui ferait disparaître le titre sans
+        // que rien ne l'explique.
+        val hauteur = (bas - haut).coerceAtLeast(root.height / 5)
+        return haut to hauteur
     }
 
-    private fun ajusterBandeRecueil() {
-        val image = findViewById<ImageView>(R.id.imageRecueil) ?: return
-        if (image.visibility != View.VISIBLE) return
-        val root = findViewById<View>(R.id.callRoot) ?: return
-        if (root.height == 0) return
-        val minimum = root.height / 3
-        val cible = (zones.topOfVisibleTextZones() ?: root.height).coerceAtLeast(minimum)
-        val params = image.layoutParams as? FrameLayout.LayoutParams ?: return
-        if (params.height == cible) return
-        params.height = cible
-        image.layoutParams = params
+    /**
+     * Pose la bande, et RÉESSAIE UNE FOIS si les repères ne sont pas encore
+     * mesurés.
+     *
+     * Les bornes sont des vues. Au tout premier affichage — le moment précis
+     * où la bande est montrée — la disposition n'a pas encore eu lieu, la
+     * hauteur de la bande d'information vaut zéro, et l'ancre haute aussi. La
+     * bande repartirait donc du pixel zéro, c'est-à-dire exactement le défaut
+     * qu'on corrige, et seulement au début : le genre d'anomalie qu'on
+     * n'attrape pas en essayant, parce qu'elle se répare toute seule au
+     * premier mot prononcé.
+     *
+     * Un seul report, jamais une boucle : la seconde tentative pose ce qu'elle
+     * trouve, mesuré ou non.
+     */
+    private fun poserBande(vue: View?) {
+        if (vue == null || vue.visibility != View.VISIBLE) return
+        if (!appliquerBande(vue, exiger = true)) {
+            vue.post { appliquerBande(vue, exiger = false) }
+        }
     }
+
+    private fun appliquerBande(vue: View, exiger: Boolean): Boolean {
+        if (vue.visibility != View.VISIBLE) return true
+        val (haut, hauteur) = bandeDeConsultation() ?: return false
+        if (exiger && haut <= 0) return false
+        val params = vue.layoutParams as? FrameLayout.LayoutParams ?: return true
+        if (params.height == hauteur && params.topMargin == haut) return true
+        params.height = hauteur
+        params.topMargin = haut
+        vue.layoutParams = params
+        return true
+    }
+
+    private fun ajusterBandeActualite() = poserBande(findViewById<View>(R.id.blocActualite))
+
+    private fun ajusterBandeRecueil() = poserBande(findViewById<ImageView>(R.id.imageRecueil))
 
     private fun connectVideoCall() {
         // Deux chemins mènent ici (fin du décompte et demande de connexion

@@ -2,10 +2,12 @@ package com.seniorvisio.ui
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -47,7 +49,7 @@ import java.util.Locale
  * effacement, même nombre de lignes. Rien ne les distingue que leur source.
  */
 class HomeZonesController(
-    root: View,
+    private val root: View,
     /**
      * Appelé à chaque changement de palette, pour que l'écran hôte repeigne
      * ce qu'il possède en propre (son fond hors appel, ses boutons) — les
@@ -419,6 +421,39 @@ class HomeZonesController(
      * se contenter de supposer que le texte est en bas : on parcourt la pile
      * telle qu'elle est réellement empilée à cet instant.
      */
+    /**
+     * Le bas de ce qui est ÉCRIT dans la bande d'information, en coordonnées
+     * de la racine.
+     *
+     * ═══ POURQUOI PAS SIMPLEMENT zoneInfo.bottom ═══
+     *
+     * Parce que la boîte et son contenu ne coïncident pas. Pendant un appel,
+     * zoneInfo pèse un tiers de la hauteur de l'écran alors qu'elle n'y écrit
+     * que deux lignes et un bouton : son bas se trouve très en dessous de ce
+     * qu'on voit. Une bande d'actualité posée sous zoneInfo.bottom perdrait
+     * donc un tiers d'écran pour rien, et une bande posée sous le texte, si on
+     * l'avait devinée à la main, se serait décalée à la première retouche.
+     *
+     * Le repère demandé est « sous la date » sur l'accueil et « sous le bouton
+     * de sommeil » pendant un appel. Ce sont les deux mêmes vues, et c'est la
+     * PLUS BASSE des deux qui convient dans les deux cas : prendre le maximum
+     * répond aux deux formulations sans avoir à savoir laquelle s'applique.
+     *
+     * offsetDescendantRectToMyCoords plutôt qu'une somme de .top : la bande
+     * d'information est imbriquée différemment selon l'écran, et un calcul qui
+     * suppose la profondeur casse le jour où quelqu'un ajoute un conteneur.
+     */
+    fun basDuContenuInfo(): Int {
+        val racine = root as? ViewGroup ?: return 0
+        fun basDe(vue: View): Int {
+            if (vue.visibility != View.VISIBLE || vue.height == 0) return 0
+            val r = Rect(0, 0, vue.width, vue.height)
+            racine.offsetDescendantRectToMyCoords(vue, r)
+            return r.bottom
+        }
+        return maxOf(basDe(textClockDate), basDe(boutonSommeil))
+    }
+
     fun topOfVisibleTextZones(): Int? {
         for (index in 0 until zoneStack.childCount) {
             val child = zoneStack.getChildAt(index)
@@ -480,6 +515,33 @@ class HomeZonesController(
                 .takeIf { it.size == views.size } ?: return
         }
         zoneActualite.visibility = if (modeActualite) View.VISIBLE else View.GONE
+        // ═══ LA BANDE D'INFORMATION REND SON TIERS AUX TITRES ═══
+        //
+        // En mode actualité la pile ne compte que deux surfaces, de poids 1 et
+        // 2 : un tiers de l'écran revenait donc à zoneInfo, pour deux lignes de
+        // texte et un bouton. Les titres n'occupaient que les deux tiers
+        // restants, et le vide au-dessus se voyait.
+        //
+        // Elle passe à sa hauteur utile, et zoneActualite — seule vue pondérée
+        // qui reste — prend tout le reste. Les titres commencent donc juste
+        // sous la date, et s'arrêtent au-dessus des boutons de navigation, qui
+        // sont déjà dans zoneActualite et hors de la rangée pondérée.
+        //
+        // Hors mode actualité, rien ne change : les trois zones se partagent la
+        // hauteur comme avant, et l'ordre reste celui de l'administrateur.
+        (zoneInfo.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
+            val hauteurVoulue = if (modeActualite) {
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            } else {
+                0
+            }
+            val poidsVoulu = if (modeActualite) 0f else 1f
+            if (lp.height != hauteurVoulue || lp.weight != poidsVoulu) {
+                lp.height = hauteurVoulue
+                lp.weight = poidsVoulu
+                zoneInfo.layoutParams = lp
+            }
+        }
         val déjàEnPlace = zoneStack.childCount == ordered.size &&
             ordered.withIndex().all { (index, view) -> zoneStack.getChildAt(index) === view }
         if (déjàEnPlace) return
