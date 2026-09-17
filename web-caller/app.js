@@ -311,6 +311,10 @@ const DEFAULT_SETTINGS = {
   volume: 100,
   captionEnabled: false,
   selfPreview: false,
+  // « Nous sommes dans la même pièce ». Faux par défaut, et ce défaut compte :
+  // un réglage illisible ou absent doit rendre le son à Jean, jamais le lui
+  // retirer. Voir appliquerMemePiece pour la mention affichée au rétablissement.
+  sameRoom: false,
 };
 
 // --- Identité de l'appelant, mémorisée dans ce navigateur uniquement ---
@@ -412,13 +416,35 @@ function currentSettingsFromUi() {
     volume: Number(els.volumeSlider.value),
     captionEnabled: els.captionToggle.checked,
     selfPreview: els.selfPreviewToggle.checked,
+    sameRoom: els.sameRoomToggle.checked,
   };
+}
+
+// ═══ MÉMORISÉ TOUT SEUL, SANS BOUTON À TROUVER ═══
+//
+// Les réglages n'étaient retenus que si le proche pensait à appuyer sur
+// « Mémoriser ces réglages ». Personne n'y pense : on coche une case pendant
+// l'appel, on raccroche, et au suivant tout est revenu à zéro. Un réglage
+// qu'il faut penser à enregistrer est un réglage qui ne se souvient jamais.
+//
+// Enveloppé : localStorage lève en navigation privée sur certains navigateurs,
+// et une exception ici tomberait au milieu d'un appel, sur un geste anodin.
+function saveSettings() {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(currentSettingsFromUi()));
+  } catch (e) {
+    console.warn("[Réglages] Mémorisation impossible :", e);
+  }
 }
 
 function applySettingsToUi(settings) {
   els.volumeSlider.value = settings.volume;
   els.captionToggle.checked = settings.captionEnabled;
   els.selfPreviewToggle.checked = settings.selfPreview;
+  // Les effets, et pas seulement la coche — voir appliquerMemePiece. Appelée
+  // même quand le réglage est faux : c'est elle qui rend le curseur de volume
+  // et réaffiche « écouter la pièce » après un appel où il était vrai.
+  appliquerMemePiece(!!settings.sameRoom, { mémorisé: true });
 }
 
 // --- Câblage UI ---
@@ -824,25 +850,38 @@ function applyScreenState(state) {
 
 on("callButton", "click", async () => {
   const settings = loadSavedSettings() || DEFAULT_SETTINGS;
-  applySettingsToUi(settings);
-  renderVolumeWarning();
   els.callingHint.textContent = "Connexion à sa tablette…";
   els.countdownFill.style.width = "0%";
   els.countdownText.textContent = "";
   // Remis à zéro à chaque appel : un micro resté coupé d'un appel précédent
   // rendrait Jean muet sans que personne ne comprenne pourquoi.
   els.tabletMicMuteToggle.checked = false;
-  els.sameRoomToggle.checked = false;
-  // L'attente de la transcription recommence à chaque appel : le moteur est
-  // arrêté entre deux appels (voir renderCaptionStatus).
-  captionTextSeen = false;
-  renderCaptionStatus();
-  els.sameRoomStatus.textContent = "";
-  els.volumeSlider.disabled = false;
-  els.micToRoomControl.classList.remove("hidden");
+  // « Quelqu'un vient d'entrer dans la chambre » est un fait du moment et non
+  // une préférence : celui-là repart à zéro, et n'est pas mémorisé.
   els.micToRoomToggle.checked = false;
   els.micToRoomBanner.classList.add("hidden");
   els.micToRoomStatus.textContent = "";
+
+  // ═══ LES RÉGLAGES MÉMORISÉS SONT POSÉS APRÈS LA REMISE À ZÉRO ═══
+  //
+  // Et c'est tout le correctif. Ils étaient appliqués en PREMIÈRE ligne de ce
+  // gestionnaire, puis quatre lignes plus bas remettaient « même pièce » à
+  // faux, rendaient le curseur de volume et réaffichaient « écouter la
+  // pièce ». Le réglage était donc restauré puis effacé dans le même geste :
+  // même enregistré, il n'aurait jamais survécu d'un appel à l'autre.
+  //
+  // Ces quatre remises à zéro ne sont pas perdues pour autant — ce sont
+  // exactement les effets de appliquerMemePiece(false), qu'applique
+  // applySettingsToUi quand le réglage mémorisé est faux. Rien n'est supprimé,
+  // tout passe par un seul chemin.
+  applySettingsToUi(settings);
+  renderVolumeWarning();
+
+  // L'attente de la transcription recommence à chaque appel : le moteur est
+  // arrêté entre deux appels (voir renderCaptionStatus). Après la
+  // restauration, pour que l'état affiché soit celui de la case rétablie.
+  captionTextSeen = false;
+  renderCaptionStatus();
   els.captionOverflowIndicator.classList.add("hidden");
   // La réplique de l'écran de Jean repart vide : les textes du dernier appel
   // ne doivent pas réapparaître le temps que la tablette publie les siens.
@@ -867,8 +906,12 @@ on("callButton", "click", async () => {
   els.forceConnectButton.disabled = false;
 });
 
+// Le bouton reste, alors que tout est désormais retenu à chaque changement.
+// Le retirer priverait d'un accusé de réception : sans lui, rien ne dit que la
+// mémorisation a bien eu lieu, et on ne l'apprend qu'au prochain appel — trop
+// tard pour s'en apercevoir, et trop tôt pour faire le lien.
 on("rememberSettingsButton", "click", () => {
-  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(currentSettingsFromUi()));
+  saveSettings();
   const original = els.rememberSettingsButton.textContent;
   els.rememberSettingsButton.textContent = "✅ Réglages mémorisés";
   setTimeout(() => {
@@ -925,10 +968,12 @@ on("captionToggle", "change", () => {
   captionTextSeen = false;
   renderCaptionStatus();
   engine.setCaptionMode(els.captionToggle.checked);
+  saveSettings();
 });
 
 on("selfPreviewToggle", "change", () => {
   engine.setSelfPreviewMode(els.selfPreviewToggle.checked);
+  saveSettings();
 });
 
 // Coupe le micro de la tablette (voir WebRtcCallEngine.listenForMicMute côté
@@ -1092,6 +1137,14 @@ on("volumeSlider", "input", () => {
   clearTimeout(volumeDebounce);
   volumeDebounce = setTimeout(() => {
     engine.setRemoteVolume(Number(els.volumeSlider.value) / 100);
+    // Mémorisé avec le même retard, et non à chaque pixel du curseur : un
+    // glissement du doigt produit des dizaines d'événements, et écrire dans
+    // localStorage à chacun ferait ramer la page pendant l'appel.
+    //
+    // Un volume à zéro sera refusé à la RELECTURE (voir loadSavedSettings) et
+    // non ici : on garde ce que le proche a fait, et c'est au moment de s'en
+    // resservir qu'on décide de ne pas rouvrir un appel en silence.
+    saveSettings();
   }, 150);
 });
 
@@ -2316,19 +2369,39 @@ on("slideshowRememberToggle", "change", () => {
 // WebRtcCallEngine.listenForSameRoomMode) plutôt que de la déduire d'un
 // volume à zéro : un curseur remonté par inadvertance ramènerait sinon
 // l'écho, sans que rien n'indique pourquoi.
-on("sameRoomToggle", "change", () => {
-  const sameRoom = els.sameRoomToggle.checked;
+// ═══ UNE SEULE FONCTION, POUR QUE LA RESTAURATION AIT LE MÊME EFFET ═══
+//
+// Ces effets vivaient dans le gestionnaire « change ». Rétablir le réglage
+// mémorisé en cochant la case n'aurait alors RIEN appliqué : ni la coupure du
+// micro de la tablette, ni le curseur de volume désactivé, ni la commande
+// « écouter la pièce » masquée. Une coche affichée et aucun effet — la pire
+// des deux situations, puisqu'elle affirme quelque chose de faux.
+//
+// @param mémorisé vrai quand le réglage vient du dernier appel et non d'un
+//   geste qu'on vient de faire. La mention change, et c'est tout l'objet de
+//   la distinction : « même pièce » coupe entièrement le son de Jean, et ce
+//   projet a déjà perdu des jours sur une consigne de silence qui avait
+//   survécu à l'appel. Le proche doit le lire AVANT de se connecter.
+function appliquerMemePiece(sameRoom, { mémorisé = false } = {}) {
+  els.sameRoomToggle.checked = sameRoom;
   engine.setSameRoomMode(sameRoom);
   els.tabletMicMuteToggle.checked = sameRoom;
   engine.setTabletMicMuted(sameRoom);
   els.volumeSlider.disabled = sameRoom;
-  els.sameRoomStatus.textContent = sameRoom
-    ? "Son de la tablette entièrement coupé. Vos paroles continuent de s'écrire chez Jean."
-    : "";
+  els.sameRoomStatus.textContent = !sameRoom
+    ? ""
+    : mémorisé
+      ? "Réglage mémorisé : décochez si vous n'êtes pas auprès de Jean. Son de la tablette entièrement coupé."
+      : "Son de la tablette entièrement coupé. Vos paroles continuent de s'écrire chez Jean.";
   // Sans objet quand on est déjà dans la pièce : la personne qui parle à Jean,
   // c'est soi, et son micro est justement coupé.
   els.micToRoomControl.classList.toggle("hidden", sameRoom);
   if (sameRoom && els.micToRoomToggle.checked) setMicToRoom(false);
+}
+
+on("sameRoomToggle", "change", () => {
+  appliquerMemePiece(els.sameRoomToggle.checked);
+  saveSettings();
 });
 
 // Quelqu'un est entré dans la chambre de Jean et lui parle : la transcription

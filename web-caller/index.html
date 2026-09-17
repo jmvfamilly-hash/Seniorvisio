@@ -209,6 +209,45 @@
              le proche regarde le visage de Jean. Un outil de mise au point
              n'a pas à disputer sa place à ce qui fait l'objet de l'appel. -->
 
+        <!-- ═══ LES DEUX RÉGLAGES QUI SE DÉCIDENT EN PLEINE PHRASE ═══
+
+             Ils vivaient derrière le bouton ⚙️. Or ce sont les seuls dont on
+             change d'avis PENDANT qu'on parle : on s'assoit à côté de Jean, ou
+             on veut qu'il lise ce qu'on dit parce qu'il n'entend pas bien
+             aujourd'hui. Traverser un panneau de réglages pour ça, c'est
+             quitter la conversation.
+
+             Même raison que le bouton de caméra juste en dessous, et même
+             conséquence : ce qui se décide en parlant reste sous les yeux.
+
+             Les deux sont MÉMORISÉS d'un appel à l'autre (voir app.js,
+             saveSettings). Pour « même pièce » ce n'est pas anodin : le
+             réglage coupe entièrement le son de la tablette, et une consigne
+             de silence qui survit à l'appel a déjà coûté des jours de
+             recherche dans ce projet. D'où la mention explicite au
+             rétablissement, écrite sous la case et lue AVANT de se connecter.
+        -->
+        <div class="caption-control caption-control-visio">
+          <label>
+            <input type="checkbox" id="sameRoomToggle">
+            📍 Nous sommes dans la même pièce (coupe complètement le son de la tablette)
+          </label>
+          <p class="hint" id="sameRoomStatus"></p>
+        </div>
+
+        <div class="caption-control caption-control-visio">
+          <label>
+            <input type="checkbox" id="captionToggle">
+            🔤 Afficher mes paroles en grand chez Jean
+          </label>
+          <!-- Cocher cette case démarre le moteur de transcription sur la
+               tablette, ce qui prend plusieurs secondes. Sans cette ligne,
+               rien ne se passait à l'écran pendant ce temps : on décochait en
+               croyant que la case n'avait rien fait — ce qui ARRÊTE le moteur
+               et produit exactement le symptôme qu'on essayait de corriger. -->
+          <p class="hint" id="captionStatus"></p>
+        </div>
+
         <div class="pane-actions">
           <!-- Sur l'écran vidéo et non dans les réglages : montrer quelque
                chose à Jean — une fenêtre, un plat, un objet — se décide en
@@ -241,27 +280,6 @@
              d'arriver — ils viennent du son de l'appel, pas du micro de la
              tablette. Réglage d'appel et non de diaporama : il vaut aussi
              quand on ne montre aucune photo. -->
-        <div class="caption-control">
-          <label>
-            <input type="checkbox" id="sameRoomToggle">
-            📍 Nous sommes dans la même pièce (coupe complètement le son de la tablette)
-          </label>
-          <p class="hint" id="sameRoomStatus"></p>
-        </div>
-
-        <div class="caption-control">
-          <label>
-            <input type="checkbox" id="captionToggle">
-            🔤 Afficher mes paroles en grand chez Jean
-          </label>
-          <!-- Cocher cette case démarre le moteur de transcription sur la
-               tablette, ce qui prend plusieurs secondes. Sans cette ligne,
-               rien ne se passait à l'écran pendant ce temps : on décochait en
-               croyant que la case n'avait rien fait — ce qui ARRÊTE le moteur
-               et produit exactement le symptôme qu'on essayait de corriger. -->
-          <p class="hint" id="captionStatus"></p>
-        </div>
-
         <div class="caption-control">
           <label>
             <input type="checkbox" id="selfPreviewToggle">
