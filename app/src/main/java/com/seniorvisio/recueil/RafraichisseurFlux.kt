@@ -112,6 +112,59 @@ class RafraichisseurFlux(private val context: Context) {
     }
 
     /**
+     * Relit les fils TOUT DE SUITE, après avoir effacé ce qui est affiché.
+     *
+     * ═══ POURQUOI IMMÉDIATEMENT, ET NON AU PROCHAIN CONTRÔLE ═══
+     *
+     * Changer la liste remettait le compteur à zéro, et la relecture avait lieu
+     * au contrôle suivant — dans le quart d'heure. Quinze minutes pendant
+     * lesquelles l'écran montre encore l'ancien fil, c'est quinze minutes où
+     * l'administrateur ne peut pas distinguer « mon réglage n'est pas arrivé »
+     * de « il est arrivé et met du temps ». On règle, on regarde, et on
+     * conclut à tort.
+     *
+     * ═══ POURQUOI ON EFFACE D'ABORD ═══
+     *
+     * Le nettoyage n'est pas une précaution technique : c'est ce qui rend le
+     * geste LISIBLE. L'écran se vide, puis se remplit des nouveaux titres. Sans
+     * lui, un fil qui donnerait des titres ressemblants laisserait dans le
+     * doute — a-t-on relu, ou est-ce encore l'ancien affichage ?
+     *
+     * Le prix est assumé : si les nouvelles adresses sont injoignables, la
+     * zone reste vide. C'est la conséquence exacte de ce qui a été demandé, et
+     * le journal la nomme. Mieux vaut cela qu'un ancien fil qui persiste et
+     * fait croire que rien n'a été pris en compte.
+     *
+     * Exécuté sur le fil de l'ordonnanceur, jamais sur celui de l'appelant :
+     * cette méthode est appelée depuis un rappel Firestore, qui s'exécute sur
+     * le fil principal — y faire un téléchargement réseau lèverait aussitôt.
+     */
+    fun rafraîchirMaintenant() {
+        val tâche = Runnable {
+            runCatching {
+                // Le drapeau lève la protection contre l'écrasement par du
+                // vide : un ordre explicite doit produire un effet visible,
+                // même quand cet effet est un écran vide.
+                config.fluxListeChangee = true
+                publier(emptyList())
+                CallTrace.record("FLUX nettoyé", "ancienne liste retirée — relecture immédiate")
+                rafraîchir()
+            }.onFailure { e ->
+                Log.e(TAG, "Relecture immédiate en échec", e)
+                CallTrace.record(
+                    "FLUX ÉCHEC",
+                    "relecture immédiate : ${e.javaClass.simpleName} : ${e.message ?: "sans message"}",
+                )
+            }
+        }
+        // L'ordonnanceur peut avoir été arrêté (service qui s'éteint) : le
+        // refus est alors normal et ne doit pas emporter le rappel Firestore
+        // depuis lequel on nous appelle.
+        runCatching { ordonnanceur.execute(tâche) }
+            .onFailure { Log.w(TAG, "Relecture immédiate refusée : ordonnanceur arrêté") }
+    }
+
+    /**
      * Le fil est-il périmé ?
      *
      * ═══ UNE SEULE BORNE, PAS UNE LISTE DE CAS ═══

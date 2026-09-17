@@ -15,6 +15,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.seniorvisio.BuildConfig
+import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.service.RoomPresenceService
 import java.time.LocalDate
 import java.io.File
@@ -539,15 +540,26 @@ class DeviceStatusReporter(private val context: Context) {
         snapshot.getString(FIELD_FLUX_ACTUALITES)?.let { liste ->
             if (adminConfig.fluxActualites != liste) {
                 adminConfig.fluxActualites = liste
+                // Remis à zéro ET drapeau levé : ce sont les deux filets si la
+                // relecture immédiate ci-dessous n'aboutit pas — service pas
+                // encore démarré, tablette qui redémarre dans la foulée. Le
+                // contrôle du quart d'heure reprendra alors la main.
                 adminConfig.fluxDernierRafraichissementMs = 0L
-                // Lève, pour ce rafraîchissement-là seulement, la protection
-                // contre l'écrasement par du vide : un ordre explicite doit
-                // produire un effet visible, même si la nouvelle liste ne
-                // donne aucun titre.
                 adminConfig.fluxListeChangee = true
                 val nombre = liste.split(",", "\n", ";").count { it.isNotBlank() }
                 Log.i(TAG, "Fils d'information réglés à distance : $nombre")
-                CallTrace.record("FLUX réglé", "$nombre fil(s) — relecture au prochain contrôle")
+                CallTrace.record("FLUX réglé", "$nombre fil(s) — relecture immédiate demandée")
+                // ═══ TOUT DE SUITE, ET NON AU PROCHAIN CONTRÔLE ═══
+                //
+                // Quinze minutes d'attente, c'est quinze minutes pendant
+                // lesquelles l'administrateur ne peut pas distinguer « mon
+                // réglage n'est pas arrivé » de « il est arrivé et met du
+                // temps ». Il règle, il regarde, et il conclut à tort.
+                //
+                // Le rafraîchisseur nettoie l'ancienne liste puis relit, sur
+                // son propre fil — ce rappel-ci s'exécute sur le fil principal,
+                // où un téléchargement lèverait aussitôt.
+                CallListenerService.enService?.flux?.rafraîchirMaintenant()
             }
         }
 

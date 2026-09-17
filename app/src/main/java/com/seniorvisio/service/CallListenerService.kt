@@ -78,7 +78,7 @@ class CallListenerService : LifecycleService() {
      * un fil d'information qui apparaîtrait de lui-même sur la tablette de
      * Jean serait un changement d'écran que personne ne lui a demandé.
      */
-    private val flux = RafraichisseurFlux(this)
+    val flux = RafraichisseurFlux(this)
 
     /**
      * Cadence l'affichage des titres sur l'écran d'accueil et réveille la
