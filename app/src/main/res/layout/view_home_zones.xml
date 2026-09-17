@@ -26,6 +26,8 @@
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/zoneStack"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -36,6 +38,8 @@
          ni la température (voir TimeContext et WeatherClient). -->
     <LinearLayout
         android:id="@+id/zoneInfo"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
@@ -49,10 +53,24 @@
          part : le bouton de sommeil vit à sa droite, et sans cette colonne il
          aurait décentré la date et la météo. Poids 1 pour que le bandeau reste
          centré sur la largeur qui lui reste, quelle que soit celle du bouton. -->
+    <!-- wrap_content, ET C'EST UN CORRECTIF.
+
+         Cette colonne était en match_parent. Tant que zoneInfo pesait un tiers
+         de l'écran, cela ne se voyait pas : il y avait de la place de reste.
+
+         Depuis que zoneInfo se réduit à son contenu en mode actualité, un
+         enfant match_parent dans un parent wrap_content n'a plus de hauteur
+         définie — chacun attend la mesure de l'autre. La bande se mesurait
+         donc trop court, la date de 38 sp débordait par le bas, et la zone des
+         titres, dessinée après elle, la recouvrait.
+
+         C'était bien « la date coupée par le fond des news », et la cause
+         n'était ni la couleur ni l'ordre de dessin : c'étaient deux hauteurs
+         qui se renvoyaient la question. -->
     <LinearLayout
         android:id="@+id/blocInfoCentre"
         android:layout_width="0dp"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:layout_weight="1"
         android:orientation="vertical"
         android:gravity="top|center_horizontal">

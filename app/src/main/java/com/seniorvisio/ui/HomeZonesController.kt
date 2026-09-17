@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -542,6 +543,32 @@ class HomeZonesController(
                 zoneInfo.layoutParams = lp
             }
         }
+
+        // ═══ ET LA BANDE PASSE DEVANT LES TITRES ═══
+        //
+        // La cause du recouvrement est corrigée dans la mise en page (voir
+        // blocInfoCentre), mais une hauteur qui se mesure juste au pixel près
+        // reste une hauteur qu'un changement de police ou d'interligne peut
+        // faire déborder de nouveau. Or ce qui déborde ici, c'est la date —
+        // le seul repère permanent de la journée de Jean.
+        //
+        // Elle est donc posée DEVANT. Le haut du bloc des titres est vide :
+        // l'image et le texte y sont centrés verticalement, rien n'y est
+        // écrit. Une date qui empiète de quelques pixels s'y lit sans rien
+        // masquer, au lieu de disparaître sous un aplat.
+        //
+        // outlineProvider NONE parce que zoneInfo porte un fond : sans cela,
+        // l'élévation projetterait une ombre portée sur les titres. On veut
+        // l'ordre de dessin, pas le relief.
+        //
+        // Sur zoneInfo et non sur la date elle-même : l'ordre de dessin se
+        // décide entre ENFANTS D'UN MÊME PARENT. Élever le texte ne l'aurait
+        // fait passer que devant ses voisins dans la bande, pas devant la zone
+        // des titres, qui est sa tante et non sa sœur.
+        val densité = context.resources.displayMetrics.density
+        zoneInfo.outlineProvider =
+            if (modeActualite) ViewOutlineProvider.NONE else ViewOutlineProvider.BACKGROUND
+        zoneInfo.elevation = if (modeActualite) ÉLÉVATION_BANDE_INFO_DP * densité else 0f
         val déjàEnPlace = zoneStack.childCount == ordered.size &&
             ordered.withIndex().all { (index, view) -> zoneStack.getChildAt(index) === view }
         if (déjàEnPlace) return
@@ -634,6 +661,14 @@ class HomeZonesController(
          * jour où l'une des deux est retouchée, sans que rien ne le signale.
          */
         const val ZONE_CORNER_RADIUS_DP = 16f
+
+        /**
+         * De combien la bande d'information passe devant les titres, en mode
+         * actualité. Quatre points suffisent : il ne s'agit pas de relief —
+         * l'ombre est justement désactivée — mais uniquement de décider qui
+         * est dessiné en dernier.
+         */
+        private const val ÉLÉVATION_BANDE_INFO_DP = 4f
 
         /** Même durée de fondu que les zones de texte, pour que tout l'écran respire au même rythme. */
         private const val FADE_MS = 400L
