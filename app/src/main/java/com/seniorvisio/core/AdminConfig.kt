@@ -319,6 +319,20 @@ class AdminConfig(context: Context) {
         get() = prefs.getBoolean(KEY_COMMANDES_VOCALES, true)
         set(value) = prefs.edit().putBoolean(KEY_COMMANDES_VOCALES, value).apply()
 
+    /**
+     * La liste des fils, posée à distance par l'administrateur.
+     *
+     * ELLE PASSE DEVANT celle livrée avec l'APK (voir
+     * RafraichisseurFlux.adresses), y compris en production où la valeur bâtie
+     * est vide. Remplir ce champ allume donc le fil d'information sur la
+     * tablette de Jean, sans reconstruction — c'est voulu, et c'est noté ici
+     * parce que le build.gradle a longtemps prétendu le contraire.
+     *
+     * Vide signifie « rien à dire », pas « éteins » : c'est le repli sur la
+     * valeur bâtie, et non une extinction. Éteindre une production qui a été
+     * allumée demande donc de vider ce champ ET de savoir que l'APK de
+     * production, lui, n'en propose aucun.
+     */
     var fluxActualites: String
         get() = prefs.getString(KEY_FLUX_ACTUALITES, null).orEmpty()
         set(value) = prefs.edit().putString(KEY_FLUX_ACTUALITES, value).apply()

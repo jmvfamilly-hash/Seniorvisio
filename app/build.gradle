@@ -128,12 +128,35 @@ android {
             buildConfigField "String", "DEVICE_ID", "\"jean_tablet\""
             buildConfigField "String", "CALLS_COLLECTION", "\"calls\""
             buildConfigField "boolean", "KIOSK_ENABLED", "true"
-            // VIDE, ET C'EST LE GARDE-FOU. Un fil d'information qui
-            // apparaîtrait de lui-même sur la tablette de Jean serait un
-            // changement d'écran que personne ne lui a demandé — et il n'a
-            // aucun moyen de le faire disparaître. L'adresse vide éteint la
-            // fonction entièrement (voir RafraichisseurFlux). Le jour où on
-            // la voudra chez lui, c'est cette ligne, et elle seule.
+            // VIDE PAR DÉFAUT — UN RÉGLAGE D'USINE, PAS UN VERROU.
+            //
+            // Un fil d'information qui apparaîtrait de lui-même sur la
+            // tablette de Jean serait un changement d'écran que personne ne
+            // lui a demandé, et il n'a aucun moyen de le faire disparaître.
+            // D'où cette valeur vide : à la sortie d'usine, la fonction est
+            // éteinte.
+            //
+            // CE COMMENTAIRE A PROMIS PLUS QUE ÇA, ET C'ÉTAIT FAUX.
+            //
+            // Il disait « l'adresse vide éteint la fonction entièrement » et
+            // « le jour où on la voudra chez lui, c'est cette ligne, et elle
+            // seule ». C'était vrai quand il a été écrit. Ça ne l'est plus
+            // depuis que le PWA sait écrire la liste des fils :
+            //
+            //     RafraichisseurFlux.adresses() :
+            //     config.fluxActualites.takeIf { it.isNotBlank() }
+            //         ?: BuildConfig.FLUX_ACTUALITES
+            //
+            // Le réglage distant PASSE DEVANT. Remplir le champ dans le
+            // panneau d'administration de production allume donc le fil chez
+            // Jean, sans reconstruire quoi que ce soit.
+            //
+            // C'est un choix assumé — l'administrateur doit pouvoir décider
+            // sans build — et il est laissé tel quel. Ce qui ne pouvait pas
+            // rester, c'est un commentaire annonçant une garantie que le code
+            // ne tient pas : on s'y fie pour ne PAS vérifier ailleurs, et
+            // c'est exactement comme ça qu'un écran finit par apparaître chez
+            // quelqu'un qui ne l'a pas demandé.
             buildConfigField "String", "FLUX_ACTUALITES", "\"\""
         }
         validation {
