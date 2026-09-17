@@ -120,16 +120,50 @@
         android:padding="24dp"
         android:visibility="gone">
 
-        <ImageView
-            android:id="@+id/imageActualite"
+        <!-- ═══ LA PHOTO ET SON CRÉDIT, DANS UNE SEULE COLONNE ═══
+
+             L'ImageView occupait cette place seule. Le crédit du photographe
+             se rapporte à l'image et non à l'article : il descend donc avec
+             elle, et non sous le titre où il passerait pour le nom du fil.
+
+             La photo prend le POIDS, le crédit son contenu. La photo se réduit
+             donc exactement de la hauteur du crédit, et la colonne entière
+             reste dans la hauteur de la rangée — celle du bloc de titre en
+             face. Sans cela, la ligne ajoutée pousserait la colonne au-delà et
+             le bas de la photo serait coupé.
+
+             fitCenter et non centerCrop : une photo de presse recadrée perd
+             souvent son sujet, et personne ne peut le signaler ici. -->
+        <LinearLayout
+            android:id="@+id/colonneImageActualite"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="4"
             android:layout_marginEnd="24dp"
-            android:scaleType="fitCenter"
-            android:adjustViewBounds="true"
-            android:contentDescription="Illustration de l'article"
-            android:visibility="gone" />
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/imageActualite"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scaleType="fitCenter"
+                android:contentDescription="Illustration de l'article" />
+
+            <TextView
+                android:id="@+id/creditActualite"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textSize="14sp"
+                android:alpha="0.55"
+                android:gravity="end"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:visibility="gone"
+                android:text="" />
+        </LinearLayout>
 
         <LinearLayout
             android:layout_width="0dp"

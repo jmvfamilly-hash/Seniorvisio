@@ -549,7 +549,23 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 when (rendu) {
                     is Rendu.Texte -> {
-                        zones.afficherActualite(rendu.texte, rendu.vignette, rendu.origine)
+                        zones.afficherActualite(
+                            rendu.texte,
+                            rendu.vignette,
+                            rendu.origine,
+                            rendu.crédit,
+                        )
+                        // Le nom du fil ne s'affiche pas alors que l'analyseur
+                        // le lit — vérifié en l'exécutant sur le flux réel. Le
+                        // défaut est donc entre les deux, et « rien ne
+                        // s'affiche » se lit pareil que la donnée manque ou que
+                        // la vue soit masquée. Cette ligne tranche.
+                        CallTrace.record(
+                            "ACCUEIL actualité rendu",
+                            "origine=" + (rendu.origine ?: "ABSENTE") +
+                                " · crédit=" + (rendu.crédit ?: "absent") +
+                                " · " + (if (rendu.vignette != null) "avec" else "sans") + " vignette",
+                        )
                         zones.majNavigationActualite(rangActualite, titresActualite.size)
                     }
                     else -> zones.masquerActualite()

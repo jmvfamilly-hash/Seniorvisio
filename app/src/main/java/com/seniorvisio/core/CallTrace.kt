@@ -123,7 +123,23 @@ object CallTrace {
      * liste exacte : « REPOS mémoire » et « REPOS mémoire SAUT » sont la même
      * mesure, et oublier la seconde reviendrait à jeter précisément les sauts.
      */
-    private val PRÉFIXES_REPOS = listOf("DÉMARRAGE", "REPOS mémoire", "MÉMOIRE")
+    private val PRÉFIXES_REPOS = listOf(
+        "DÉMARRAGE",
+        "REPOS mémoire",
+        "MÉMOIRE",
+        // Le fil d'information se rafraîchit une fois par jour, donc toujours
+        // HORS appel. Ses lignes tombaient exactement dans le trou que ce
+        // tampon existe pour boucher : elles disaient quels fils ont été lus et
+        // sous quel nom, et le premier appel les effaçait. On cherchait ensuite
+        // pourquoi le nom du fil n'apparaît pas, avec un journal d'où la
+        // réponse avait été retirée.
+        "FLUX",
+        // Le rendu d'un titre sur l'accueil : une par article, et c'est elle
+        // qui dit si la provenance est arrivée jusqu'à la vue. La rotation des
+        // titres en produit plusieurs par heure ; le plafond de soixante joue
+        // son rôle et garde les plus récentes, qui sont les bonnes.
+        "ACCUEIL actualité rendu",
+    )
 
     private fun estLigneDeRepos(source: String): Boolean =
         PRÉFIXES_REPOS.any { source.startsWith(it) }

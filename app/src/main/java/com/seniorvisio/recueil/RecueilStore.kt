@@ -291,6 +291,7 @@ class RecueilStore(private val context: Context) {
                 ) "$élémentId.jpg" else null,
                 texte = brut[CHAMP_TEXTE] as? String,
                 origine = (brut[CHAMP_ORIGINE] as? String)?.takeIf { it.isNotBlank() },
+                crédit = (brut[CHAMP_CRÉDIT] as? String)?.takeIf { it.isNotBlank() },
             )
         }
         return Recueil(
@@ -353,6 +354,7 @@ class RecueilStore(private val context: Context) {
         private const val CHAMP_CAUSE = "cause"
         private const val CHAMP_TEXTE = "texte"
         private const val CHAMP_ORIGINE = "origine"
+        private const val CHAMP_CRÉDIT = "credit"
         private const val CHAMP_ÉTAT_GLOBAL = "etatGlobal"
         private const val CHAMP_VÉRIFIÉ_PAR = "verifiePar"
     }

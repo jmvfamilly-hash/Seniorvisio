@@ -602,11 +602,24 @@ class IncomingCallActivity : AppCompatActivity() {
                     // L'image n'apparaît QUE si le flux en a fourni une.
                     // Réserver sa place quand elle manque donnerait un titre
                     // serré à droite d'un vide inexpliqué.
+                    // C'est la COLONNE qui se montre ou se cache, et non la
+                    // seule image : le crédit du photographe vit dedans, et
+                    // masquer l'image seule laisserait sa ligne flotter sous
+                    // une photo absente.
+                    val colonneActu = findViewById<View>(R.id.colonneImageActualite)
                     if (rendu.vignette != null) {
                         imageActu.setImageBitmap(rendu.vignette)
-                        imageActu.visibility = View.VISIBLE
+                        colonneActu?.visibility = View.VISIBLE
                     } else {
-                        imageActu.visibility = View.GONE
+                        colonneActu?.visibility = View.GONE
+                    }
+                    findViewById<TextView>(R.id.creditActualite)?.let { vue ->
+                        if (rendu.crédit.isNullOrBlank() || rendu.vignette == null) {
+                            vue.visibility = View.GONE
+                        } else {
+                            vue.text = rendu.crédit
+                            vue.visibility = View.VISIBLE
+                        }
                     }
                     // La provenance, sous le titre, ou rien. Cherchée par
                     // findViewById plutôt que retenue : cette mise en page a
@@ -626,10 +639,19 @@ class IncomingCallActivity : AppCompatActivity() {
                 }
                 renderer?.visibility = View.INVISIBLE
                 zones.setBackground(HomeZonesController.Background.SLIDESHOW)
+                // La provenance est JOURNALISÉE, et ce n'est pas décoratif.
+                // Le nom du fil ne s'affiche pas alors que l'analyseur le lit
+                // correctement — vérifié en l'exécutant sur le flux réel. Le
+                // défaut est donc entre l'analyse et l'écran, et rien ne
+                // permettait de dire lequel des deux : « rien ne s'affiche »
+                // se lit pareil quand la donnée manque et quand la vue est
+                // masquée. Cette ligne tranche, sans coûter de ligne en plus.
                 CallTrace.record(
                     "APPEL actualité",
                     "${état.position}/${état.total} · ${rendu.texte.length} signes · " +
-                        (if (rendu.vignette != null) "avec vignette" else "sans vignette"),
+                        (if (rendu.vignette != null) "avec vignette" else "sans vignette") +
+                        " · origine=" + (rendu.origine ?: "ABSENTE") +
+                        " · crédit=" + (rendu.crédit ?: "absent"),
                 )
             }
             is Rendu.Impossible -> {

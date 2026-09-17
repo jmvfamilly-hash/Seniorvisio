@@ -121,6 +121,14 @@ data class Element(
      * pour ne rien dire.
      */
     val origine: String? = null,
+    /**
+     * Le crédit du photographe, quand le fil en donne un (<media:credit>).
+     *
+     * Distinct d'[origine], et affiché à un autre endroit : celui-ci se
+     * rapporte à la PHOTO, l'autre à l'article. Réunis sous le titre, ils
+     * laisseraient croire que le fil s'appelle « LUDOVIC MARIN/AFP ».
+     */
+    val crédit: String? = null,
 )
 
 /**

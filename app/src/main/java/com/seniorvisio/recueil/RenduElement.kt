@@ -39,7 +39,12 @@ sealed class Rendu {
      * L'écran d'appel s'en sert donc pour choisir sa disposition (voir
      * IncomingCallActivity.afficherRecueil).
      */
-    data class Texte(val texte: String, val vignette: Bitmap?, val origine: String? = null) : Rendu()
+    data class Texte(
+        val texte: String,
+        val vignette: Bitmap?,
+        val origine: String? = null,
+        val crédit: String? = null,
+    ) : Rendu()
 
     /**
      * Rien à montrer, et une phrase qui dit pourquoi.
@@ -125,7 +130,7 @@ class RenduTexte : RenduElement {
                 null
             }
         }
-        return Rendu.Texte(texte, vignette, element.origine)
+        return Rendu.Texte(texte, vignette, element.origine, element.crédit)
     }
 
     private companion object {

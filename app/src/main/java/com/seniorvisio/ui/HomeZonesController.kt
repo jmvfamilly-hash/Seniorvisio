@@ -100,6 +100,11 @@ class HomeZonesController(
     private val zoneCall: View = root.findViewById(R.id.zoneCall)
     private val zoneActualite: View = root.findViewById(R.id.zoneActualite)
     private val imageActualite: ImageView = root.findViewById(R.id.imageActualiteAccueil)
+    // La colonne qui porte la photo ET le crédit du photographe. C'est elle
+    // qu'on montre ou qu'on cache : masquer la seule image laisserait la ligne
+    // de crédit flotter sous une photo absente.
+    private val colonneImageActualite: View = root.findViewById(R.id.colonneImageAccueil)
+    private val creditActualite: TextView = root.findViewById(R.id.creditActualiteAccueil)
     private val texteActualite: TextView = root.findViewById(R.id.texteActualiteAccueil)
     private val boutonActualitePrecedente: Button = root.findViewById(R.id.boutonActualitePrecedente)
     private val boutonActualiteSuivante: Button = root.findViewById(R.id.boutonActualiteSuivante)
@@ -160,7 +165,12 @@ class HomeZonesController(
      * pièce restée en mémoire réapparaîtrait telle quelle à la fin de
      * l'actualité, des heures après avoir été prononcée.
      */
-    fun afficherActualite(texte: String, vignette: Bitmap?, origine: String? = null) {
+    fun afficherActualite(
+        texte: String,
+        vignette: Bitmap?,
+        origine: String? = null,
+        crédit: String? = null,
+    ) {
         texteActualite.text = texte
         // Masquée quand le fil ne se nomme pas — le cas de beaucoup de flux.
         // Une ligne vide sous le titre prendrait de la hauteur sur une zone qui
@@ -174,10 +184,18 @@ class HomeZonesController(
         }
         if (vignette != null) {
             imageActualite.setImageBitmap(vignette)
-            imageActualite.visibility = View.VISIBLE
+            colonneImageActualite.visibility = View.VISIBLE
         } else {
             imageActualite.setImageDrawable(null)
-            imageActualite.visibility = View.GONE
+            colonneImageActualite.visibility = View.GONE
+        }
+        // Sous la photo, et seulement s'il y a une photo : un crédit de
+        // photographe sans photographie ne se rapporte à rien.
+        if (crédit.isNullOrBlank() || vignette == null) {
+            creditActualite.visibility = View.GONE
+        } else {
+            creditActualite.text = crédit
+            creditActualite.visibility = View.VISIBLE
         }
         if (!modeActualite) {
             modeActualite = true

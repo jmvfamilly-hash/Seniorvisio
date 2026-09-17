@@ -58,6 +58,14 @@ object FluxRss {
          * AVEC l'article, ou elle est perdue au premier tri.
          */
         val origine: String? = null,
+        /**
+         * Le crédit du photographe, lu dans <media:credit>.
+         *
+         * Affiché SOUS LA PHOTO et non sous le titre, à la différence de
+         * [origine] : il se rapporte à l'image, pas à l'article. Les mettre
+         * ensemble laisserait croire que le fil s'appelle « LUDOVIC MARIN/AFP ».
+         */
+        val crédit: String? = null,
     )
 
     /**
@@ -87,6 +95,16 @@ object FluxRss {
             var autreImage: String? = null
             var description: String? = null
             var date: Instant? = null
+            // L'illustration déclarée par <media:content>, et le crédit du
+            // photographe qui l'accompagne. Séparés des deux réservoirs
+            // ci-dessus parce qu'ils PASSENT DEVANT : quand le fil donne un
+            // bloc média, c'est lui l'illustration de l'article.
+            var mediaImage: String? = null
+            var crédit: String? = null
+            // Vrai entre <media:content> et sa fermeture. Les enfants de ce
+            // bloc portent des noms — description, title, credit — que la
+            // troncature du préfixe rend identiques à ceux de l'article.
+            var dansMedia = false
             // Au niveau du CANAL, donc lu une fois et valable pour tous les
             // articles du fil. Déclaré ici et non dans la boucle : le
             // réinitialiser à chaque <item> l'effacerait, puisqu'il apparaît
@@ -106,6 +124,7 @@ object FluxRss {
                             texte = null; description = null
                             enclosure = null; autreImage = null
                             date = null
+                            mediaImage = null; crédit = null; dansMedia = false
                         }
                         // ═══ LE NOM DU FIL : <channel><title> ═══
                         //
@@ -126,6 +145,50 @@ object FluxRss {
                             nomDuFil = p.nextText().trim().takeIf { it.isNotBlank() }
 
                         !dansUnArticle -> Unit   // le reste de l'en-tête : ignoré
+
+                        // ═══ LE BLOC MÉDIA EST TRAITÉ AVANT TOUT LE RESTE ═══
+                        //
+                        // Ces trois branches sont EN TÊTE, et l'ordre est le
+                        // correctif lui-même : dans un « when », la première
+                        // branche qui accepte gagne. Placées plus bas, elles
+                        // arrivaient après « description », et la légende de la
+                        // photo écrasait le chapô avant qu'elles ne soient
+                        // seulement consultées.
+                        //
+                        // C'est la même faute que la garde du titre de canal,
+                        // quelques lignes plus haut : un nom de balise abrégé
+                        // ne dit pas à quel niveau il se trouve, et c'est la
+                        // position dans la liste qui porte la distinction.
+                        nom == "content" && !p.getAttributeValue(null, "url").isNullOrBlank() -> {
+                            dansMedia = true
+                            val url = p.getAttributeValue(null, "url")
+                            val type = p.getAttributeValue(null, "type").orEmpty()
+                            val medium = p.getAttributeValue(null, "medium").orEmpty()
+                            val estImage = (type.isBlank() || type.startsWith("image")) &&
+                                (medium.isBlank() || medium == "image")
+                            if (mediaImage == null && estImage) mediaImage = url
+                        }
+
+                        // Le crédit du photographe. Il n'a de sens que dans le
+                        // bloc média : ailleurs, « credit » désignerait autre
+                        // chose.
+                        nom == "credit" && dansMedia ->
+                            crédit = p.nextText().trim().takeIf { it.isNotBlank() }
+
+                        // Le reste du bloc média est écarté, et <media:description>
+                        // est la raison d'être de cette ligne : c'est la légende
+                        // de la photo, pas le chapô de l'article. Vérifié en
+                        // exécutant l'analyseur sur le flux réel — description
+                        // valait « Bruno Retailleau, candidat Les Républicains… »
+                        // au lieu du texte de l'article.
+                        //
+                        // Invisible à l'écran, puisque le chapô n'y est pas
+                        // affiché ; visible dans imageDans(), le dernier recours
+                        // qui cherche une image dans le HTML du chapô et
+                        // fouillait la légende de l'image qu'on venait de ne pas
+                        // prendre.
+                        dansMedia -> Unit
+
                         nom == "title" -> texte = p.nextText().trim()
                         nom == "description" || nom == "summary" ->
                             description = p.nextText()
@@ -157,6 +220,7 @@ object FluxRss {
                             ) enclosure = url
                         }
 
+
                         // Replis, pour les flux qui font autrement. Gardés
                         // parce qu'ils ne coûtent rien et qu'un fil
                         // d'information change de moteur de publication sans
@@ -171,15 +235,20 @@ object FluxRss {
                         }
                     }
 
-                    XmlPullParser.END_TAG -> if (nom == "item" || nom == "entry") {
+                    XmlPullParser.END_TAG -> if (nom == "content") {
+                        // La fermeture du bloc média rend leur sens ordinaire
+                        // aux balises qui suivent, dans l'article.
+                        dansMedia = false
+                    } else if (nom == "item" || nom == "entry") {
                         dansUnArticle = false
                         val t = texte
                         if (!t.isNullOrBlank()) {
                             titres += Titre(
                                 t,
-                                enclosure ?: autreImage ?: imageDans(description),
+                                mediaImage ?: enclosure ?: autreImage ?: imageDans(description),
                                 date,
                                 nomDuFil,
+                                crédit,
                             )
                             if (titres.size >= maximum) return titres
                         }
