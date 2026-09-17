@@ -2693,10 +2693,27 @@ function majListeRecueils(liste) {
   // ne rien dire d'utile, or c'est le visage de Jean qu'on est venu voir.
   els.recueilBar.classList.toggle("hidden", recueilsPrésentables.length === 0);
 
-  // Le recueil en cours de présentation vient d'être retiré depuis un autre
-  // téléphone : on referme plutôt que de laisser des flèches qui ne mènent
-  // nulle part.
-  if (recueilOuvertId && !recueilsPrésentables.some((r) => r.id === recueilOuvertId)) {
+  // ═══ REFERMER SEULEMENT SI LE RECUEIL A VRAIMENT DISPARU ═══
+  //
+  // Le garde-fou visait « le recueil vient d'être retiré depuis un autre
+  // téléphone » : des flèches qui ne mènent nulle part valent moins qu'une
+  // fermeture.
+  //
+  // Il cherchait dans recueilsPrésentables, qui est filtré sur « prêtes > 0 »,
+  // et « prêtes » compte les éléments que LA TABLETTE a marqués prêts dans son
+  // tableau de vérification. Il suffisait donc qu'un instantané Firestore
+  // arrive avec une vérification incomplète — document réécrit, vérification en
+  // cours, décodage qui échoue faute de mémoire — pour que le compte tombe à
+  // zéro et que la fenêtre se referme au nez de Jean, EN PLEINE CONSULTATION.
+  //
+  // Le journal de la tablette le montrait : « APPEL actualité 2/28 » puis, huit
+  // dixièmes de seconde plus tard, « APPEL recueil refermé ». Personne n'avait
+  // rien touché.
+  //
+  // La question posée est donc désormais la bonne : le recueil existe-t-il
+  // encore dans la collection ? Momentanément illisible n'est pas supprimé.
+  const existeEncore = (liste || []).some((r) => r.id === recueilOuvertId);
+  if (recueilOuvertId && !existeEncore) {
     fermerRecueilPrésenté();
   }
 }

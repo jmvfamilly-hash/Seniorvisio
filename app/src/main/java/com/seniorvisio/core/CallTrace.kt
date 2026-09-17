@@ -371,17 +371,50 @@ object CallTrace {
      * Debug.getMemoryInfo coûte quelques dizaines de millisecondes : c'est
      * pour ça qu'elle n'est appelée que sur un SAUT constaté, et non à chaque
      * battement. Mesurer trop souvent aurait ralenti ce qu'on mesure.
+     *
+     * ═══ CINQ CATÉGORIES NE FAISAIENT PAS LE COMPTE ═══
+     *
+     * La première fois que cette ventilation s'est déclenchée pour de bon, elle
+     * a rendu ceci :
+     *
+     *     graphique=0 · natif=19 · java=10 · code=4 · pile=0 · total=887
+     *
+     * Trente-trois mégaoctets nommés sur huit cent quatre-vingt-sept. Les
+     * catégories affichées étaient exactes ; elles décrivaient quatre pour cent
+     * de la mémoire du processus, et on en tirait des conclusions sur la
+     * totalité.
+     *
+     * private-other et system manquaient — c'est là que vivent les
+     * cartographies anonymes et les zones partagées, donc précisément ce qui
+     * n'est ni du tas Java, ni du tas natif, ni du code. Elles sont ajoutées,
+     * avec l'échange.
+     *
+     * Et une ligne « non expliqué », qui est la garde : tant qu'elle vaut zéro,
+     * la ventilation dit tout. Le jour où elle ne vaut plus zéro, elle le dit
+     * elle-même au lieu de laisser croire qu'on a fait le tour — ce qui vient
+     * de coûter une conclusion fausse, avancée avec une arithmétique qui
+     * tombait juste.
      */
     fun ventilationMémoire(): String {
         val info = android.os.Debug.MemoryInfo()
         android.os.Debug.getMemoryInfo(info)
         fun stat(nom: String) = info.getMemoryStat(nom)?.toIntOrNull()?.div(1024) ?: -1
-        return "graphique=${stat("summary.graphics")} Mo · " +
-            "natif=${stat("summary.native-heap")} Mo · " +
-            "java=${stat("summary.java-heap")} Mo · " +
-            "code=${stat("summary.code")} Mo · " +
-            "pile=${stat("summary.stack")} Mo · " +
-            "total=${stat("summary.total-pss")} Mo"
+        val graphique = stat("summary.graphics")
+        val natif = stat("summary.native-heap")
+        val java = stat("summary.java-heap")
+        val code = stat("summary.code")
+        val pile = stat("summary.stack")
+        val autrePrivé = stat("summary.private-other")
+        val système = stat("summary.system")
+        val total = stat("summary.total-pss")
+        // Ce qui n'est expliqué par AUCUNE catégorie. Zéro en régime sain ; tout
+        // autre chiffre dit que l'instrument regarde à côté (voir ci-dessus).
+        val nommées = listOf(graphique, natif, java, code, pile, autrePrivé, système)
+            .filter { it >= 0 }.sum()
+        return "graphique=$graphique Mo · natif=$natif Mo · java=$java Mo · " +
+            "code=$code Mo · pile=$pile Mo · autre-privé=$autrePrivé Mo · " +
+            "système=$système Mo · échange=${stat("summary.total-swap")} Mo · " +
+            "total=$total Mo · non expliqué=${total - nommées} Mo"
     }
 
     /**

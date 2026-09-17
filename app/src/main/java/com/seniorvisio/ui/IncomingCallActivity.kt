@@ -1068,6 +1068,22 @@ class IncomingCallActivity : AppCompatActivity() {
             callEngine.listenForRecueilCommande { commande ->
                 runOnUiThread {
                     val id = commande.recueilId
+                    // ═══ LA COMMANDE REÇUE EST JOURNALISÉE, PAS SEULEMENT SON EFFET ═══
+                    //
+                    // « APPEL recueil | refermé » disait ce qui s'était passé,
+                    // jamais qui l'avait demandé. Or la fenêtre se refermait
+                    // toute seule au milieu d'une consultation, et il a fallu
+                    // relire les deux côtés du code pour établir que l'ordre
+                    // venait du PWA — un identifiant vide, envoyé par une
+                    // fermeture automatique.
+                    //
+                    // Une ligne de plus, et la prochaine fois la question se
+                    // tranche à la lecture.
+                    CallTrace.record(
+                        "APPEL recueil commande",
+                        if (id.isNullOrEmpty()) "fermeture demandée (identifiant vide)"
+                        else "ouverture demandée · rang ${commande.index}",
+                    )
                     if (id.isNullOrEmpty()) lecteur.fermer() else lecteur.ouvrir(id, commande.index)
                 }
             }
