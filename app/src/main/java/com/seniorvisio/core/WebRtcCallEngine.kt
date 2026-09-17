@@ -476,8 +476,38 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
     @Volatile private var transcriptionWorker: Thread? = null
     @Volatile private var transcriptionWorkerRunning = false
-    private var lastSlowFeedLoggedAtMs = 0L
     private var lastOverflowLoggedAtMs = 0L
+
+    /**
+     * ═══ LE RETARD SE MESURE SUR UNE FENÊTRE, PAS SUR UN BLOC ═══
+     *
+     * L'alarme précédente comparait la durée d'un appel à feed() à cinquante
+     * millisecondes, dans l'absolu. Elle écrivait donc, une trentaine de fois
+     * par conversation :
+     *
+     *     moteur lent : 63 ms pour 110 ms de son
+     *
+     * Soixante-trois millisecondes pour avaler cent dix millisecondes de son,
+     * c'est-à-dire près de deux fois plus vite que le temps réel. Le moteur ne
+     * traînait pas : il était en avance, et on l'accusait quand même.
+     *
+     * Ce n'était pas seulement faux, c'était coûteux. Le tampon du journal est
+     * plafonné : trente lignes de fausse alerte par appel en chassent trente
+     * vraies. L'instrument se remplissait de son propre bruit.
+     *
+     * La bonne question n'est pas « ce bloc a-t-il été long ? » mais « le
+     * moteur suit-il ? », et elle ne se tranche que cumulativement : sur dix
+     * secondes, le temps passé à calculer doit rester sous la durée du son
+     * traité. Au-delà, le retard s'accumule pour de bon, et c'est le seul cas
+     * qui finit par s'entendre.
+     *
+     * Le pic isolé garde sa ligne à lui, avec une barre haute : un demi-seconde
+     * sur un seul bloc est un blocage, même si la moyenne reste bonne. Les deux
+     * pannes sont réelles et ne se soignent pas pareil.
+     */
+    private var fenêtreDébutMs = 0L
+    private var fenêtreSonMs = 0L
+    private var fenêtreCalculMs = 0L
 
     // Synchronisées toutes les deux : le démarrage est demandé depuis le
     // thread principal (startLocalMedia) ET depuis le thread de signalisation
@@ -534,12 +564,35 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                     val startedAt = SystemClock.elapsedRealtime()
                     transcription.feed(ring.source, chunk, ring.sampleRate, ring.channels)
                     val tookMs = SystemClock.elapsedRealtime() - startedAt
-                    if (tookMs >= SLOW_FEED_MS && startedAt - lastSlowFeedLoggedAtMs >= 1_000L) {
-                        lastSlowFeedLoggedAtMs = startedAt
+                    val duréeSonMs = (read / bytesPerMs(ring)).toLong()
+
+                    // Le pic isolé : un blocage franc, qui s'entend, même si la
+                    // moyenne reste bonne juste après.
+                    if (tookMs >= BLOCAGE_FEED_MS) {
                         CallTrace.record(
                             "APPEL transcription",
-                            "moteur lent : $tookMs ms pour ${read / bytesPerMs(ring)} ms de son",
+                            "moteur figé : $tookMs ms sur un seul bloc de $duréeSonMs ms de son",
                         )
+                    }
+
+                    // Le retard cumulé : la seule mesure qui dise si le moteur
+                    // suit. Une ligne toutes les dix secondes AU PLUS, et
+                    // uniquement quand il ne suit pas.
+                    if (fenêtreDébutMs == 0L) fenêtreDébutMs = startedAt
+                    fenêtreSonMs += duréeSonMs
+                    fenêtreCalculMs += tookMs
+                    if (startedAt - fenêtreDébutMs >= FENÊTRE_RETARD_MS) {
+                        if (fenêtreCalculMs > fenêtreSonMs) {
+                            CallTrace.record(
+                                "APPEL transcription",
+                                "moteur en retard : $fenêtreCalculMs ms de calcul pour " +
+                                    "$fenêtreSonMs ms de son sur les dernières " +
+                                    "${(startedAt - fenêtreDébutMs) / 1000} s",
+                            )
+                        }
+                        fenêtreDébutMs = startedAt
+                        fenêtreSonMs = 0L
+                        fenêtreCalculMs = 0L
                     }
                 } catch (e: Throwable) {
                     // Une exception du moteur ne doit pas emporter ce thread :
@@ -979,13 +1032,17 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         lastNetworkLoggedAtMs = 0L
     }
 
-    private fun watchSystemVolumes() {
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-        val now = "appel=${audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)}" +
+    /** Les niveaux tels que le système les donne à l'instant, en une ligne comparable. */
+    private fun lireNiveaux(audioManager: AudioManager): String =
+        "appel=${audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)}" +
             "/${audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)}" +
             " média=${audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)}" +
             "/${audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)}" +
             " mode=${audioManager.mode}"
+
+    private fun watchSystemVolumes() {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        val now = lireNiveaux(audioManager)
         if (now == lastSeenVolumes) return
         val avant = lastSeenVolumes
         lastSeenVolumes = now
@@ -1409,6 +1466,28 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         // question qu'aucune correction, prise seule, n'aurait tranchée.
         val music = setStreamShare(audioManager, AudioManager.STREAM_MUSIC, share)
         CallTrace.record("APPEL volume système", "consigne=$requested → appel $voice · média $music")
+
+        // ═══ L'INSTANTANÉ EST RAFRAÎCHI ICI, ET C'EST UN CORRECTIF ═══
+        //
+        // La sentinelle de [watchSystemVolumes] compare les niveaux courants à
+        // ceux qu'elle a vus la dernière fois, et crie « CHANGÉ SOUS NOUS »
+        // quand ils diffèrent. Elle ne savait rien des changements que nous
+        // faisons nous-mêmes : elle les découvrait au relevé suivant et les
+        // dénonçait comme venant de l'extérieur.
+        //
+        // Le journal en donne la démonstration complète, en trois lignes :
+        //
+        //     156,932s  consigne même pièce   | activé=true
+        //     159,168s  volume système        | consigne=0.0 → média 0/15
+        //     159,240s  niveaux               | CHANGÉ SOUS NOUS : média=11/15 → média=0/15
+        //
+        // Soixante-douze millisecondes après avoir mis le média à zéro, nous
+        // nous accusions d'avoir mis le média à zéro. Une alarme qui se
+        // déclenche à chaque appel n'est plus lue quand elle a raison — et
+        // celle-ci doit précisément servir à repérer le jour où les boutons
+        // physiques de la tablette, ou une autre application, touchent au son
+        // de Jean pendant qu'il parle.
+        lastSeenVolumes = lireNiveaux(audioManager)
     }
 
     /** Pose la part demandée du plafond sur un flux. Rend « niveau/max » pour le journal. */
@@ -1586,6 +1665,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         }
         audioFocusRequest = null
         lastSeenVolumes = null
+        // La fenêtre de retard appartient à l'appel qui s'achève : la laisser
+        // courir ferait porter à la première seconde du prochain appel le
+        // cumul du précédent, et l'accuserait d'un retard qu'il n'a pas.
+        fenêtreDébutMs = 0L
+        fenêtreSonMs = 0L
+        fenêtreCalculMs = 0L
         savedAudioMode?.let { audioManager.mode = it }
         @Suppress("DEPRECATION")
         audioManager.isSpeakerphoneOn = savedSpeakerphoneOn
@@ -2107,12 +2192,36 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         private const val IDLE_SLEEP_MS = 100L
 
         /**
-         * Au-delà, le moteur est franchement plus lent que le temps réel et la
-         * trace le dit. Cinquante millisecondes pour dix millisecondes de son,
-         * c'est un facteur cinq : soutenu, il vide la file en quelques
-         * secondes et il aurait, avant cette file, tenu le haut-parleur muet
-         * tout ce temps.
+         * Sur quelle durée le retard du moteur se juge.
+         *
+         * ═══ CE QUI A RENDU LE SEUIL PRÉCÉDENT FAUX ═══
+         *
+         * Il valait cinquante millisecondes, et sa justification écrite était :
+         * « cinquante millisecondes pour dix millisecondes de son, c'est un
+         * facteur cinq ». Le raisonnement était juste — pour des blocs de dix
+         * millisecondes.
+         *
+         * Or [READ_CHUNK_BYTES] en produit de CENT. Le facteur cinq annoncé
+         * était devenu un facteur zéro virgule cinq : le seuil se déclenchait
+         * sur un moteur deux fois plus rapide que le temps réel.
+         *
+         * Le seuil n'a jamais été modifié ; c'est ce qu'il mesurait qui a
+         * changé sous lui, en silence, le jour où les blocs ont été agrandis.
+         * Une constante dont la valeur dépend d'une AUTRE constante doit se
+         * calculer à partir d'elle, ou se mesurer relativement — jamais se
+         * recopier en dur avec le calcul en commentaire.
          */
-        private const val SLOW_FEED_MS = 50L
+        private const val FENÊTRE_RETARD_MS = 10_000L
+
+        /**
+         * Un seul appel au moteur qui dure autant est un blocage, quelle que
+         * soit la moyenne : le son continue d'arriver pendant ce temps-là.
+         *
+         * Un demi-seconde, parce que c'est l'ordre de grandeur à partir duquel
+         * la file de lecture commence à déborder pour de bon, et parce que le
+         * journal en a montré de vrais — « 650 ms » — noyés au milieu de trente
+         * fausses alertes qui, elles, ne disaient rien.
+         */
+        private const val BLOCAGE_FEED_MS = 500L
     }
 }

@@ -81,6 +81,52 @@ object CallTrace {
     private var droppedFromTail = 0
 
     private val entries = ArrayDeque<String>()
+
+    /**
+     * ═══ UN TROISIÈME TAMPON, PARCE QUE LE DEUXIÈME A EFFACÉ LA PREUVE ═══
+     *
+     * Deux corrections poussées le même jour se contredisaient.
+     *
+     * L'une mesure la mémoire AU REPOS, toutes les cinq minutes, parce que la
+     * croissance jusqu'à neuf cents mégaoctets ne se produit pas pendant les
+     * appels mais entre eux. L'autre vide les deux tampons au début d'un appel,
+     * pour que la chronologie cesse de reculer au milieu du texte.
+     *
+     * La seconde détruit donc exactement ce que la première collecte. Sur le
+     * premier journal récupéré après coup, il ne restait AUCUNE mesure au
+     * repos : le début de l'appel les avait toutes emportées. L'instrument
+     * s'était éteint lui-même, et il fallait relire le code pour s'en rendre
+     * compte — vu du journal, « aucune ligne de repos » ressemble à « rien ne
+     * s'est passé au repos ».
+     *
+     * D'où ce tampon-ci : les lignes qui décrivent l'état de la machine, et
+     * elles seules, y sont recopiées et n'en sortent JAMAIS au début d'un
+     * appel. Il couvre la vie entière du processus, pas celle d'un appel.
+     *
+     * La chronologie reste juste parce que ces lignes sont imprimées dans une
+     * section à part, sous un intertitre qui dit ce qu'elle est. Le défaut
+     * d'origine n'était pas que d'anciennes lignes subsistent : c'était
+     * qu'elles se mélangeaient aux nouvelles sans rien qui les distingue.
+     *
+     * Elles restent aussi dans le flot normal, à leur place. Une alerte mémoire
+     * pendant une conversation est un événement de cette conversation ; la voir
+     * deux fois avec le même horodatage ne trompe personne, ne pas la voir du
+     * tout dans la trace de l'appel, si.
+     */
+    private const val MAX_REPOS = 60
+
+    private val repos = ArrayDeque<String>()
+    private var reposPerdues = 0
+
+    /**
+     * Ce qui décrit la machine plutôt que l'appel. Un préfixe, et non une
+     * liste exacte : « REPOS mémoire » et « REPOS mémoire SAUT » sont la même
+     * mesure, et oublier la seconde reviendrait à jeter précisément les sauts.
+     */
+    private val PRÉFIXES_REPOS = listOf("DÉMARRAGE", "REPOS mémoire", "MÉMOIRE")
+
+    private fun estLigneDeRepos(source: String): Boolean =
+        PRÉFIXES_REPOS.any { source.startsWith(it) }
     private var startedAtMs = SystemClock.elapsedRealtime()
     private var lastAtMs = startedAtMs
 
@@ -113,6 +159,16 @@ object CallTrace {
         // secondes dès qu'il change, donc les lignes d'avant l'appel ont déjà
         // été envoyées. Ce qui reste ici couvre exactement « depuis le début de
         // cet appel », ce qui est précisément ce qu'on vient y chercher.
+        //
+        // Recopié AVANT l'effacement, et conservé à travers lui : c'est tout
+        // l'objet de ce tampon (voir MAX_REPOS).
+        if (estLigneDeRepos(source)) {
+            repos.addLast(line)
+            while (repos.size > MAX_REPOS) {
+                repos.removeFirst()
+                reposPerdues++
+            }
+        }
         if (source == CALL_START) {
             opening.clear()
             entries.clear()
@@ -194,6 +250,17 @@ object CallTrace {
             appendLine("Sans donnée personnelle : aucun texte prononcé n'entre ici (voir CallTrace).")
             appendLine("Colonnes : [temps depuis le démarrage, écart avec la ligne précédente] origine | contenu")
             appendLine()
+            if (repos.isNotEmpty()) {
+                appendLine("──── ÉTAT DE LA MACHINE, depuis le démarrage et à travers les appels ────")
+                if (reposPerdues > 0) {
+                    appendLine("     ($reposPerdues relevé(s) plus ancien(s) évincé(s))")
+                }
+                append(repos.joinToString("\n"))
+                appendLine()
+                appendLine()
+                appendLine("──── LA SUITE : depuis le début du dernier appel ────")
+                appendLine()
+            }
             append(opening.joinToString("\n"))
             if (droppedFromTail > 0) {
                 // Dit, et non passé sous silence : un journal qui a perdu des
@@ -301,6 +368,43 @@ object CallTrace {
             "total=${stat("summary.total-pss")} Mo"
     }
 
+    /**
+     * Ce qu'il reste de mémoire À LA TABLETTE ENTIÈRE, et non à nous.
+     *
+     * ═══ LA MESURE QUI MANQUAIT, ET CE QU'ELLE RETOURNE ═══
+     *
+     * Le journal porte cette ligne, une seconde et demie après le démarrage :
+     *
+     *     MÉMOIRE réclamée | CRITIQUE — le système va tuer des services
+     *                      | java=3/192 Mo · natif=7 Mo
+     *
+     * Une application qui vient de naître, qui tient sept mégaoctets, et à qui
+     * le système annonce qu'il va tuer des services. Sept mégaoctets ne mettent
+     * aucun appareil en difficulté. La pénurie ne vient donc pas de nous — ou
+     * pas d'elle seule — et nous sommes peut-être tués comme voisins encombrants
+     * plutôt que comme coupables.
+     *
+     * Tout ce qui était mesuré jusqu'ici décrivait NOTRE consommation. Aucune
+     * de ces mesures ne peut distinguer « nous fuyons » de « la tablette est
+     * pleine », puisque les deux donnent la même courbe vue de chez nous. Celle
+     * d'en face manquait, et elle tranche : si la mémoire libre de l'appareil
+     * s'effondre pendant que notre tas reste plat, le coupable est ailleurs.
+     *
+     * availMem se lit dans /proc/meminfo : quelques centaines de microsecondes,
+     * assez peu cher pour accompagner chaque relevé plutôt que les seuls sauts.
+     */
+    fun mesureSystème(): String {
+        val am = gestionnaireActivité ?: return "tablette=non mesurée"
+        val info = android.app.ActivityManager.MemoryInfo()
+        return runCatching {
+            am.getMemoryInfo(info)
+            val mo = 1024L * 1024L
+            val alerte = if (info.lowMemory) " ⚠ SOUS LE SEUIL" else ""
+            "tablette libre=${info.availMem / mo}/${info.totalMem / mo} Mo " +
+                "(seuil=${info.threshold / mo} Mo)$alerte"
+        }.getOrElse { "tablette=illisible" }
+    }
+
     private const val FICHIER = "journal-appel-precedent.txt"
 
     /**
@@ -311,6 +415,7 @@ object CallTrace {
     private const val DÉLAI_DISQUE_MS = 5_000L
 
     private var dossier: File? = null
+    @Volatile private var gestionnaireActivité: android.app.ActivityManager? = null
     private var révision: String = "?"
     private var écrivain: Handler? = null
 
@@ -339,6 +444,11 @@ object CallTrace {
         if (dossier != null) return
         dossier = context.filesDir
         révision = buildRev
+        // applicationContext, et non le service : cet objet vit aussi longtemps
+        // que le processus, et retenir un composant qui, lui, s'arrête, le
+        // garderait en vie pour rien.
+        gestionnaireActivité = context.applicationContext
+            .getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
         écrivain = Handler(HandlerThread("CallTraceDisque").apply { start() }.looper)
         installerFiletDePlantage()
     }

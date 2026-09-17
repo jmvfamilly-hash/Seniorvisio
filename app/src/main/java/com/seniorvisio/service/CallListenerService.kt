@@ -268,7 +268,10 @@ class CallListenerService : LifecycleService() {
         val précédent = dernierNatifAuReposMo
         dernierNatifAuReposMo = natifMo
         if (précédent < 0) {
-            CallTrace.record("REPOS mémoire", CallTrace.mesureMémoire())
+            CallTrace.record(
+                "REPOS mémoire",
+                "${CallTrace.mesureMémoire()} · ${CallTrace.mesureSystème()} · référence",
+            )
             return
         }
         val écart = natifMo - précédent
@@ -276,11 +279,14 @@ class CallListenerService : LifecycleService() {
             CallTrace.record(
                 "REPOS mémoire SAUT",
                 "+$écart Mo depuis le battement précédent → $natifMo Mo · " +
-                    CallTrace.ventilationMémoire(),
+                    "${CallTrace.mesureSystème()} · ${CallTrace.ventilationMémoire()}",
             )
         } else {
             val signe = if (écart >= 0) "+" else ""
-            CallTrace.record("REPOS mémoire", "${CallTrace.mesureMémoire()} · écart $signe$écart Mo")
+            CallTrace.record(
+                "REPOS mémoire",
+                "${CallTrace.mesureMémoire()} · écart $signe$écart Mo · ${CallTrace.mesureSystème()}",
+            )
         }
     }
 
@@ -288,12 +294,18 @@ class CallListenerService : LifecycleService() {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        CallTrace.record("MÉMOIRE réclamée", "${nomDuPalier(level)} · ${CallTrace.mesureMémoire()}")
+        CallTrace.record(
+            "MÉMOIRE réclamée",
+            "${nomDuPalier(level)} · ${CallTrace.mesureMémoire()} · ${CallTrace.mesureSystème()}",
+        )
     }
 
     override fun onLowMemory() {
         super.onLowMemory()
-        CallTrace.record("MÉMOIRE critique", "le système manque de mémoire · ${CallTrace.mesureMémoire()}")
+        CallTrace.record(
+            "MÉMOIRE critique",
+            "le système manque de mémoire · ${CallTrace.mesureMémoire()} · ${CallTrace.mesureSystème()}",
+        )
     }
 
     /** Le palier en toutes lettres : un entier nu ne se relit pas six mois plus tard. */
