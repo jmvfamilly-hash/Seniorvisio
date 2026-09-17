@@ -227,6 +227,23 @@
              recherche dans ce projet. D'où la mention explicite au
              rétablissement, écrite sous la case et lue AVANT de se connecter.
         -->
+        <!-- Le volume monte ici avec les deux cases, et pas par souci de
+             symétrie : la page simplifiée donnée aux proches (?mode=proches)
+             masque le bouton ⚙️ Réglages. Laissé là-bas, le volume devenait
+             inatteignable — et le jour où Jean entend mal, le proche n'aurait
+             eu aucun moyen de monter le son.
+
+             Un réglage qu'on retire d'un écran doit être suivi jusqu'à celui
+             où il reste joignable. -->
+        <div class="volume-control volume-control-visio">
+          <label for="volumeSlider">🔊 Volume chez Jean</label>
+          <input type="range" id="volumeSlider" min="0" max="200" value="100" step="5" data-unit=" %">
+          <!-- Dit franchement quand le son est coupé chez Jean. Un curseur à
+               zéro se voit quand on le regarde, et personne ne le regarde en
+               pleine conversation. -->
+          <p class="volume-warning hidden" id="volumeWarning"></p>
+        </div>
+
         <div class="caption-control caption-control-visio">
           <label>
             <input type="checkbox" id="sameRoomToggle">
@@ -264,15 +281,6 @@
       <!-- ================= FENÊTRE RÉGLAGES ================= -->
       <section id="paneSettings" class="pane hidden">
         <h2 class="pane-title">Réglages de l'appel</h2>
-
-        <div class="volume-control">
-          <label for="volumeSlider">🔊 Volume chez Jean</label>
-          <input type="range" id="volumeSlider" min="0" max="200" value="100" step="5" data-unit=" %">
-          <!-- Dit franchement quand le son est coupé chez Jean. Un curseur à
-               zéro se voit quand on le regarde, et personne ne le regarde en
-               pleine conversation. -->
-          <p class="volume-warning hidden" id="volumeWarning"></p>
-        </div>
 
         <!-- Cas où le proche est physiquement à côté de Jean : la tablette ne
              doit alors ni capter sa voix (elle reviendrait en écho dans le

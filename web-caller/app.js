@@ -307,6 +307,52 @@ const CONFIG = {
 // plutôt qu'un réglage partagé côté tablette qui écraserait les préférences
 // des autres appelants.
 const SETTINGS_STORAGE_KEY = "seniorvisio_caller_settings";
+// ═══ LA PAGE SIMPLIFIÉE DONNÉE AUX PROCHES ═══
+//
+// Un PARAMÈTRE D'ADRESSE, et non une seconde page. Une page dupliquée aurait
+// divergé de l'originale au premier correctif : c'est exactement ce qui est
+// arrivé entre l'écran d'accueil et l'écran d'appel de la tablette, deux fois,
+// et qui a coûté une journée à remettre d'aplomb.
+//
+//     …/Seniorvisio/?mode=proches   la vue visio, sans réglages ni admin
+//     …/Seniorvisio/?mode=complet   rétablit tout
+//
+// MÉMORISÉ, et ce n'est pas du confort. Le manifeste déclare
+// start_url "./index.html" : un proche qui installe le raccourci sur son écran
+// d'accueil rouvrirait l'application SANS le paramètre, donc avec les réglages
+// de retour. Le mode doit survivre à cette perte.
+//
+// D'où aussi « complet » : sans porte de sortie, le navigateur de
+// l'administrateur resterait simplifié pour toujours, et il faudrait vider les
+// données du site pour en ressortir — sur un téléphone, personne ne trouve.
+const MODE_STORAGE_KEY = "seniorvisio_mode_affichage";
+
+function modeAffichage() {
+  let demandé = null;
+  try {
+    demandé = new URLSearchParams(location.search).get("mode");
+  } catch (e) {
+    demandé = null;
+  }
+  try {
+    if (demandé === "proches" || demandé === "complet") {
+      localStorage.setItem(MODE_STORAGE_KEY, demandé);
+      return demandé;
+    }
+    return localStorage.getItem(MODE_STORAGE_KEY) || "complet";
+  } catch (e) {
+    // Navigation privée, stockage refusé : on rend ce que l'adresse demande, et
+    // à défaut la page entière. Le repli ne doit jamais RETIRER une commande à
+    // quelqu'un qui n'a rien demandé.
+    return demandé || "complet";
+  }
+}
+
+// Posé sur <body> plutôt qu'en masquant chaque bouton : une classe ne peut pas
+// buter sur un élément absent, là où document.getElementById rend null et fait
+// tomber tout le câblage qui suit (voir l'en-tête de ce fichier).
+document.body.classList.toggle("mode-proches", modeAffichage() === "proches");
+
 const DEFAULT_SETTINGS = {
   volume: 100,
   captionEnabled: false,

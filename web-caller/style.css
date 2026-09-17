@@ -874,3 +874,15 @@ body.verrouille { overflow: hidden; }
 .recueil-nav button:disabled {
   opacity: 0.4;
 }
+
+/* ═══ PAGE SIMPLIFIÉE POUR LES PROCHES (?mode=proches) ═══
+
+   Deux boutons retirés, et rien d'autre : la vue visio garde le volume, les
+   deux cases qui se décident en parlant, la caméra, les photos et le raccroché.
+
+   Le 🔒 Administration de l'écran d'appel n'est pas listé ici — il vit à
+   l'intérieur du panneau de réglages, donc il devient inatteignable du seul
+   fait que le bouton qui y mène a disparu. L'énumérer aurait laissé croire que
+   deux règles le protègent, alors qu'une seule agit. */
+body.mode-proches #openSettingsButton,
+body.mode-proches #openAdminIdleButton { display: none; }
