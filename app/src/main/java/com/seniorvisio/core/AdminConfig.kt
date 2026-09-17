@@ -349,6 +349,29 @@ class AdminConfig(context: Context) {
      * juste avant un redémarrage, et l'intention ne doit pas se perdre avec le
      * processus.
      */
+    /**
+     * La version de l'application qui a écrit le recueil du fil.
+     *
+     * ═══ POURQUOI CE CHAMP EXISTE ═══
+     *
+     * Le recueil n'est réécrit qu'une fois par jour. Cette règle porte sur le
+     * CONTENU — ne pas remplacer les titres sous les yeux de Jean à tout bout
+     * de champ — et elle est juste.
+     *
+     * Mais elle s'appliquait aussi, par effet de bord, aux changements de
+     * FORMAT. Ajouter un champ au recueil — la provenance du titre, par
+     * exemple — n'avait alors aucun effet visible avant le lendemain 7 h : on
+     * installait une version, on ne voyait rien, et rien ne disait que le
+     * document affiché datait d'avant. On cherche alors un défaut d'affichage
+     * qui n'existe pas.
+     *
+     * Un numéro de version qui ne correspond plus force donc une réécriture,
+     * une seule fois, au premier démarrage qui suit l'installation.
+     */
+    var fluxDerniereRevision: String
+        get() = prefs.getString(KEY_FLUX_REVISION, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_FLUX_REVISION, value).apply()
+
     var fluxListeChangee: Boolean
         get() = prefs.getBoolean(KEY_FLUX_LISTE_CHANGEE, false)
         set(value) = prefs.edit().putBoolean(KEY_FLUX_LISTE_CHANGEE, value).apply()
@@ -557,6 +580,7 @@ class AdminConfig(context: Context) {
         private const val KEY_FLUX_DERNIER_JOUR = "flux_dernier_rafraichissement"
         private const val KEY_FLUX_LISTE_CHANGEE = "flux_liste_changee"
         private const val KEY_CAPTION_INTERLIGNE = "caption_interligne"
+        private const val KEY_FLUX_REVISION = "flux_derniere_revision"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
         private const val KEY_DIM_JEAN_SPEECH = "dim_jean_speech"
         private const val KEY_ROOM_HANDOFF_ENABLED = "room_handoff_enabled"

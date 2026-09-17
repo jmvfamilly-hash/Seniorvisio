@@ -138,6 +138,24 @@ class RafraichisseurFlux(private val context: Context) {
      * lendemain matin pour montrer quelque chose.
      */
     private fun siDûRafraîchir() {
+        // ═══ UNE VERSION NOUVELLE RÉÉCRIT, SANS ATTENDRE 7 H ═══
+        //
+        // La règle « une fois par jour » porte sur le CONTENU : ne pas
+        // remplacer les titres sous les yeux de Jean à tout bout de champ. Elle
+        // ne doit pas s'appliquer au FORMAT. Ajouter un champ au recueil — la
+        // provenance du titre — n'avait sinon aucun effet visible avant le
+        // lendemain matin : on installe une version, on ne voit rien, et rien
+        // ne dit que le document affiché a été écrit par la précédente. On
+        // cherche alors un défaut d'affichage qui n'existe pas.
+        if (config.fluxDerniereRevision != BuildConfig.BUILD_REV) {
+            CallTrace.record(
+                "FLUX version",
+                "recueil écrit par « ${config.fluxDerniereRevision.ifEmpty { "aucune" }} », " +
+                    "cette version est ${BuildConfig.BUILD_REV} — réécriture immédiate",
+            )
+            rafraîchir()
+            return
+        }
         val échéance = dernièreÉchéanceDe7h()
         if (config.fluxDernierRafraichissementMs >= échéance) return
         rafraîchir()
@@ -242,6 +260,7 @@ class RafraichisseurFlux(private val context: Context) {
             // l'administrateur apprenne quelque chose de son essai.
             if (config.fluxListeChangee) {
                 publier(emptyList())
+                config.fluxDerniereRevision = BuildConfig.BUILD_REV
                 config.fluxListeChangee = false
                 config.fluxDernierRafraichissementMs = System.currentTimeMillis()
                 CallTrace.record(
@@ -259,6 +278,7 @@ class RafraichisseurFlux(private val context: Context) {
         }
 
         publier(titres)
+        config.fluxDerniereRevision = BuildConfig.BUILD_REV
         config.fluxListeChangee = false
         config.fluxDernierRafraichissementMs = System.currentTimeMillis()
         Log.i(TAG, "${titres.size} titres publiés")
