@@ -504,6 +504,17 @@ class HomeZonesController(
         textMomentIcon.setTextColor(palette.primaryText)
         textWeatherIcon.setTextColor(palette.primaryText)
         texteActualite.setTextColor(palette.primaryText)
+        // L'origine et le crédit aussi, alors qu'ils héritaient jusqu'ici du
+        // défaut du thème. Ce défaut n'était identique à la palette par aucune
+        // règle : il se trouvait simplement lui ressembler. L'écran d'appel
+        // venant d'être aligné sur cette palette, les laisser hériter aurait
+        // fait un TROISIÈME comportement — celui qui se remarque le jour où le
+        // thème change et où deux lignes sur trois suivent.
+        //
+        // Leur mise en retrait est portée par la transparence posée dans la
+        // mise en page, pas par une teinte à part.
+        origineActualite.setTextColor(palette.primaryText)
+        creditActualite.setTextColor(palette.primaryText)
         zoneActualite.background = GradientDrawable().apply {
             cornerRadius = ZONE_CORNER_RADIUS_DP * context.resources.displayMetrics.density
             setColor(palette.zoneBackground)
@@ -552,7 +563,15 @@ class HomeZonesController(
 
     companion object {
         /** Même arrondi que les deux zones de texte (voir RollingCaptionZone). */
-        private const val ZONE_CORNER_RADIUS_DP = 16f
+        /**
+         * Le rayon des coins des zones, partagé avec l'écran d'appel.
+         *
+         * Exposé et non privé : le bloc d'actualité de l'écran d'appel doit
+         * avoir EXACTEMENT le même fond, et recopier « 16f » là-bas rouvrirait
+         * la divergence qu'on vient de fermer — deux valeurs qui s'écartent le
+         * jour où l'une des deux est retouchée, sans que rien ne le signale.
+         */
+        const val ZONE_CORNER_RADIUS_DP = 16f
 
         /** Même durée de fondu que les zones de texte, pour que tout l'écran respire au même rythme. */
         private const val FADE_MS = 400L

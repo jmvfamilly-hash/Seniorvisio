@@ -222,6 +222,7 @@ class IncomingCallActivity : AppCompatActivity() {
                 // aux premières secondes de la sonnerie.
                 findViewById<View>(R.id.callRoot).setBackgroundColor(palette.background)
                 applyPaletteToAlert(palette)
+                appliquerPaletteAuxNews(palette)
                 screenIsDark = palette.isDark
                 publishScreenLayout()
             },
@@ -388,6 +389,38 @@ class IncomingCallActivity : AppCompatActivity() {
      * qu'une teinte unique ne permet pas. Le vert de remplissage, lui, ne
      * bouge pas — il contraste avec les deux.
      */
+    /**
+     * Peint le titre d'actualité comme l'accueil le peint.
+     *
+     * ═══ DEUX ÉCRANS, UNE SEULE SOURCE DE COULEUR ═══
+     *
+     * L'accueil peignait son titre avec palette.primaryText et posait dessous
+     * un fond arrondi palette.zoneBackground (voir
+     * HomeZonesController.applyPalette). Cet écran-ci écrivait en blanc fixe,
+     * sur rien. Les deux ne pouvaient donc pas s'accorder : rien ne les
+     * reliait, et la palette change avec l'heure de la journée.
+     *
+     * Le fond n'est pas décoratif. Ce bloc est posé sur la VIDÉO DU PROCHE,
+     * dont les couleurs sont quelconques : un titre sans fond devient
+     * illisible dès que la scène filmée est claire. C'est exactement la raison
+     * pour laquelle la zone d'information en a déjà un.
+     *
+     * L'origine et le crédit reçoivent la même couleur, leur transparence
+     * étant déjà posée dans la mise en page — c'est elle qui les met en
+     * retrait, pas une teinte à part.
+     */
+    private fun appliquerPaletteAuxNews(palette: ScreenTheme.Palette) {
+        findViewById<TextView>(R.id.texteActualite)?.setTextColor(palette.primaryText)
+        findViewById<TextView>(R.id.origineActualite)?.setTextColor(palette.primaryText)
+        findViewById<TextView>(R.id.creditActualite)?.setTextColor(palette.primaryText)
+        findViewById<View>(R.id.blocActualite)?.background =
+            android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = HomeZonesController.ZONE_CORNER_RADIUS_DP *
+                    resources.displayMetrics.density
+                setColor(palette.zoneBackground)
+            }
+    }
+
     private fun applyPaletteToAlert(palette: ScreenTheme.Palette) {
         findViewById<TextView>(R.id.textCallerName).setTextColor(palette.primaryText)
         findViewById<TextView>(R.id.textCountdownHint).setTextColor(palette.secondaryText)

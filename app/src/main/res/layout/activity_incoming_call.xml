@@ -109,15 +109,37 @@
          rentrer dans l'espace qui lui est donné » : Android réduit la taille
          jusqu'à ce que le titre tienne, au lieu de le tronquer. Un titre de
          fil d'information va de quarante à plus de cent trente signes, et
-         c'est le long qui déborde. Le plancher de 20 sp n'est pas décoratif :
-         en dessous, plus personne ne lit cet écran depuis un fauteuil. -->
+         c'est le long qui déborde. Le plancher de 22 sp n'est pas décoratif :
+         en dessous, plus personne ne lit cet écran depuis un fauteuil.
+
+         ═══ LES MÊMES VALEURS QUE L'ACCUEIL, ET CE N'EST PAS UN HASARD ═══
+
+         Bornes 22-64 sp, marge 20 dp, crédit 13 sp : identiques à
+         view_home_zones.xml. Elles ne l'étaient pas — 20-56 sp, 24 dp, 14 sp —
+         et l'écart se voyait. Un même interligne de 1,5 posé sur des
+         caractères de 56 et de 64 ne donne pas le même espacement en pixels :
+         ce qu'on prenait pour deux interlignes différents n'était qu'une
+         différence de corps.
+
+         La COULEUR n'est plus écrite ici. Elle était en dur (#FFFFFF) pendant
+         que l'accueil peignait le sien avec la palette de l'heure, donc les
+         deux écrans ne pouvaient pas s'accorder. C'est désormais la palette
+         qui peint les deux (voir IncomingCallActivity.appliquerPaletteAuxNews
+         et HomeZonesController.applyPalette) — une seule source, et deux
+         écrans qui ne peuvent plus diverger sans qu'on l'ait voulu.
+
+         Ce qui reste différent, volontairement : la HAUTEUR. Ici le bloc prend
+         la bande de la vidéo (voir ajusterBandeActualite), sur l'accueil il
+         occupe un poids fixe dans la colonne. Le titre a donc plus de place
+         pendant un appel, et l'ajustement automatique le rend un peu plus
+         grand — à bornes pourtant égales. -->
     <LinearLayout
         android:id="@+id/blocActualite"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="horizontal"
         android:baselineAligned="false"
-        android:padding="24dp"
+        android:padding="20dp"
         android:visibility="gone">
 
         <!-- ═══ LA PHOTO ET SON CRÉDIT, DANS UNE SEULE COLONNE ═══
@@ -139,7 +161,7 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="4"
-            android:layout_marginEnd="24dp"
+            android:layout_marginEnd="20dp"
             android:orientation="vertical"
             android:visibility="gone">
 
@@ -156,7 +178,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:textSize="14sp"
+                android:textSize="13sp"
                 android:alpha="0.55"
                 android:gravity="end"
                 android:maxLines="1"
@@ -177,10 +199,9 @@
                 android:layout_height="0dp"
                 android:layout_weight="1"
                 android:gravity="center_vertical"
-                android:textColor="#FFFFFF"
                 android:autoSizeTextType="uniform"
-                android:autoSizeMinTextSize="20sp"
-                android:autoSizeMaxTextSize="56sp"
+                android:autoSizeMinTextSize="22sp"
+                android:autoSizeMaxTextSize="64sp"
                 android:autoSizeStepGranularity="2sp" />
 
             <!-- ═══ D'OÙ SORT CETTE NOUVELLE ═══
@@ -204,7 +225,6 @@
                 android:maxLines="1"
                 android:ellipsize="end"
                 android:visibility="gone"
-                android:textColor="#FFFFFF"
                 android:text="" />
         </LinearLayout>
     </LinearLayout>
