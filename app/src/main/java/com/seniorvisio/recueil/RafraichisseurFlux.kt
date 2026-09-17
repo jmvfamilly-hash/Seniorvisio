@@ -292,6 +292,32 @@ class RafraichisseurFlux(private val context: Context) {
                 "retenus du jour ${titres.size}",
         )
 
+        // ═══ AUCUN FIL JOIGNABLE N'EST PAS UNE RÉPONSE ═══
+        //
+        // Ce contrôle passe AVANT tout le reste, et il corrige un défaut grave
+        // introduit avec le nettoyage de la liste.
+        //
+        // Au redémarrage qui suit une mise à jour, le Wi-Fi n'est pas encore
+        // associé : tous les fils sont injoignables, la sélection ne rend rien,
+        // et le drapeau « liste changée » — qui survit au redémarrage — faisait
+        // alors publier un recueil VIDE. Pire, la date du dernier
+        // remplacement était posée : la tentative suivante n'aurait eu lieu
+        // qu'à 7 h le lendemain. Les titres disparaissaient donc pour une
+        // journée entière, à cause d'une poignée de secondes sans réseau.
+        //
+        // Une absence de réponse n'est pas une réponse vide. Rien n'est publié,
+        // rien n'est marqué comme fait, et l'on recommence au prochain contrôle
+        // — dans le quart d'heure.
+        if (injoignables == adresses.size) {
+            Log.w(TAG, "Aucun fil joignable : rien n'est publié, nouvel essai au prochain contrôle")
+            CallTrace.record(
+                "FLUX injoignable",
+                "les ${adresses.size} fil(s) sont muets — rien n'est publié, " +
+                    "nouvel essai dans le quart d'heure",
+            )
+            return
+        }
+
         if (titres.isEmpty()) {
             // ═══ SAUF QUAND L'ADMINISTRATEUR VIENT DE CHANGER LA LISTE ═══
             //
