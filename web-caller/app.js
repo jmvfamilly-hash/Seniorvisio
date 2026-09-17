@@ -1354,9 +1354,51 @@ function renderUsageDays(days) {
       block.appendChild(list);
     }
 
+    // ═══ CE QUE JEAN A TOUCHÉ CE JOUR-LÀ ═══
+    //
+    // Les boutons de navigation et le bouton de sommeil ont été ajoutés sans
+    // qu'on sache s'ils serviraient — « Jean n'a jamais rien à faire » reste la
+    // règle, et tout ce qu'on lui propose de faire est une hypothèse. Une
+    // hypothèse qu'on ne mesure pas s'installe pour toujours, faute de preuve
+    // du contraire.
+    //
+    // Le glissement figure à part du bouton alors qu'il fait la même chose :
+    // il a été ajouté « juste au cas où », et c'est la seule façon de savoir
+    // s'il sert. Une ligne vide est donc une réponse, pas une absence de
+    // réponse.
+    const gestes = day.gestes || {};
+    const totalGestes = Object.values(gestes).reduce((t, n) => t + (Number(n) || 0), 0);
+    if (totalGestes > 0) {
+      const ligne = document.createElement("div");
+      ligne.className = "usage-day-label";
+      const detail = document.createElement("span");
+      detail.textContent = LIBELLÉS_GESTES
+        .filter(([clef]) => Number(gestes[clef]) > 0)
+        .map(([clef, libellé]) => `${libellé} ${gestes[clef]}`)
+        .join(" · ");
+      ligne.appendChild(detail);
+      block.appendChild(ligne);
+    }
+
     els.usageDays.appendChild(block);
   });
 }
+
+// L'ordre d'affichage est celui-ci et non celui du document : les deux moyens
+// d'un même déplacement se lisent côte à côte, ce qui est la comparaison qu'on
+// vient chercher. Les noms sont ceux de UsageStats.GESTE_* — les changer d'un
+// seul côté ferait disparaître une colonne sans rien signaler.
+const LIBELLÉS_GESTES = [
+  ["actualitePrecedentBouton", "◀ titre (bouton)"],
+  ["actualitePrecedentGlissement", "◀ titre (glissement)"],
+  ["actualiteSuivantBouton", "▶ titre (bouton)"],
+  ["actualiteSuivantGlissement", "▶ titre (glissement)"],
+  ["recueilPrecedentBouton", "◀ photo (bouton)"],
+  ["recueilPrecedentGlissement", "◀ photo (glissement)"],
+  ["recueilSuivantBouton", "▶ photo (bouton)"],
+  ["recueilSuivantGlissement", "▶ photo (glissement)"],
+  ["sommeil", "sommeil"],
+];
 
 function renderUsageSummary(days) {
   els.usageSummary.textContent = "";

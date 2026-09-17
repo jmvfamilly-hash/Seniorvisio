@@ -401,11 +401,40 @@
                 android:elevation="6dp"
                 android:background="@drawable/fond_bouton_navigation" />
 
-            <View
+            <!-- ═══ « NOUVELLES DU JOUR », À LA PLACE DE L'ESPACEUR ═══
+
+                 Le vide entre les deux cibles était tenu par une View de
+                 largeur nulle et de poids 1. Ce libellé reprend EXACTEMENT ces
+                 deux propriétés : le vide reste donc garanti, quelles que
+                 soient la police et la longueur des libellés des boutons —
+                 c'était la raison d'être de l'espaceur, et elle n'a pas
+                 disparu.
+
+                 Il dit à Jean ce qu'il regarde. Deux flèches sans rien entre
+                 elles font naviguer dans quelque chose qui ne se nomme pas :
+                 on sait avancer, on ne sait pas dans quoi.
+
+                 Pas de capitales, conformément aux consignes de lisibilité, et
+                 un corps inférieur à celui des boutons : c'est une indication,
+                 pas une commande. Rien ici ne se touche.
+
+                 minWidth conservé : si un jour la barre devait se serrer, le
+                 libellé s'efface par ellipse plutôt que de coller les deux
+                 boutons l'un contre l'autre. -->
+            <TextView
+                android:id="@+id/titreBandeauActualite"
                 android:layout_width="0dp"
-                android:layout_height="1dp"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:minWidth="24dp" />
+                android:layout_gravity="center_vertical"
+                android:minWidth="24dp"
+                android:gravity="center"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textSize="20sp"
+                android:textAllCaps="false"
+                android:alpha="0.75"
+                android:text="Nouvelles du jour" />
 
             <Button
                 android:id="@+id/boutonActualiteSuivante"

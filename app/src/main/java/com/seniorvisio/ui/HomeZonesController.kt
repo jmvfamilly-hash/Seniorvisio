@@ -20,6 +20,7 @@ import com.seniorvisio.core.HomeZone
 import com.seniorvisio.core.ScreenTheme
 import com.seniorvisio.core.TimeContext
 import com.seniorvisio.core.TranscriptionSource
+import com.seniorvisio.core.UsageStats
 import com.seniorvisio.core.WeatherClient
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -108,6 +109,7 @@ class HomeZonesController(
     // de crédit flotter sous une photo absente.
     private val colonneImageActualite: View = root.findViewById(R.id.colonneImageAccueil)
     private val creditActualite: TextView = root.findViewById(R.id.creditActualiteAccueil)
+    private val titreBandeauActualite: TextView = root.findViewById(R.id.titreBandeauActualite)
 
     /**
      * La vignette actuellement posée sur la vue, pour pouvoir la reprendre
@@ -267,7 +269,10 @@ class HomeZonesController(
      * retirer le maintien allumé (voir MiseEnVeille).
      */
     fun brancherSommeil(surSommeil: () -> Unit) {
-        boutonSommeil.setOnClickListener { surSommeil() }
+        boutonSommeil.setOnClickListener {
+            UsageStats.noteGeste(UsageStats.GESTE_SOMMEIL)
+            surSommeil()
+        }
     }
 
     fun brancherNavigationActualite(
@@ -275,9 +280,26 @@ class HomeZonesController(
         surSuivant: () -> Unit,
         surSwipe: (Boolean) -> Unit,
     ) {
-        boutonActualitePrecedente.setOnClickListener { surPrécédent() }
-        boutonActualiteSuivante.setOnClickListener { surSuivant() }
-        GlissementHorizontal.brancher(zoneActualite, surSwipe)
+        // Comptés ICI, au point où le geste est reçu, et non dans le
+        // déplacement qu'il provoque : c'est le MOYEN qu'on veut mesurer — le
+        // bouton ou le glissement — et les deux aboutissent au même
+        // déplacement. Compter plus loin les aurait confondus, c'est-à-dire
+        // perdu exactement ce qu'on cherche à savoir.
+        boutonActualitePrecedente.setOnClickListener {
+            UsageStats.noteGeste(UsageStats.GESTE_ACTUALITE_PRECEDENT)
+            surPrécédent()
+        }
+        boutonActualiteSuivante.setOnClickListener {
+            UsageStats.noteGeste(UsageStats.GESTE_ACTUALITE_SUIVANT)
+            surSuivant()
+        }
+        GlissementHorizontal.brancher(zoneActualite) { versLAvant ->
+            UsageStats.noteGeste(
+                if (versLAvant) UsageStats.GESTE_ACTUALITE_SUIVANT_GLISSE
+                else UsageStats.GESTE_ACTUALITE_PRECEDENT_GLISSE
+            )
+            surSwipe(versLAvant)
+        }
     }
 
     /**
@@ -608,6 +630,12 @@ class HomeZonesController(
         // mise en page, pas par une teinte à part.
         origineActualite.setTextColor(palette.primaryText)
         creditActualite.setTextColor(palette.primaryText)
+        // Le libellé de la barre aussi. Le laisser hériter du thème aurait
+        // recréé le comportement à part qu'on vient justement de retirer de
+        // l'origine et du crédit : trois textes peints par la palette et un
+        // quatrième qui suit sa propre règle, indiscernables tant que le thème
+        // ne change pas.
+        titreBandeauActualite.setTextColor(palette.primaryText)
         zoneActualite.background = GradientDrawable().apply {
             cornerRadius = ZONE_CORNER_RADIUS_DP * context.resources.displayMetrics.density
             setColor(palette.zoneBackground)

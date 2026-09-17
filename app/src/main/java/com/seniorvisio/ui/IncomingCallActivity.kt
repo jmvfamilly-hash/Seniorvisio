@@ -775,18 +775,29 @@ class IncomingCallActivity : AppCompatActivity() {
     private fun brancherNavigationRecueil() {
         val précédent = findViewById<Button>(R.id.boutonRecueilPrecedent) ?: return
         val suivant = findViewById<Button>(R.id.boutonRecueilSuivant) ?: return
-        précédent.setOnClickListener { déplacerRecueil(-1) }
-        suivant.setOnClickListener { déplacerRecueil(+1) }
+        précédent.setOnClickListener {
+            UsageStats.noteGeste(UsageStats.GESTE_RECUEIL_PRECEDENT)
+            déplacerRecueil(-1)
+        }
+        suivant.setOnClickListener {
+            UsageStats.noteGeste(UsageStats.GESTE_RECUEIL_SUIVANT)
+            déplacerRecueil(+1)
+        }
 
         // Le glissement est branché sur les deux vues qui portent un contenu —
         // la photo et le bloc d'actualité — et pas sur la racine de l'écran :
         // sur la racine, il capterait aussi les gestes faits au-dessus des
         // boutons et des zones de texte.
-        findViewById<View>(R.id.imageRecueil)?.let { vue ->
-            GlissementHorizontal.brancher(vue) { versLAvant -> déplacerRecueil(if (versLAvant) +1 else -1) }
-        }
-        findViewById<View>(R.id.blocActualite)?.let { vue ->
-            GlissementHorizontal.brancher(vue) { versLAvant -> déplacerRecueil(if (versLAvant) +1 else -1) }
+        listOf(R.id.imageRecueil, R.id.blocActualite).forEach { id ->
+            findViewById<View>(id)?.let { vue ->
+                GlissementHorizontal.brancher(vue) { versLAvant ->
+                    UsageStats.noteGeste(
+                        if (versLAvant) UsageStats.GESTE_RECUEIL_SUIVANT_GLISSE
+                        else UsageStats.GESTE_RECUEIL_PRECEDENT_GLISSE
+                    )
+                    déplacerRecueil(if (versLAvant) +1 else -1)
+                }
+            }
         }
     }
 

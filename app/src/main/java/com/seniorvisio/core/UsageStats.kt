@@ -124,6 +124,42 @@ object UsageStats {
         writeDay(start.toLocalDate().toString(), day)
     }
 
+    /**
+     * Un geste de Jean sur l'écran, compté pour la journée en cours.
+     *
+     * ═══ POURQUOI COMPTER, ET POURQUOI SI FINEMENT ═══
+     *
+     * Les boutons de navigation et le bouton de sommeil ont été ajoutés sans
+     * qu'on sache s'ils serviraient. « Jean n'a jamais rien à faire » reste la
+     * règle : tout ce qu'on lui propose de faire est une hypothèse, et une
+     * hypothèse invérifiable finit par s'installer pour toujours faute de
+     * preuve du contraire.
+     *
+     * Le glissement est compté SÉPARÉMENT du bouton, alors que les deux font
+     * exactement la même chose. C'est précisément l'intérêt : le glissement a
+     * été ajouté « juste au cas où », et rien ne disait s'il servait. Deux
+     * compteurs répondent à la question ; un seul l'aurait enterrée.
+     *
+     * AUCUNE DONNÉE PERSONNELLE. Un nom de geste et un entier — pas quel titre
+     * était affiché, pas à quelle heure précise, rien de ce qui a été dit ni
+     * regardé. Ce qui est compté ici pourrait être affiché sur la porte de la
+     * chambre.
+     *
+     * Rangé dans la journée en cours, donc publié avec elle (voir
+     * DeviceStatusReporter.publishUsage, qui recopie toutes les clés du jour)
+     * et purgé avec elle au bout de huit jours. Rien à ajouter ailleurs.
+     */
+    @Synchronized
+    fun noteGeste(geste: String) {
+        if (!ready()) return
+        val aujourdhui = LocalDate.now().toString()
+        val day = readDay(aujourdhui)
+        val gestes = day.optJSONObject(FIELD_GESTES) ?: JSONObject()
+        gestes.put(geste, gestes.optInt(geste, 0) + 1)
+        day.put(FIELD_GESTES, gestes)
+        writeDay(aujourdhui, day)
+    }
+
     // ---- Rattrapage du temps écoulé ----
 
     /**
@@ -297,6 +333,23 @@ object UsageStats {
     const val FIELD_ENGINES = "engineSeconds"
     const val FIELD_BILLABLE_EQUIVALENT = "billableEquivalentSeconds"
     const val FIELD_CALLS = "calls"
+
+    /** Les gestes de Jean, comptés par nom (voir noteGeste et GESTE_*). */
+    const val FIELD_GESTES = "gestes"
+
+    // Les noms sont des constantes et non des chaînes écrites à l'appel :
+    // une faute de frappe créerait un compteur silencieux, qui monterait sans
+    // que personne ne le lise jamais — et le compteur attendu resterait à zéro,
+    // ce qui se conclurait par « la fonction ne sert pas ».
+    const val GESTE_ACTUALITE_SUIVANT = "actualiteSuivantBouton"
+    const val GESTE_ACTUALITE_PRECEDENT = "actualitePrecedentBouton"
+    const val GESTE_ACTUALITE_SUIVANT_GLISSE = "actualiteSuivantGlissement"
+    const val GESTE_ACTUALITE_PRECEDENT_GLISSE = "actualitePrecedentGlissement"
+    const val GESTE_RECUEIL_SUIVANT = "recueilSuivantBouton"
+    const val GESTE_RECUEIL_PRECEDENT = "recueilPrecedentBouton"
+    const val GESTE_RECUEIL_SUIVANT_GLISSE = "recueilSuivantGlissement"
+    const val GESTE_RECUEIL_PRECEDENT_GLISSE = "recueilPrecedentGlissement"
+    const val GESTE_SOMMEIL = "sommeil"
 
     private const val KEY_DAY_PREFIX = "day_"
     private const val KEY_MONTH_PREFIX = "month_"
