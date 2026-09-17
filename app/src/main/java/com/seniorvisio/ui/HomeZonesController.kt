@@ -557,9 +557,13 @@ class HomeZonesController(
         // écrit. Une date qui empiète de quelques pixels s'y lit sans rien
         // masquer, au lieu de disparaître sous un aplat.
         //
-        // outlineProvider NONE parce que zoneInfo porte un fond : sans cela,
+        // outlineProvider à NULL parce que zoneInfo porte un fond : sans cela,
         // l'élévation projetterait une ombre portée sur les titres. On veut
         // l'ordre de dessin, pas le relief.
+        //
+        // null, et non ViewOutlineProvider.NONE, qui n'existe pas : cette
+        // classe n'expose que BACKGROUND, BOUNDS et PADDED_BOUNDS. Une absence
+        // de contour se dit par l'absence de fournisseur.
         //
         // Sur zoneInfo et non sur la date elle-même : l'ordre de dessin se
         // décide entre ENFANTS D'UN MÊME PARENT. Élever le texte ne l'aurait
@@ -567,7 +571,7 @@ class HomeZonesController(
         // des titres, qui est sa tante et non sa sœur.
         val densité = context.resources.displayMetrics.density
         zoneInfo.outlineProvider =
-            if (modeActualite) ViewOutlineProvider.NONE else ViewOutlineProvider.BACKGROUND
+            if (modeActualite) null else ViewOutlineProvider.BACKGROUND
         zoneInfo.elevation = if (modeActualite) ÉLÉVATION_BANDE_INFO_DP * densité else 0f
         val déjàEnPlace = zoneStack.childCount == ordered.size &&
             ordered.withIndex().all { (index, view) -> zoneStack.getChildAt(index) === view }
