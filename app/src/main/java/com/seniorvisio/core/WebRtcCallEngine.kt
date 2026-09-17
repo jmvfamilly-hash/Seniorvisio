@@ -839,12 +839,52 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             override fun run() {
                 pollInboundBytes()
                 watchSystemVolumes()
+                surveillerMémoire()
                 mediaWatchdogHandler.postDelayed(this, MEDIA_WATCHDOG_TICK_MS)
             }
         }
         mediaWatchdogRunnable = runnable
         mediaWatchdogHandler.postDelayed(runnable, MEDIA_WATCHDOG_TICK_MS)
     }
+
+    /**
+     * Suit le tas natif toutes les trois secondes, et détaille sur un SAUT.
+     *
+     * ═══ POURQUOI TROIS SECONDES, ET POURQUOI UN SEUIL ═══
+     *
+     * La mesure était accrochée au relevé réseau, toutes les quinze secondes.
+     * Le journal de la panne montre 39 Mo, puis 101, puis 757 : l'explosion
+     * tient ENTIÈREMENT dans un intervalle, et on ne voit donc ni sa forme ni
+     * son point de départ. Une pente régulière et une marche brutale ne se
+     * cherchent pas au même endroit.
+     *
+     * Sur ce battement-ci, qui existe déjà, on obtient cinq points là où on en
+     * avait un. Et au-delà de trente mégaoctets d'écart, on paie la mesure
+     * détaillée — celle qui dit si ce sont les tampons graphiques ou des
+     * allocations ordinaires. Ce seuil évite de la payer en régime normal,
+     * où elle n'apprendrait rien.
+     */
+    private fun surveillerMémoire() {
+        val natifMo = android.os.Debug.getNativeHeapAllocatedSize() / (1024L * 1024L)
+        val précédent = dernierNatifMo
+        dernierNatifMo = natifMo
+        if (précédent < 0) {
+            CallTrace.record("APPEL mémoire", CallTrace.mesureMémoire())
+            return
+        }
+        val écart = natifMo - précédent
+        if (écart >= SAUT_MÉMOIRE_MO) {
+            CallTrace.record(
+                "APPEL mémoire SAUT",
+                "+$écart Mo en ${MEDIA_WATCHDOG_TICK_MS / 1000}s → $natifMo Mo · " +
+                    CallTrace.ventilationMémoire(),
+            )
+        } else if (natifMo != précédent) {
+            CallTrace.record("APPEL mémoire", CallTrace.mesureMémoire())
+        }
+    }
+
+    private var dernierNatifMo = -1L
 
     private fun stopMediaWatchdog() {
         mediaWatchdogRunnable?.let { mediaWatchdogHandler.removeCallbacks(it) }
@@ -1994,6 +2034,13 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
         /** Cadence de relevé du compteur d'octets reçus (voir startMediaWatchdog). */
         private const val MEDIA_WATCHDOG_TICK_MS = 3_000L
+
+        /**
+         * Au-delà de cet écart en trois secondes, on paie la mesure détaillée.
+         * Trente mégaoctets : bien au-dessus du bruit d'un appel qui se
+         * comporte, bien en dessous des sauts constatés lors de la panne.
+         */
+        private const val SAUT_MÉMOIRE_MO = 30L
 
         /**
          * Intervalle entre deux lignes de qualité de lien.

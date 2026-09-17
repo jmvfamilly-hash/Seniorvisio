@@ -254,6 +254,37 @@ object CallTrace {
         return "java=${javaUtilisé}/${javaMax} Mo · natif=$natif Mo"
     }
 
+    /**
+     * La même mesure, mais VENTILÉE PAR CATÉGORIE.
+     *
+     * ═══ POURQUOI LE TAS NATIF GLOBAL NE SUFFIT PAS ═══
+     *
+     * Il a suffi à trancher la première question — la mémoire, et non un
+     * plantage natif — en montrant le tas natif passer de 39 à 757 Mo en
+     * trente secondes pendant que le tas Java ne bougeait pas.
+     *
+     * Il ne dit pas ce QUI enfle. Or les recherches divergent complètement
+     * selon la catégorie : « graphics » désigne les tampons de surface et les
+     * trames vidéo, donc le rendu WebRTC ; « native » désigne des allocations
+     * ordinaires, donc du code qui retient des octets ; « code » désigne des
+     * bibliothèques chargées. Chercher au mauvais endroit coûte une journée.
+     *
+     * Debug.getMemoryInfo coûte quelques dizaines de millisecondes : c'est
+     * pour ça qu'elle n'est appelée que sur un SAUT constaté, et non à chaque
+     * battement. Mesurer trop souvent aurait ralenti ce qu'on mesure.
+     */
+    fun ventilationMémoire(): String {
+        val info = android.os.Debug.MemoryInfo()
+        android.os.Debug.getMemoryInfo(info)
+        fun stat(nom: String) = info.getMemoryStat(nom)?.toIntOrNull()?.div(1024) ?: -1
+        return "graphique=${stat("summary.graphics")} Mo · " +
+            "natif=${stat("summary.native-heap")} Mo · " +
+            "java=${stat("summary.java-heap")} Mo · " +
+            "code=${stat("summary.code")} Mo · " +
+            "pile=${stat("summary.stack")} Mo · " +
+            "total=${stat("summary.total-pss")} Mo"
+    }
+
     private const val FICHIER = "journal-appel-precedent.txt"
 
     /**
