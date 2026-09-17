@@ -62,6 +62,56 @@ sealed class Rendu {
  * Un par type. Le lecteur choisit le bon d'après [Element.type] et ne sait
  * rien de plus — c'est ce qui permet d'ajouter un type sans le modifier.
  */
+/**
+ * Décode un fichier image en le réduisant à la taille où il sera VU.
+ *
+ * ═══ CE QUE COÛTAIT L'ABSENCE DE CETTE FONCTION ═══
+ *
+ * decodeFile() sans options rend l'image en pleine définition, en ARGB_8888.
+ * Les fichiers rangés font jusqu'à 1920 px de côté (voir RecueilStore.CÔTÉ_
+ * PLAFOND) : 1920 × 1080 × 4 octets, soit huit mégaoctets et demi par vignette.
+ *
+ * Le journal a montré le tas natif passer de 39 à 759 mégaoctets en dix
+ * secondes pendant que les titres défilaient. Sept cent vingt mégaoctets
+ * divisés par huit et demi font quatre-vingt-sept images — et les titres
+ * défilaient à cinq par seconde.
+ *
+ * ═══ POURQUOI RIEN NE LES REPRENAIT ═══
+ *
+ * Depuis Android 8, les pixels vivent dans le tas NATIF, mais le ramasse-
+ * miettes se déclenche sur la pression du tas JAVA. Celui-ci est resté entre 9
+ * et 20 mégaoctets sur 192 pendant toute la montée : il n'a jamais été assez
+ * plein pour qu'une collecte parte, donc les images mortes n'ont jamais été
+ * rendues. Le tas natif est monté jusqu'à 883 mégaoctets et y est resté une
+ * heure, le système annonçant sans arrêt qu'il allait tuer des services.
+ *
+ * Réduire ne suffit pas à guérir cela — cela divise la vitesse de la fuite,
+ * pas la fuite. C'est le recyclage explicite, côté écran, qui rend les octets
+ * (voir HomeZonesController.afficherActualite). Mais décoder huit mégaoctets
+ * pour en afficher deux était de toute façon du gâchis pur.
+ */
+private fun décoderRéduit(fichier: File, côtéVisé: Int, tag: String): Bitmap? {
+    // Première passe sans allouer : on veut les dimensions, pas l'image.
+    // Décoder en grand pour réduire ensuite serait exactement la dépense qu'on
+    // cherche à éviter.
+    val mesure = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(fichier.absolutePath, mesure)
+    if (mesure.outWidth <= 0 || mesure.outHeight <= 0) return null
+
+    var facteur = 1
+    while (maxOf(mesure.outWidth, mesure.outHeight) / (facteur * 2) >= côtéVisé) facteur *= 2
+    val options = BitmapFactory.Options().apply { inSampleSize = facteur }
+    val image = BitmapFactory.decodeFile(fichier.absolutePath, options)
+    if (image != null && facteur > 1) {
+        Log.d(
+            tag,
+            "${mesure.outWidth}×${mesure.outHeight} réduit d'un facteur $facteur " +
+                "→ ${image.width}×${image.height}",
+        )
+    }
+    return image
+}
+
 interface RenduElement {
     fun préparer(element: Element, fichier: File?): Rendu
 }
@@ -74,7 +124,7 @@ interface RenduElement {
  * à chaque affichage coûterait un temps visible entre deux photos, pour un
  * résultat identique.
  */
-class RenduPhoto : RenduElement {
+class RenduPhoto(private val côtéVisé: Int) : RenduElement {
     override fun préparer(element: Element, fichier: File?): Rendu {
         if (fichier == null || !fichier.exists()) {
             // Le document Firestore dit « prêt » mais le fichier n'est plus là :
@@ -83,7 +133,7 @@ class RenduPhoto : RenduElement {
             return Rendu.Impossible("Cette photo n'est plus sur la tablette")
         }
         return try {
-            val bitmap = BitmapFactory.decodeFile(fichier.absolutePath)
+            val bitmap = décoderRéduit(fichier, côtéVisé, TAG)
                 ?: return Rendu.Impossible("Cette photo n'a pas pu être ouverte")
             Rendu.Image(bitmap)
         } catch (e: OutOfMemoryError) {
@@ -112,7 +162,7 @@ class RenduPhoto : RenduElement {
  * plus le droit qu'un proche d'envoyer à cette tablette une image qu'elle ne
  * sait pas décoder.
  */
-class RenduTexte : RenduElement {
+class RenduTexte(private val côtéVisé: Int) : RenduElement {
     override fun préparer(element: Element, fichier: File?): Rendu {
         val texte = element.texte?.takeIf { it.isNotBlank() }
             ?: return Rendu.Impossible("Ce texte est arrivé vide")
@@ -121,7 +171,19 @@ class RenduTexte : RenduElement {
         // Un titre sans image reste un titre, et il occupera toute la largeur.
         val vignette = fichier?.takeIf { it.exists() }?.let {
             try {
-                BitmapFactory.decodeFile(it.absolutePath)
+                // LA MOITIÉ DE LA DALLE, ET NON LA DALLE ENTIÈRE.
+                //
+                // La vignette occupe la colonne de gauche, qui pèse 4 sur 10
+                // dans la rangée (voir view_home_zones.xml) : elle ne sera
+                // jamais vue à plus de 40 % de la largeur. Viser la dalle
+                // entière rendait un facteur de réduction de 1 — c'est-à-dire
+                // aucune réduction — sur des fichiers rangés à 1920 px, donc
+                // huit mégaoctets et demi pour en afficher deux.
+                //
+                // Le facteur passe à 2, et l'image à 2,1 Mo. Quatre fois moins,
+                // sans qu'on puisse le voir : elle reste plus fine que la place
+                // où elle est posée.
+                décoderRéduit(it, côtéVisé / 2, TAG)
             } catch (e: OutOfMemoryError) {
                 Log.w(TAG, "Vignette trop lourde pour ${element.id}", e)
                 null
@@ -158,9 +220,9 @@ class RenduNonPrisEnCharge(private val quoi: String) : RenduElement {
  * Unique endroit où la correspondance est écrite : ajouter un type, c'est
  * ajouter une ligne ici et une classe, et rien d'autre.
  */
-fun renduPour(type: TypeElement): RenduElement = when (type) {
-    TypeElement.PHOTO -> RenduPhoto()
+fun renduPour(type: TypeElement, côtéVisé: Int): RenduElement = when (type) {
+    TypeElement.PHOTO -> RenduPhoto(côtéVisé)
     TypeElement.VIDEO -> RenduNonPrisEnCharge("Une vidéo")
-    TypeElement.TEXTE -> RenduTexte()
+    TypeElement.TEXTE -> RenduTexte(côtéVisé)
     TypeElement.INCONNU -> RenduNonPrisEnCharge("Un contenu d'un type inconnu")
 }

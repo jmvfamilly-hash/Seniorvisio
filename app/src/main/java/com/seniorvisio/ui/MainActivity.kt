@@ -539,14 +539,46 @@ class MainActivity : AppCompatActivity() {
         afficherActualiteCourante()
     }
 
+    /**
+     * ═══ UN SEUL FIL DE DÉCODAGE, ET SEULE LA DERNIÈRE DEMANDE COMPTE ═══
+     *
+     * Chaque changement de titre lançait un Thread neuf, qui décodait sa propre
+     * vignette. Le journal a montré les titres défiler toutes les deux dixièmes
+     * de seconde — bouton maintenu, ou glissement qui se répète — et le tas
+     * natif passer de 39 à 759 mégaoctets en dix secondes. Sept cent vingt
+     * mégaoctets, à huit et demi par image : quatre-vingt-sept vignettes
+     * décodées en même temps, pour une seule qui sera vue.
+     *
+     * LecteurRecueil, qui fait le même travail pour l'écran d'appel, tenait
+     * déjà la bonne forme : un exécuteur à fil unique et un compteur de
+     * génération. Ce chemin-ci ne l'avait pas, et rien ne le signalait tant que
+     * personne ne feuilletait vite.
+     *
+     * Le compteur ne fait pas qu'éviter d'afficher une image périmée : il
+     * ÉVITE DE LA POSER, donc de la garder en vie. Combiné au fil unique, une
+     * rafale de vingt changements ne laisse jamais plus d'une image décodée à
+     * la fois.
+     */
+    private val décodeurActualite: java.util.concurrent.ExecutorService =
+        java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread(r, "SeniorVisio-ActualiteAccueil").apply { isDaemon = true }
+        }
+
+    private var demandeActualite = 0
+
     private fun afficherActualiteCourante() {
         val element = titresActualite.getOrNull(rangActualite) ?: return
         val magasin = RecueilStore.actif
         val recueil = magasin?.disponibles()?.firstOrNull { it.id == recueilActualiteId }
         val fichier = if (recueil != null) magasin.fichier(recueil, element) else null
-        Thread {
-            val rendu = renduPour(element.type).préparer(element, fichier)
+        val côté = magasin?.définitionDeLaDalle ?: 1280
+        val mienne = ++demandeActualite
+        décodeurActualite.execute {
+            val rendu = renduPour(element.type, côté).préparer(element, fichier)
             runOnUiThread {
+                // Périmée : Jean a déjà demandé un autre titre. On ne la pose
+                // pas, donc rien ne la retient, donc elle peut être reprise.
+                if (mienne != demandeActualite) return@runOnUiThread
                 when (rendu) {
                     is Rendu.Texte -> {
                         zones.afficherActualite(
@@ -571,7 +603,7 @@ class MainActivity : AppCompatActivity() {
                     else -> zones.masquerActualite()
                 }
             }
-        }.apply { isDaemon = true; name = "SeniorVisio-ActualiteAccueil" }.start()
+        }
     }
 
     override fun onPause() {
@@ -596,6 +628,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // Le fil de décodage meurt avec l'écran. Sans cela, une rotation ou une
+        // recréation d'activité en laisserait un de plus derrière elle à chaque
+        // fois, tous inactifs et tous vivants — la fuite qu'on vient de fermer,
+        // sous une autre forme.
+        décodeurActualite.shutdownNow()
         zones.release()
         super.onDestroy()
     }

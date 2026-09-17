@@ -138,7 +138,7 @@ class LecteurRecueil(private val store: RecueilStore) {
         val courant = recueil ?: return
         val élément = courant.prêts.getOrNull(index) ?: return
         val fichier = store.fichier(courant, élément)
-        val rendu = renduPour(élément.type)
+        val rendu = renduPour(élément.type, store.définitionDeLaDalle)
         val mienne = ++demande
 
         décodeur.execute {

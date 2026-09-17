@@ -51,6 +51,12 @@ class RecueilStore(private val context: Context) {
      * d'essai n'ont pas le même écran, et ranger du 1920 sur une dalle de 1280
      * ne ferait que remplir un disque déjà étroit.
      */
+    /**
+     * Exposée : le rendu en a besoin pour réduire au décodage, et la recalculer
+     * de son côté serait une seconde vérité sur la même dalle.
+     */
+    val définitionDeLaDalle: Int get() = côtéMax
+
     private val côtéMax: Int by lazy {
         val métriques = DisplayMetrics()
         @Suppress("DEPRECATION")

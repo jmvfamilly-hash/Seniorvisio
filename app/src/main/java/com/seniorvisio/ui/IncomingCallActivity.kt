@@ -569,6 +569,16 @@ class IncomingCallActivity : AppCompatActivity() {
         blocActu?.visibility = View.GONE
         imageActu?.setImageDrawable(null)
 
+        // Ce qui était posé jusqu'ici, retenu AVANT d'être remplacé. Voir
+        // rendreImageRecueil : les octets d'un bitmap ne reviennent pas tout
+        // seuls sur cette tablette.
+        val ancienne = imageRecueilPosée
+        // Remis à zéro TOUT DE SUITE : les branches qui posent une image le
+        // renseignent, les autres — recueil refermé, rendu impossible — le
+        // laissent nul, et l'ancienne est alors reprise au lieu de rester
+        // retenue par un champ qui ne correspond plus à rien d'affiché.
+        imageRecueilPosée = null
+
         when (val rendu = état.rendu) {
             null -> {
                 // INVISIBLE et non GONE pour la vidéo, ici comme ailleurs dans
@@ -581,6 +591,7 @@ class IncomingCallActivity : AppCompatActivity() {
             }
             is Rendu.Image -> {
                 image.setImageBitmap(rendu.bitmap)
+                imageRecueilPosée = rendu.bitmap
                 image.visibility = View.VISIBLE
                 renderer?.visibility = View.INVISIBLE
                 zones.setBackground(HomeZonesController.Background.SLIDESHOW)
@@ -609,6 +620,7 @@ class IncomingCallActivity : AppCompatActivity() {
                     val colonneActu = findViewById<View>(R.id.colonneImageActualite)
                     if (rendu.vignette != null) {
                         imageActu.setImageBitmap(rendu.vignette)
+                        imageRecueilPosée = rendu.vignette
                         colonneActu?.visibility = View.VISIBLE
                     } else {
                         colonneActu?.visibility = View.GONE
@@ -661,6 +673,22 @@ class IncomingCallActivity : AppCompatActivity() {
                 zones.setBackground(HomeZonesController.Background.SLIDESHOW)
                 CallTrace.record("APPEL recueil", "inaffichable : ${rendu.raison}")
             }
+        }
+        // ═══ L'ANCIENNE IMAGE EST RENDUE, APRÈS QUE LA NOUVELLE EST POSÉE ═══
+        //
+        // Même correctif que sur l'accueil, et pour la même raison : depuis
+        // Android 8 les pixels vivent dans le tas natif, mais le ramasse-
+        // miettes se déclenche sur le tas Java, qui reste ici sous vingt
+        // mégaoctets sur cent quatre-vingt-douze. Une collecte ne part donc
+        // jamais, et les photos feuilletées pendant un appel s'accumulent —
+        // huit mégaoctets et demi chacune, jusqu'à 883 mégaoctets constatés.
+        //
+        // L'ordre et la garde d'identité sont la sûreté de l'opération :
+        // recycler un bitmap encore posé fait planter le dessin à la frame
+        // suivante, et le lecteur peut republier le MÊME état — donc la même
+        // instance — sans que rien n'ait changé.
+        if (ancienne != null && ancienne !== imageRecueilPosée && !ancienne.isRecycled) {
+            ancienne.recycle()
         }
         majBarreNavigationRecueil(état)
         publierPositionRecueil(état)
@@ -1127,6 +1155,15 @@ class IncomingCallActivity : AppCompatActivity() {
      */
     /** Ce que réappliquerPoliceSiChangée a posé la dernière fois. */
     private var policeAppliquée: com.seniorvisio.core.PoliceSenior? = null
+
+    /**
+     * Le bitmap actuellement posé sur la bande du recueil — photo de famille
+     * ou vignette d'actualité, les deux partagent la place.
+     *
+     * Retenu pour pouvoir le reprendre quand le suivant arrive. Null quand
+     * rien n'est affiché : la bande est alors rendue à la vidéo du proche.
+     */
+    private var imageRecueilPosée: android.graphics.Bitmap? = null
 
     private fun applyCaptionErgonomics() {
         zones.setVisibleLines(adminConfig.captionVisibleLines)

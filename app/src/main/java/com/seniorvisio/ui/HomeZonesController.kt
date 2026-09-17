@@ -105,6 +105,14 @@ class HomeZonesController(
     // de crédit flotter sous une photo absente.
     private val colonneImageActualite: View = root.findViewById(R.id.colonneImageAccueil)
     private val creditActualite: TextView = root.findViewById(R.id.creditActualiteAccueil)
+
+    /**
+     * La vignette actuellement posée sur la vue, pour pouvoir la reprendre
+     * quand la suivante arrive. Retenue ici et nulle part ailleurs : c'est
+     * cette classe qui sait ce qui est affiché, donc elle seule sait ce qui ne
+     * l'est plus.
+     */
+    private var vignetteActuelle: Bitmap? = null
     private val texteActualite: TextView = root.findViewById(R.id.texteActualiteAccueil)
     private val boutonActualitePrecedente: Button = root.findViewById(R.id.boutonActualitePrecedente)
     private val boutonActualiteSuivante: Button = root.findViewById(R.id.boutonActualiteSuivante)
@@ -182,12 +190,34 @@ class HomeZonesController(
             origineActualite.text = origine
             origineActualite.visibility = View.VISIBLE
         }
+        // ═══ L'ANCIENNE VIGNETTE EST RENDUE, ET C'EST LE CŒUR DU CORRECTIF ═══
+        //
+        // Depuis Android 8 les pixels d'un bitmap vivent dans le tas NATIF,
+        // mais le ramasse-miettes se déclenche sur la pression du tas JAVA.
+        // Celui-ci est resté entre 9 et 20 mégaoctets sur 192 pendant que le
+        // natif montait à 883 : jamais assez plein pour qu'une collecte parte.
+        // Les vignettes mortes n'étaient donc JAMAIS reprises, et le système
+        // annonçait sans arrêt qu'il allait tuer des services.
+        //
+        // recycle() rend les octets tout de suite, sans attendre une collecte
+        // qui n'arrive pas.
+        //
+        // L'ORDRE COMPTE, ET LA GARDE AUSSI. Recycler un bitmap encore posé
+        // sur une vue fait planter le dessin à la frame suivante. On pose donc
+        // le nouveau D'ABORD, puis on reprend l'ancien — et jamais s'il s'agit
+        // de la même instance, ce qui arriverait si le même titre était
+        // réaffiché.
+        val ancienne = vignetteActuelle
         if (vignette != null) {
             imageActualite.setImageBitmap(vignette)
             colonneImageActualite.visibility = View.VISIBLE
         } else {
             imageActualite.setImageDrawable(null)
             colonneImageActualite.visibility = View.GONE
+        }
+        vignetteActuelle = vignette
+        if (ancienne != null && ancienne !== vignette && !ancienne.isRecycled) {
+            ancienne.recycle()
         }
         // Sous la photo, et seulement s'il y a une photo : un crédit de
         // photographe sans photographie ne se rapporte à rien.
@@ -210,6 +240,10 @@ class HomeZonesController(
         if (!modeActualite) return
         modeActualite = false
         imageActualite.setImageDrawable(null)
+        // Quitter le fil d'information rend aussi la dernière vignette : sans
+        // cela, huit mégaoctets restaient retenus tant que l'écran vivait.
+        vignetteActuelle?.takeIf { !it.isRecycled }?.recycle()
+        vignetteActuelle = null
         applyZoneOrder()
     }
 

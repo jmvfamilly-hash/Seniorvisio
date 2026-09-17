@@ -275,10 +275,27 @@ class CallListenerService : LifecycleService() {
             return
         }
         val écart = natifMo - précédent
-        if (écart >= SAUT_REPOS_MO) {
+        // ═══ UN PLATEAU HAUT SE DÉCRIT AUSSI, ET PAS SEULEMENT UN SAUT ═══
+        //
+        // La règle ne payait la ventilation que sur un écart de cinquante
+        // mégaoctets. Or le journal a montré le tas natif à 883 mégaoctets,
+        // PLAT, pendant plus d'une heure : « écart +0 » à chaque battement.
+        // La ventilation ne s'est donc jamais déclenchée, et l'état qui nous
+        // intéressait — celui qui faisait crier le système toutes les minutes
+        // — n'a jamais été décrit.
+        //
+        // Une règle qui ne décrit que les transitions reste muette sur l'état
+        // installé. C'est exactement la panne qu'on cherchait, et elle était
+        // déjà là quand on a commencé à mesurer.
+        //
+        // La ventilation coûte quelques dizaines de millisecondes ; sur un
+        // battement de cinq minutes, et seulement au-dessus de trois cents
+        // mégaoctets, c'est sans conséquence.
+        if (écart >= SAUT_REPOS_MO || natifMo >= PLATEAU_REPOS_MO) {
+            val motif = if (écart >= SAUT_REPOS_MO) "+$écart Mo depuis le battement précédent" else "plateau"
             CallTrace.record(
                 "REPOS mémoire SAUT",
-                "+$écart Mo depuis le battement précédent → $natifMo Mo · " +
+                "$motif → $natifMo Mo · " +
                     "${CallTrace.mesureSystème()} · ${CallTrace.ventilationMémoire()}",
             )
         } else {
@@ -441,6 +458,17 @@ class CallListenerService : LifecycleService() {
          * plusieurs centaines.
          */
         private const val SAUT_REPOS_MO = 50L
+
+        /**
+         * Au-dessus de ce niveau, la ventilation est payée à CHAQUE battement,
+         * même si rien ne bouge.
+         *
+         * Trois cents mégaoctets : bien au-dessus du régime observé hors
+         * incident — quarante à cent — et bien en dessous du plateau constaté,
+         * 883. Un fonctionnement sain ne l'atteint pas ; l'état qu'on cherche à
+         * décrire le dépasse largement.
+         */
+        private const val PLATEAU_REPOS_MO = 300L
 
         /**
          * Attente avant de réarmer l'écoute, multipliée par le nombre
