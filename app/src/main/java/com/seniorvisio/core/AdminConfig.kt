@@ -297,6 +297,24 @@ class AdminConfig(context: Context) {
      * l'éteindre à distance est ce qui permet de trancher en trente secondes
      * entre « la détection est trop permissive » et « autre chose ne va pas ».
      */
+    /**
+     * L'interligne des zones de transcription, en multiple de la hauteur de
+     * ligne. De 0 à 1,5.
+     *
+     * 1,5 par défaut, comme le demandent les consignes d'accessibilité. Mais
+     * ces zones ont une hauteur FIXE et le nombre de lignes visibles y commande
+     * la taille de la police : l'interligne et la taille des caractères se
+     * disputent donc la même hauteur, et rien ne dit d'avance laquelle des deux
+     * soulage le plus une personne donnée. Cela se constate à l'écran.
+     *
+     * La plage descend jusqu'à zéro à la demande explicite de l'administrateur,
+     * en connaissance de ce que cela produit (voir
+     * RollingCaptionZone.setLineSpacingMultiplier).
+     */
+    var captionInterligne: Float
+        get() = prefs.getFloat(KEY_CAPTION_INTERLIGNE, 1.5f).coerceIn(0f, 1.5f)
+        set(value) = prefs.edit().putFloat(KEY_CAPTION_INTERLIGNE, value.coerceIn(0f, 1.5f)).apply()
+
     var commandesVocalesActives: Boolean
         get() = prefs.getBoolean(KEY_COMMANDES_VOCALES, true)
         set(value) = prefs.edit().putBoolean(KEY_COMMANDES_VOCALES, value).apply()
@@ -538,6 +556,7 @@ class AdminConfig(context: Context) {
         private const val KEY_COMMANDES_VOCALES = "commandes_vocales_actives"
         private const val KEY_FLUX_DERNIER_JOUR = "flux_dernier_rafraichissement"
         private const val KEY_FLUX_LISTE_CHANGEE = "flux_liste_changee"
+        private const val KEY_CAPTION_INTERLIGNE = "caption_interligne"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
         private const val KEY_DIM_JEAN_SPEECH = "dim_jean_speech"
         private const val KEY_ROOM_HANDOFF_ENABLED = "room_handoff_enabled"

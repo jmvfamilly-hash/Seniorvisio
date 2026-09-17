@@ -196,6 +196,12 @@ class MainActivity : AppCompatActivity() {
         zones.setVisibleLines(adminConfig.captionVisibleLines)
         zones.setScrollSpeedDpPerSec(adminConfig.captionScrollSpeedDp.toFloat())
         zones.setClearDelaySeconds(adminConfig.captionClearDelaySeconds)
+        // Relu à chaque battement comme les autres réglages d'ergonomie :
+        // l'administrateur qui bouge le curseur à distance doit en voir l'effet
+        // sur la tablette dans la seconde, et surtout PENDANT un appel — c'est
+        // là qu'il juge s'il en veut plus ou moins. Les valeurs identiques sont
+        // ignorées en aval, la relecture ne coûte donc rien.
+        zones.setCaptionLineSpacing(adminConfig.captionInterligne)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -518,6 +518,7 @@ const els = {
   voskModelSelect: el("voskModelSelect"),
   engineStatus: el("engineStatus"),
   commandesVocalesToggle: el("commandesVocalesToggle"),
+  interligneSlider: el("interligneSlider"),
   roomWakeEnabledToggle: el("roomWakeEnabledToggle"),
   roomWakeThresholdSlider: el("roomWakeThresholdSlider"),
   blockWakeAtNightToggle: el("blockWakeAtNightToggle"),
@@ -1003,6 +1004,7 @@ engine.onCommandRejected(afficherConsigneRefusée);
 const ADMIN_SLIDER_FIELDS = [
   ["captionLinesSlider", "captionVisibleLines"],
   ["scrollSpeedSlider", "captionScrollSpeedDp"],
+  ["interligneSlider", "captionInterligne"],
   ["captionClearDelaySlider", "captionClearDelaySeconds"],
   ["roomWakeThresholdSlider", "roomWakeThreshold"],
   // Plafonds mensuels des services payants. Le champ porte le nom du moteur

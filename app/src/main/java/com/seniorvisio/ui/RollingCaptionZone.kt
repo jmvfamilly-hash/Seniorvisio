@@ -416,6 +416,44 @@ class RollingCaptionZone(
         fitTextToVisibleLines()
     }
 
+    /**
+     * L'interligne de cette zone, en multiple de la hauteur d'une ligne.
+     *
+     * ═══ POURQUOI CE RÉGLAGE EXISTE, ET POURQUOI IL DESCEND SI BAS ═══
+     *
+     * Les consignes d'accessibilité retenues pour ce projet demandent 1,5 :
+     * un interligne généreux évite que les caractères ne « fusionnent » à
+     * l'œil, ce qui est un problème majeur de l'attention visuelle chez les
+     * personnes âgées.
+     *
+     * Mais la zone de texte d'un appel a une hauteur FIXE, et le nombre de
+     * lignes visibles y commande la taille de la police (voir
+     * setVisibleLines). Un interligne de 1,5 consomme donc de la hauteur qui
+     * n'est plus disponible pour les caractères eux-mêmes : à nombre de lignes
+     * égal, le texte est plus petit. Les deux règles d'accessibilité — grand
+     * interligne, grands caractères — se disputent la même hauteur, et rien ne
+     * dit d'avance laquelle l'emporte pour une personne donnée.
+     *
+     * D'où un réglage, et une plage qui va jusqu'à zéro à la demande explicite
+     * de l'administrateur. EN DESSOUS D'ENVIRON 0,8 LES LIGNES SE CHEVAUCHENT,
+     * et à zéro elles se superposent toutes : le texte n'est pas « serré », il
+     * est illisible. Ce n'est pas une limite qu'on a oublié de poser, c'est une
+     * conséquence arithmétique de la hauteur de ligne. Le réglage se change à
+     * distance, donc un essai malheureux se défait en un geste.
+     *
+     * Appliqué à la volée : la vue se remesure, et la taille de police se
+     * recalcule pour que le nombre de lignes demandé tienne toujours.
+     */
+    fun setLineSpacingMultiplier(multiplier: Float) {
+        val borné = multiplier.coerceIn(0f, 1.5f)
+        if (borné == lineSpacingMultiplier) return
+        lineSpacingMultiplier = borné
+        textView.setLineSpacing(0f, borné)
+        fitTextToVisibleLines()
+    }
+
+    private var lineSpacingMultiplier = -1f
+
     fun setScrollSpeedDpPerSec(dpPerSec: Float) {
         maxScrollSpeedPxPerSec = dpPerSec * scrollView.resources.displayMetrics.density
     }

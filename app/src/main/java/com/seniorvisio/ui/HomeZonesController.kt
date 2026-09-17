@@ -261,6 +261,20 @@ class HomeZonesController(
         callZone.setVisibleLines(lines)
     }
 
+    /**
+     * Les DEUX zones, et non la seule zone d'appel.
+     *
+     * L'administrateur a demandé ce réglage « au moins pour les appels à
+     * distance ». Le poser sur une seule des deux romprait l'invariant de cet
+     * écran — les deux zones obéissent aux mêmes règles, rien ne les distingue
+     * que leur source — et donnerait deux pavés de texte d'aspect différent
+     * l'un au-dessus de l'autre, ce que personne n'a demandé.
+     */
+    fun setCaptionLineSpacing(multiplier: Float) {
+        roomZone.setLineSpacingMultiplier(multiplier)
+        callZone.setLineSpacingMultiplier(multiplier)
+    }
+
     fun setScrollSpeedDpPerSec(dpPerSec: Float) {
         roomZone.setScrollSpeedDpPerSec(dpPerSec)
         callZone.setScrollSpeedDpPerSec(dpPerSec)

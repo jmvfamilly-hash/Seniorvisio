@@ -510,6 +510,18 @@ class DeviceStatusReporter(private val context: Context) {
         // et une valeur inconnue rangée telle quelle laisserait la tablette
         // dans un état qu'aucun écran n'affiche. On ignore ce qu'on ne
         // reconnaît pas, et le réglage précédent tient.
+        // L'interligne des zones de transcription. Borné à la lecture comme à
+        // l'écriture : ce document est ouvert en écriture à qui en connaît
+        // l'adresse, et une valeur aberrante rendrait le texte d'appel
+        // inaffichable sans qu'on sache d'où elle vient.
+        snapshot.getDouble(FIELD_CAPTION_INTERLIGNE)?.let {
+            val voulu = it.toFloat().coerceIn(0f, 1.5f)
+            if (adminConfig.captionInterligne != voulu) {
+                adminConfig.captionInterligne = voulu
+                Log.i(TAG, "Interligne de transcription réglé à distance : $voulu")
+            }
+        }
+
         snapshot.getBoolean(FIELD_COMMANDES_VOCALES)?.let {
             if (adminConfig.commandesVocalesActives != it) {
                 adminConfig.commandesVocalesActives = it
@@ -888,6 +900,7 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_POLICE_SENIOR = "policeSenior"
         private const val FIELD_FLUX_ACTUALITES = "fluxActualites"
         private const val FIELD_COMMANDES_VOCALES = "commandesVocales"
+        private const val FIELD_CAPTION_INTERLIGNE = "captionInterligne"
         private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"
         private const val FIELD_VOSK_MODEL_SIZE = "voskModelSize"
         private const val FIELD_VOSK_MODEL_STATE = "voskModelState"
