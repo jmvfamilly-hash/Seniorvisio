@@ -423,6 +423,14 @@ class CallListenerService : LifecycleService() {
         private const val HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000L
 
         /**
+         * Au-delà de cet écart entre deux battements de cinq minutes, on paie
+         * la ventilation par catégorie. Cinquante mégaoctets : un régime sain
+         * n'en bouge pas de tant, et la croissance constatée en dépassait
+         * plusieurs centaines.
+         */
+        private const val SAUT_REPOS_MO = 50L
+
+        /**
          * Attente avant de réarmer l'écoute, multipliée par le nombre
          * d'échecs. Une erreur vient souvent d'un réseau absent : réessayer
          * aussitôt en boucle viderait la batterie sans rien rétablir.
