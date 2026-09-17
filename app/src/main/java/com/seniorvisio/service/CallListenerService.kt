@@ -134,6 +134,7 @@ class CallListenerService : LifecycleService() {
             // à l'heure dite — le titre se remet d'aplomb ici. Sans réveiller
             // la dalle : un rattrapage n'est pas un changement.
             actualites.réévaluer(réveillerLÉcran = false)
+            surveillerMémoireAuRepos()
             statusReporter.reportHeartbeat(échecsDÉcoute)
             heartbeatHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
         }
@@ -242,6 +243,49 @@ class CallListenerService : LifecycleService() {
      * La mesure accompagne le palier : savoir qu'on a été prévenu ne vaut que
      * si l'on sait à quel niveau de consommation ça s'est produit.
      */
+    /**
+     * La mémoire HORS APPEL, et c'est là que manquait la mesure.
+     *
+     * ═══ CE QUE LE DERNIER JOURNAL A MONTRÉ ═══
+     *
+     * Le tas natif était déjà à 904 Mo à la PREMIÈRE mesure d'un appel, sur un
+     * processus démarré depuis quatre-vingt-trois minutes, et il n'a plus bougé
+     * de tout l'appel. La croissance ne s'était donc pas produite pendant une
+     * conversation : elle avait eu lieu avant, pendant que la tablette ne
+     * faisait rien de visible.
+     *
+     * Or la mesure était accrochée au chien de garde média, qui ne tourne que
+     * pendant un appel. On regardait exactement là où il ne se passait rien.
+     *
+     * Ici, sur le battement du service, qui vit en permanence. Cinq minutes est
+     * grossier pour saisir un saut, mais suffisant pour dire si la courbe monte
+     * au repos — ce qui est la question ouverte. Au-delà de cinquante
+     * mégaoctets d'écart entre deux battements, la ventilation par catégorie
+     * est payée, et elle nommera ce qui enfle.
+     */
+    private fun surveillerMémoireAuRepos() {
+        val natifMo = android.os.Debug.getNativeHeapAllocatedSize() / (1024L * 1024L)
+        val précédent = dernierNatifAuReposMo
+        dernierNatifAuReposMo = natifMo
+        if (précédent < 0) {
+            CallTrace.record("REPOS mémoire", CallTrace.mesureMémoire())
+            return
+        }
+        val écart = natifMo - précédent
+        if (écart >= SAUT_REPOS_MO) {
+            CallTrace.record(
+                "REPOS mémoire SAUT",
+                "+$écart Mo depuis le battement précédent → $natifMo Mo · " +
+                    CallTrace.ventilationMémoire(),
+            )
+        } else {
+            val signe = if (écart >= 0) "+" else ""
+            CallTrace.record("REPOS mémoire", "${CallTrace.mesureMémoire()} · écart $signe$écart Mo")
+        }
+    }
+
+    private var dernierNatifAuReposMo = -1L
+
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         CallTrace.record("MÉMOIRE réclamée", "${nomDuPalier(level)} · ${CallTrace.mesureMémoire()}")

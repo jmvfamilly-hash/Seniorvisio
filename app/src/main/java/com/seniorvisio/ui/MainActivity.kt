@@ -192,6 +192,9 @@ class MainActivity : AppCompatActivity() {
      * Les valeurs identiques sont ignorées en aval (voir
      * RollingCaptionZone.setVisibleLines), la relecture ne coûte donc rien.
      */
+    /** Ce que réappliquerPoliceSiChangée a posé la dernière fois. */
+    private var policeAppliquée: com.seniorvisio.core.PoliceSenior? = null
+
     private fun applyCaptionErgonomics() {
         zones.setVisibleLines(adminConfig.captionVisibleLines)
         zones.setScrollSpeedDpPerSec(adminConfig.captionScrollSpeedDp.toFloat())
@@ -202,6 +205,11 @@ class MainActivity : AppCompatActivity() {
         // là qu'il juge s'il en veut plus ou moins. Les valeurs identiques sont
         // ignorées en aval, la relecture ne coûte donc rien.
         zones.setCaptionLineSpacing(adminConfig.captionInterligne)
+        // La police aussi, et pour la même raison que tout le reste ici : le
+        // choix se fait depuis le PWA pendant que l'écran est déjà affiché.
+        // L'appliquer au seul gonflage revenait à n'en tenir compte qu'au
+        // redémarrage suivant.
+        policeAppliquée = réappliquerPoliceSiChangée(policeAppliquée)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

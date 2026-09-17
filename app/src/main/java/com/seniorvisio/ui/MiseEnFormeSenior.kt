@@ -37,6 +37,33 @@ fun policeChoisie(context: Context): PoliceSenior =
         ?: PoliceSenior.PAR_DÉFAUT
 
 /**
+ * Ré-applique la police si, et seulement si, le choix a changé.
+ *
+ * ═══ POURQUOI CE N'ÉTAIT PAS SUFFISANT DE LE FAIRE AU GONFLAGE ═══
+ *
+ * La mise en forme n'était posée qu'une fois, juste après setContentView.
+ * Choisir une police depuis le PWA pendant qu'un écran est déjà affiché —
+ * c'est-à-dire tout le temps, et en particulier PENDANT UN APPEL, qui est le
+ * moment où l'on juge la lisibilité — n'avait donc aucun effet. Le réglage
+ * partait, la tablette l'enregistrait, et l'écran gardait l'ancienne police :
+ * indiscernable d'un réglage qui n'arrive pas.
+ *
+ * Appelée sur le battement d'ergonomie, comme les autres réglages d'écran. La
+ * comparaison évite de reparcourir l'arbre des vues toutes les secondes pour
+ * rien : on ne le fait qu'au changement.
+ *
+ * @param déjàAppliquée ce que l'appelant a posé la dernière fois, ou null.
+ * @return le choix désormais en vigueur, à conserver pour le prochain appel.
+ */
+fun Activity.réappliquerPoliceSiChangée(déjàAppliquée: PoliceSenior?): PoliceSenior {
+    val choix = policeChoisie(this)
+    if (choix != déjàAppliquée) {
+        MiseEnFormeSenior.appliquer(findViewById(android.R.id.content), choix)
+    }
+    return choix
+}
+
+/**
  * Pose la police et la mise en forme sur tout un écran, d'un coup.
  *
  * Parcourt l'arbre plutôt que d'énumérer les vues : un texte ajouté demain à

@@ -445,14 +445,23 @@ class RollingCaptionZone(
      * recalcule pour que le nombre de lignes demandé tienne toujours.
      */
     fun setLineSpacingMultiplier(multiplier: Float) {
+        // ═══ TOUJOURS APPLIQUÉ, SANS GARDE SUR UNE VALEUR MÉMORISÉE ═══
+        //
+        // Une garde « si c'est déjà la même valeur, ne rien faire » supposait
+        // que rien d'autre ne touche à l'interligne de cette vue. C'est faux :
+        // la mise en forme d'accessibilité parcourt tout l'arbre et pose 1,5
+        // sur chaque texte (voir MiseEnFormeSenior). Après ce passage, la vue
+        // était à 1,5 alors que la valeur mémorisée ici disait autre chose — et
+        // la garde empêchait précisément de la remettre d'aplomb. Le réglage
+        // devenait inopérant, définitivement, sans que rien ne le signale.
+        //
+        // Réappliquer coûte deux lectures de propriété : fitTextToVisibleLines
+        // se termine tout de suite quand la taille est déjà la bonne. Une garde
+        // qui peut se désynchroniser de ce qu'elle garde ne vaut pas ce prix.
         val borné = multiplier.coerceIn(0f, 1.5f)
-        if (borné == lineSpacingMultiplier) return
-        lineSpacingMultiplier = borné
         textView.setLineSpacing(0f, borné)
         fitTextToVisibleLines()
     }
-
-    private var lineSpacingMultiplier = -1f
 
     fun setScrollSpeedDpPerSec(dpPerSec: Float) {
         maxScrollSpeedPxPerSec = dpPerSec * scrollView.resources.displayMetrics.density

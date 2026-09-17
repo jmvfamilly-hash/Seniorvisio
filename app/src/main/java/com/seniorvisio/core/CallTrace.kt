@@ -97,9 +97,25 @@ object CallTrace {
         lastAtMs = now
         val line = String.format(Locale.FRANCE, "[%9.3fs %+8.3fs] %-26s | %s", since, delta, source, detail)
 
-        // Un nouvel appel commence : l'ouverture du précédent a fait son temps.
+        // ═══ LES DEUX TAMPONS SONT VIDÉS, ET C'EST UN CORRECTIF ═══
+        //
+        // Seul « opening » l'était. Les lignes d'AVANT l'appel restaient donc
+        // dans « entries », et le journal les rendait APRÈS les cent vingt
+        // premières lignes de l'appel — puisqu'il imprime opening puis entries.
+        //
+        // Le résultat se lisait ainsi : 5108s, puis 5000s, puis 5014s, puis
+        // 5110s. Des horodatages qui reculent au milieu du texte. C'est le seul
+        // instrument dont on dispose pour cette panne, et il rendait une
+        // chronologie fausse — de quoi conclure n'importe quoi sur l'ordre des
+        // événements.
+        //
+        // Rien n'est perdu pour autant : le journal est publié toutes les vingt
+        // secondes dès qu'il change, donc les lignes d'avant l'appel ont déjà
+        // été envoyées. Ce qui reste ici couvre exactement « depuis le début de
+        // cet appel », ce qui est précisément ce qu'on vient y chercher.
         if (source == CALL_START) {
             opening.clear()
+            entries.clear()
             droppedFromTail = 0
         }
         if (opening.size < MAX_OPENING) {

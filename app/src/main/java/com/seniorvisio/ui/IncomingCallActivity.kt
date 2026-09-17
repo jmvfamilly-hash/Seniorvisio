@@ -1103,6 +1103,9 @@ class IncomingCallActivity : AppCompatActivity() {
      * d'accueil, pour que Jean lise de la même façon qu'un appel soit en cours
      * ou non.
      */
+    /** Ce que réappliquerPoliceSiChangée a posé la dernière fois. */
+    private var policeAppliquée: com.seniorvisio.core.PoliceSenior? = null
+
     private fun applyCaptionErgonomics() {
         zones.setVisibleLines(adminConfig.captionVisibleLines)
         zones.setScrollSpeedDpPerSec(adminConfig.captionScrollSpeedDp.toFloat())
@@ -1113,6 +1116,11 @@ class IncomingCallActivity : AppCompatActivity() {
         // là qu'il juge s'il en veut plus ou moins. Les valeurs identiques sont
         // ignorées en aval, la relecture ne coûte donc rien.
         zones.setCaptionLineSpacing(adminConfig.captionInterligne)
+        // La police aussi, et pour la même raison que tout le reste ici : le
+        // choix se fait depuis le PWA pendant que l'écran est déjà affiché.
+        // L'appliquer au seul gonflage revenait à n'en tenir compte qu'au
+        // redémarrage suivant.
+        policeAppliquée = réappliquerPoliceSiChangée(policeAppliquée)
     }
 
     /**
