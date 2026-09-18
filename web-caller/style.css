@@ -886,3 +886,45 @@ body.verrouille { overflow: hidden; }
    deux règles le protègent, alors qu'une seule agit. */
 body.mode-proches #openSettingsButton,
 body.mode-proches #openAdminIdleButton { display: none; }
+
+/* ═══ LE TITRE D'ACTUALITÉ AFFICHÉ CHEZ JEAN, RÉPLIQUÉ ═══
+
+   Posé par-dessus la vidéo dans la réplique, comme le bloc l'est chez lui.
+   Le fond sombre translucide reprend le rôle du fond arrondi de sa zone : sans
+   lui, un titre clair sur une scène claire devient illisible — c'est le même
+   raisonnement que pour la bande d'information de la tablette. */
+.jean-news {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.72);
+  box-sizing: border-box;
+}
+.jean-news-image {
+  width: 40%;
+  max-height: 100%;
+  object-fit: contain;
+  flex: none;
+}
+.jean-news-texte { flex: 1; min-width: 0; }
+.jean-news-titre {
+  margin: 0;
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1.35;
+  /* Quatre lignes au plus : au-delà, le titre chasserait la provenance hors du
+     cadre, et c'est elle qui dit d'où vient ce que Jean lit. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.jean-news-origine {
+  margin: 6px 0 0;
+  color: #fff;
+  opacity: 0.6;
+  font-size: 0.8rem;
+}

@@ -26,6 +26,12 @@ class RealCallEngine extends CallEngine {
     this._lastScreenStateKey = null;
     this._lastScreenLayoutKey = null;
     this._captionDebugCb = null;
+    // Le rang que Jean REGARDE, publié par la tablette à chaque changement
+    // (voir CallSignalingClient.publierPositionRecueil). Retenu pour ne
+    // rappeler l'écran que lorsqu'il bouge : ce listener se redéclenche à
+    // chaque écriture sur le document d'appel, sous-titres compris.
+    this._recueilAfficheCb = null;
+    this._dernierRecueilAffiche = null;
     this._lastCaptionDebugMessage = null;
     this._hasNotifiedConnected = false;
     this._hasReportedCalleeError = false;
@@ -319,6 +325,22 @@ class RealCallEngine extends CallEngine {
    */
   onCaptionDebug(callback) { this._captionDebugCb = callback; }
 
+  /**
+   * Le rang réellement affiché chez Jean, et le total.
+   *
+   * ═══ UN CANAL QUI EXISTAIT DÉJÀ, ET QUE PERSONNE N'ÉCOUTAIT ═══
+   *
+   * La tablette écrit recueilRangAffiche à chaque changement, depuis le jour
+   * où Jean a eu ses propres boutons de navigation. Le commentaire qui
+   * accompagne cette écriture dit : « sans ce retour, le proche commenterait
+   * la photo précédente sans comprendre pourquoi Jean ne suit pas ».
+   *
+   * Le retour partait. Rien ne le lisait. Le compteur affiché ici montrait le
+   * rang DEMANDÉ par le proche, et les deux divergeaient en silence dès que
+   * Jean touchait ses boutons.
+   */
+  onRecueilAffiche(callback) { this._recueilAfficheCb = callback; }
+
   async startCall(targetId, callerName, initialSettings = {}) {
     // Capturé au tout début : si cancelCall() est appelé pendant que cette
     // fonction attend encore (caméra, création de l'offre, écriture
@@ -588,6 +610,18 @@ class RealCallEngine extends CallEngine {
       // jusqu'ici, la tablette raccrochait aussitôt (status "ended") sans la
       // moindre explication — l'écran ici se contentait de repasser en
       // veille, comme un raccroché normal. Affiché une seule fois par appel.
+      // Le rang que Jean a réellement sous les yeux. Comparé avant d'être
+      // rendu : sans cela, chaque sous-titre publié redessinerait la réplique.
+      if (typeof data.recueilRangAffiche === "number") {
+        const clé = `${data.recueilRangAffiche}/${data.recueilTotalAffiche || 0}`;
+        if (clé !== this._dernierRecueilAffiche) {
+          this._dernierRecueilAffiche = clé;
+          this._recueilAfficheCb && this._recueilAfficheCb(
+            data.recueilRangAffiche,
+            data.recueilTotalAffiche || 0
+          );
+        }
+      }
       if (data.calleeErrorMessage && !this._hasReportedCalleeError) {
         this._hasReportedCalleeError = true;
         this._errorCb && this._errorCb(

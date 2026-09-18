@@ -119,6 +119,29 @@
           <video id="remoteVideo" autoplay playsinline></video>
           <img id="jeanSlideshow" class="jean-slideshow hidden" alt="Photo affichée chez Jean">
 
+          <!-- ═══ LE TITRE QUE JEAN LIT EN CE MOMENT ═══
+
+               Pendant la présentation des actualités, la réplique ne montrait
+               que la vidéo : le proche commentait un titre sans savoir lequel
+               était à l'écran, et sans le voir changer quand Jean naviguait
+               avec ses propres boutons.
+
+               Le rang vient de la TABLETTE (recueilRangAffiche), pas du
+               compteur local : c'est celui que Jean regarde, et non celui
+               qu'on lui a demandé de regarder. Les deux divergent dès qu'il
+               touche ses flèches.
+
+               Même disposition que chez lui — vignette à gauche, titre à
+               droite, provenance dessous — pour que le proche reconnaisse ce
+               qu'il décrit sans avoir à le traduire. -->
+          <div id="jeanNews" class="jean-news hidden">
+            <img id="jeanNewsImage" class="jean-news-image hidden" alt="">
+            <div class="jean-news-texte">
+              <p id="jeanNewsTitre" class="jean-news-titre"></p>
+              <p id="jeanNewsOrigine" class="jean-news-origine"></p>
+            </div>
+          </div>
+
           <!-- Plus de zone d'information ici. Elle répliquait la date, la
                météo et le moment de la journée affichés chez Jean — sauf que
                son écran ne les montre plus dès qu'un appel se présente (voir

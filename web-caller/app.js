@@ -574,6 +574,10 @@ const els = {
   identityStatus: el("identityStatus"),
   recueilBar: el("recueilBar"),
   recueilChoix: el("recueilChoix"),
+  jeanNews: el("jeanNews"),
+  jeanNewsImage: el("jeanNewsImage"),
+  jeanNewsTitre: el("jeanNewsTitre"),
+  jeanNewsOrigine: el("jeanNewsOrigine"),
   recueilOuvrir: el("recueilOuvrir"),
   recueilNav: el("recueilNav"),
   recueilPrec: el("recueilPrec"),
@@ -2720,6 +2724,16 @@ function majListeRecueils(liste) {
     .map((r) => ({
       id: r.id,
       titre: r.titre,
+      // LES ÉLÉMENTS PRÊTS SONT CONSERVÉS, pas seulement comptés.
+      //
+      // Ils arrivaient déjà en entier — texte, provenance, crédit, adresse de
+      // la vignette — et cette fonction n'en gardait que le nombre. Tout était
+      // là, jeté à la porte, et la réplique de l'écran de Jean ne pouvait donc
+      // rien montrer de ce qu'il lisait.
+      //
+      // Aucun champ Firestore en plus : c'est le même document, lu jusqu'au
+      // bout cette fois.
+      prêts: (r.elements || []).filter((e) => e.etat === "prêt"),
       prêtes: (r.elements || []).filter((e) => e.etat === "prêt").length,
     }))
     .filter((r) => r.prêtes > 0);
@@ -2762,6 +2776,10 @@ function majListeRecueils(liste) {
   if (recueilOuvertId && !existeEncore) {
     fermerRecueilPrésenté();
   }
+  // Le contenu vient d'être rafraîchi : la réplique doit suivre. Sans cela,
+  // elle garderait le titre d'avant le rafraîchissement du fil — le matin, à
+  // sept heures, quand toute la liste est remplacée d'un coup.
+  rendreNewsRépliquée();
 }
 
 function recueilCourant() {
@@ -2779,7 +2797,13 @@ function renderRecueilNav() {
   }
   if (!courant) return;
   if (els.recueilCompteur) {
-    els.recueilCompteur.textContent = `${recueilRang + 1} / ${courant.prêtes}`;
+    // Le rang de la TABLETTE quand elle l'a publié. Celui de ce téléphone
+    // n'est qu'une demande : Jean peut avoir navigué depuis avec ses boutons,
+    // et le compteur affichait alors sereinement un rang que personne ne
+    // regardait.
+    const rang = rangAffiché >= 0 ? rangAffiché : recueilRang;
+    const total = rangAffiché >= 0 && totalAffiché > 0 ? totalAffiché : courant.prêtes;
+    els.recueilCompteur.textContent = `${rang + 1} / ${total}`;
   }
   // Pas de bouclage, ici comme côté tablette : un proche qui commente ses
   // photos une par une doit voir qu'il est arrivé au bout. Un diaporama qui
@@ -2789,6 +2813,60 @@ function renderRecueilNav() {
   if (els.recueilSuiv) els.recueilSuiv.disabled = recueilRang >= courant.prêtes - 1;
 }
 
+// ═══ CE QUE JEAN A SOUS LES YEUX, ET NON CE QU'ON LUI A DEMANDÉ ═══
+//
+// rangAffiché vient de la tablette (recueilRangAffiche). recueilRang, lui, est
+// ce que CE téléphone a demandé. Les deux coïncident tant que le proche seul
+// navigue, et divergent dès que Jean touche ses propres flèches — c'est
+// précisément le cas pour lequel le canal avait été construit, et jamais lu.
+//
+// -1 tant que la tablette n'a rien publié : distinct de 0, qui est un rang
+// valide. Confondre les deux aurait fait afficher le premier titre avant que
+// Jean n'en voie aucun.
+let rangAffiché = -1;
+let totalAffiché = 0;
+
+/**
+ * Réplique le titre d'actualité affiché chez Jean.
+ *
+ * Masquée dès qu'on n'est pas dans un recueil d'actualités : la réplique doit
+ * montrer ce que Jean a sous les yeux, donc se taire quand elle ne le sait
+ * pas. Un titre laissé là après la fermeture serait pire qu'un cadre vide — il
+ * affirmerait quelque chose de faux.
+ */
+function rendreNewsRépliquée() {
+  if (!els.jeanNews) return;
+  const courant = recueilCourant();
+  const élément = courant && rangAffiché >= 0
+    ? (courant.prêts || [])[rangAffiché]
+    : null;
+  const texte = élément && élément.texte;
+  if (!texte) {
+    els.jeanNews.classList.add("hidden");
+    return;
+  }
+  els.jeanNewsTitre.textContent = texte;
+  const provenance = [élément.origine, élément.credit].filter(Boolean).join(" · ");
+  els.jeanNewsOrigine.textContent = provenance;
+  if (élément.source) {
+    els.jeanNewsImage.src = élément.source;
+    els.jeanNewsImage.classList.remove("hidden");
+  } else {
+    // L'attribut est retiré, et non vidé : une source vide fait tenter un
+    // chargement de la page courante et salit la console à chaque titre.
+    els.jeanNewsImage.removeAttribute("src");
+    els.jeanNewsImage.classList.add("hidden");
+  }
+  els.jeanNews.classList.remove("hidden");
+}
+
+engine.onRecueilAffiche((rang, total) => {
+  rangAffiché = rang;
+  totalAffiché = total;
+  renderRecueilNav();
+  rendreNewsRépliquée();
+});
+
 async function présenterRecueil(id, rang) {
   const envoyé = await engine.montrerRecueil(id, rang);
   // On n'avance l'affichage de CET écran qu'une fois la consigne acceptée.
@@ -2796,14 +2874,25 @@ async function présenterRecueil(id, rang) {
   // avait fait chercher la panne du mauvais côté pour le diaporama : le proche
   // voyait « 3 / 12 » alors que Jean était resté sur la première.
   if (!envoyé) return;
+  // Changement de recueil : ce que la tablette avait publié ne se rapporte
+  // plus à rien. On repart à « inconnu » plutôt que de garder un rang qui
+  // désignerait un élément d'un autre recueil.
+  if (id !== recueilOuvertId) {
+    rangAffiché = -1;
+    totalAffiché = 0;
+  }
   recueilOuvertId = id;
   recueilRang = rang;
   renderRecueilNav();
+  rendreNewsRépliquée();
 }
 
 async function fermerRecueilPrésenté() {
   recueilOuvertId = null;
   recueilRang = 0;
+  rangAffiché = -1;
+  totalAffiché = 0;
+  rendreNewsRépliquée();
   renderRecueilNav();
   await engine.montrerRecueil(null, 0);
 }
