@@ -333,6 +333,23 @@ class AdminConfig(context: Context) {
      * allumée demande donc de vider ce champ ET de savoir que l'APK de
      * production, lui, n'en propose aucun.
      */
+    /**
+     * L'identifiant du recueil d'œuvres à présenter sur l'écran d'accueil.
+     *
+     * VIDE = ÉTEINT, et c'est le garde-fou : tant que personne n'a nommé un
+     * recueil, l'accueil garde le fil d'information. Une galerie qui
+     * apparaîtrait d'elle-même chez Jean serait un changement d'écran que
+     * personne ne lui a demandé — la même règle que pour le fil, pour la même
+     * raison.
+     *
+     * Branche d'essai : ce réglage n'a pas encore de commande dans le PWA. Il
+     * se pose à la main dans le document de l'appareil, le temps de juger si
+     * la galerie mérite d'exister.
+     */
+    var recueilOeuvres: String
+        get() = prefs.getString(KEY_RECUEIL_OEUVRES, null).orEmpty()
+        set(value) = prefs.edit().putString(KEY_RECUEIL_OEUVRES, value).apply()
+
     var fluxActualites: String
         get() = prefs.getString(KEY_FLUX_ACTUALITES, null).orEmpty()
         set(value) = prefs.edit().putString(KEY_FLUX_ACTUALITES, value).apply()
@@ -590,6 +607,7 @@ class AdminConfig(context: Context) {
         private const val KEY_TRANSCRIPTION_PIECE_AFFICHEE = "transcription_piece_affichee"
         private const val KEY_POLICE_SENIOR = "police_senior"
         private const val KEY_FLUX_ACTUALITES = "flux_actualites"
+        private const val KEY_RECUEIL_OEUVRES = "recueil_oeuvres"
         private const val KEY_COMMANDES_VOCALES = "commandes_vocales_actives"
         private const val KEY_FLUX_DERNIER_JOUR = "flux_dernier_rafraichissement"
         private const val KEY_FLUX_LISTE_CHANGEE = "flux_liste_changee"

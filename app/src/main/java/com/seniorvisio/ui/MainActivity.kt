@@ -604,6 +604,33 @@ class MainActivity : AppCompatActivity() {
                         )
                         zones.majNavigationActualite(rangActualite, titresActualite.size)
                     }
+                    // ═══ UNE ŒUVRE, ET NON PLUS UN ÉCRAN VIDE ═══
+                    //
+                    // Ce chemin masquait la zone. Un élément PHOTO — donc
+                    // toute œuvre d'art — tombait ici et disparaissait sans
+                    // qu'aucune ligne ne le dise : la galerie était
+                    // invisible sur l'accueil, et rien n'expliquait pourquoi.
+                    is Rendu.Image -> {
+                        zones.afficherOeuvre(
+                            rendu.bitmap,
+                            element.texte,
+                            magasin?.disponibles()
+                                ?.firstOrNull { it.id == recueilActualiteId }?.titre,
+                        )
+                        zones.majNavigationActualite(rangActualite, titresActualite.size)
+                        // La mesure va avec l'essai : c'est la question à
+                        // laquelle cette branche doit répondre. Une œuvre en
+                        // haute définition pèse plusieurs mégaoctets, et on
+                        // vient de passer deux jours à mal mesurer exactement
+                        // cela — la ligne dit donc les pixels ET l'empreinte.
+                        CallTrace.record(
+                            "ŒUVRE affichée",
+                            "${rangActualite + 1}/${titresActualite.size} · " +
+                                "${rendu.bitmap.width}×${rendu.bitmap.height} px · " +
+                                "${rendu.bitmap.byteCount / (1024 * 1024)} Mo · " +
+                                CallTrace.ventilationMémoire(),
+                        )
+                    }
                     else -> zones.masquerActualite()
                 }
             }

@@ -92,7 +92,19 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
      */
     fun réévaluer(réveillerLÉcran: Boolean) {
         val magasin = RecueilStore.actif ?: return
-        val recueil = magasin.disponibles().firstOrNull { it.id == RECUEIL_FLUX }
+        // ═══ LES ŒUVRES PASSENT DEVANT LE FIL, QUAND ELLES SONT NOMMÉES ═══
+        //
+        // Un seul ordonnanceur pour les deux : la cadence, le réveil de la
+        // dalle, le rattrapage des alarmes perdues et la navigation de Jean
+        // sont exactement les mêmes besoins. En écrire un second aurait
+        // condamné les deux à diverger — c'est déjà arrivé ici entre l'accueil
+        // et l'écran d'appel, deux fois.
+        //
+        // Ce qui change, c'est le CONTENU d'un élément : un titre d'actualité
+        // est un texte, une œuvre est une image. L'écran d'accueil sait
+        // désormais afficher les deux (voir MainActivity.afficherActualiteCourante).
+        val voulu = config.recueilOeuvres.takeIf { it.isNotBlank() } ?: RECUEIL_FLUX
+        val recueil = magasin.disponibles().firstOrNull { it.id == voulu }
         val prêts = recueil?.prêts.orEmpty()
 
         val créneau = CadenceurActualites.creneau(LocalDateTime.now(), prêts.size, config)

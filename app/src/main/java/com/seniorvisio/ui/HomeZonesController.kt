@@ -110,6 +110,7 @@ class HomeZonesController(
     private val colonneImageActualite: View = root.findViewById(R.id.colonneImageAccueil)
     private val creditActualite: TextView = root.findViewById(R.id.creditActualiteAccueil)
     private val titreBandeauActualite: TextView = root.findViewById(R.id.titreBandeauActualite)
+    private val colonneTexteActualite: View = root.findViewById(R.id.colonneTexteAccueil)
 
     /**
      * La vignette actuellement posée sur la vue, pour pouvoir la reprendre
@@ -184,6 +185,9 @@ class HomeZonesController(
         origine: String? = null,
         crédit: String? = null,
     ) {
+        // Un titre revient : la zone reprend sa disposition. Appelé ici et non
+        // par l'appelant, pour qu'aucun chemin d'affichage ne puisse l'oublier.
+        quitterModeOeuvre()
         texteActualite.text = texte
         // Masquée quand le fil ne se nomme pas — le cas de beaucoup de flux.
         // Une ligne vide sous le titre prendrait de la hauteur sur une zone qui
@@ -241,6 +245,79 @@ class HomeZonesController(
     }
 
     /** Rend la place aux deux zones de texte. */
+    /**
+     * Une œuvre d'art en plein cadre, avec sa légende sous la barre.
+     *
+     * ═══ LA MÊME ZONE, ET DEUX CONTENUS ═══
+     *
+     * L'écran d'accueil ne savait afficher qu'un Rendu.Texte : une œuvre, qui
+     * est un Rendu.Image, y était purement et simplement masquée. C'était le
+     * seul vrai manque — tout le reste existait déjà, y compris les boutons de
+     * Jean, le glissement, le téléchargement et la réduction à la définition
+     * de la dalle.
+     *
+     * L'image prend TOUTE la rangée : la colonne de texte passe à un poids nul
+     * plutôt que d'être masquée, pour que la bascule dans l'autre sens rende
+     * exactement la mise en page d'avant. Une vue masquée puis remontrée garde
+     * ses paramètres ; une vue retirée les perd.
+     *
+     * fitCenter, comme partout ailleurs ici : un tableau recadré pour remplir
+     * l'écran perd ce qu'on est venu regarder, et Jean n'a aucun moyen de le
+     * signaler.
+     */
+    fun afficherOeuvre(image: Bitmap?, légende: String?, titreGalerie: String?) {
+        val ancienne = vignetteActuelle
+        modeOeuvre = true
+        texteActualite.text = ""
+        colonneTexteActualite.visibility = View.GONE
+        (colonneImageActualite.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
+            lp.weight = 10f
+            lp.marginEnd = 0
+            colonneImageActualite.layoutParams = lp
+        }
+        if (image != null) {
+            imageActualite.setImageBitmap(image)
+            colonneImageActualite.visibility = View.VISIBLE
+        } else {
+            imageActualite.setImageDrawable(null)
+            colonneImageActualite.visibility = View.GONE
+        }
+        vignetteActuelle = image
+        if (ancienne != null && ancienne !== image && !ancienne.isRecycled) ancienne.recycle()
+
+        // La légende va SOUS LA PHOTO, à la place du crédit : c'est le même
+        // rapport — un texte qui parle de l'image, pas de l'article.
+        if (légende.isNullOrBlank()) {
+            creditActualite.visibility = View.GONE
+        } else {
+            creditActualite.text = légende
+            creditActualite.visibility = View.VISIBLE
+        }
+        origineActualite.visibility = View.GONE
+        titreBandeauActualite.text = titreGalerie?.takeIf { it.isNotBlank() } ?: "Œuvres"
+        if (!modeActualite) {
+            modeActualite = true
+            roomZone.clear()
+            callZone.clear()
+            applyZoneOrder()
+        }
+    }
+
+    /** Rend à la zone sa disposition de titre, quand on quitte les œuvres. */
+    private fun quitterModeOeuvre() {
+        if (!modeOeuvre) return
+        modeOeuvre = false
+        colonneTexteActualite.visibility = View.VISIBLE
+        (colonneImageActualite.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
+            lp.weight = 4f
+            lp.marginEnd = (20 * context.resources.displayMetrics.density).toInt()
+            colonneImageActualite.layoutParams = lp
+        }
+        titreBandeauActualite.text = "Nouvelles du jour"
+    }
+
+    private var modeOeuvre = false
+
     fun masquerActualite() {
         if (!modeActualite) return
         modeActualite = false
