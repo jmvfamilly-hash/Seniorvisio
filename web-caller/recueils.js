@@ -201,7 +201,16 @@ class Recueils {
     const retenus = [];
     const refusés = [];
 
-    for (const file of fichiers) {
+    for (const entrée of fichiers) {
+      // ═══ UN FICHIER, OU UN FICHIER ET SON COMMENTAIRE ═══
+      //
+      // Les photos de famille n'ont rien à dire d'elles-mêmes : on passe le
+      // fichier nu, comme avant. Les vues d'une exposition, elles, portent le
+      // commentaire du conservateur — celui que Jean lira dans sa zone de
+      // parole. Accepter les deux formes évite un second chemin de
+      // téléversement, qui aurait fini par diverger de celui-ci.
+      const file = entrée && entrée.file ? entrée.file : entrée;
+      const texte = (entrée && entrée.texte) || "";
       const type = typeDeFichier(file);
       if (type === "inconnu") {
         refusés.push({ nom: file.name, raison: `type non pris en charge (${file.type || "inconnu"})` });
@@ -218,7 +227,7 @@ class Recueils {
         });
         continue;
       }
-      retenus.push({ file, type });
+      retenus.push({ file, type, texte });
     }
 
     if (!retenus.length) {
@@ -238,7 +247,7 @@ class Recueils {
     let octetsFinis = 0;
 
     for (let i = 0; i < retenus.length; i++) {
-      const { file, type } = retenus[i];
+      const { file, type, texte } = retenus[i];
       const elementId = identifiantÉlément();
       const chemin = `recueils/${this._deviceDocId}/${recueilId}/${elementId}`;
       const ref = this._storage.ref(chemin);
@@ -273,6 +282,10 @@ class Recueils {
         nature: "fichier",
         source: await ref.getDownloadURL(),
         ordre: i,
+        // Absent plutôt que vide : la tablette lit ce champ pour savoir s'il y
+        // a quelque chose à écrire dans la zone de parole, et une chaîne vide
+        // y aurait ouvert une zone pour n'y rien mettre.
+        ...(texte ? { texte } : {}),
       });
     }
 

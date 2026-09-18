@@ -536,6 +536,31 @@ class DeviceStatusReporter(private val context: Context) {
             }
         }
 
+        // ═══ LE RECUEIL D'EXPOSITION REMPLACE LE FIL, QUAND IL EST NOMMÉ ═══
+        //
+        // Vide = le fil d'information reprend sa place. C'est le même
+        // garde-fou que pour les fils : rien n'apparaît de soi-même sur
+        // l'écran de Jean.
+        //
+        // Ce raccordement manquait. Le réglage existait côté tablette, l'écrire
+        // dans Firestore n'avait aucun effet, et on aurait cherché pourquoi la
+        // galerie ne s'affiche pas alors que tout était en place — le genre de
+        // silence que ce projet a déjà payé plusieurs fois.
+        snapshot.getString(FIELD_RECUEIL_OEUVRES)?.let { id ->
+            if (adminConfig.recueilOeuvres != id) {
+                adminConfig.recueilOeuvres = id
+                CallTrace.record(
+                    "EXPOSITION réglée",
+                    if (id.isBlank()) "aucune — l'accueil reprend le fil d'information"
+                    else "recueil « $id » présenté sur l'accueil",
+                )
+                // Le prochain contrôle de l'ordonnanceur reprendra la main : il
+                // passe toutes les cinq minutes sur le battement du service, et
+                // relit le recueil à présenter à chaque fois.
+                CallListenerService.enService?.actualites?.réévaluer(réveillerLÉcran = false)
+            }
+        }
+
         // La liste des fils d'information, réglée depuis le PWA.
         //
         // Changer la liste remet la date du dernier remplacement à zéro : sans
@@ -926,6 +951,9 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_ROOM_ENGINE = "roomTranscriptionEngine"
         private const val FIELD_POLICE_SENIOR = "policeSenior"
         private const val FIELD_FLUX_ACTUALITES = "fluxActualites"
+
+        /** L'identifiant du recueil d'exposition, ou vide pour revenir au fil. */
+        private const val FIELD_RECUEIL_OEUVRES = "recueilOeuvres"
         private const val FIELD_COMMANDES_VOCALES = "commandesVocales"
         private const val FIELD_CAPTION_INTERLIGNE = "captionInterligne"
         private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"

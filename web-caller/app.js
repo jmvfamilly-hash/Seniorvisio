@@ -574,6 +574,13 @@ const els = {
   identityStatus: el("identityStatus"),
   recueilBar: el("recueilBar"),
   recueilChoix: el("recueilChoix"),
+  expositionJson: el("expositionJson"),
+  expositionLire: el("expositionLire"),
+  expositionCadre: el("expositionCadre"),
+  expositionOeuvres: el("expositionOeuvres"),
+  expositionEnvoyer: el("expositionEnvoyer"),
+  expositionRetirer: el("expositionRetirer"),
+  expositionStatut: el("expositionStatut"),
   jeanNews: el("jeanNews"),
   jeanNewsImage: el("jeanNewsImage"),
   jeanNewsTitre: el("jeanNewsTitre"),
@@ -1487,6 +1494,148 @@ function renderUsageDays(days) {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// EXPOSITION COMMENTÉE
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Une visite guidée que Jean feuillette seul sur l'écran d'accueil, avec les
+// mêmes boutons que les actualités. Le découpage se fait ICI : une toile de
+// musée fait cent mégapixels, et la tablette ne doit jamais en voir une.
+
+let expositionLue = null;
+/** Le fichier choisi pour chaque œuvre, par rang. */
+const fichiersParOeuvre = new Map();
+
+/**
+ * Le cadre publié par la tablette, ou null.
+ *
+ * NULL EST UNE RÉPONSE, et elle bloque l'envoi. Sans cadre, on ne peut que
+ * deviner une taille de découpe — et une exposition découpée de travers ne se
+ * verrait qu'à l'arrivée sur la tablette, très loin de sa cause. Mieux vaut
+ * refuser et dire pourquoi.
+ */
+function cadreDeLaTablette() {
+  const c = lastDeviceData && lastDeviceData.cadreOeuvre;
+  if (!c || !(c.largeur > 0) || !(c.hauteur > 0)) return null;
+  return { largeur: Math.round(c.largeur), hauteur: Math.round(c.hauteur) };
+}
+
+function rendreÉtatCadre() {
+  if (!els.expositionCadre) return;
+  const cadre = cadreDeLaTablette();
+  els.expositionCadre.textContent = cadre
+    ? `Cadre publié par la tablette : ${cadre.largeur} × ${cadre.hauteur} px — c'est à cette taille que les vues seront découpées.`
+    : "La tablette n'a pas encore publié la taille de son cadre. Ouvrez son écran d'accueil et attendez le prochain signe de vie (cinq minutes au plus).";
+}
+
+function rendreOeuvres() {
+  if (!els.expositionOeuvres) return;
+  els.expositionOeuvres.textContent = "";
+  if (!expositionLue) return;
+  expositionLue.oeuvres.forEach((oeuvre, rang) => {
+    const bloc = document.createElement("div");
+    bloc.className = "caption-control";
+    const titre = document.createElement("label");
+    const points = (oeuvre.points_interet || []).length;
+    titre.textContent = `${rang + 1}. ${oeuvre.titre} — ${points + 1} vue${points ? "s" : ""}`;
+    const choix = document.createElement("input");
+    choix.type = "file";
+    choix.accept = "image/*";
+    choix.addEventListener("change", () => {
+      const f = choix.files && choix.files[0];
+      if (f) fichiersParOeuvre.set(rang, f);
+      else fichiersParOeuvre.delete(rang);
+      majBoutonEnvoyer();
+    });
+    bloc.append(titre, choix);
+    els.expositionOeuvres.appendChild(bloc);
+  });
+}
+
+function majBoutonEnvoyer() {
+  if (!els.expositionEnvoyer) return;
+  const prêt = !!expositionLue &&
+    !!cadreDeLaTablette() &&
+    fichiersParOeuvre.size === expositionLue.oeuvres.length;
+  els.expositionEnvoyer.disabled = !prêt;
+}
+
+on("expositionLire", "click", () => {
+  fichiersParOeuvre.clear();
+  try {
+    expositionLue = Exposition.lireExposition(els.expositionJson.value);
+  } catch (e) {
+    expositionLue = null;
+    els.expositionStatut.textContent = `⚠️ ${e.message}`;
+    rendreOeuvres();
+    majBoutonEnvoyer();
+    return;
+  }
+  const vues = expositionLue.oeuvres.reduce(
+    (t, o) => t + 1 + (o.points_interet || []).length, 0
+  );
+  els.expositionStatut.textContent =
+    `« ${expositionLue.titre} » — ${expositionLue.oeuvres.length} œuvre(s), ${vues} vues à découper.`;
+  rendreÉtatCadre();
+  rendreOeuvres();
+  majBoutonEnvoyer();
+});
+
+on("expositionEnvoyer", "click", async () => {
+  const cadre = cadreDeLaTablette();
+  if (!expositionLue || !cadre) return;
+  els.expositionEnvoyer.disabled = true;
+  try {
+    // ═══ TOUT EST DÉCOUPÉ AVANT LE PREMIER ENVOI ═══
+    //
+    // Et non découpé-envoyé œuvre par œuvre : si la sixième image est illisible,
+    // on l'apprend AVANT d'avoir téléversé les vingt vues des cinq premières.
+    // La même raison que côté recueils, où le document n'est écrit qu'une fois
+    // tous les fichiers en place.
+    const vues = [];
+    for (let rang = 0; rang < expositionLue.oeuvres.length; rang++) {
+      const oeuvre = expositionLue.oeuvres[rang];
+      els.expositionStatut.textContent =
+        `Découpe ${rang + 1}/${expositionLue.oeuvres.length} — ${oeuvre.titre}…`;
+      const découpées = await Exposition.découperOeuvre(
+        oeuvre, fichiersParOeuvre.get(rang), cadre
+      );
+      découpées.forEach((v) => vues.push({ file: v.fichier, texte: v.texte }));
+    }
+
+    els.expositionStatut.textContent = `Envoi de ${vues.length} vues…`;
+    const { id } = await recueils.créer(
+      { titre: expositionLue.titre, crééPar: expositionLue.curateur || "le conservateur", fichiers: vues },
+      (p) => {
+        els.expositionStatut.textContent =
+          `Envoi ${p.index}/${p.total} — ${Math.round((p.octets / p.octetsTotal) * 100)} %`;
+      }
+    );
+
+    // Nommer le recueil est le DERNIER geste : tant qu'il n'est pas fait, la
+    // tablette garde ses actualités. Fait plus tôt, elle aurait affiché une
+    // exposition à moitié installée.
+    await engine.setDeviceSetting(CONFIG.deviceDocId, "recueilOeuvres", id);
+    els.expositionStatut.textContent =
+      `✅ « ${expositionLue.titre} » installée — ${vues.length} vues. L'écran d'accueil la présentera dans les minutes qui viennent.`;
+  } catch (e) {
+    console.error("[Exposition] Échec :", e);
+    els.expositionStatut.textContent = `⚠️ ${e.message}`;
+  } finally {
+    majBoutonEnvoyer();
+  }
+});
+
+on("expositionRetirer", "click", async () => {
+  try {
+    await engine.setDeviceSetting(CONFIG.deviceDocId, "recueilOeuvres", "");
+    els.expositionStatut.textContent =
+      "Exposition retirée — l'écran d'accueil revient au fil d'information.";
+  } catch (e) {
+    els.expositionStatut.textContent = `⚠️ ${e.message}`;
+  }
+});
+
 // L'ordre d'affichage est celui-ci et non celui du document : les deux moyens
 // d'un même déplacement se lisent côte à côte, ce qui est la comparaison qu'on
 // vient chercher. Les noms sont ceux de UsageStats.GESTE_* — les changer d'un
@@ -1829,6 +1978,11 @@ setInterval(() => {
   bloc("rafraîchissement du signe de vie", () => {
     if (lastDeviceData && !els.adminOverlay.classList.contains("hidden")) {
       renderDeviceHealth(lastDeviceData);
+      // Le cadre arrive avec le signe de vie : la ligne qui l'annonce doit
+      // suivre, sinon elle dirait « pas encore publié » alors qu'il vient de
+      // l'être, et on attendrait pour rien.
+      rendreÉtatCadre();
+      majBoutonEnvoyer();
     }
   });
 }, 30000);
