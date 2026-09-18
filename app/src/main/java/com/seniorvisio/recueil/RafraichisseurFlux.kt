@@ -353,10 +353,19 @@ class RafraichisseurFlux(private val context: Context) {
             // tentative recommencera au prochain contrôle, dans le quart
             // d'heure, au lieu d'attendre demain 7 h.
             Log.w(TAG, "Aucun titre du jour : l'état précédent est conservé")
+            // Dans le journal aussi : « FLUX lecture » dit déjà « retenus du
+            // jour 0 », mais pas ce qu'on en FAIT. Garder l'ancien fil et le
+            // retirer se lisaient pareil, et ce sont deux écrans différents
+            // pour Jean.
+            CallTrace.record(
+                "FLUX conservé",
+                "aucun titre du jour — l'ancien fil reste affiché, nouvel essai dans le quart d'heure",
+            )
             return
         }
 
         publier(titres)
+        CallTrace.record("FLUX publié", "${titres.size} titre(s) écrits dans le recueil")
         config.fluxDerniereRevision = BuildConfig.BUILD_REV
         config.fluxListeChangee = false
         config.fluxDernierRafraichissementMs = System.currentTimeMillis()
@@ -397,7 +406,19 @@ class RafraichisseurFlux(private val context: Context) {
                     "elements" to éléments,
                 )
             )
-            .addOnFailureListener { e -> Log.e(TAG, "Recueil du flux non publié", e) }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Recueil du flux non publié", e)
+                // LE CAS LE PLUS TROMPEUR DE TOUS. La lecture a réussi, la
+                // sélection a réussi, le journal dira « retenus du jour 28 » —
+                // et l'écran de Jean continuera d'afficher la liste d'hier
+                // parce que l'écriture, elle, n'est jamais arrivée. Sans cette
+                // ligne, tout indiquait que le fil allait bien.
+                CallTrace.record(
+                    "FLUX ÉCHEC écriture",
+                    "le recueil n'a pas pu être écrit (${e.javaClass.simpleName}) — " +
+                        "l'écran garde la liste précédente",
+                )
+            }
     }
 
     private companion object {

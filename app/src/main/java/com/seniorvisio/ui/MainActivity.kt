@@ -31,6 +31,7 @@ import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.AlertVolume
 import com.seniorvisio.core.CallTrace
+import com.seniorvisio.core.VieDuFil
 import com.seniorvisio.core.CommandesVocales
 import com.seniorvisio.core.MiseEnVeille
 import com.seniorvisio.core.Environnement
@@ -587,16 +588,19 @@ class MainActivity : AppCompatActivity() {
                             rendu.origine,
                             rendu.crédit,
                         )
-                        // Le nom du fil ne s'affiche pas alors que l'analyseur
-                        // le lit — vérifié en l'exécutant sur le flux réel. Le
-                        // défaut est donc entre les deux, et « rien ne
-                        // s'affiche » se lit pareil que la donnée manque ou que
-                        // la vue soit masquée. Cette ligne tranche.
-                        CallTrace.record(
-                            "ACCUEIL actualité rendu",
-                            "origine=" + (rendu.origine ?: "ABSENTE") +
-                                " · crédit=" + (rendu.crédit ?: "absent") +
-                                " · " + (if (rendu.vignette != null) "avec" else "sans") + " vignette",
+                        // COMPTÉ, ET NON ÉCRIT. Cette ligne partait à chaque
+                        // rotation et remplissait à elle seule le tampon qui
+                        // garde l'état de la machine : cinquante-sept
+                        // affichages avaient évincé toutes les lignes FLUX,
+                        // c'est-à-dire précisément celles qui disent si le fil
+                        // a pu être lu. L'instrument chassait sa réponse.
+                        //
+                        // Le bilan part sur le battement du service (voir
+                        // VieDuFil), une ligne toutes les cinq minutes.
+                        VieDuFil.noterAffichage(
+                            rangActualite,
+                            titresActualite.size,
+                            rendu.origine,
                         )
                         zones.majNavigationActualite(rangActualite, titresActualite.size)
                     }

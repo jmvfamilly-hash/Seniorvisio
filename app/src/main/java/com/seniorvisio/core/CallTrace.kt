@@ -134,15 +134,48 @@ object CallTrace {
         // pourquoi le nom du fil n'apparaît pas, avec un journal d'où la
         // réponse avait été retirée.
         "FLUX",
-        // Le rendu d'un titre sur l'accueil : une par article, et c'est elle
-        // qui dit si la provenance est arrivée jusqu'à la vue. La rotation des
-        // titres en produit plusieurs par heure ; le plafond de soixante joue
-        // son rôle et garde les plus récentes, qui sont les bonnes.
-        "ACCUEIL actualité rendu",
+        // Le bilan du fil, une ligne par battement de cinq minutes (voir
+        // VieDuFil). NOMMÉS UN PAR UN, et non par le préfixe « ACCUEIL
+        // actualité » : ce préfixe couvrirait aussi la ligne de rotation et
+        // celle de navigation, qui partent à chaque titre. C'est exactement ce
+        // qui s'était produit — cinquante-sept lignes d'affichage avaient
+        // évincé toutes les lignes FLUX, c'est-à-dire la réponse qu'on venait
+        // chercher.
+        "ACCUEIL actualité vivant",
+        "ACCUEIL actualité vide",
     )
+
+    /**
+     * Ce qui ne s'évince pas tant qu'autre chose peut partir à sa place.
+     *
+     * Le fil se rafraîchit UNE FOIS PAR JOUR : ses lignes sont rares, et ce
+     * sont celles qui disent pourquoi l'écran affiche ce qu'il affiche. Les
+     * relevés mémoire, eux, reviennent toutes les cinq minutes et le plus
+     * ancien ne manque à personne.
+     *
+     * Sans cette distinction, un tampon plein finissait par ne contenir que
+     * les cinq dernières heures de relevés mémoire — et la lecture du matin,
+     * la seule qui explique la journée, était partie depuis longtemps.
+     */
+    private val PRÉFIXES_PROTÉGÉS = listOf("FLUX", "DÉMARRAGE")
 
     private fun estLigneDeRepos(source: String): Boolean =
         PRÉFIXES_REPOS.any { source.startsWith(it) }
+
+    /**
+     * L'origine d'une ligne déjà formatée, pour décider quoi évincer.
+     *
+     * Par la fermeture du crochet, et NON par un index fixe : le format place
+     * l'origine en vingt-troisième colonne, mais les deux horodatages
+     * s'élargissent au-delà de leur gabarit après quelques heures de
+     * fonctionnement. Un découpage à position fixe aurait donc été juste sur
+     * les essais courts et faux sur la tablette de Jean, qui tourne des
+     * semaines — le genre d'erreur qui ne se voit jamais là où on la cherche.
+     */
+    private fun origineDe(ligne: String): String {
+        val début = ligne.indexOf("] ")
+        return if (début < 0) ligne else ligne.substring(début + 2)
+    }
     private var startedAtMs = SystemClock.elapsedRealtime()
     private var lastAtMs = startedAtMs
 
@@ -181,7 +214,15 @@ object CallTrace {
         if (estLigneDeRepos(source)) {
             repos.addLast(line)
             while (repos.size > MAX_REPOS) {
-                repos.removeFirst()
+                // La plus ancienne NON PROTÉGÉE part la première. Si tout est
+                // protégé, la plus ancienne part quand même : un tampon qui
+                // refuserait de se vider finirait par ne plus rien accepter,
+                // ce qui est pire que de perdre une ligne.
+                val victime = repos.indexOfFirst { ligne ->
+                    val origine = origineDe(ligne)
+                    PRÉFIXES_PROTÉGÉS.none { origine.startsWith(it) }
+                }
+                repos.removeAt(if (victime >= 0) victime else 0)
                 reposPerdues++
             }
         }

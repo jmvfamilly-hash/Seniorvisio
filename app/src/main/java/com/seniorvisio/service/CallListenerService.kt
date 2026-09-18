@@ -135,6 +135,9 @@ class CallListenerService : LifecycleService() {
             // la dalle : un rattrapage n'est pas un changement.
             actualites.réévaluer(réveillerLÉcran = false)
             surveillerMémoireAuRepos()
+            // Le fil d'information vit-il ? Une ligne par battement, et rien
+            // quand un titre reste simplement posé (voir VieDuFil).
+            com.seniorvisio.core.VieDuFil.publierBilan()
             statusReporter.reportHeartbeat(échecsDÉcoute)
             heartbeatHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
         }

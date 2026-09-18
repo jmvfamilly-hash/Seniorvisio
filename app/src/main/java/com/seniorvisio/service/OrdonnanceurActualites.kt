@@ -143,7 +143,14 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
     private fun programmerProchainRéveilDeJour(aucunTitre: Boolean) {
         val dans = System.currentTimeMillis() + RENDEZ_VOUS_À_VIDE_MS
         alarmes()?.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, dans, intentionDeRéveil())
-        if (aucunTitre) Log.i(TAG, "Aucun titre installé — nouvel essai dans 15 min")
+        if (aucunTitre) {
+            Log.i(TAG, "Aucun titre installé — nouvel essai dans 15 min")
+            // Et dans le journal, cette fois. Ce chemin n'écrivait que dans
+            // logcat : la tablette pouvait se redonner rendez-vous toutes les
+            // quinze minutes pendant des heures sans qu'une seule ligne ne le
+            // dise à qui relève le journal à distance.
+            com.seniorvisio.core.VieDuFil.noterAucunTitre()
+        }
     }
 
     /**
