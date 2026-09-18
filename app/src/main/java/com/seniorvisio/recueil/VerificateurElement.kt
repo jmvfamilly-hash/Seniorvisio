@@ -149,7 +149,75 @@ class VerificateurNonPrisEnCharge(private val type: TypeElement) : VerificateurE
 }
 
 /** À qui confier quoi. Unique table de correspondance type → vérificateur. */
-fun vérificateurPour(type: TypeElement, côtéMax: Int): VerificateurElement = when (type) {
-    TypeElement.PHOTO -> VerificateurPhoto(côtéMax)
+/**
+ * Range une œuvre SANS TOUCHER À SA DÉFINITION.
+ *
+ * ═══ POURQUOI UN SECOND CHEMIN, ET NON UN RÉGLAGE DU PREMIER ═══
+ *
+ * VerificateurPhoto ré-encode toute image à la définition de la dalle, et
+ * c'est juste : une photo de famille se regarde en entier, garder douze
+ * mégapixels pour l'afficher sur mille deux cents pixels remplirait le disque
+ * sans rien apporter.
+ *
+ * Une toile de musée se regarde AUTREMENT. La visite guidée agrandit un détail
+ * — la touche du pinceau, une signature dans un coin — et ce détail se découpe
+ * dans le fichier rangé (voir DecoupeOeuvre). Rangée à 1920 px, la toile ne
+ * contient plus le détail qu'on prétend montrer : on agrandirait de la
+ * bouillie en croyant montrer la matière.
+ *
+ * Les deux besoins sont opposés, donc deux chemins. Les mélanger aurait donné
+ * un vérificateur avec un drapeau, et un drapeau finit toujours par être posé
+ * du mauvais côté.
+ *
+ * LE FICHIER EST COPIÉ TEL QUEL, sans ré-encodage : un JPEG ré-encodé perd de
+ * la matière à chaque passage, et c'est précisément la matière qu'on vient
+ * regarder.
+ *
+ * Il est quand même MESURÉ avant d'être accepté — bornes seulement, sans
+ * allouer un seul pixel. Un fichier que la tablette ne saura pas ouvrir doit
+ * être refusé à l'installation, pas découvert devant Jean.
+ */
+class VerificateurOeuvre : VerificateurElement {
+    override fun vérifier(element: Element, téléchargé: File, dossier: File): Element {
+        val mesure = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(téléchargé.absolutePath, mesure)
+        if (mesure.outWidth <= 0 || mesure.outHeight <= 0) {
+            return element.copy(
+                état = ÉtatElement.REFUSÉ,
+                cause = "Format non reconnu par la tablette.",
+            )
+        }
+        return try {
+            val nom = "${element.id}.jpg"
+            téléchargé.copyTo(File(dossier, nom), overwrite = true)
+            Log.i(
+                TAG_OEUVRE,
+                "Œuvre rangée sans réduction : ${mesure.outWidth}×${mesure.outHeight} px",
+            )
+            element.copy(état = ÉtatElement.PRÊT, cause = null, fichierLocal = nom)
+        } catch (e: Exception) {
+            Log.e(TAG_OEUVRE, "Rangement impossible pour ${element.id}", e)
+            element.copy(
+                état = ÉtatElement.REFUSÉ,
+                cause = "La tablette n'a pas pu la ranger (${e.javaClass.simpleName}).",
+            )
+        }
+    }
+
+    private companion object {
+        const val TAG_OEUVRE = "VerificateurOeuvre"
+    }
+}
+
+/**
+ * @param oeuvres vrai pour le recueil d'exposition : les images y sont rangées
+ *   sans réduction, parce qu'on va découper dedans (voir VerificateurOeuvre).
+ */
+fun vérificateurPour(
+    type: TypeElement,
+    côtéMax: Int,
+    oeuvres: Boolean = false,
+): VerificateurElement = when (type) {
+    TypeElement.PHOTO -> if (oeuvres) VerificateurOeuvre() else VerificateurPhoto(côtéMax)
     else -> VerificateurNonPrisEnCharge(type)
 }
