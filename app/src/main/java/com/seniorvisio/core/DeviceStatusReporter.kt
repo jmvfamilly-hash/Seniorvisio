@@ -151,6 +151,12 @@ class DeviceStatusReporter(private val context: Context) {
                 // d'essai et celui de la production se ressemblent trait pour
                 // trait, et c'est cette ligne-là qu'on regarde en premier.
                 FIELD_APP_VERSION to Environnement.étiquetteVersion(),
+                // La taille du cadre où s'affiche une œuvre, pour que le PWA
+                // découpe les vues d'une exposition à la bonne dimension (voir
+                // CadreOeuvre). Absent tant que l'écran d'accueil n'a jamais
+                // été disposé — le PWA saura alors qu'il ne peut pas découper,
+                // au lieu de découper de travers.
+                FIELD_CADRE_OEUVRE to com.seniorvisio.oeuvres.CadreOeuvre.publiable(),
                 FIELD_BATTERY_PERCENT to batteryPercent,
                 FIELD_COMPANION_APPS to companionAppVersions(),
                 FIELD_LAST_HEARTBEAT_AT to FieldValue.serverTimestamp(),
@@ -900,6 +906,15 @@ class DeviceStatusReporter(private val context: Context) {
         /** Une journée d'usage par document (voir publishUsage, UsageStats). */
         private const val USAGE_COLLECTION = "usage"
         private const val FIELD_APP_VERSION = "appVersion"
+
+        /**
+         * Le cadre où une œuvre s'affiche, en pixels : { largeur, hauteur }.
+         *
+         * Publié pour que le PWA découpe les vues d'une exposition à la taille
+         * exacte où elles seront vues. Voir oeuvres/CadreOeuvre — et surtout la
+         * raison pour laquelle ce n'est pas la taille de l'écran.
+         */
+        private const val FIELD_CADRE_OEUVRE = "cadreOeuvre"
         private const val FIELD_BATTERY_PERCENT = "batteryPercent"
         private const val FIELD_COMPANION_APPS = "companionAppVersions"
         private const val FIELD_LAST_HEARTBEAT_AT = "lastHeartbeatAt"

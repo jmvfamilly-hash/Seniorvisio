@@ -21,6 +21,7 @@ import com.seniorvisio.core.ScreenTheme
 import com.seniorvisio.core.TimeContext
 import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.core.UsageStats
+import com.seniorvisio.oeuvres.CadreOeuvre
 import com.seniorvisio.core.WeatherClient
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -111,6 +112,7 @@ class HomeZonesController(
     private val creditActualite: TextView = root.findViewById(R.id.creditActualiteAccueil)
     private val titreBandeauActualite: TextView = root.findViewById(R.id.titreBandeauActualite)
     private val colonneTexteActualite: View = root.findViewById(R.id.colonneTexteAccueil)
+    private val rangeeActualite: View = root.findViewById(R.id.rangeeActualite)
 
     /**
      * La vignette actuellement posée sur la vue, pour pouvoir la reprendre
@@ -285,28 +287,36 @@ class HomeZonesController(
         vignetteActuelle = image
         if (ancienne != null && ancienne !== image && !ancienne.isRecycled) ancienne.recycle()
 
-        // La légende va SOUS LA PHOTO, à la place du crédit : c'est le même
-        // rapport — un texte qui parle de l'image, pas de l'article.
-        if (légende.isNullOrBlank()) {
-            creditActualite.visibility = View.GONE
-        } else {
-            creditActualite.text = légende
-            creditActualite.visibility = View.VISIBLE
-        }
+        // Le crédit reste masqué : la légende n'est plus une mention sous la
+        // photo, c'est le commentaire du conservateur, et il s'écrit dans la
+        // zone de parole (voir plus bas).
+        creditActualite.visibility = View.GONE
         origineActualite.visibility = View.GONE
         titreBandeauActualite.text = titreGalerie?.takeIf { it.isNotBlank() } ?: "Œuvres"
-        if (!modeActualite) {
+
+        // La pile change de composition à l'entrée dans le mode, pas à chaque
+        // œuvre : applyZoneOrder retire et remet les vues, ce qui coûte une
+        // disposition complète et ferait clignoter l'écran à chaque Suivant.
+        if (!modeActualite || !pileEnModeOeuvre) {
             modeActualite = true
+            pileEnModeOeuvre = true
             roomZone.clear()
-            callZone.clear()
             applyZoneOrder()
         }
+
+        // L'explication, POSÉE COMME UNE PAROLE. Vidée d'abord : sans cela le
+        // commentaire du détail précédent resterait en tête et les deux se
+        // liraient à la suite, comme une seule phrase qui n'a jamais été dite.
+        callZone.clear()
+        if (!légende.isNullOrBlank()) callZone.submit(légende, isFinal = true)
     }
 
     /** Rend à la zone sa disposition de titre, quand on quitte les œuvres. */
     private fun quitterModeOeuvre() {
         if (!modeOeuvre) return
         modeOeuvre = false
+        pileEnModeOeuvre = false
+        callZone.clear()
         colonneTexteActualite.visibility = View.VISIBLE
         (colonneImageActualite.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
             lp.weight = 4f
@@ -317,6 +327,16 @@ class HomeZonesController(
     }
 
     private var modeOeuvre = false
+
+    /**
+     * Vrai quand la PILE contient déjà la zone de parole.
+     *
+     * Distinct de modeOeuvre : celui-ci décrit ce qu'on affiche, celui-là ce
+     * que la pile contient. Les confondre ferait reconstruire la pile à chaque
+     * œuvre — une disposition complète par appui sur Suivant, donc un
+     * clignotement à chaque pas de la visite.
+     */
+    private var pileEnModeOeuvre = false
 
     fun masquerActualite() {
         if (!modeActualite) return
@@ -568,6 +588,20 @@ class HomeZonesController(
     }
 
     init {
+        // ═══ LE CADRE EST MESURÉ, PAS DÉDUIT ═══
+        //
+        // Sa hauteur dépend des poids de la pile, des marges, du bandeau de
+        // date et des boutons — dont la taille dépend elle-même de la police
+        // choisie par l'administrateur. Le recalculer côté PWA reviendrait à
+        // réécrire cette mise en page dans un second langage, et à la voir
+        // diverger au premier ajustement.
+        //
+        // Sur chaque disposition, et non une fois : la rangée change de taille
+        // quand on entre en mode actualité, quand la police change, et quand
+        // la tablette pivote.
+        rangeeActualite.addOnLayoutChangeListener { vue, _, _, _, _, _, _, _, _ ->
+            CadreOeuvre.noter(vue.width, vue.height)
+        }
         applyZoneOrder()
         roomZone.onDisplayChanged = { onTextZonesChanged?.invoke() }
         callZone.onDisplayChanged = { onTextZonesChanged?.invoke() }
@@ -608,7 +642,18 @@ class HomeZonesController(
         // fonction qui décide de la composition de la pile, et un second
         // endroit qui y toucherait finirait par la contredire.
         val ordered = if (modeActualite) {
-            listOf(zoneInfo, zoneActualite)
+            // ═══ EN MODE ŒUVRE, LA ZONE DE PAROLE RESTE ═══
+            //
+            // L'explication du conservateur s'y écrit, et c'est délibéré :
+            // c'est l'endroit où Jean lit déjà ce qu'on lui dit. Il n'a donc
+            // rien de nouveau à apprendre à lire — le commentaire arrive là où
+            // les mots arrivent, avec la même police, le même interligne et le
+            // même nombre de lignes que la transcription.
+            //
+            // Le fil d'information, lui, garde deux surfaces : son titre EST
+            // le contenu, il n'a rien à commenter en dessous.
+            if (modeOeuvre) listOf(zoneInfo, zoneActualite, zoneCall)
+            else listOf(zoneInfo, zoneActualite)
         } else {
             val views = mapOf(HomeZone.INFO to zoneInfo, HomeZone.ROOM to zoneRoom, HomeZone.CALL to zoneCall)
             adminConfig.zoneOrder.mapNotNull { views[it] }

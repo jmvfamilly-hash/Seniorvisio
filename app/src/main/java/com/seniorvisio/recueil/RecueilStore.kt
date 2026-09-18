@@ -109,18 +109,12 @@ class RecueilStore(private val context: Context) {
     private var dernierÉtat: List<Recueil> = emptyList()
 
     private fun installerCeQuiManque(recueils: List<Recueil>) {
-        // Lu UNE fois pour toute la passe, et non par élément : c'est une
-        // lecture de préférences, et il y en aurait eu une par photo.
-        val recueilDesOeuvres = com.seniorvisio.core.AdminConfig(context).recueilOeuvres
         recueils.forEach { recueil ->
             val dossier = dossierDe(recueil.id).apply { mkdirs() }
             val misÀJour = recueil.éléments.map { element ->
                 if (estInstallé(element, dossier)) return@map element
                 if (element.état == ÉtatElement.REFUSÉ) return@map element
-                // Le recueil d'exposition est rangé sans réduction : c'est
-                // dans ces fichiers-là que la visite guidée découpe ses détails
-                // (voir VerificateurOeuvre et DecoupeOeuvre).
-                installer(element, dossier, recueil.id == recueilDesOeuvres)
+                installer(element, dossier)
             }
             // ═══ ON NE PUBLIE QUE CE QUI A RÉELLEMENT CHANGÉ ═══
             //
@@ -164,7 +158,7 @@ class RecueilStore(private val context: Context) {
         else -> File(dossier, element.fichierLocal).exists()
     }
 
-    private fun installer(element: Element, dossier: File, oeuvres: Boolean = false): Element {
+    private fun installer(element: Element, dossier: File): Element {
         if (element.type == TypeElement.TEXTE) return installerTexte(element, dossier)
         if (element.nature == NatureElement.FLUX) {
             return element.copy(
@@ -175,7 +169,7 @@ class RecueilStore(private val context: Context) {
         val brut = File(context.cacheDir, "recueil-${element.id}")
         return try {
             TelechargementHttp.vers(element.source, brut, "élément ${element.id}")
-            vérificateurPour(element.type, côtéMax, oeuvres).vérifier(element, brut, dossier)
+            vérificateurPour(element.type, côtéMax).vérifier(element, brut, dossier)
         } catch (e: Exception) {
             Log.w(TAG, "Téléchargement impossible pour ${element.id}", e)
             element.copy(
