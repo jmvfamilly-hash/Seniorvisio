@@ -438,7 +438,13 @@
 
           <div class="volume-control">
             <label for="scrollSpeedSlider">🐢🐇 Vitesse de défilement max chez Jean</label>
-            <input type="range" id="scrollSpeedSlider" min="20" max="100" value="50" step="10" data-unit=" dp/s">
+            <!-- Plancher descendu de 20 à 5 : signalé à l'usage, le texte
+                 défile encore trop vite pour être suivi devant une œuvre, et
+                 20 dp/s ne laissait plus aucune marge. Le pas passe à 5 pour
+                 que le bas de la course soit réglable finement — entre 5 et
+                 20, chaque cran change visiblement la lecture, là où en haut
+                 de course dix de plus ou de moins ne se voient pas. -->
+            <input type="range" id="scrollSpeedSlider" min="5" max="100" value="50" step="5" data-unit=" dp/s">
           </div>
 
           <div class="volume-control">

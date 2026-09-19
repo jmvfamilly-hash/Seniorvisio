@@ -77,6 +77,9 @@ class RollingCaptionZone(
 
     private var visibleLines = DEFAULT_VISIBLE_LINES
     private var clearDelayMs = DEFAULT_CLEAR_DELAY_MS
+
+    /** Voir garderAffiché : la légende d'une œuvre ne s'efface pas d'elle-même. */
+    private var garderAffiché = false
     private var maxScrollSpeedPxPerSec = DEFAULT_SCROLL_SPEED_DP_PER_SEC * scrollView.resources.displayMetrics.density
 
     private val scrollAnimator = CaptionScrollAnimator(
@@ -152,7 +155,18 @@ class RollingCaptionZone(
         reveal()
 
         handler.removeCallbacks(clearRunnable)
-        handler.postDelayed(clearRunnable, clearDelayMs)
+        // ═══ SAUF QUAND LE TEXTE DOIT RESTER ═══
+        //
+        // Devant une œuvre, la légende est la seule parole qui sera prononcée
+        // pendant les trois quarts d'heure du créneau. L'effacer au bout du
+        // délai de silence laisse alors le tableau nu quarante-quatre minutes
+        // sur quarante-cinq — la règle des appels appliquée là où elle ne veut
+        // plus rien dire, puisque rien ne viendra réarmer le délai.
+        //
+        // Un drapeau plutôt qu'un délai immense : « ne s'efface pas » est un
+        // état, et le dire par un nombre de secondes assez grand aurait été un
+        // faux réglage, qu'on aurait fini par croire ajustable.
+        if (!garderAffiché) handler.postDelayed(clearRunnable, clearDelayMs)
 
         textView.post {
             // Jamais de retour en haut : le texte ne fait que s'allonger, et
@@ -469,6 +483,31 @@ class RollingCaptionZone(
 
     fun setClearDelaySeconds(seconds: Int) {
         clearDelayMs = (seconds * 1000L).coerceAtLeast(MIN_CLEAR_DELAY_MS)
+    }
+
+    /**
+     * Le texte reste tant qu'on ne le remplace pas.
+     *
+     * Pour la légende d'une œuvre, qui n'est suivie d'aucune autre parole.
+     * L'appelant reste maître de la fin : [clear] efface toujours, et
+     * afficherOeuvre l'appelle avant chaque nouvelle vue.
+     *
+     * Le délai déjà armé est retiré à l'activation : sans cela, une légende
+     * posée juste avant la bascule s'effacerait quand même, une fois, sans
+     * qu'on comprenne pourquoi la première œuvre se comporte autrement que
+     * les suivantes.
+     */
+    fun garderAffiché(garder: Boolean) {
+        if (garderAffiché == garder) return
+        garderAffiché = garder
+        if (garder) {
+            handler.removeCallbacks(clearRunnable)
+        } else if (committed.isNotEmpty() || pending.isNotEmpty()) {
+            // On rend la règle des appels, et on repart du délai plein plutôt
+            // que du temps déjà écoulé : le texte visible au moment du retour
+            // mérite d'être lu en entier.
+            handler.postDelayed(clearRunnable, clearDelayMs)
+        }
     }
 
     /**
