@@ -18,6 +18,7 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.google.firebase.firestore.ListenerRegistration
 import com.seniorvisio.BuildConfig
+import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.CallerPhotoCache
 import com.seniorvisio.core.DeviceStatusReporter
@@ -195,6 +196,23 @@ class CallListenerService : LifecycleService() {
         startForeground(FOREGROUND_ID, buildForegroundNotification())
         acquireWifiLock()
         UsageStats.init(this)
+        // ═══ UN ÉTAT, ET PAS SEULEMENT UNE TRANSITION ═══
+        //
+        // « EXPOSITION réglée » ne part qu'au CHANGEMENT de valeur (voir
+        // DeviceStatusReporter). Le réglage vit en préférences, donc il
+        // survit au redémarrage : après un relancement, plus une seule ligne
+        // ne disait ce que cette tablette est censée présenter, et on
+        // cherchait une exposition absente dans un journal qui ne mentionnait
+        // jamais l'exposition.
+        //
+        // Cette ligne-ci répond à la question dans tous les cas, y compris
+        // celui — le plus courant — où rien n'a changé depuis le démarrage.
+        val expo = AdminConfig(this).recueilOeuvres
+        CallTrace.record(
+            "EXPOSITION en place",
+            if (expo.isBlank()) "aucune — l'accueil présente le fil d'information"
+            else "recueil « $expo »",
+        )
         recueils.démarrer()
         flux.démarrer()
         actualites.démarrer()

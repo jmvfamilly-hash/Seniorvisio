@@ -386,6 +386,15 @@ class MainActivity : AppCompatActivity() {
      * sa route tout seul. Rien à annuler, rien à refermer.
      */
     private var titresActualite: List<Element> = emptyList()
+
+    /**
+     * Le dernier motif de refus journalisé, pour ne pas le répéter.
+     *
+     * Remis à zéro nulle part exprès : si la panne cesse puis revient à
+     * l'identique, la deuxième occurrence n'apprend rien de plus que la
+     * première, et cet écran ne vit que le temps qu'il est affiché.
+     */
+    private var dernierRefus: String? = null
     private var recueilActualiteId: String? = null
     private var rangActualite = 0
 
@@ -631,7 +640,50 @@ class MainActivity : AppCompatActivity() {
                                 CallTrace.ventilationMémoire(),
                         )
                     }
-                    else -> zones.masquerActualite()
+                    // ═══ LE SEUL CHEMIN QUI NE DISAIT RIEN ═══
+                    //
+                    // Rendu.Impossible porte une phrase écrite exprès pour
+                    // être lue — « cette photo n'est plus sur la tablette »,
+                    // « n'a pas pu être ouverte », « est trop lourde ». Elle
+                    // était construite, puis jetée : l'écran se vidait, et le
+                    // journal n'en gardait aucune trace.
+                    //
+                    // C'est ce trou qui a fait chercher l'exposition du côté
+                    // de l'ordonnanceur — lequel faisait son travail et
+                    // l'écrivait — pendant que le refus avait lieu ici, deux
+                    // étages plus bas, en silence.
+                    //
+                    // AUCUNE DONNÉE PERSONNELLE : la raison vient d'une liste
+                    // fermée de phrases du code, le type est un nom
+                    // d'énumération, et le reste est un compte. Ni le titre,
+                    // ni la légende, ni rien de ce que Jean a sous les yeux.
+                    is Rendu.Impossible -> {
+                        zones.masquerActualite()
+                        // ═══ UNE FOIS PAR MOTIF, ET NON UNE FOIS PAR VUE ═══
+                        //
+                        // Cette ligne est protégée dans le tampon d'état (voir
+                        // CallTrace) : elle ne s'évince pas. Sans ce filtre,
+                        // Jean faisant défiler vingt-cinq vues refusées
+                        // produirait vingt-cinq lignes protégées, qui
+                        // chasseraient les lignes FLUX — c'est-à-dire
+                        // précisément le défaut que ce tampon a été construit
+                        // pour corriger, réintroduit par l'instrument censé le
+                        // servir.
+                        //
+                        // Le motif, et non le rang : vingt-cinq vues refusées
+                        // pour la même raison sont UNE panne, et la dire une
+                        // fois suffit à la traiter.
+                        val motif = "${rendu.raison} · type=${element.type.étiquette} · " +
+                            "fichier=${if (fichier == null) "aucun" else "présent"} · " +
+                            "recueil=$recueilActualiteId"
+                        if (motif != dernierRefus) {
+                            dernierRefus = motif
+                            CallTrace.record(
+                                "ACCUEIL élément refusé",
+                                "${rangActualite + 1}/${titresActualite.size} · $motif",
+                            )
+                        }
+                    }
                 }
             }
         }

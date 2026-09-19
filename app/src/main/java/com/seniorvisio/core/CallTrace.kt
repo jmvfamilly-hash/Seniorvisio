@@ -143,6 +143,15 @@ object CallTrace {
         // chercher.
         "ACCUEIL actualité vivant",
         "ACCUEIL actualité vide",
+        // Le refus d'un élément : rare, et c'est la seule ligne qui dise
+        // POURQUOI l'écran s'est vidé. Sans elle dans ce tampon, elle serait
+        // partie au premier appel — exactement le trou qui a coûté un
+        // aller-retour sur l'exposition.
+        "ACCUEIL élément refusé",
+        // L'exposition installée, dite au démarrage. Une seule ligne par
+        // processus, et elle répond à « qu'est-ce que cette tablette est
+        // censée présenter ? ».
+        "EXPOSITION",
     )
 
     /**
@@ -157,7 +166,15 @@ object CallTrace {
      * les cinq dernières heures de relevés mémoire — et la lecture du matin,
      * la seule qui explique la journée, était partie depuis longtemps.
      */
-    private val PRÉFIXES_PROTÉGÉS = listOf("FLUX", "DÉMARRAGE")
+    private val PRÉFIXES_PROTÉGÉS = listOf(
+        "FLUX",
+        "DÉMARRAGE",
+        // Même raison que FLUX, et le même défaut constaté : un refus
+        // d'élément part une fois, puis l'écran reste vide pendant des heures
+        // en produisant des relevés mémoire qui l'évinceraient.
+        "ACCUEIL élément refusé",
+        "EXPOSITION",
+    )
 
     private fun estLigneDeRepos(source: String): Boolean =
         PRÉFIXES_REPOS.any { source.startsWith(it) }

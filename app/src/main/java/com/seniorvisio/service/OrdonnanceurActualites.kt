@@ -123,7 +123,12 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
         rangCourant = créneau.rang
         if (changement) {
             observateur?.surTitre(prêts.getOrNull(créneau.rang), recueil?.id)
-            CallTraceActualite.noter(créneau.rang, prêts.size, créneau.finDuCreneau)
+            // Le recueil est NOMMÉ, et ce n'est pas de la décoration : sur le
+            // dernier journal, « titre 24/25 » a dû être rapproché à la main
+            // d'un « FLUX publié | 17 titre(s) » pour établir que l'écran
+            // présentait l'exposition et non le fil. Un compte d'éléments
+            // n'est pas une identité.
+            CallTraceActualite.noter(créneau.rang, prêts.size, créneau.finDuCreneau, voulu)
         }
         // Le réveil n'est demandé que sur un VRAI changement : une réévaluation
         // de rattrapage ne doit pas rallumer l'écran pour le titre déjà affiché.
@@ -210,10 +215,10 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
 
 /** Trace lisible dans le journal technique, séparée pour ne pas alourdir la logique. */
 internal object CallTraceActualite {
-    fun noter(rang: Int, total: Int, fin: LocalDateTime) {
+    fun noter(rang: Int, total: Int, fin: LocalDateTime, recueil: String) {
         com.seniorvisio.core.CallTrace.record(
             "ACCUEIL actualité",
-            "titre ${rang + 1}/$total · jusqu'à ${fin.toLocalTime()}",
+            "titre ${rang + 1}/$total · recueil=$recueil · jusqu'à ${fin.toLocalTime()}",
         )
     }
 }
