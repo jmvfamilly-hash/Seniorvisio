@@ -483,14 +483,19 @@ function saveSettings() {
   }
 }
 
-function applySettingsToUi(settings) {
+async function applySettingsToUi(settings) {
   els.volumeSlider.value = settings.volume;
   els.captionToggle.checked = settings.captionEnabled;
   els.selfPreviewToggle.checked = settings.selfPreview;
   // Les effets, et pas seulement la coche — voir appliquerMemePiece. Appelée
   // même quand le réglage est faux : c'est elle qui rend le curseur de volume
   // et réaffiche « écouter la pièce » après un appel où il était vrai.
-  appliquerMemePiece(!!settings.sameRoom, { mémorisé: true });
+  //
+  // ATTENDUE : appliquerMemePiece décide de l'état du curseur d'après le
+  // retour des consignes. Sans await, l'appel partirait avant que cet état
+  // soit connu, et la mention affichée pourrait démentir la case une fraction
+  // de seconde plus tard.
+  await appliquerMemePiece(!!settings.sameRoom, { mémorisé: true });
 }
 
 // --- Câblage UI ---
@@ -931,7 +936,7 @@ on("callButton", "click", async () => {
   // exactement les effets de appliquerMemePiece(false), qu'applique
   // applySettingsToUi quand le réglage mémorisé est faux. Rien n'est supprimé,
   // tout passe par un seul chemin.
-  applySettingsToUi(settings);
+  await applySettingsToUi(settings);
   renderVolumeWarning();
 
   // L'attente de la transcription recommence à chaque appel : le moteur est
@@ -958,6 +963,19 @@ on("callButton", "click", async () => {
     remoteVolume: settings.volume / 100,
     captionModeEnabled: settings.captionEnabled,
     selfPreviewEnabled: settings.selfPreview,
+    // ═══ LES DEUX QUI MANQUAIENT ═══
+    //
+    // Sans elles, le document d'appel naissait avec sameRoomMode=false, et
+    // écrasait la case que le proche venait de cocher quatre lignes plus haut.
+    // Le journal de la tablette le disait depuis le début :
+    //
+    //     APPEL consigne même pièce | activé=false microCoupé=false
+    //
+    // La coupure du micro suit le même réglage : « même pièce » signifie que
+    // la tablette ne capte plus rien, sans quoi la voix du proche lui
+    // reviendrait en écho depuis la pièce où il se trouve.
+    sameRoomMode: !!settings.sameRoom,
+    tabletMicMuted: !!settings.sameRoom,
     callerPhotoBase64: identity.photoBase64 || null,
   });
   els.forceConnectButton.disabled = false;
@@ -2586,26 +2604,56 @@ on("slideshowRememberToggle", "change", () => {
 //   la distinction : « même pièce » coupe entièrement le son de Jean, et ce
 //   projet a déjà perdu des jours sur une consigne de silence qui avait
 //   survécu à l'appel. Le proche doit le lire AVANT de se connecter.
-function appliquerMemePiece(sameRoom, { mémorisé = false } = {}) {
+// ═══ LE CURSEUR N'EST REPRIS QU'UNE FOIS LA COUPURE ACQUISE ═══
+//
+// Il était désactivé dès que la case était cochée, sans attendre que la
+// consigne parte. Or elle ne partait pas : appelée avant startCall, elle
+// tombait dans un document d'appel qui n'existait pas encore. Le proche se
+// retrouvait donc avec le son de Jean à plein ET le seul moyen de le baisser
+// verrouillé, au motif qu'il serait coupé.
+//
+// C'est la règle déjà écrite dans ce fichier pour la page des proches : un
+// réglage qu'on retire d'un écran doit être suivi jusqu'à celui où il reste
+// joignable. Ici, on ne retire la commande que si la chose qu'elle commande a
+// réellement disparu.
+async function appliquerMemePiece(sameRoom, { mémorisé = false } = {}) {
   els.sameRoomToggle.checked = sameRoom;
-  engine.setSameRoomMode(sameRoom);
   els.tabletMicMuteToggle.checked = sameRoom;
-  engine.setTabletMicMuted(sameRoom);
-  els.volumeSlider.disabled = sameRoom;
+  // Rendu AVANT toute tentative : si la suite échoue, on sort de cette
+  // fonction avec un curseur utilisable, jamais l'inverse.
+  els.volumeSlider.disabled = false;
+  // « attente » compte comme un succès : la consigne est retenue et partira
+  // dans la création du document d'appel, en une seule écriture (voir
+  // webrtc-engine, _envoyerConsigne). La distinguer de false est tout l'objet
+  // des trois réponses : sans elle, le cas NORMAL — régler avant d'appeler —
+  // serait signalé comme une panne.
+  const [consigne, micro] = await Promise.all([
+    engine.setSameRoomMode(sameRoom),
+    engine.setTabletMicMuted(sameRoom),
+  ]);
+  const acquis = (r) => r === true || r === "attente";
+  const transmis = acquis(consigne) && acquis(micro);
+  els.volumeSlider.disabled = sameRoom && transmis;
   els.sameRoomStatus.textContent = !sameRoom
     ? ""
-    : mémorisé
-      ? "Réglage mémorisé : décochez si vous n'êtes pas auprès de Jean. Son de la tablette entièrement coupé."
-      : "Son de la tablette entièrement coupé. Vos paroles continuent de s'écrire chez Jean.";
+    : !transmis
+      // Ce que le proche doit savoir tout de suite, et qui vaut mieux qu'une
+      // case cochée : Jean entend encore, et le curseur reste à sa main.
+      ? "⚠️ La coupure n'a pas atteint la tablette — Jean vous entend toujours. Le volume reste réglable ci-dessus."
+      : mémorisé
+        ? "Réglage mémorisé : décochez si vous n'êtes pas auprès de Jean. Son de la tablette entièrement coupé."
+        : "Son de la tablette entièrement coupé. Vos paroles continuent de s'écrire chez Jean.";
   // Sans objet quand on est déjà dans la pièce : la personne qui parle à Jean,
   // c'est soi, et son micro est justement coupé.
   els.micToRoomControl.classList.toggle("hidden", sameRoom);
   if (sameRoom && els.micToRoomToggle.checked) setMicToRoom(false);
 }
 
-on("sameRoomToggle", "change", () => {
-  appliquerMemePiece(els.sameRoomToggle.checked);
+on("sameRoomToggle", "change", async () => {
+  // Mémorisé AVANT d'attendre la consigne : c'est le geste du proche qu'on
+  // retient, et il ne doit pas dépendre de l'état du réseau à cet instant.
   saveSettings();
+  await appliquerMemePiece(els.sameRoomToggle.checked);
 });
 
 // Quelqu'un est entré dans la chambre de Jean et lui parle : la transcription

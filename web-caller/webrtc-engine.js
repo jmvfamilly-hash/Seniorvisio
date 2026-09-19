@@ -14,6 +14,9 @@ class RealCallEngine extends CallEngine {
     this._pc = null;
     this._localStream = null;
     this._callDocRef = null;
+    // Les consignes posées avant que le document d'appel n'existe. Déversées
+    // dans ce document à sa création (voir _envoyerConsigne et startCall).
+    this._consignesEnAttente = {};
     this._unsubscribeCallDoc = null;
     this._unsubscribeCalleeCandidates = null;
     // Volontairement hors de _teardown() : cette écoute-là ne suit pas un
@@ -104,8 +107,41 @@ class RealCallEngine extends CallEngine {
    * Une consigne qui n'arrive pas est une information, pas un incident à
    * masquer : c'est même la seule chose que le proche puisse agir dessus.
    */
+  /**
+   * @returns true si la consigne est arrivée, "attente" si elle est retenue
+   *   pour la création du document, false si la tablette l'a refusée.
+   *
+   * ═══ TROIS RÉPONSES ET NON DEUX, PARCE QU'ELLES N'APPELLENT PAS LA MÊME
+   *     CONDUITE ═══
+   *
+   * « Retenue » et « refusée » rendaient toutes deux false, et l'appelant ne
+   * pouvait donc que confondre une consigne en route avec une consigne perdue.
+   * C'est exactement ce qui a fait afficher « son coupé » sur une tablette qui
+   * entendait tout.
+   */
   async _envoyerConsigne(nom, champs) {
-    if (!this._callDocRef) return false;
+    if (!this._callDocRef) {
+      // ═══ RETENUE, ET NON JETÉE ═══
+      //
+      // Cette ligne rendait false sans un mot. Les réglages mémorisés sont
+      // appliqués juste AVANT startCall — le document d'appel n'existe pas
+      // encore — donc « même pièce » et la coupure du micro disparaissaient
+      // ici, silencieusement, à chaque appel. La case restait cochée et la
+      // tablette diffusait le son à plein.
+      //
+      // Le commentaire au-dessus dit qu'une consigne qui n'arrive pas est une
+      // information et non un incident à masquer. Il décrivait le chemin
+      // d'erreur ; ce chemin-ci, celui du « trop tôt », faisait précisément ce
+      // qu'il condamne.
+      //
+      // Les champs sont fusionnés dans le document à sa création (voir
+      // startCall), donc en UNE écriture : la tablette ne lit jamais l'état
+      // intermédiaire, là où une mise à jour d'après-coup lui aurait fait
+      // rejouer le son une fraction de seconde.
+      Object.assign(this._consignesEnAttente, champs);
+      console.warn(`[Consigne] « ${nom} » retenue : l'appel n'est pas encore créé`);
+      return "attente";
+    }
     try {
       await this._callDocRef.update(champs);
       return true;
@@ -518,21 +554,39 @@ class RealCallEngine extends CallEngine {
         // transcription restée sur la pièce d'un appel précédent laisserait
         // l'appelant parler sans que rien ne s'écrive de ce qu'il dit.
         micToRoom: false,
-        // Remis à faux à chaque appel : un mode "même pièce" resté actif d'un
-        // appel précédent laisserait Jean sans aucun son, sans que personne ne
-        // comprenne pourquoi.
-        sameRoomMode: false,
-        // Faux au départ dans les deux cas, et remis à vrai en cours d'appel
-        // seulement : la connexion immédiate par le bouton « Connexion
-        // immédiate » (voir forceConnect), la coupure du micro par la case
-        // « même pièce » (voir setTabletMicMuted). Écrits ici plutôt
-        // qu'omis : la tablette lit ce document dès le premier instantané, et
-        // un champ absent l'obligerait à distinguer « pas encore reçu » de
-        // « explicitement faux ».
+        // ═══ « MÊME PIÈCE » VIENT DE L'APPELANT, ET NON D'UN FAUX EN DUR ═══
+        //
+        // Ces deux champs valaient false sans condition, avec en commentaire
+        // « remis à faux à chaque appel ». C'était juste tant que le réglage
+        // n'était pas mémorisé. Depuis qu'il l'est, cette ligne écrasait en
+        // silence la case que le proche venait de voir cochée : l'écran disait
+        // « son de la tablette entièrement coupé », le document disait faux, et
+        // c'est le document que la tablette écoute.
+        //
+        // La valeur vient donc de l'appelant (voir app.js, bouton « Appeler »),
+        // et la remise à zéro d'un appel à l'autre est faite là où le réglage
+        // est connu, pas ici.
+        sameRoomMode: initialSettings.sameRoomMode ?? false,
+        tabletMicMuted: initialSettings.tabletMicMuted ?? false,
+        // Faux au départ, et remis à vrai en cours d'appel seulement : la
+        // connexion immédiate par le bouton « Connexion immédiate » (voir
+        // forceConnect). Écrit ici plutôt qu'omis : la tablette lit ce
+        // document dès le premier instantané, et un champ absent l'obligerait
+        // à distinguer « pas encore reçu » de « explicitement faux ».
         forceConnectRequested: false,
-        tabletMicMuted: false,
+        // ═══ EN DERNIER, DONC PRIORITAIRE ═══
+        //
+        // Toute consigne posée avant l'existence du document entre ici, dans
+        // la même écriture. Placée après les valeurs par défaut pour les
+        // remplacer : une consigne explicite du proche doit l'emporter sur un
+        // défaut, jamais l'inverse. Et en une seule écriture, donc sans
+        // instant où la tablette lirait l'état d'avant.
+        ...this._consignesEnAttente,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
+      // Déversées : les garder ferait ressurgir le réglage d'un appel abandonné
+      // au début du suivant, longtemps après que le proche l'a oublié.
+      this._consignesEnAttente = {};
     } catch (e) {
       console.error("[RealCallEngine] Échec pendant la préparation de l'appel :", e);
       this._errorCb && this._errorCb(
@@ -784,7 +838,9 @@ class RealCallEngine extends CallEngine {
    * chez Jean sans rien lui demander.
    */
   async setTabletMicMuted(muted) {
-    await this._envoyerConsigne("couper le micro de la tablette", { tabletMicMuted: muted });
+    // RENDU, et non avalé : l'appelant désactive le curseur de volume sur la
+    // foi de cette consigne. Sans le retour, il le faisait sur la foi de rien.
+    return this._envoyerConsigne("couper le micro de la tablette", { tabletMicMuted: muted });
   }
 
   /**
@@ -808,7 +864,7 @@ class RealCallEngine extends CallEngine {
    * qu'un curseur pourrait défaire par accident à l'écran suivant.
    */
   async setSameRoomMode(enabled) {
-    await this._envoyerConsigne("nous sommes dans la même pièce", { sameRoomMode: enabled });
+    return this._envoyerConsigne("nous sommes dans la même pièce", { sameRoomMode: enabled });
   }
 
   /** Résumé lisible des métriques vidéo temps réel (résolution, fps, pertes). */
@@ -1044,5 +1100,11 @@ class RealCallEngine extends CallEngine {
     if (this._pc) this._pc.close();
     this._pc = null;
     this._callDocRef = null;
+    // Une consigne posée pendant un appel qui se termine n'a plus de
+    // destinataire. La garder la ferait s'appliquer au DÉBUT du prochain
+    // appel, c'est-à-dire longtemps après le geste qui l'a produite — et pour
+    // « même pièce », qui coupe tout le son de Jean, ce retard serait une
+    // panne muette de plus.
+    this._consignesEnAttente = {};
   }
 }
