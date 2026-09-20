@@ -350,6 +350,30 @@ class AdminConfig(context: Context) {
         get() = prefs.getString(KEY_RECUEIL_OEUVRES, null).orEmpty()
         set(value) = prefs.edit().putString(KEY_RECUEIL_OEUVRES, value).apply()
 
+    /**
+     * L'explication d'un DÉTAIL s'écrit-elle sur l'écran de Jean ?
+     *
+     * ═══ VRAI PAR DÉFAUT, ET CE DÉFAUT COMPTE ═══
+     *
+     * Éteint, le commentaire du conservateur n'apparaît plus chez Jean : le
+     * détail cesse d'être recouvert par un pavé de texte, et l'explication
+     * n'existe plus que pour le proche qui ouvre l'exposition pendant un
+     * appel (voir la réplique de l'écran, côté PWA).
+     *
+     * C'est un choix qui RETIRE quelque chose à Jean quand personne n'est au
+     * bout du fil. Il doit donc être posé sciemment, jamais hérité d'un
+     * réglage absent ou illisible — d'où le vrai par défaut, comme partout
+     * ailleurs ici où le défaut est ce qui donne, et non ce qui prive.
+     *
+     * NE CONCERNE PAS la vue d'ensemble, qui garde toujours sa légende :
+     * peintre, titre et lieu ne sont pas un commentaire, ils disent ce qu'on
+     * regarde. Ni l'écran d'appel, qui n'a jamais écrit la légende d'un
+     * recueil — le proche la lit sur son téléphone et la dit de vive voix.
+     */
+    var explicationOeuvreSurTablette: Boolean
+        get() = prefs.getBoolean(KEY_EXPLICATION_OEUVRE, true)
+        set(value) = prefs.edit().putBoolean(KEY_EXPLICATION_OEUVRE, value).apply()
+
     var fluxActualites: String
         get() = prefs.getString(KEY_FLUX_ACTUALITES, null).orEmpty()
         set(value) = prefs.edit().putString(KEY_FLUX_ACTUALITES, value).apply()
@@ -608,6 +632,7 @@ class AdminConfig(context: Context) {
         private const val KEY_POLICE_SENIOR = "police_senior"
         private const val KEY_FLUX_ACTUALITES = "flux_actualites"
         private const val KEY_RECUEIL_OEUVRES = "recueil_oeuvres"
+        private const val KEY_EXPLICATION_OEUVRE = "explication_oeuvre_sur_tablette"
         private const val KEY_COMMANDES_VOCALES = "commandes_vocales_actives"
         private const val KEY_FLUX_DERNIER_JOUR = "flux_dernier_rafraichissement"
         private const val KEY_FLUX_LISTE_CHANGEE = "flux_liste_changee"

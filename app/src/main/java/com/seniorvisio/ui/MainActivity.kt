@@ -620,9 +620,25 @@ class MainActivity : AppCompatActivity() {
                     // qu'aucune ligne ne le dise : la galerie était
                     // invisible sur l'accueil, et rien n'expliquait pourquoi.
                     is Rendu.Image -> {
+                        // ═══ L'EXPLICATION D'UN DÉTAIL PEUT ÊTRE RÉSERVÉE AU
+                        //     PROCHE ═══
+                        //
+                        // Éteint, le commentaire du conservateur ne s'écrit
+                        // plus chez Jean : la zone de parole ne s'ouvre pas, et
+                        // le tiers bas du tableau cesse d'être recouvert. Le
+                        // proche, lui, le lit dans la réplique de l'écran sur
+                        // son téléphone et le dit de vive voix — c'est la
+                        // visite guidée, et c'est ce que le réglage sert.
+                        //
+                        // LA VUE D'ENSEMBLE N'EST JAMAIS CONCERNÉE : peintre,
+                        // titre et lieu ne commentent rien, ils disent ce qu'on
+                        // regarde. Les taire laisserait un tableau anonyme.
+                        val détail = element.rôle == RÔLE_DÉTAIL
+                        val légende = element.texte
+                            ?.takeUnless { détail && !adminConfig.explicationOeuvreSurTablette }
                         zones.afficherOeuvre(
                             rendu.bitmap,
-                            element.texte,
+                            légende,
                             magasin?.disponibles()
                                 ?.firstOrNull { it.id == recueilActualiteId }?.titre,
                         )
@@ -811,5 +827,12 @@ class MainActivity : AppCompatActivity() {
 
         /** Espacement des lignes de diagnostic vocal, pour ne pas noyer le journal. */
         private const val ÉCOUTE_NOTÉE_MS = 2_000L
+
+        /**
+         * Le rôle d'une vue de détail, tel que le découpage l'écrit (voir
+         * web-caller/exposition.js). Sans accent : c'est une valeur de champ
+         * qui voyage dans Firestore, pas du texte à lire.
+         */
+        private const val RÔLE_DÉTAIL = "detail"
     }
 }

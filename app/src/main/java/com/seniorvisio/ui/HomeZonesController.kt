@@ -786,6 +786,31 @@ class HomeZonesController(
             }
         }
 
+        // ═══ UNE ZONE DE PAROLE NE DÉPASSE JAMAIS LE TIERS DE LA HAUTEUR ═══
+        //
+        // C'est la règle de cet écran depuis l'origine : trois zones, un tiers
+        // chacune. En mode œuvre la pile n'en compte plus que deux pondérées,
+        // et rien n'imposait que le rapport tienne — il tenait parce que les
+        // poids valent 2 et 1 dans la mise en page, ce qui est un accident
+        // heureux et non une garantie.
+        //
+        // Posés ici, donc vérifiés à chaque composition : un ajustement de la
+        // mise en page ne peut plus faire grandir en silence le pavé de texte
+        // posé sur un tableau. Le tiers est un PLAFOND — zoneInfo mangeant sa
+        // part au-dessus, la zone de parole en occupe un peu moins.
+        (zoneCall.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
+            if (lp.weight != POIDS_ZONE_PAROLE) {
+                lp.weight = POIDS_ZONE_PAROLE
+                zoneCall.layoutParams = lp
+            }
+        }
+        (zoneActualite.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
+            if (lp.weight != POIDS_ZONE_OEUVRE) {
+                lp.weight = POIDS_ZONE_OEUVRE
+                zoneActualite.layoutParams = lp
+            }
+        }
+
         // ═══ ET LA BANDE PASSE DEVANT LES TITRES ═══
         //
         // La cause du recouvrement est corrigée dans la mise en page (voir
@@ -945,6 +970,18 @@ class HomeZonesController(
          * est dessiné en dernier.
          */
         private const val ÉLÉVATION_BANDE_INFO_DP = 4f
+
+        /**
+         * Les poids de la pile en mode actualité ou œuvre : deux tiers pour ce
+         * qu'on regarde, un tiers au plus pour ce qu'on lit.
+         *
+         * Un tiers est la règle de cet écran depuis l'origine — trois zones,
+         * une part chacune — et elle vaut d'autant plus quand la zone de
+         * parole est posée sur un tableau : au-delà, ce n'est plus une bande
+         * de texte, c'est l'œuvre qui disparaît derrière.
+         */
+        private const val POIDS_ZONE_OEUVRE = 2f
+        private const val POIDS_ZONE_PAROLE = 1f
 
         /** Même durée de fondu que les zones de texte, pour que tout l'écran respire au même rythme. */
         private const val FADE_MS = 400L

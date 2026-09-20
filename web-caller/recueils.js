@@ -247,7 +247,7 @@ class Recueils {
     let octetsFinis = 0;
 
     for (let i = 0; i < retenus.length; i++) {
-      const { file, type, texte } = retenus[i];
+      const { file, type, texte, role } = retenus[i];
       const elementId = identifiantÉlément();
       const chemin = `recueils/${this._deviceDocId}/${recueilId}/${elementId}`;
       const ref = this._storage.ref(chemin);
@@ -286,6 +286,11 @@ class Recueils {
         // a quelque chose à écrire dans la zone de parole, et une chaîne vide
         // y aurait ouvert une zone pour n'y rien mettre.
         ...(texte ? { texte } : {}),
+        // Absent lui aussi quand il n'y a rien à dire : une photo de famille
+        // n'est ni une vue d'ensemble ni un détail, et lui coller un rôle
+        // vide obligerait la tablette à distinguer « pas de rôle » de « rôle
+        // inconnu » pour un champ qui ne la concerne pas.
+        ...(role ? { role } : {}),
       });
     }
 

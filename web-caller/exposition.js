@@ -320,6 +320,14 @@ async function découperOeuvre(oeuvre, fichier, cadre) {
       { type: "image/jpeg" }
     ),
     texte: légendeDEnsemble(oeuvre),
+    // ═══ CE QUE LA VUE EST, ET NON CE QU'ON DEVINE ═══
+    //
+    // La tablette peut être réglée pour ne pas écrire l'explication d'un
+    // DÉTAIL (voir explicationOeuvreSurTablette) tout en gardant la légende
+    // d'une vue d'ensemble. Sans ce champ, elle devrait trancher en
+    // analysant le texte — et se tromperait le jour où un musée s'appelle
+    // « 1878 ».
+    role: "ensemble",
   });
 
   // De ZÉRO À SIX selon le JSON, et rien ici ne suppose un nombre : une œuvre
@@ -385,6 +393,7 @@ async function découperOeuvre(oeuvre, fichier, cadre) {
       texte: [nettoyerTexte(p.cible), nettoyerTexte(p.texte)]
         .filter(Boolean)
         .join(" — "),
+      role: "detail",
     });
   }
   return vues;

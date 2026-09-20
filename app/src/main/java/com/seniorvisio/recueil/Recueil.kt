@@ -129,6 +129,24 @@ data class Element(
      * laisseraient croire que le fil s'appelle « LUDOVIC MARIN/AFP ».
      */
     val crédit: String? = null,
+    /**
+     * Ce que cette vue est, dans une exposition : « ensemble » ou « detail ».
+     *
+     * Null pour tout le reste — une photo de famille, un titre de fil — et
+     * c'est volontaire : ce champ ne décrit qu'une chose, et lui donner une
+     * valeur par défaut obligerait chaque lecteur à distinguer « pas
+     * concerné » de « valeur inconnue ».
+     *
+     * Posé par le découpage, côté PWA (voir exposition.js). La tablette
+     * pourrait le déduire du texte — la légende d'ensemble porte un repère
+     * <discret>, pas celle d'un détail — mais elle se tromperait au premier
+     * conservateur qui écrirait un commentaire autrement. Un fait explicite
+     * vaut mieux qu'un indice.
+     *
+     * Sert à n'écrire l'explication d'un DÉTAIL sur l'écran de Jean que si
+     * l'administrateur le veut (voir AdminConfig.explicationOeuvreSurTablette).
+     */
+    val rôle: String? = null,
 )
 
 /**

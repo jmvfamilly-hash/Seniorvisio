@@ -546,6 +546,25 @@ class DeviceStatusReporter(private val context: Context) {
         // dans Firestore n'avait aucun effet, et on aurait cherché pourquoi la
         // galerie ne s'affiche pas alors que tout était en place — le genre de
         // silence que ce projet a déjà payé plusieurs fois.
+        // L'explication d'un détail chez Jean, ou seulement chez le proche.
+        // Relue en direct comme les autres : l'administrateur bascule et
+        // constate à l'écran suivant, sans nouvel APK.
+        //
+        // Aucune réévaluation de l'ordonnanceur ici, contrairement au recueil
+        // d'exposition : ce réglage ne change pas CE qui est présenté, mais ce
+        // qui s'écrit dessous. Le prochain changement de vue l'appliquera, et
+        // forcer un saut de vue pour un réglage de confort ferait bouger
+        // l'écran de Jean sans qu'il ait rien demandé.
+        snapshot.getBoolean(FIELD_EXPLICATION_OEUVRE)?.let { voulu ->
+            if (adminConfig.explicationOeuvreSurTablette != voulu) {
+                adminConfig.explicationOeuvreSurTablette = voulu
+                CallTrace.record(
+                    "EXPOSITION explication",
+                    if (voulu) "écrite chez Jean" else "réservée au proche sur le PWA",
+                )
+            }
+        }
+
         snapshot.getString(FIELD_RECUEIL_OEUVRES)?.let { id ->
             if (adminConfig.recueilOeuvres != id) {
                 adminConfig.recueilOeuvres = id
@@ -954,6 +973,9 @@ class DeviceStatusReporter(private val context: Context) {
 
         /** L'identifiant du recueil d'exposition, ou vide pour revenir au fil. */
         private const val FIELD_RECUEIL_OEUVRES = "recueilOeuvres"
+
+        /** Vrai : l'explication d'un détail s'écrit chez Jean. Faux : chez le proche seul. */
+        private const val FIELD_EXPLICATION_OEUVRE = "explicationOeuvreSurTablette"
         private const val FIELD_COMMANDES_VOCALES = "commandesVocales"
         private const val FIELD_CAPTION_INTERLIGNE = "captionInterligne"
         private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"

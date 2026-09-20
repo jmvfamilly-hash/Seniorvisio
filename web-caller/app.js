@@ -586,6 +586,7 @@ const els = {
   expositionEnvoyer: el("expositionEnvoyer"),
   expositionRetirer: el("expositionRetirer"),
   expositionStatut: el("expositionStatut"),
+  explicationOeuvreToggle: el("explicationOeuvreToggle"),
   jeanNews: el("jeanNews"),
   jeanNewsImage: el("jeanNewsImage"),
   jeanNewsTitre: el("jeanNewsTitre"),
@@ -1180,6 +1181,7 @@ const ADMIN_TOGGLE_FIELDS = [
   ["dimJeanSpeechToggle", "dimJeanSpeech"],
   ["roomHandoffToggle", "roomHandoffEnabled"],
   ["speechTraceToggle", "speechTraceEnabled"],
+  ["explicationOeuvreToggle", "explicationOeuvreSurTablette"],
 ];
 
 for (const [elementKey, field] of ADMIN_TOGGLE_FIELDS) {
@@ -1898,6 +1900,12 @@ function applyDeviceSettings(data) {
   // touché au réglage, et la tablette l'a alors à sa valeur par défaut, qui
   // est active. Montrer la case décochée ferait croire à une fonction éteinte.
   els.commandesVocalesToggle.checked = data.commandesVocales !== false;
+  // Même raison, même forme : vrai par défaut côté tablette (voir AdminConfig).
+  // Le champ est absent tant que personne n'a basculé le réglage, et montrer
+  // la case décochée ferait croire que les détails sont déjà muets chez Jean.
+  if (els.explicationOeuvreToggle) {
+    els.explicationOeuvreToggle.checked = data.explicationOeuvreSurTablette !== false;
+  }
   els.roomWakeEnabledToggle.checked = data.roomWakeEnabled !== false;
   // Vrai par défaut côté tablette : un champ absent veut dire « jamais réglé
   // d'ici », pas « désactivé ».
