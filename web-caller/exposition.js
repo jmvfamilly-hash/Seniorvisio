@@ -1,3 +1,20 @@
+// ═══ TOUT CE FICHIER VIT DANS SA PROPRE PORTÉE ═══
+//
+// Les scripts de ce PWA sont chargés en balises CLASSIQUES : leurs
+// déclarations de premier niveau atterrissent toutes dans la même portée
+// globale. Deux fichiers qui déclarent « const DISCRET_OPEN » ne se
+// complètent donc pas — le second à être analysé lève « Identifier already
+// been declared », et TOUT le fichier meurt à l'analyse, avant la première
+// ligne exécutée.
+//
+// C'est arrivé : app.js et ce fichier ont déclaré le même repère, et le
+// PWA s'est retrouvé sans bouton d'appel ni bouton d'administration. La
+// même panne que l'export ES d'il y a trois jours, par un autre chemin, et
+// le fichier la documentait déjà en bas — sans se protéger.
+//
+// L'enveloppe supprime la classe entière de problème : plus rien d'ici ne
+// touche la portée globale, sauf window.Exposition, qui est le contrat.
+(function () {
 /**
  * Découpe une exposition commentée en vues prêtes à afficher chez Jean.
  *
@@ -504,3 +521,4 @@ window.Exposition = {
   découperOeuvre,
   lireExposition,
 };
+})();
