@@ -408,8 +408,68 @@ object CallTrace {
         val javaUtilisé = (r.totalMemory() - r.freeMemory()) / moOctets
         val javaMax = r.maxMemory() / moOctets
         val natif = android.os.Debug.getNativeHeapAllocatedSize() / moOctets
-        return "java=${javaUtilisé}/${javaMax} Mo · natif=$natif Mo"
+        val résident = résidentMo()
+        val échange = échangéMo()
+        // Le RÉSIDENT en tête, et l'allocateur étiqueté pour ce qu'il est.
+        // Deux jours de recherche ont été menés sur un chiffre qui ne mesurait
+        // pas l'empreinte ; le nom porte désormais l'avertissement.
+        return "résident=${résident ?: "?"} Mo · échangé=${échange ?: "?"} Mo · " +
+            "java=${javaUtilisé}/${javaMax} Mo · natif alloué=$natif Mo"
     }
+
+    /**
+     * L'empreinte réellement en mémoire vive, lue dans /proc/self/status.
+     *
+     * ═══ POURQUOI CELUI-CI ET PAS LES AUTRES ═══
+     *
+     * Trois chiffres ont servi de mesure dans ce projet, et les deux premiers
+     * ne mesuraient pas ce qu'on croyait.
+     *
+     * getNativeHeapAllocatedSize est la comptabilité de l'ALLOCATEUR : ce
+     * qu'il a distribué, pas ce qui occupe la mémoire vive. Les deux ont
+     * divergé d'un facteur deux à trois.
+     *
+     * summary.total-pss est pire encore pour cet usage, et de façon
+     * contre-intuitive : getTotalPss() ajoute les pages PARTIES EN SWAP,
+     * qu'aucune des catégories nommées ne compte. Sur le dernier journal de
+     * production, total=3031 Mo dont échange=3022 — le « total » décrivait
+     * presque entièrement de la mémoire qui n'est plus en RAM. Et comme
+     * summary.system est calculé par soustraction, tout le swap y retombait :
+     * système ≈ échange n'était pas une découverte, c'était une identité
+     * arithmétique, que j'ai lue comme un fait.
+     *
+     * VmRSS, lui, dit une chose et une seule : le nombre de pages de ce
+     * processus effectivement en mémoire vive. Pas de part proportionnelle,
+     * pas de swap recompté, pas de résidu. VmSwap dit l'autre moitié de
+     * l'histoire, séparément, ce qui est exactement ce qui manquait.
+     *
+     * Null si le fichier est illisible — on le dit, plutôt que de rendre zéro,
+     * qui se lirait comme une mesure.
+     */
+    fun résidentMo(): Long? = ligneDeStatutMo("VmRSS:")
+
+    /** Ce que ce processus a fait sortir en swap, en Mo. Voir résidentMo. */
+    fun échangéMo(): Long? = ligneDeStatutMo("VmSwap:")
+
+    /**
+     * Une ligne de /proc/self/status, en mégaoctets.
+     *
+     * Le noyau l'écrit en kilo-octets : « VmRSS:    123456 kB ». On découpe
+     * sur les espaces plutôt que par position — le nombre est aligné à droite
+     * sur une largeur qui varie avec sa grandeur.
+     *
+     * AUCUNE DONNÉE PERSONNELLE : ce fichier ne contient que des compteurs du
+     * noyau sur ce processus-ci. Pas un mot de ce qui se dit dans la pièce.
+     */
+    private fun ligneDeStatutMo(préfixe: String): Long? = runCatching {
+        File("/proc/self/status").useLines { lignes ->
+            lignes.firstOrNull { it.startsWith(préfixe) }
+                ?.split(Regex("\\s+"))
+                ?.getOrNull(1)
+                ?.toLongOrNull()
+                ?.div(1024L)
+        }
+    }.getOrNull()
 
     /**
      * La même mesure, mais VENTILÉE PAR CATÉGORIE.
@@ -469,10 +529,24 @@ object CallTrace {
         // autre chiffre dit que l'instrument regarde à côté (voir ci-dessus).
         val nommées = listOf(graphique, natif, java, code, pile, autrePrivé, système)
             .filter { it >= 0 }.sum()
+        // ═══ « SYSTÈME » ET « TOTAL » SONT ÉTIQUETÉS POUR CE QU'ILS SONT ═══
+        //
+        // summary.system n'est pas une mesure : Android la CALCULE comme le
+        // reste — total-pss moins les catégories nommées. Or getTotalPss()
+        // ajoute les pages parties en swap, qu'aucune de ces catégories ne
+        // compte. Tout le swap retombe donc dans « système », et l'égalité
+        // système ≈ échange que j'ai lue comme une découverte n'était qu'une
+        // soustraction.
+        //
+        // Les deux gardent leur place — ils font le compte, et la ligne « non
+        // expliqué » ne vaut que s'il est complet — mais ils portent
+        // désormais ce qu'il faut savoir pour ne pas les relire de travers.
         return "graphique=$graphique Mo · natif=$natif Mo · java=$java Mo · " +
             "code=$code Mo · pile=$pile Mo · autre-privé=$autrePrivé Mo · " +
-            "système=$système Mo · échange=${stat("summary.total-swap")} Mo · " +
-            "total=$total Mo · non expliqué=${total - nommées} Mo"
+            "système=$système Mo (résidu, contient l'échange) · " +
+            "échange=${stat("summary.total-swap")} Mo · " +
+            "total=$total Mo (échange compris) · non expliqué=${total - nommées} Mo · " +
+            "résident réel=${résidentMo() ?: "?"} Mo"
     }
 
     /**

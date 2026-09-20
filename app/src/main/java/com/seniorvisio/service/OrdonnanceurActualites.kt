@@ -53,6 +53,24 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
 
     private val config by lazy { AdminConfig(service) }
     private var rangCourant = -1
+
+    /**
+     * Le recueil présenté au dernier calcul.
+     *
+     * ═══ UN RANG NE SUFFIT PAS À DIRE QU'UN CONTENU A CHANGÉ ═══
+     *
+     * Le changement se décidait sur le seul rang. Or les deux recueils — le
+     * fil d'information et une exposition — tirent leur rang de la MÊME heure
+     * de la journée. Installer une exposition à un moment où son rang coïncide
+     * avec celui du fil ne produisait donc aucun changement : l'observateur
+     * n'était pas prévenu, et l'écran gardait le titre d'actualité précédent
+     * jusqu'au créneau suivant, jusqu'à trois quarts d'heure plus tard.
+     *
+     * Le réglage était bien arrivé, l'ordonnanceur avait bien basculé, et
+     * l'écran ne montrait rien de nouveau. Une panne sans cause visible, dont
+     * la probabilité dépend de l'heure à laquelle on installe.
+     */
+    private var recueilCourant: String? = null
     private var enregistré = false
 
     private val réveil = object : BroadcastReceiver() {
@@ -111,16 +129,19 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
         if (créneau == null || créneau.finDuCreneau == null) {
             // Nuit, ou aucun titre installé : l'écran d'accueil reprend ses
             // zones de texte, et rien n'est programmé avant le jour.
-            if (rangCourant != -1) {
+            if (rangCourant != -1 || recueilCourant != null) {
                 rangCourant = -1
+                recueilCourant = null
                 observateur?.surTitre(null, null)
             }
             programmerProchainRéveilDeJour(créneau == null)
             return
         }
 
-        val changement = créneau.rang != rangCourant
+        // Le RECUEIL compte autant que le rang : voir recueilCourant.
+        val changement = créneau.rang != rangCourant || voulu != recueilCourant
         rangCourant = créneau.rang
+        recueilCourant = voulu
         if (changement) {
             observateur?.surTitre(prêts.getOrNull(créneau.rang), recueil?.id)
             // Le recueil est NOMMÉ, et ce n'est pas de la décoration : sur le
@@ -138,6 +159,58 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
     }
 
     var observateur: Observateur? = null
+
+    /**
+     * Branche un écran ET lui livre tout de suite ce qu'il doit montrer.
+     *
+     * ═══ POURQUOI POSER L'OBSERVATEUR NE SUFFISAIT PAS ═══
+     *
+     * L'écran d'accueil se débranche à onPause pour ne pas être retenu en
+     * mémoire par le service, et se rebranche à onResume. Pendant ce temps
+     * l'ordonnanceur continue de tourner sur le battement du service et MET À
+     * JOUR SON RANG DANS LE VIDE : les changements partent vers un observateur
+     * nul.
+     *
+     * Au retour, réévaluer comparait donc le rang courant à lui-même,
+     * concluait « aucun changement », et ne poussait rien. Or la liste des
+     * titres de l'écran n'est alimentée que par cet observateur : l'écran
+     * restait sur ce qu'il avait, ou sur rien, jusqu'au créneau suivant.
+     *
+     * Invisible chez Jean, dont le mode kiosque garde l'accueil au premier
+     * plan — il ne se met jamais en pause. Systématique sur la tablette
+     * d'essai, qui est une application ordinaire.
+     *
+     * L'état courant est donc RELU et livré, sans toucher au rang mémorisé :
+     * ce n'est pas un changement, c'est une remise au courant.
+     */
+    fun brancher(nouvel: Observateur) {
+        observateur = nouvel
+        val magasin = RecueilStore.actif ?: return
+        val voulu = config.recueilOeuvres.takeIf { it.isNotBlank() } ?: RECUEIL_FLUX
+        val recueil = magasin.disponibles().firstOrNull { it.id == voulu }
+        val prêts = recueil?.prêts.orEmpty()
+        val créneau = CadenceurActualites.creneau(LocalDateTime.now(), prêts.size, config)
+        if (créneau?.finDuCreneau == null) {
+            // Nuit ou rien d'installé : l'écran doit le savoir aussi, sinon il
+            // garderait la dernière œuvre affichée avant sa mise en pause.
+            rangCourant = -1
+            recueilCourant = null
+            nouvel.surTitre(null, null)
+            return
+        }
+        // ═══ CE QUI VIENT D'ÊTRE LIVRÉ EST MÉMORISÉ ═══
+        //
+        // Sans ces deux lignes, le réévaluer qui suit systématiquement
+        // brancher trouvait un rang à -1, concluait « changement », et
+        // poussait une SECONDE fois le même élément. Deux décodages de bitmap
+        // et un clignotement à chaque retour d'écran, pour rien.
+        //
+        // Trouvé par le rejeu, pas à la lecture : les deux fonctions sont
+        // justes séparément, c'est leur enchaînement qui ne l'était pas.
+        rangCourant = créneau.rang
+        recueilCourant = voulu
+        nouvel.surTitre(prêts.getOrNull(créneau.rang), recueil?.id)
+    }
 
     // ── Réveils ────────────────────────────────────────────────
 

@@ -413,7 +413,10 @@ class MainActivity : AppCompatActivity() {
             // faire : il appellera de lui-même dès son démarrage.
             return
         }
-        service.actualites.observateur = OrdonnanceurActualites.Observateur { element, recueilId ->
+        // brancher, et non « observateur = » : la pose seule ne livrait rien
+        // tant que le rang n'avait pas bougé, et l'écran restait vide après
+        // chaque mise en pause (voir OrdonnanceurActualites.brancher).
+        service.actualites.brancher(OrdonnanceurActualites.Observateur { element, recueilId ->
             if (element == null || recueilId == null) {
                 runOnUiThread {
                     titresActualite = emptyList()
@@ -432,7 +435,10 @@ class MainActivity : AppCompatActivity() {
                 rangActualite = prêts.indexOf(element).coerceAtLeast(0)
                 afficherActualiteCourante()
             }
-        }
+        })
+        // Toujours appelé après : brancher livre l'état, réévaluer reprogramme
+        // l'alarme et rattrape un réveil perdu. Les deux ne font pas la même
+        // chose, et celui-ci ne poussera rien de plus — le rang n'a pas bougé.
         service.actualites.réévaluer(réveillerLÉcran = false)
     }
 
