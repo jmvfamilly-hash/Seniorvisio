@@ -230,7 +230,10 @@ class RollingCaptionZone(
      */
     private fun styledText(): CharSequence {
         val full = renderedText()
-        if (!full.contains(SILENCE_MARKER) && !full.contains(JEAN_OPEN) && !full.contains(JEAN_CLOSE)) {
+        // Une liste plutôt que trois contains enchaînés : le quatrième repère
+        // aurait été oublié ici, et le texte serait alors rendu tel quel —
+        // balises comprises, à l'écran, chez Jean.
+        if (MARQUEURS_STYLÉS.none { full.contains(it) }) {
             return full
         }
 
@@ -239,11 +242,31 @@ class RollingCaptionZone(
         // au passage les portions qu'ils encadraient.
         val styled = SpannableStringBuilder()
         val dimmed = mutableListOf<IntRange>()
+        // Les portions à mettre en retrait ET à rapetisser : le lieu de
+        // conservation d'une œuvre, sous le peintre et le titre. Tenues à
+        // part de « dimmed » parce qu'elles ne reçoivent pas le même
+        // traitement — voir plus bas, et la raison pour laquelle la parole de
+        // Jean, elle, garde sa taille.
+        val discrets = mutableListOf<IntRange>()
         var inJean = false
         var openedAt = 0
+        var inDiscret = false
+        var discretDepuis = 0
         var index = 0
         while (index < full.length) {
             when {
+                full.startsWith(DISCRET_OPEN, index) -> {
+                    inDiscret = true
+                    discretDepuis = styled.length
+                    index += DISCRET_OPEN.length
+                }
+                full.startsWith(DISCRET_CLOSE, index) -> {
+                    // Même tolérance qu'en dessous pour une fermeture sans
+                    // ouverture : le tampon peut avoir été coupé au milieu.
+                    discrets += (if (inDiscret) discretDepuis else 0) until styled.length
+                    inDiscret = false
+                    index += DISCRET_CLOSE.length
+                }
                 full.startsWith(JEAN_OPEN, index) -> {
                     inJean = true
                     openedAt = styled.length
@@ -269,6 +292,7 @@ class RollingCaptionZone(
         // Ouverture sans fermeture : c'est le cas normal du segment en cours de
         // dictée, pas encore clos.
         if (inJean) dimmed += openedAt until styled.length
+        if (inDiscret) discrets += discretDepuis until styled.length
 
         val rendered = styled.toString()
         var from = rendered.indexOf(SILENCE_MARKER)
@@ -289,6 +313,31 @@ class RollingCaptionZone(
             if (range.isEmpty()) return@forEach
             styled.setSpan(
                 ForegroundColorSpan(dimColour),
+                range.first,
+                range.last + 1,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
+        // ═══ CELUI-CI RAPETISSE, CONTRAIREMENT À LA PAROLE DE JEAN ═══
+        //
+        // La distinction n'est pas décorative. Le texte de Jean est atténué
+        // sans être réduit, parce qu'il peut vouloir le déchiffrer depuis son
+        // fauteuil pour vérifier ce que la tablette a compris.
+        //
+        // Le lieu de conservation d'une œuvre, lui, n'est pas destiné à être
+        // lu de loin : il est là pour qui s'approche. Le réduire est ce qui
+        // fait monter le peintre et le titre au premier plan, et c'est
+        // exactement ce qui a été demandé.
+        discrets.forEach { range ->
+            if (range.isEmpty()) return@forEach
+            styled.setSpan(
+                ForegroundColorSpan(dimColour),
+                range.first,
+                range.last + 1,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+            styled.setSpan(
+                RelativeSizeSpan(DISCRET_TEXT_SCALE),
                 range.first,
                 range.last + 1,
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
@@ -698,7 +747,36 @@ class RollingCaptionZone(
          */
         private const val JEAN_OPEN = "<jean>"
         private const val JEAN_CLOSE = "</jean>"
-        private val HIDDEN_MARKERS = listOf(JEAN_OPEN, JEAN_CLOSE)
+
+        /**
+         * Les repères d'une mention secondaire : le lieu de conservation
+         * d'une œuvre, sous le peintre et le titre.
+         *
+         * Posés par le PWA au découpage de l'exposition (voir
+         * web-caller/exposition.js), et non par la tablette : c'est là que
+         * l'on sait ce qu'est chaque morceau de la légende. Les fabriquer ici
+         * aurait obligé la tablette à analyser un texte pour en deviner la
+         * structure — et à se tromper le jour où un musée s'appelle « 1878 ».
+         *
+         * Traités exactement comme ceux de Jean, donc retirés à l'affichage
+         * et transmis tels quels au miroir du PWA, qui les connaît aussi.
+         */
+        private const val DISCRET_OPEN = "<discret>"
+        private const val DISCRET_CLOSE = "</discret>"
+
+        /**
+         * 0,62 : assez petit pour que le peintre et le titre passent devant,
+         * assez grand pour rester lisible de près. En dessous, la mention
+         * cesse d'être discrète pour devenir illisible, ce qui n'est pas la
+         * même chose.
+         */
+        private const val DISCRET_TEXT_SCALE = 0.62f
+
+        private val HIDDEN_MARKERS = listOf(JEAN_OPEN, JEAN_CLOSE, DISCRET_OPEN, DISCRET_CLOSE)
+
+        /** Tout ce dont la présence oblige à construire un texte stylé. */
+        private val MARQUEURS_STYLÉS =
+            listOf(SILENCE_MARKER, JEAN_OPEN, JEAN_CLOSE, DISCRET_OPEN, DISCRET_CLOSE)
 
         /**
          * Opacité du texte attribué à Jean. 45 % : nettement en retrait du flot

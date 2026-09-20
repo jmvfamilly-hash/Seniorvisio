@@ -264,6 +264,18 @@ video {
   opacity: 0.45;
 }
 
+/* La mention secondaire d'une légende d'œuvre — le lieu de conservation, sous
+   le peintre et le titre (voir DISCRET_TEXT_SCALE dans RollingCaptionZone).
+
+   Atténuée ET rapetissée, contrairement aux paroles de Jean : lui peut vouloir
+   déchiffrer ce que la tablette a compris, alors qu'un nom de musée n'est pas
+   destiné à être lu du fauteuil. Les deux valeurs reprennent celles de la
+   tablette — cette réplique ne vaut que si elle montre la même chose. */
+.jean-caption-text .jean-mention-discrete {
+  opacity: 0.45;
+  font-size: 0.62em;
+}
+
 #mirrorHint {
   margin-top: 8px;
   margin-bottom: 12px;

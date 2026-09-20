@@ -28,11 +28,42 @@
  * oeuvres/CadreOeuvre côté Android, champ « cadreOeuvre »).
  */
 
-/** Part de la largeur de la toile qu'occupe un détail. */
+/**
+ * Part de la largeur de la toile qu'occupe un détail, QUAND LE JSON NE LE DIT
+ * PAS — c'est-à-dire pour l'ancienne forme, qui donnait un point et non un
+ * cadre. Conservée pour qu'une exposition écrite avant ce changement continue
+ * de se découper (voir fenetreDetail).
+ */
 const PART_DU_DETAIL = 1 / 3;
 
 /** Qualité JPEG des vues produites. */
 const QUALITE = 0.85;
+
+/** Part de la largeur du cadre qu'occupe la colonne de la miniature. */
+const PART_MINIATURE = 0.25;
+
+/**
+ * Le fond de la vue de détail, autour de la miniature.
+ *
+ * Une couleur FIXE, alors que ce projet refuse ailleurs de figer une teinte de
+ * bande — et la différence tient à ce qu'on regarde. Une bande de mise en page
+ * doit suivre le thème ; ici, l'image occupe la dalle entière et devient la
+ * scène elle-même. Un gris de cimaise très sombre ne jure avec aucun tableau
+ * et ne prétend pas être de l'interface.
+ */
+const FOND_DETAIL = "#141414";
+
+/**
+ * Les repères d'une mention secondaire dans une légende.
+ *
+ * Identiques à DISCRET_OPEN/DISCRET_CLOSE dans RollingCaptionZone.kt et dans
+ * app.js : ces trois copies sont la seule chose qui relie les trois côtés, et
+ * elles doivent rester écrites pareil. Sans espace à l'intérieur, comme les
+ * autres repères de ce protocole — un retour à la ligne au milieu d'une balise
+ * en laisserait un fragment à l'écran.
+ */
+const DISCRET_OPEN = "<discret>";
+const DISCRET_CLOSE = "</discret>";
 
 /**
  * La fenêtre à découper autour d'un point, aux proportions du cadre.
@@ -74,6 +105,103 @@ function fenetreDetail(imgL, imgH, x, y, cadreL, cadreH) {
   return { sx, sy, sl, sh };
 }
 
+/** Ramène une valeur dans [0, 1]. */
+function borné01(v) {
+  return Math.min(Math.max(v, 0), 1);
+}
+
+/**
+ * La fenêtre d'un détail quand le JSON donne un CADRE et non un point.
+ *
+ * ═══ LE CADRE EST ÉTENDU, JAMAIS ROGNÉ ═══
+ *
+ * Le rectangle fourni n'a aucune raison d'avoir les proportions du panneau où
+ * il sera affiché. Deux façons de concilier les deux, et une seule est
+ * acceptable : rogner ferait sortir du champ une partie de ce qui a été
+ * DÉSIGNÉ comme la cible — c'est-à-dire trahir la consigne du conservateur
+ * sans que rien ne le signale. On élargit donc autour, ce qui montre un peu
+ * plus que demandé, jamais un peu moins.
+ *
+ * ET « y_max » EST ACCEPTÉ AU MÊME TITRE QUE « ymax ». Le JSON fourni écrit
+ * y_max dans ses dix points. Refuser cette orthographe ferait tomber
+ * l'exposition entière sur une faute de frappe, et l'imposer obligerait à la
+ * corriger à la main à chaque nouvelle exposition. On lit les deux, et on n'en
+ * reparle plus.
+ *
+ * @returns {sx, sy, sl, sh} en pixels de la toile, ou null si le cadre est
+ *   inexploitable — l'appelant retombe alors sur le point, s'il y en a un.
+ */
+function fenetreDepuisCadre(imgL, imgH, cadre, panneauL, panneauH) {
+  if (!cadre || typeof cadre !== "object") return null;
+  const lire = (...noms) => {
+    for (const n of noms) {
+      if (typeof cadre[n] === "number" && Number.isFinite(cadre[n])) return cadre[n];
+    }
+    return null;
+  };
+  const xmin = lire("xmin", "x_min");
+  const ymin = lire("ymin", "y_min");
+  const xmax = lire("xmax", "x_max");
+  const ymax = lire("ymax", "y_max");
+  if (xmin === null || ymin === null || xmax === null || ymax === null) return null;
+
+  // Ordonnés avant d'être bornés : un cadre écrit à l'envers décrit la même
+  // région, et la refuser pour cela seul n'aiderait personne.
+  const x0 = borné01(Math.min(xmin, xmax));
+  const x1 = borné01(Math.max(xmin, xmax));
+  const y0 = borné01(Math.min(ymin, ymax));
+  const y1 = borné01(Math.max(ymin, ymax));
+  let sl = (x1 - x0) * imgL;
+  let sh = (y1 - y0) * imgH;
+  if (sl < 1 || sh < 1) return null;
+  let sx = x0 * imgL;
+  let sy = y0 * imgH;
+
+  // Étendu depuis le CENTRE, pour que la cible reste au milieu de la vue.
+  const rapport = panneauL / panneauH;
+  const centreX = sx + sl / 2;
+  const centreY = sy + sh / 2;
+  if (sl / sh < rapport) sl = sh * rapport;
+  else sh = sl / rapport;
+
+  // La toile peut être plus petite que la fenêtre voulue. On réduit alors en
+  // gardant le rapport : déformer le tableau serait pire que montrer moins.
+  if (sl > imgL) {
+    sh *= imgL / sl;
+    sl = imgL;
+  }
+  if (sh > imgH) {
+    sl *= imgH / sh;
+    sh = imgH;
+  }
+
+  // RECADRÉE, ET NON DÉPLACÉE, près d'un bord — même règle que pour un point :
+  // une cible dans un coin verrait sinon sa fenêtre glisser vers le centre, et
+  // sortirait du champ.
+  sx = Math.min(Math.max(centreX - sl / 2, 0), Math.max(imgL - sl, 0));
+  sy = Math.min(Math.max(centreY - sh / 2, 0), Math.max(imgH - sh, 0));
+  return { sx, sy, sl, sh };
+}
+
+/**
+ * Retire les marques de citation laissées par l'outil qui a rédigé le JSON.
+ *
+ *    « …à marée basse[span_1](start_span)[span_1](end_span). »
+ *
+ * Sans ce nettoyage, JEAN LES LIRAIT dans sa légende. C'est le genre de détail
+ * qui ne se voit pas en relisant un fichier et saute aux yeux sur l'écran d'un
+ * homme de quatre-vingts ans.
+ *
+ * Les espaces qui restent en double après le retrait sont resserrés, sinon la
+ * ponctuation se retrouverait décollée du mot qui la précède.
+ */
+function nettoyerTexte(texte) {
+  return String(texte || "")
+    .replace(/\[span_\d+\]\((?:start|end)_span\)/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 /**
  * La taille d'une vue d'ensemble : la toile entière, contenue dans le cadre.
  *
@@ -105,6 +233,51 @@ function chargerImage(fichier) {
     };
     image.src = url;
   });
+}
+
+/**
+ * Où se posent le détail, la miniature et son rectangle, dans un cadre donné.
+ *
+ * ═══ SÉPARÉ DU DESSIN, POUR POUVOIR ÊTRE ÉPROUVÉ ═══
+ *
+ * Le dessin demande un canevas, donc un navigateur. Cette fonction-ci ne rend
+ * que des nombres, et c'est là que vivent les erreurs qui ne se voient pas à
+ * l'œil : un rectangle décalé de quelques pour cent ressemble à un rectangle
+ * juste, et désignerait pourtant la mauvaise partie du tableau.
+ */
+function dispositionDetail(imgL, imgH, fenetre, cadreL, cadreH) {
+  const largeurMiniature = Math.max(Math.round(cadreL * PART_MINIATURE), 1);
+  const panneauL = Math.max(cadreL - largeurMiniature, 1);
+  const marge = Math.max(Math.round(Math.min(largeurMiniature, cadreH) * 0.08), 4);
+  const boiteL = Math.max(largeurMiniature - 2 * marge, 1);
+  const boiteH = Math.max(cadreH - 2 * marge, 1);
+  // Contenue, jamais agrandie : une miniature étirée au-delà de sa définition
+  // ne montrerait rien de plus et brouillerait le repère qu'elle porte.
+  const échelle = Math.min(boiteL / imgL, boiteH / imgH);
+  const miniL = Math.max(imgL * échelle, 1);
+  const miniH = Math.max(imgH * échelle, 1);
+  return {
+    // Le détail occupe tout le panneau de gauche, exactement : c'est pour
+    // cela que la fenêtre a été étendue à ses proportions.
+    detail: { x: 0, y: 0, largeur: panneauL, hauteur: cadreH },
+    miniature: {
+      x: panneauL + marge + (boiteL - miniL) / 2,
+      // CENTRÉE VERTICALEMENT dans sa colonne, comme demandé : posée en haut,
+      // elle flotterait sous une bande vide de la hauteur de l'écran.
+      y: marge + (boiteH - miniH) / 2,
+      largeur: miniL,
+      hauteur: miniH,
+    },
+    // Le rectangle repère montre la fenêtre RÉELLEMENT affichée, et non le
+    // cadre demandé : c'est ce que Jean a sous les yeux à gauche, et les deux
+    // diffèrent dès que le cadre a été étendu aux proportions du panneau.
+    repere: {
+      x: panneauL + marge + (boiteL - miniL) / 2 + fenetre.sx * échelle,
+      y: marge + (boiteH - miniH) / 2 + fenetre.sy * échelle,
+      largeur: fenetre.sl * échelle,
+      hauteur: fenetre.sh * échelle,
+    },
+  };
 }
 
 function versBlob(toile) {
@@ -146,42 +319,129 @@ async function découperOeuvre(oeuvre, fichier, cadre) {
       `${assainir(oeuvre.titre)}-ensemble.jpg`,
       { type: "image/jpeg" }
     ),
-    // La vue d'ensemble annonce l'œuvre : son titre, son année, son musée.
-    // C'est ce que dirait un conservateur en arrivant devant le tableau.
-    texte: [oeuvre.titre, oeuvre.annee, oeuvre.musee].filter(Boolean).join(" · "),
+    texte: légendeDEnsemble(oeuvre),
   });
 
+  // De ZÉRO À SIX selon le JSON, et rien ici ne suppose un nombre : une œuvre
+  // sans point d'intérêt donne sa seule vue d'ensemble, ce qui est un usage
+  // légitime — on montre le tableau, sans commentaire.
   const points = Array.isArray(oeuvre.points_interet) ? oeuvre.points_interet : [];
   for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    if (typeof p.x !== "number" || typeof p.y !== "number") continue;
-    const f = fenetreDetail(imgL, imgH, p.x, p.y, cadre.largeur, cadre.hauteur);
-    // ═══ ON N'AGRANDIT JAMAIS AU-DELÀ DE LA MATIÈRE DISPONIBLE ═══
+    const p = points[i] || {};
+    const largeurPanneau = Math.max(
+      Math.round(cadre.largeur * (1 - PART_MINIATURE)),
+      1
+    );
+    // Le CADRE d'abord, le point ensuite : la forme actuelle du JSON donne un
+    // rectangle, l'ancienne un point. Essayer le cadre en premier fait que la
+    // nouvelle forme l'emporte quand les deux sont présents, ce qui est le
+    // sens de la lecture — le plus précis gagne.
+    const f =
+      fenetreDepuisCadre(imgL, imgH, p.cadre, largeurPanneau, cadre.hauteur) ||
+      (typeof p.x === "number" && typeof p.y === "number"
+        ? fenetreDetail(imgL, imgH, p.x, p.y, largeurPanneau, cadre.hauteur)
+        : null);
+    // Ni cadre ni point : on passe. Une vue découpée au hasard vaudrait moins
+    // que pas de vue du tout, et le compte affiché dirait le contraire.
+    if (!f) continue;
+
+    const d = dispositionDetail(imgL, imgH, f, cadre.largeur, cadre.hauteur);
+    toile.width = cadre.largeur;
+    toile.height = cadre.hauteur;
+    ctx.fillStyle = FOND_DETAIL;
+    ctx.fillRect(0, 0, cadre.largeur, cadre.hauteur);
+    ctx.drawImage(
+      image,
+      f.sx, f.sy, f.sl, f.sh,
+      d.detail.x, d.detail.y, d.detail.largeur, d.detail.hauteur
+    );
+    ctx.drawImage(
+      image,
+      0, 0, imgL, imgH,
+      d.miniature.x, d.miniature.y, d.miniature.largeur, d.miniature.hauteur
+    );
+
+    // ═══ DEUX TRAITS, ET C'EST CE QUI REND LE REPÈRE VISIBLE PARTOUT ═══
     //
-    // Sur une toile peu définie, la fenêtre d'un détail peut être plus petite
-    // que le cadre. L'étirer à la taille du cadre ne créerait aucun pixel
-    // nouveau : on obtiendrait une image floue, plus lourde à téléverser que la
-    // nette, et Jean verrait de la bouillie là où on lui promet la touche du
-    // pinceau.
-    //
-    // La vue sort donc à la taille de sa fenêtre quand celle-ci est plus
-    // petite, et la tablette l'agrandira si elle veut — au moins la décision
-    // sera prise là où l'on sait ce qu'on affiche.
-    const sortieL = Math.max(Math.round(Math.min(cadre.largeur, f.sl)), 1);
-    const sortieH = Math.max(Math.round(sortieL * (cadre.hauteur / cadre.largeur)), 1);
-    toile.width = sortieL;
-    toile.height = sortieH;
-    ctx.drawImage(image, f.sx, f.sy, f.sl, f.sh, 0, 0, sortieL, sortieH);
+    // Un rectangle blanc disparaît sur un ciel, un noir sur une ombre. Le
+    // sombre est tracé d'abord et plus épais : il déborde du clair de part et
+    // d'autre et lui fait un liseré. Le repère tient alors sur n'importe
+    // quelle toile, sans qu'on ait à deviner sa couleur moyenne.
+    const trait = Math.max(Math.round(cadre.hauteur / 220), 2);
+    ctx.lineJoin = "miter";
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.75)";
+    ctx.lineWidth = trait * 3;
+    ctx.strokeRect(d.repere.x, d.repere.y, d.repere.largeur, d.repere.hauteur);
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = trait;
+    ctx.strokeRect(d.repere.x, d.repere.y, d.repere.largeur, d.repere.hauteur);
+
     vues.push({
       fichier: new File(
         [await versBlob(toile)],
         `${assainir(oeuvre.titre)}-${i + 1}.jpg`,
         { type: "image/jpeg" }
       ),
-      texte: [p.cible, p.texte].filter(Boolean).join(" — "),
+      texte: [nettoyerTexte(p.cible), nettoyerTexte(p.texte)]
+        .filter(Boolean)
+        .join(" — "),
     });
   }
   return vues;
+}
+
+/**
+ * Les points qui produiront vraiment une vue.
+ *
+ * Un point sans cadre ni coordonnées est ignoré au découpage. Sans ce compte,
+ * le panneau annoncerait « 15 vues à découper » et en téléverserait 13, sans
+ * que rien ne dise lesquelles manquent — un compteur qui ment sur le travail
+ * qu'il vient de faire.
+ */
+function pointsExploitables(oeuvre) {
+  const points = Array.isArray(oeuvre && oeuvre.points_interet)
+    ? oeuvre.points_interet
+    : [];
+  return points.filter((p) => {
+    if (!p) return false;
+    // Les proportions n'importent pas pour savoir SI un cadre est lisible :
+    // un carré suffit à trancher, et évite d'avoir à connaître ici la taille
+    // de l'écran de Jean.
+    if (fenetreDepuisCadre(1000, 1000, p.cadre, 1, 1)) return true;
+    return typeof p.x === "number" && typeof p.y === "number";
+  }).length;
+}
+
+/**
+ * Ce qui s'écrit sous la vue d'ensemble : le peintre, puis l'œuvre, puis le
+ * lieu.
+ *
+ * ═══ L'ORDRE EST UNE DEMANDE, PAS UNE MISE EN PAGE ═══
+ *
+ *     John Singer Sargent
+ *     En route pour la pêche · 1878
+ *     National Gallery of Art, Washington      ← petit, en retrait
+ *
+ * Le peintre au-dessus : c'est le nom qu'on retient, et celui qui donne son
+ * sens au reste. Le lieu de conservation en dernier et en retrait : il ne se
+ * lit pas du fauteuil, il est là pour qui s'approche.
+ *
+ * Les repères <discret> sont posés ICI et non côté tablette, parce que c'est
+ * ici qu'on sait ce qu'est chaque morceau. Les fabriquer là-bas obligerait la
+ * tablette à analyser un texte pour en deviner la structure — et à se tromper
+ * le jour où un musée s'appellera « 1878 ».
+ */
+function légendeDEnsemble(oeuvre) {
+  const lignes = [];
+  const peintre = nettoyerTexte(oeuvre.artiste);
+  if (peintre) lignes.push(peintre);
+  const œuvre = [nettoyerTexte(oeuvre.titre), oeuvre.annee]
+    .filter(Boolean)
+    .join(" · ");
+  if (œuvre) lignes.push(œuvre);
+  const lieu = nettoyerTexte(oeuvre.musee);
+  if (lieu) lignes.push(`${DISCRET_OPEN}${lieu}${DISCRET_CLOSE}`);
+  return lignes.join("\n");
 }
 
 /** Un nom de fichier lisible, sans accent ni caractère qui fâche le stockage. */
@@ -226,6 +486,11 @@ function lireExposition(texte) {
 // jamais été lu, et le panneau serait resté inerte sans le moindre message.
 window.Exposition = {
   fenetreDetail,
+  fenetreDepuisCadre,
+  dispositionDetail,
+  pointsExploitables,
+  nettoyerTexte,
+  légendeDEnsemble,
   tailleVueDEnsemble,
   découperOeuvre,
   lireExposition,

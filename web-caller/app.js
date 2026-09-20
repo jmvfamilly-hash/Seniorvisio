@@ -808,6 +808,17 @@ const SILENCE_MARKER = "<silence>";
 const JEAN_OPEN = "<jean>";
 const JEAN_CLOSE = "</jean>";
 
+// Repères d'une mention secondaire — aujourd'hui le lieu de conservation d'une
+// œuvre, sous le peintre et le titre (voir DISCRET_OPEN dans
+// RollingCaptionZone.kt, et exposition.js qui les pose).
+//
+// Ils doivent être connus ICI AUSSI, et ce n'est pas du zèle : le tampon de la
+// tablette voyage tel quel jusqu'à cette réplique. Un repère que ce côté-ci
+// ignore ne disparaît pas — il s'affiche, et le proche lit « <discret> » au
+// milieu de la légende.
+const DISCRET_OPEN = "<discret>";
+const DISCRET_CLOSE = "</discret>";
+
 /**
  * Pose le texte de Jean dans la réplique, les marques de silence dans le même
  * style que chez lui — plus petites et en italique. La réplique est censée
@@ -833,13 +844,22 @@ function renderJeanText(element, text) {
   const firstOpen = text.indexOf(JEAN_OPEN);
   const firstClose = text.indexOf(JEAN_CLOSE);
   let inJean = firstClose >= 0 && (firstOpen < 0 || firstClose < firstOpen);
+  const premierOuvrantDiscret = text.indexOf(DISCRET_OPEN);
+  const premierFermantDiscret = text.indexOf(DISCRET_CLOSE);
+  let inDiscret =
+    premierFermantDiscret >= 0 &&
+    (premierOuvrantDiscret < 0 || premierFermantDiscret < premierOuvrantDiscret);
   let buffer = "";
 
   const flush = () => {
     if (!buffer) return;
-    if (inJean) {
+    if (inJean || inDiscret) {
       const dim = document.createElement("span");
-      dim.className = "jean-own-speech";
+      // Deux classes distinctes : chez Jean l'une atténue seulement et
+      // l'autre rapetisse aussi (voir DISCRET_TEXT_SCALE). Les confondre ici
+      // ferait mentir la réplique sur ce qu'il a réellement sous les yeux,
+      // ce qui est précisément ce qu'elle existe pour éviter.
+      dim.className = inDiscret ? "jean-mention-discrete" : "jean-own-speech";
       dim.textContent = buffer;
       element.appendChild(dim);
     } else {
@@ -858,6 +878,14 @@ function renderJeanText(element, text) {
       flush();
       inJean = false;
       index += JEAN_CLOSE.length;
+    } else if (text.startsWith(DISCRET_OPEN, index)) {
+      flush();
+      inDiscret = true;
+      index += DISCRET_OPEN.length;
+    } else if (text.startsWith(DISCRET_CLOSE, index)) {
+      flush();
+      inDiscret = false;
+      index += DISCRET_CLOSE.length;
     } else if (text.startsWith(SILENCE_MARKER, index)) {
       flush();
       const mark = document.createElement("em");
@@ -1554,8 +1582,13 @@ function rendreOeuvres() {
     const bloc = document.createElement("div");
     bloc.className = "caption-control";
     const titre = document.createElement("label");
-    const points = (oeuvre.points_interet || []).length;
-    titre.textContent = `${rang + 1}. ${oeuvre.titre} — ${points + 1} vue${points ? "s" : ""}`;
+    // Les points RÉELLEMENT exploitables, et non tous ceux du JSON : un point
+    // sans cadre ni coordonnées ne produit aucune vue, et l'annoncer ferait
+    // chercher une image qui n'a jamais été envoyée.
+    const points = Exposition.pointsExploitables(oeuvre);
+    const auteur = oeuvre.artiste ? ` (${oeuvre.artiste})` : "";
+    titre.textContent =
+      `${rang + 1}. ${oeuvre.titre}${auteur} — ${points + 1} vue${points ? "s" : ""}`;
     const choix = document.createElement("input");
     choix.type = "file";
     choix.accept = "image/*";
@@ -1590,7 +1623,7 @@ on("expositionLire", "click", () => {
     return;
   }
   const vues = expositionLue.oeuvres.reduce(
-    (t, o) => t + 1 + (o.points_interet || []).length, 0
+    (t, o) => t + 1 + Exposition.pointsExploitables(o), 0
   );
   els.expositionStatut.textContent =
     `« ${expositionLue.titre} » — ${expositionLue.oeuvres.length} œuvre(s), ${vues} vues à découper.`;
