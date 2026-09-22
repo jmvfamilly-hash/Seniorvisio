@@ -12,6 +12,7 @@ import android.util.Log
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.recueil.CadenceurActualites
 import com.seniorvisio.recueil.Element
+import com.seniorvisio.recueil.Recueil
 import com.seniorvisio.recueil.RecueilStore
 import com.seniorvisio.ui.MainActivity
 import java.time.LocalDateTime
@@ -53,7 +54,59 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
 
     private val config by lazy { AdminConfig(service) }
     private var rangCourant = -1
+
+    /**
+     * Le recueil présenté au dernier calcul.
+     *
+     * ═══ UN RANG NE SUFFIT PAS À DIRE QU'UN CONTENU A CHANGÉ ═══
+     *
+     * Le changement se décidait sur le seul rang. Or deux recueils — le fil
+     * d'information et une galerie photo — tirent leur rang de la MÊME heure
+     * de la journée. Installer une galerie à un moment où son rang coïncide
+     * avec celui du fil ne produisait donc aucun changement : l'observateur
+     * n'était pas prévenu, et l'écran gardait le titre d'actualité précédent
+     * jusqu'au créneau suivant.
+     *
+     * Le réglage était bien arrivé, l'ordonnanceur avait bien basculé, et
+     * l'écran ne montrait rien de nouveau. Une panne sans cause visible, dont
+     * la probabilité dépend de l'heure à laquelle on installe.
+     */
+    private var recueilCourant: String? = null
     private var enregistré = false
+
+    /**
+     * Ce qui est présenté en ce moment : le fil d'information, ou la galerie
+     * photo choisie par l'administrateur.
+     *
+     * Une classe et non un simple identifiant, parce que les deux n'obéissent
+     * pas aux mêmes règles — cadence et réveil de la dalle — et que laisser
+     * chaque appelant les redériver de l'identifiant les ferait diverger.
+     */
+    private data class Présentation(
+        val recueil: Recueil?,
+        val voulu: String,
+        /** Vrai pour une galerie photo : cadence fixe, et JAMAIS de réveil. */
+        val estGalerie: Boolean,
+    ) {
+        val prêts: List<Element> get() = recueil?.prêts.orEmpty()
+    }
+
+    /**
+     * Ce que l'écran d'accueil doit présenter, d'après les réglages.
+     *
+     * LA GALERIE PASSE DEVANT LE FIL quand elle est nommée. C'est le même
+     * garde-fou que pour les fils d'information : rien n'apparaît de soi-même
+     * sur l'écran de Jean, il faut l'avoir demandé.
+     */
+    private fun présentation(magasin: RecueilStore): Présentation {
+        val galerie = config.recueilPhotos.takeIf { it.isNotBlank() }
+        val voulu = galerie ?: RECUEIL_FLUX
+        return Présentation(
+            recueil = magasin.disponibles().firstOrNull { it.id == voulu },
+            voulu = voulu,
+            estGalerie = galerie != null,
+        )
+    }
 
     private val réveil = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -92,35 +145,102 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
      */
     fun réévaluer(réveillerLÉcran: Boolean) {
         val magasin = RecueilStore.actif ?: return
-        val recueil = magasin.disponibles().firstOrNull { it.id == RECUEIL_FLUX }
-        val prêts = recueil?.prêts.orEmpty()
+        val p = présentation(magasin)
+        val prêts = p.prêts
 
-        val créneau = CadenceurActualites.creneau(LocalDateTime.now(), prêts.size, config)
+        val créneau = créneauDe(p)
         if (créneau == null || créneau.finDuCreneau == null) {
-            // Nuit, ou aucun titre installé : l'écran d'accueil reprend ses
-            // zones de texte, et rien n'est programmé avant le jour.
-            if (rangCourant != -1) {
+            // Nuit, ou rien d'installé : l'écran d'accueil reprend ses zones
+            // de texte, et rien n'est programmé avant le jour.
+            if (rangCourant != -1 || recueilCourant != null) {
                 rangCourant = -1
+                recueilCourant = null
                 observateur?.surTitre(null, null)
             }
             programmerProchainRéveilDeJour(créneau == null)
             return
         }
 
-        val changement = créneau.rang != rangCourant
+        // Le RECUEIL compte autant que le rang : voir recueilCourant.
+        val changement = créneau.rang != rangCourant || p.voulu != recueilCourant
         rangCourant = créneau.rang
+        recueilCourant = p.voulu
         if (changement) {
-            observateur?.surTitre(prêts.getOrNull(créneau.rang), recueil?.id)
-            CallTraceActualite.noter(créneau.rang, prêts.size, créneau.finDuCreneau)
+            observateur?.surTitre(prêts.getOrNull(créneau.rang), p.recueil?.id)
+            CallTraceActualite.noter(créneau.rang, prêts.size, créneau.finDuCreneau, p.voulu)
         }
-        // Le réveil n'est demandé que sur un VRAI changement : une réévaluation
-        // de rattrapage ne doit pas rallumer l'écran pour le titre déjà affiché.
-        if (réveillerLÉcran && changement) rallumerLÉcran()
+        // ═══ UNE PHOTO NE RALLUME JAMAIS LA DALLE ═══
+        //
+        // Un titre d'actualité qui change vaut un réveil : c'est une nouvelle,
+        // et la dalle s'allume pour la donner. Une photo de famille, non — la
+        // galerie est là pour que l'écran soit agréable QUAND on le regarde,
+        // pas pour réclamer qu'on le regarde. Vingt-quatre réveils par jour
+        // pour faire défiler des photos, c'est une tablette qui s'allume
+        // toute seule toutes les heures dans une chambre.
+        //
+        // Elles restent donc « visibles seulement quand la tablette n'est pas
+        // en veille », exactement comme demandé — et la bonne photo est à
+        // l'écran dès qu'il se rallume, puisque le rang se déduit de l'heure
+        // (voir CadenceurActualites) et que le rebranchement la livre.
+        if (réveillerLÉcran && changement && !p.estGalerie) rallumerLÉcran()
 
         programmer(créneau.finDuCreneau)
     }
 
+    /** La cadence qui convient : fixe pour une galerie, divisée pour le fil. */
+    private fun créneauDe(p: Présentation): CadenceurActualites.Creneau? =
+        if (p.estGalerie) {
+            CadenceurActualites.creneauFixe(
+                LocalDateTime.now(), p.prêts.size, MINUTES_PAR_PHOTO, config,
+            )
+        } else {
+            CadenceurActualites.creneau(LocalDateTime.now(), p.prêts.size, config)
+        }
+
     var observateur: Observateur? = null
+
+    /**
+     * Branche un écran ET lui livre tout de suite ce qu'il doit montrer.
+     *
+     * ═══ POURQUOI POSER L'OBSERVATEUR NE SUFFISAIT PAS ═══
+     *
+     * L'écran d'accueil se débranche à onPause pour ne pas être retenu en
+     * mémoire par le service, et se rebranche à onResume. Pendant ce temps
+     * l'ordonnanceur continue de tourner sur le battement du service et MET À
+     * JOUR SON RANG DANS LE VIDE : les changements partent vers un observateur
+     * nul.
+     *
+     * Au retour, réévaluer comparait donc le rang courant à lui-même,
+     * concluait « aucun changement », et ne poussait rien. Or la liste des
+     * titres de l'écran n'est alimentée que par cet observateur : l'écran
+     * restait sur ce qu'il avait, ou sur rien.
+     *
+     * C'est aussi ce qui rend tenable la règle « une photo ne rallume pas la
+     * dalle » : l'écran qui se rallume tout seul, ou que Jean réveille,
+     * reçoit ici la photo du moment sans avoir à attendre le créneau suivant.
+     */
+    fun brancher(nouvel: Observateur) {
+        observateur = nouvel
+        val magasin = RecueilStore.actif ?: return
+        val p = présentation(magasin)
+        val créneau = créneauDe(p)
+        if (créneau?.finDuCreneau == null) {
+            // Nuit ou rien d'installé : l'écran doit le savoir aussi, sinon il
+            // garderait la dernière photo affichée avant sa mise en pause.
+            rangCourant = -1
+            recueilCourant = null
+            nouvel.surTitre(null, null)
+            return
+        }
+        // Ce qui vient d'être livré est MÉMORISÉ : sans ces deux lignes, le
+        // réévaluer qui suit systématiquement brancher trouverait un rang à
+        // -1, conclurait « changement », et pousserait une seconde fois le
+        // même élément — deux décodages de bitmap et un clignotement à chaque
+        // retour d'écran.
+        rangCourant = créneau.rang
+        recueilCourant = p.voulu
+        nouvel.surTitre(p.prêts.getOrNull(créneau.rang), p.recueil?.id)
+    }
 
     // ── Réveils ────────────────────────────────────────────────
 
@@ -192,16 +312,29 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
         const val TAG = "OrdonnanceurActu"
         const val ACTION_CHANGEMENT = "com.seniorvisio.ACTUALITE_SUIVANTE"
         const val RECUEIL_FLUX = "flux-actualites"
+
+        /**
+         * Un quart d'heure par photo, comme demandé.
+         *
+         * Assez long pour qu'une photo ne soit pas un défilement — une image
+         * qui change sous les yeux réclame l'attention au lieu de l'apaiser —
+         * et assez court pour qu'une galerie de trente photos fasse deux tours
+         * dans une journée éveillée.
+         */
+        const val MINUTES_PAR_PHOTO = 15
         const val RENDEZ_VOUS_À_VIDE_MS = 15 * 60 * 1000L
     }
 }
 
 /** Trace lisible dans le journal technique, séparée pour ne pas alourdir la logique. */
 internal object CallTraceActualite {
-    fun noter(rang: Int, total: Int, fin: LocalDateTime) {
+    fun noter(rang: Int, total: Int, fin: LocalDateTime, recueil: String) {
         com.seniorvisio.core.CallTrace.record(
             "ACCUEIL actualité",
-            "titre ${rang + 1}/$total · jusqu'à ${fin.toLocalTime()}",
+            // Le recueil est NOMMÉ : un compte d'éléments n'est pas une
+            // identité, et « 24/25 » a déjà dû être rapproché à la main d'un
+            // « FLUX publié | 17 titre(s) » pour savoir ce qui était à l'écran.
+            "titre ${rang + 1}/$total · recueil=$recueil · jusqu'à ${fin.toLocalTime()}",
         )
     }
 }

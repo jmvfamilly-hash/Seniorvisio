@@ -386,6 +386,15 @@ class MainActivity : AppCompatActivity() {
      * sa route tout seul. Rien à annuler, rien à refermer.
      */
     private var titresActualite: List<Element> = emptyList()
+
+    /**
+     * Le dernier motif de refus journalisé, pour ne pas le répéter.
+     *
+     * Remis à zéro nulle part exprès : si la panne cesse puis revient à
+     * l'identique, la deuxième occurrence n'apprend rien de plus que la
+     * première, et cet écran ne vit que le temps qu'il est affiché.
+     */
+    private var dernierRefus: String? = null
     private var recueilActualiteId: String? = null
     private var rangActualite = 0
 
@@ -404,7 +413,12 @@ class MainActivity : AppCompatActivity() {
             // faire : il appellera de lui-même dès son démarrage.
             return
         }
-        service.actualites.observateur = OrdonnanceurActualites.Observateur { element, recueilId ->
+        // brancher, et non « observateur = » : la pose seule ne livrait rien
+        // tant que le rang n'avait pas bougé, et l'écran restait vide après
+        // chaque mise en pause (voir OrdonnanceurActualites.brancher). C'est
+        // aussi ce qui rend tenable la règle « une photo ne rallume pas la
+        // dalle » : l'écran qui se rallume reçoit la photo du moment.
+        service.actualites.brancher(OrdonnanceurActualites.Observateur { element, recueilId ->
             if (element == null || recueilId == null) {
                 runOnUiThread {
                     titresActualite = emptyList()
@@ -423,7 +437,10 @@ class MainActivity : AppCompatActivity() {
                 rangActualite = prêts.indexOf(element).coerceAtLeast(0)
                 afficherActualiteCourante()
             }
-        }
+        })
+        // Toujours après : brancher livre l'état, réévaluer reprogramme
+        // l'alarme et rattrape un réveil perdu. Les deux ne font pas la même
+        // chose, et celui-ci ne poussera rien de plus — le rang n'a pas bougé.
         service.actualites.réévaluer(réveillerLÉcran = false)
     }
 
@@ -604,7 +621,60 @@ class MainActivity : AppCompatActivity() {
                         )
                         zones.majNavigationActualite(rangActualite, titresActualite.size)
                     }
-                    else -> zones.masquerActualite()
+                    // ═══ UNE PHOTO, ET NON PLUS UN ÉCRAN VIDE ═══
+                    //
+                    // Ce chemin masquait la zone. Un élément PHOTO — donc
+                    // toute photo d'une galerie — tombait ici et disparaissait
+                    // sans qu'aucune ligne ne le dise.
+                    is Rendu.Image -> {
+                        zones.afficherPhoto(
+                            rendu.bitmap,
+                            magasin?.disponibles()
+                                ?.firstOrNull { it.id == recueilActualiteId }?.titre,
+                        )
+                        zones.majNavigationActualite(rangActualite, titresActualite.size)
+                        // La mesure va avec l'essai : une photo plein écran
+                        // pèse plusieurs mégaoctets, et on vient de passer deux
+                        // jours à mal mesurer exactement cela.
+                        CallTrace.record(
+                            "ACCUEIL photo",
+                            "${rangActualite + 1}/${titresActualite.size} · " +
+                                "${rendu.bitmap.width}×${rendu.bitmap.height} px · " +
+                                "${rendu.bitmap.byteCount / (1024 * 1024)} Mo · " +
+                                "résident=${CallTrace.résidentMo() ?: "?"} Mo",
+                        )
+                    }
+                    // ═══ LE SEUL CHEMIN QUI NE DISAIT RIEN ═══
+                    //
+                    // Rendu.Impossible porte une phrase écrite exprès pour
+                    // être lue — « cette photo n'est plus sur la tablette »,
+                    // « n'a pas pu être ouverte », « est trop lourde ». Elle
+                    // était construite, puis jetée : l'écran se vidait, et le
+                    // journal n'en gardait aucune trace.
+                    //
+                    // UNE FOIS PAR MOTIF, et non par vue : cette ligne est
+                    // protégée dans le tampon d'état. Sans filtre, Jean
+                    // faisant défiler vingt photos refusées produirait vingt
+                    // lignes protégées, qui chasseraient les lignes FLUX — le
+                    // défaut même que ce tampon corrige, réintroduit par
+                    // l'instrument censé le servir.
+                    //
+                    // AUCUNE DONNÉE PERSONNELLE : la raison vient d'une liste
+                    // fermée de phrases du code, le type est un nom
+                    // d'énumération, le reste est un compte.
+                    is Rendu.Impossible -> {
+                        zones.masquerActualite()
+                        val motif = "${rendu.raison} · type=${element.type.étiquette} · " +
+                            "fichier=${if (fichier == null) "aucun" else "présent"} · " +
+                            "recueil=$recueilActualiteId"
+                        if (motif != dernierRefus) {
+                            dernierRefus = motif
+                            CallTrace.record(
+                                "ACCUEIL élément refusé",
+                                "${rangActualite + 1}/${titresActualite.size} · $motif",
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -338,6 +338,27 @@ class AdminConfig(context: Context) {
         set(value) = prefs.edit().putString(KEY_FLUX_ACTUALITES, value).apply()
 
     /**
+     * L'identifiant de la galerie photo présentée sur l'écran d'accueil.
+     *
+     * ═══ VIDE PAR DÉFAUT, ET CE DÉFAUT EST LA RÈGLE DE CE PROJET ═══
+     *
+     * Choisie par l'administrateur parmi les recueils que les proches ont
+     * installés. Tant qu'aucune n'est nommée, l'accueil garde le fil
+     * d'information — et si le fil est vide lui aussi, ses zones de texte.
+     *
+     * Une galerie qui apparaîtrait d'elle-même chez Jean serait un changement
+     * d'écran que personne ne lui a demandé : même garde-fou que pour les
+     * fils, pour la même raison.
+     *
+     * Les photos tournent au quart d'heure et ne rallument JAMAIS la dalle
+     * (voir OrdonnanceurActualites) : elles rendent l'écran agréable quand on
+     * le regarde, elles ne réclament pas qu'on le regarde.
+     */
+    var recueilPhotos: String
+        get() = prefs.getString(KEY_RECUEIL_PHOTOS, null).orEmpty()
+        set(value) = prefs.edit().putString(KEY_RECUEIL_PHOTOS, value).apply()
+
+    /**
      * Instant du dernier remplacement complet du fil, en millisecondes.
      *
      * Rangé dans les préférences et non en mémoire : c'est ce qui permet à la
@@ -590,6 +611,7 @@ class AdminConfig(context: Context) {
         private const val KEY_TRANSCRIPTION_PIECE_AFFICHEE = "transcription_piece_affichee"
         private const val KEY_POLICE_SENIOR = "police_senior"
         private const val KEY_FLUX_ACTUALITES = "flux_actualites"
+        private const val KEY_RECUEIL_PHOTOS = "recueil_photos"
         private const val KEY_COMMANDES_VOCALES = "commandes_vocales_actives"
         private const val KEY_FLUX_DERNIER_JOUR = "flux_dernier_rafraichissement"
         private const val KEY_FLUX_LISTE_CHANGEE = "flux_liste_changee"

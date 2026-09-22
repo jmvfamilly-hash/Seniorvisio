@@ -50,6 +50,12 @@ jobs:
       # contre les caches partiels) est partagée avec le banc d'essai — voir
       # scripts/prepare_pwa.py, et la raison pour laquelle elle ne doit pas
       # être écrite deux fois.
+      # Même garde-fou qu'au banc d'essai, et il compte davantage ici : une
+      # page publiée sans aucun bouton actif chez les proches, c'est Jean
+      # qu'on ne peut plus appeler. Voir scripts/verifie_scripts_pwa.js.
+      - name: Vérifie que les scripts du PWA ne se marchent pas dessus
+        run: node scripts/verifie_scripts_pwa.js
+
       - name: Prépare le site de production
         run: |
           python3 scripts/prepare_pwa.py \

@@ -523,6 +523,8 @@ const els = {
   fluxActualites: el("fluxActualites"),
   fluxActualitesSave: el("fluxActualitesSave"),
   fluxActualitesStatus: el("fluxActualitesStatus"),
+  galeriePreferee: el("galeriePreferee"),
+  galeriePrefereeStatut: el("galeriePrefereeStatut"),
   retryButton: el("retryButton"),
   blockedMessage: el("blockedMessage"),
   hangupButton: el("hangupButton"),
@@ -1237,6 +1239,83 @@ function renderVolumeWarning() {
   els.volumeWarning.classList.toggle("hidden", !muted);
 }
 
+/**
+ * La galerie présentée sur l'accueil de Jean, telle que la TABLETTE la connaît.
+ *
+ * Tenue à part de la valeur du menu déroulant : celui-ci est reconstruit à
+ * chaque instantané de la liste des recueils, et sans cette mémoire la
+ * sélection retomberait sur la première entrée — c'est-à-dire qu'on afficherait
+ * une galerie que personne n'a choisie.
+ */
+let galerieChoisie = "";
+
+/**
+ * Remplit le menu des galeries, en gardant le choix de la tablette.
+ *
+ * ═══ UNE GALERIE DISPARUE RESTE AFFICHÉE ═══
+ *
+ * Si le recueil choisi n'est plus dans la liste — supprimé depuis un autre
+ * téléphone, ou plus aucune photo décodable — on l'ajoute quand même, marqué
+ * comme indisponible. Le faire disparaître du menu ferait retomber la
+ * sélection sur « Aucune », et l'administrateur lirait « le fil d'information
+ * est actif » alors que la tablette, elle, cherche toujours cette galerie.
+ *
+ * Un menu ne doit jamais AFFIRMER un état que l'appareil n'a pas.
+ */
+function rendreGaleriePreferee() {
+  if (!els.galeriePreferee) return;
+  const options = [
+    '<option value="">— Aucune : garder le fil d\'information —</option>',
+  ];
+  let trouvée = false;
+  for (const r of recueilsPrésentables) {
+    if (r.id === galerieChoisie) trouvée = true;
+    options.push(
+      `<option value="${r.id}">${échapper(r.titre)} (${r.prêtes} photo${r.prêtes > 1 ? "s" : ""})</option>`
+    );
+  }
+  if (galerieChoisie && !trouvée) {
+    options.push(
+      `<option value="${galerieChoisie}">⚠️ galerie indisponible (${échapper(galerieChoisie)})</option>`
+    );
+  }
+  els.galeriePreferee.innerHTML = options.join("");
+  els.galeriePreferee.value = galerieChoisie;
+  if (els.galeriePrefereeStatut && galerieChoisie && !trouvée) {
+    els.galeriePrefereeStatut.textContent =
+      "⚠️ Cette galerie n'est plus installée sur la tablette : l'accueil est probablement revenu au fil d'information.";
+  }
+}
+
+/**
+ * Un titre de recueil est saisi par un proche : il peut contenir n'importe
+ * quoi, y compris quelque chose qui ressemble à une balise. Construire ces
+ * options en innerHTML sans échapper serait une injection dans le panneau
+ * d'administration.
+ */
+function échapper(texte) {
+  const d = document.createElement("div");
+  d.textContent = String(texte ?? "");
+  return d.innerHTML;
+}
+
+on("galeriePreferee", "change", async () => {
+  const id = els.galeriePreferee.value;
+  els.galeriePrefereeStatut.textContent = "Envoi…";
+  try {
+    await engine.setDeviceSetting(CONFIG.deviceDocId, "recueilPhotos", id);
+    galerieChoisie = id;
+    els.galeriePrefereeStatut.textContent = id
+      ? "✅ Galerie installée sur l'accueil — la première photo apparaîtra dans l'instant."
+      : "✅ Galerie retirée — l'accueil revient au fil d'information.";
+  } catch (e) {
+    // Remis à l'état de la tablette : laisser le menu sur un choix qui n'est
+    // pas parti affirmerait un réglage qui n'existe pas.
+    els.galeriePreferee.value = galerieChoisie;
+    els.galeriePrefereeStatut.textContent = `Réglage non transmis : ${e.message}`;
+  }
+});
+
 on("fluxActualitesSave", "click", async () => {
   const liste = els.fluxActualites.value.trim();
   els.fluxActualitesStatus.textContent = "Envoi…";
@@ -1678,6 +1757,13 @@ function applyDeviceSettings(data) {
   if (typeof data.fluxActualites === "string" &&
       document.activeElement !== els.fluxActualites) {
     els.fluxActualites.value = data.fluxActualites;
+  }
+
+  // La galerie choisie vient de la TABLETTE, pas de ce téléphone : plusieurs
+  // administrateurs peuvent régler, et c'est l'état réel qui doit s'afficher.
+  if (typeof data.recueilPhotos === "string") {
+    galerieChoisie = data.recueilPhotos;
+    rendreGaleriePreferee();
   }
 
   if (data.policeSenior) {
@@ -2785,6 +2871,10 @@ function majListeRecueils(liste) {
       prêtes: (r.elements || []).filter((e) => e.etat === "prêt").length,
     }))
     .filter((r) => r.prêtes > 0);
+
+  // Le menu des galeries suit la même liste : une galerie qu'on ne peut pas
+  // présenter pendant un appel ne peut pas davantage tenir l'écran d'accueil.
+  rendreGaleriePreferee();
 
   if (!els.recueilChoix || !els.recueilBar) return;
 

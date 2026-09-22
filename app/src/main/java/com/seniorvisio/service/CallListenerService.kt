@@ -18,6 +18,7 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.google.firebase.firestore.ListenerRegistration
 import com.seniorvisio.BuildConfig
+import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.CallerPhotoCache
 import com.seniorvisio.core.DeviceStatusReporter
@@ -195,6 +196,20 @@ class CallListenerService : LifecycleService() {
         startForeground(FOREGROUND_ID, buildForegroundNotification())
         acquireWifiLock()
         UsageStats.init(this)
+        // ═══ UN ÉTAT, ET PAS SEULEMENT UNE TRANSITION ═══
+        //
+        // « GALERIE réglée » ne part qu'au CHANGEMENT de valeur (voir
+        // DeviceStatusReporter). Le réglage vit en préférences, donc il
+        // survit au redémarrage : après un relancement, plus une seule ligne
+        // ne dirait ce que cette tablette est censée présenter, et on
+        // chercherait une galerie absente dans un journal qui ne la
+        // mentionne jamais.
+        val galerie = AdminConfig(this).recueilPhotos
+        CallTrace.record(
+            "GALERIE en place",
+            if (galerie.isBlank()) "aucune — l'accueil présente le fil d'information"
+            else "recueil « $galerie »",
+        )
         recueils.démarrer()
         flux.démarrer()
         actualites.démarrer()
@@ -266,10 +281,44 @@ class CallListenerService : LifecycleService() {
      * mégaoctets d'écart entre deux battements, la ventilation par catégorie
      * est payée, et elle nommera ce qui enfle.
      */
+    /**
+     * Le plafond de plateau de CETTE tablette (voir PART_PLATEAU_DE_LA_RAM).
+     *
+     * Recalculé à chaque battement plutôt que mémorisé : cela coûte une
+     * lecture toutes les cinq minutes, et évite d'avoir à se demander si la
+     * valeur a été posée avant que le gestionnaire ne soit disponible — une
+     * question dont la mauvaise réponse est un seuil figé à sa valeur de
+     * repli, en silence.
+     */
+    private fun plafondDePlateauMo(): Long {
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+            ?: return PLATEAU_PLANCHER_MO
+        return runCatching {
+            val info = android.app.ActivityManager.MemoryInfo()
+            am.getMemoryInfo(info)
+            val totalMo = info.totalMem / (1024L * 1024L)
+            maxOf((totalMo * PART_PLATEAU_DE_LA_RAM).toLong(), PLATEAU_PLANCHER_MO)
+        }.getOrDefault(PLATEAU_PLANCHER_MO)
+    }
+
     private fun surveillerMémoireAuRepos() {
-        val natifMo = android.os.Debug.getNativeHeapAllocatedSize() / (1024L * 1024L)
-        val précédent = dernierNatifAuReposMo
-        dernierNatifAuReposMo = natifMo
+        // ═══ LE RÉSIDENT, ET NON L'ALLOCATEUR ═══
+        //
+        // Ces seuils ont été réglés contre getNativeHeapAllocatedSize, qui
+        // compte ce que l'allocateur a distribué et non ce qui occupe la
+        // mémoire vive. Ils se sont donc déclenchés sur un nombre qui ne
+        // représentait rien : « +2971 Mo » n'était pas un saut d'empreinte, et
+        // la chasse qui a suivi cherchait trois gigaoctets qui n'étaient pas
+        // résidents.
+        //
+        // Repli sur l'allocateur si /proc est illisible : mieux vaut une
+        // surveillance imparfaite qu'aucune, et la ligne dira lequel des deux
+        // a servi.
+        val résident = CallTrace.résidentMo()
+        val natifMo = résident
+            ?: (android.os.Debug.getNativeHeapAllocatedSize() / (1024L * 1024L))
+        val précédent = dernierRésidentAuReposMo
+        dernierRésidentAuReposMo = natifMo
         if (précédent < 0) {
             CallTrace.record(
                 "REPOS mémoire",
@@ -294,11 +343,19 @@ class CallListenerService : LifecycleService() {
         // La ventilation coûte quelques dizaines de millisecondes ; sur un
         // battement de cinq minutes, et seulement au-dessus de trois cents
         // mégaoctets, c'est sans conséquence.
-        if (écart >= SAUT_REPOS_MO || natifMo >= PLATEAU_REPOS_MO) {
-            val motif = if (écart >= SAUT_REPOS_MO) "+$écart Mo depuis le battement précédent" else "plateau"
+        // ═══ LE PLATEAU EST UNE PART DE LA TABLETTE, ET NON UN NOMBRE ═══
+        //
+        // Trois cents mégaoctets veulent dire « un sixième de la machine » sur
+        // le banc d'essai, qui en a 1896, et « un vingtième » chez Jean, qui
+        // en a 5625. Un seuil absolu aurait donc crié sur l'une et dormi sur
+        // l'autre, pour la même situation — et c'est chez Jean que ça compte.
+        val plateauMo = plafondDePlateauMo()
+        if (écart >= SAUT_REPOS_MO || natifMo >= plateauMo) {
+            val motif = if (écart >= SAUT_REPOS_MO) "+$écart Mo depuis le battement précédent"
+                        else "plateau (≥ $plateauMo Mo)"
             CallTrace.record(
                 "REPOS mémoire SAUT",
-                "$motif → $natifMo Mo · " +
+                "$motif → $natifMo Mo ${if (résident != null) "résident" else "alloué (résident illisible)"} · " +
                     "${CallTrace.mesureSystème()} · ${CallTrace.ventilationMémoire()}",
             )
         } else {
@@ -310,7 +367,15 @@ class CallListenerService : LifecycleService() {
         }
     }
 
-    private var dernierNatifAuReposMo = -1L
+    /**
+     * Le dernier relevé de mémoire RÉSIDENTE au repos, pour l'écart.
+     *
+     * Renommé avec ce qu'il contient : il portait « Natif » et garde
+     * désormais le résident. Un nom qui ment sur son contenu est
+     * exactement ce qui a fait lire un chiffre d'allocateur comme une
+     * empreinte pendant deux jours.
+     */
+    private var dernierRésidentAuReposMo = -1L
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
@@ -463,15 +528,33 @@ class CallListenerService : LifecycleService() {
         private const val SAUT_REPOS_MO = 50L
 
         /**
-         * Au-dessus de ce niveau, la ventilation est payée à CHAQUE battement,
-         * même si rien ne bouge.
+         * Part de la mémoire de la tablette au-delà de laquelle la ventilation
+         * est payée à chaque battement, même si rien ne bouge.
          *
-         * Trois cents mégaoctets : bien au-dessus du régime observé hors
-         * incident — quarante à cent — et bien en dessous du plateau constaté,
-         * 883. Un fonctionnement sain ne l'atteint pas ; l'état qu'on cherche à
-         * décrire le dépasse largement.
+         * ═══ UNE PART, ET NON UN NOMBRE ═══
+         *
+         * Le seuil valait trois cents mégaoctets en dur. C'est un sixième du
+         * banc d'essai, qui a 1896 Mo, et un vingtième de la tablette de Jean,
+         * qui en a 5625 : la même situation aurait fait crier l'une et dormir
+         * l'autre, et c'est chez Jean que ça compte.
+         *
+         * Un cinquième : au-dessus, une seule application tient une part de la
+         * machine qui mérite d'être décrite, quelle que soit la machine.
+         *
+         * À RECALIBRER avec les premiers relevés de résident : ce seuil est le
+         * premier posé contre une mesure qui veut dire quelque chose, et je
+         * n'ai pas encore vu un seul chiffre de VmRSS sur ces tablettes. Le
+         * dire plutôt que de laisser croire qu'il sort d'une observation.
          */
-        private const val PLATEAU_REPOS_MO = 300L
+        private const val PART_PLATEAU_DE_LA_RAM = 0.20
+
+        /**
+         * Plancher, pour une tablette minuscule ou une lecture aberrante : en
+         * dessous de deux cents mégaoctets résidents, aucune application de
+         * visiophonie n'est en difficulté, et payer la ventilation à chaque
+         * battement n'apprendrait rien.
+         */
+        private const val PLATEAU_PLANCHER_MO = 200L
 
         /**
          * Attente avant de réarmer l'écoute, multipliée par le nombre

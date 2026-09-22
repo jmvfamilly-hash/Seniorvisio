@@ -20,6 +20,39 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- ═══ LA PHOTO, DERRIÈRE TOUT LE RESTE ═══
+
+         PREMIER ENFANT, et c'est là tout le mécanisme : un FrameLayout dessine
+         dans l'ordre de déclaration, donc cette image passe sous la pile des
+         zones. La date, le bouton de sommeil et les boutons de navigation
+         flottent alors par-dessus sans qu'aucun d'eux n'ait à changer de place
+         ni de parent.
+
+         C'était le seul moyen de rendre à une photo la dalle entière : dans la
+         pile, elle n'aurait occupé que la rangée laissée libre entre la bande
+         de date et les boutons — la place d'un titre d'actualité, deux à trois
+         fois plus petite.
+
+         fitCenter, et jamais centerCrop : une photo de famille recadrée
+         arbitrairement coupe des visages, et Jean n'a aucun moyen de le
+         signaler. Une photo en portrait sur une dalle en paysage laissera donc
+         des bandes sur les côtés. C'est le prix, et c'est le bon.
+
+         Aucune couleur de fond : le fond de l'écran est posé en code selon
+         l'heure (voir ScreenTheme), et il se voit à travers ces bandes.
+
+         ABSENTE DE L'ÉCRAN D'APPEL, volontairement : là-bas les recueils
+         passent par un autre chemin (voir IncomingCallActivity.afficherRecueil),
+         qui a sa propre mise en page par-dessus la vidéo. Le contrôleur la
+         cherche donc sans exiger qu'elle existe. -->
+    <ImageView
+        android:id="@+id/imagePleinEcran"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitCenter"
+        android:contentDescription="@null"
+        android:visibility="gone" />
+
     <include layout="@layout/view_home_zones" />
 
     <!-- Plus aucun QR code sur cet écran. Il en a porté un, puis les réglages

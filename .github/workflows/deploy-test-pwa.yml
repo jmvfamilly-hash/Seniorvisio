@@ -53,6 +53,22 @@ jobs:
       # Exactement la même préparation que la production, au jeu de documents
       # et au nom du raccourci près. Un banc d'essai préparé autrement
       # n'éprouve pas la production : il éprouve autre chose.
+      # ═══ AVANT TOUT LE RESTE : LES SCRIPTS PEUVENT-ILS COHABITER ? ═══
+      #
+      # Les scripts de ce PWA partagent une seule portée globale. Un nom
+      # déclaré deux fois au premier niveau tue le second fichier EN ENTIER,
+      # à l'analyse : la page s'affiche, et plus un bouton ne répond — ni
+      # l'appel, ni l'administration.
+      #
+      # C'est arrivé, et rien ne l'avait vu : node --check analyse chaque
+      # fichier séparément, et la comparaison des constantes partagées avait
+      # justement confirmé qu'elles s'écrivaient pareil.
+      #
+      # Ici plutôt qu'après le déploiement : une page morte publiée est une
+      # page morte, même si le pas suivant la dénonce.
+      - name: Vérifie que les scripts du PWA ne se marchent pas dessus
+        run: node scripts/verifie_scripts_pwa.js
+
       - name: Prépare le PWA du banc d'essai
         run: |
           python3 scripts/prepare_pwa.py \

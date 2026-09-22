@@ -537,6 +537,28 @@ class DeviceStatusReporter(private val context: Context) {
         // devrait attendre 7 h le lendemain pour en voir l'effet — et
         // conclurait entre-temps que son réglage n'a pas été reçu. Le
         // remplacement a lieu au prochain contrôle, dans le quart d'heure.
+        // ═══ LA GALERIE PHOTO PRÉFÉRÉE ═══
+        //
+        // Vide = l'accueil reprend le fil d'information. Même garde-fou que
+        // pour les fils : rien n'apparaît de soi-même sur l'écran de Jean.
+        //
+        // Réévaluation IMMÉDIATE, contrairement au réglage d'affichage : ici
+        // c'est le contenu même de l'écran qui change, et attendre le
+        // battement suivant laisserait cinq minutes pendant lesquelles
+        // l'administrateur ne peut pas distinguer « mon choix n'est pas
+        // arrivé » de « il est arrivé et met du temps ».
+        snapshot.getString(FIELD_RECUEIL_PHOTOS)?.let { id ->
+            if (adminConfig.recueilPhotos != id) {
+                adminConfig.recueilPhotos = id
+                CallTrace.record(
+                    "GALERIE réglée",
+                    if (id.isBlank()) "aucune — l'accueil reprend le fil d'information"
+                    else "recueil « $id » présenté sur l'accueil",
+                )
+                CallListenerService.enService?.actualites?.réévaluer(réveillerLÉcran = false)
+            }
+        }
+
         snapshot.getString(FIELD_FLUX_ACTUALITES)?.let { liste ->
             if (adminConfig.fluxActualites != liste) {
                 adminConfig.fluxActualites = liste
@@ -911,6 +933,9 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_ROOM_ENGINE = "roomTranscriptionEngine"
         private const val FIELD_POLICE_SENIOR = "policeSenior"
         private const val FIELD_FLUX_ACTUALITES = "fluxActualites"
+
+        /** L'identifiant de la galerie photo préférée, ou vide pour revenir au fil. */
+        private const val FIELD_RECUEIL_PHOTOS = "recueilPhotos"
         private const val FIELD_COMMANDES_VOCALES = "commandesVocales"
         private const val FIELD_CAPTION_INTERLIGNE = "captionInterligne"
         private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"

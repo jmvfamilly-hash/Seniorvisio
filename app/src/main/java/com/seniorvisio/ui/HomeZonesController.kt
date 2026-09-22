@@ -2,6 +2,7 @@ package com.seniorvisio.ui
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
@@ -110,6 +111,37 @@ class HomeZonesController(
     private val colonneImageActualite: View = root.findViewById(R.id.colonneImageAccueil)
     private val creditActualite: TextView = root.findViewById(R.id.creditActualiteAccueil)
     private val titreBandeauActualite: TextView = root.findViewById(R.id.titreBandeauActualite)
+    private val rangeeActualite: View = root.findViewById(R.id.rangeeActualite)
+
+    /**
+     * Le bandeau date + météo, masqué quand une photo occupe la dalle.
+     *
+     * Le bouton de sommeil, lui, vit dans zoneInfo mais HORS de ce bloc : il
+     * reste donc visible, flottant sur la photo. Éteindre son écran est le
+     * seul geste qu'on laisse à Jean, et il ne doit dépendre de rien.
+     */
+    private val blocInfoCentre: View = root.findViewById(R.id.blocInfoCentre)
+
+    /**
+     * La photo en plein cadre, sous la pile (voir activity_main.xml).
+     *
+     * NULLABLE, et pas par précaution : l'écran d'appel construit ce même
+     * contrôleur sur une autre mise en page, où cette vue n'existe pas — les
+     * recueils y ont leur propre chemin par-dessus la vidéo. Un findViewById
+     * non nul y aurait fait tomber l'écran d'appel entier.
+     */
+    private val imagePleinEcran: ImageView? = root.findViewById(R.id.imagePleinEcran)
+
+    /**
+     * La dernière palette reçue, pour pouvoir repeindre les fonds quand le
+     * MODE change et non seulement quand le thème change.
+     *
+     * Les deux décident ensemble de la même chose — zoneInfo et zoneActualite
+     * sont opaques en temps normal, transparentes devant une photo — et sans
+     * cette mémoire, entrer en mode photo entre deux changements de thème
+     * aurait laissé deux aplats posés sur l'image.
+     */
+    private var dernièrePalette: ScreenTheme.Palette? = null
 
     /**
      * La vignette actuellement posée sur la vue, pour pouvoir la reprendre
@@ -184,6 +216,9 @@ class HomeZonesController(
         origine: String? = null,
         crédit: String? = null,
     ) {
+        // Un titre revient : la zone reprend sa disposition. Appelé ici et non
+        // par l'appelant, pour qu'aucun chemin d'affichage ne puisse l'oublier.
+        quitterModePhoto()
         texteActualite.text = texte
         // Masquée quand le fil ne se nomme pas — le cas de beaucoup de flux.
         // Une ligne vide sous le titre prendrait de la hauteur sur une zone qui
@@ -240,9 +275,89 @@ class HomeZonesController(
         }
     }
 
+    /**
+     * Une photo de la galerie, sur toute la dalle.
+     *
+     * ═══ LA MÊME ZONE, ET DEUX CONTENUS ═══
+     *
+     * L'écran d'accueil ne savait afficher qu'un Rendu.Texte : une photo, qui
+     * est un Rendu.Image, y était purement et simplement masquée. C'était le
+     * seul vrai manque — tout le reste existait déjà, y compris les boutons de
+     * Jean, le glissement, le téléchargement et la réduction à la définition
+     * de la dalle.
+     *
+     * La photo quitte la pile pour la vue de fond : dans la rangée, elle
+     * n'aurait occupé que la place d'un titre d'actualité.
+     */
+    fun afficherPhoto(image: Bitmap?, titreGalerie: String?) {
+        val ancienne = vignetteActuelle
+        modePhoto = true
+
+        // La rangée entière est masquée : elle ne porte plus rien en mode
+        // photo, et la laisser visible aurait réservé sa hauteur pour rien —
+        // c'est-à-dire repoussé les boutons vers le bas sur une surface vide.
+        rangeeActualite.visibility = View.GONE
+        // La date et la météo cèdent la place. Le bouton de sommeil, lui, vit
+        // hors de ce bloc et reste : voir blocInfoCentre.
+        blocInfoCentre.visibility = View.GONE
+        texteActualite.text = ""
+        if (image != null) {
+            imagePleinEcran?.setImageBitmap(image)
+            imagePleinEcran?.visibility = View.VISIBLE
+        } else {
+            imagePleinEcran?.setImageDrawable(null)
+            imagePleinEcran?.visibility = View.GONE
+        }
+        // L'ancienne ImageView est vidée dans tous les cas : sans cela elle
+        // retiendrait le bitmap précédent, que le recyclage ci-dessous rendrait
+        // au système — et le dessin suivant travaillerait sur des pixels
+        // repris. Une vue masquée dessine encore quand on la remontre.
+        imageActualite.setImageDrawable(null)
+        vignetteActuelle = image
+        if (ancienne != null && ancienne !== image && !ancienne.isRecycled) ancienne.recycle()
+
+        creditActualite.visibility = View.GONE
+        origineActualite.visibility = View.GONE
+        titreBandeauActualite.text = titreGalerie?.takeIf { it.isNotBlank() } ?: "Photos"
+
+        // Les fonds opaques des deux zones s'effacent, sinon ils masqueraient
+        // le haut et le milieu de la photo (voir peindreFondsDesZones).
+        peindreFondsDesZones()
+
+        if (!modeActualite) {
+            modeActualite = true
+            applyZoneOrder()
+        }
+    }
+
+    /** Rend à la zone sa disposition de titre, quand on quitte les photos. */
+    private fun quitterModePhoto() {
+        if (!modePhoto) return
+        modePhoto = false
+        // La photo quitte le fond, et son bitmap est rendu : une image plein
+        // écran pèse plusieurs mégaoctets, et rien d'autre ne la reprendrait
+        // tant que l'écran vit.
+        imagePleinEcran?.setImageDrawable(null)
+        imagePleinEcran?.visibility = View.GONE
+        vignetteActuelle?.takeIf { !it.isRecycled }?.recycle()
+        vignetteActuelle = null
+        rangeeActualite.visibility = View.VISIBLE
+        blocInfoCentre.visibility = View.VISIBLE
+        peindreFondsDesZones()
+        titreBandeauActualite.text = "Nouvelles du jour"
+    }
+
+    private var modePhoto = false
+
     /** Rend la place aux deux zones de texte. */
     fun masquerActualite() {
         if (!modeActualite) return
+        // ═══ ET ON SORT AUSSI DU MODE PHOTO ═══
+        //
+        // Sans cela, la pile reviendrait à ses zones de texte pendant que la
+        // photo resterait affichée DERRIÈRE, que plus rien ne piloterait — et
+        // la date resterait masquée, les fonds transparents.
+        quitterModePhoto()
         modeActualite = false
         imageActualite.setImageDrawable(null)
         // Quitter le fil d'information rend aussi la dernière vignette : sans
@@ -602,7 +717,35 @@ class HomeZonesController(
         ordered.forEach { zoneStack.addView(it) }
     }
 
+    /**
+     * Les fonds de la bande d'information et de la zone des titres.
+     *
+     * ═══ DEVANT UNE PHOTO, ILS S'EFFACENT ═══
+     *
+     * Ces deux vues portent un aplat opaque, pour que la date reste lisible
+     * quand elle se retrouve posée sur la vidéo d'un proche. Le même aplat,
+     * posé sur une photo qui occupe la dalle entière, en masquerait le haut et
+     * le milieu — c'est-à-dire l'essentiel.
+     *
+     * Écrit ici et appelé des deux côtés — changement de thème ET changement
+     * de mode — parce que ces deux événements décident de la même chose. Deux
+     * endroits qui peignent le même fond finissent toujours par se contredire.
+     */
+    private fun peindreFondsDesZones() {
+        val palette = dernièrePalette ?: return
+        val rayon = ZONE_CORNER_RADIUS_DP * context.resources.displayMetrics.density
+        val couleur = if (modePhoto) Color.TRANSPARENT else palette.zoneBackground
+        listOf(zoneInfo, zoneActualite).forEach { vue ->
+            vue.background = GradientDrawable().apply {
+                cornerRadius = rayon
+                setColor(couleur)
+            }
+        }
+    }
+
     private fun applyPalette(palette: ScreenTheme.Palette) {
+        dernièrePalette = palette
+        peindreFondsDesZones()
         listOf(textMomentLabel, textWeatherLabel, textClockDate).forEach {
             it.setTextColor(palette.primaryText)
         }
@@ -612,10 +755,6 @@ class HomeZonesController(
         // un appel, elle se retrouve posée sur la vidéo du proche, dont les
         // couleurs sont quelconques. Sans fond, sa date devenait illisible dès
         // que la scène filmée était claire.
-        zoneInfo.background = GradientDrawable().apply {
-            cornerRadius = ZONE_CORNER_RADIUS_DP * context.resources.displayMetrics.density
-            setColor(palette.zoneBackground)
-        }
         textMomentIcon.setTextColor(palette.primaryText)
         textWeatherIcon.setTextColor(palette.primaryText)
         texteActualite.setTextColor(palette.primaryText)
@@ -636,10 +775,6 @@ class HomeZonesController(
         // quatrième qui suit sa propre règle, indiscernables tant que le thème
         // ne change pas.
         titreBandeauActualite.setTextColor(palette.primaryText)
-        zoneActualite.background = GradientDrawable().apply {
-            cornerRadius = ZONE_CORNER_RADIUS_DP * context.resources.displayMetrics.density
-            setColor(palette.zoneBackground)
-        }
         roomZone.applyColors(palette.primaryText, palette.zoneBackground)
         callZone.applyColors(palette.primaryText, palette.zoneBackground)
         onPalette(palette)
