@@ -36,7 +36,6 @@ import com.seniorvisio.core.HomeZone
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.WifiConfigurator
 import com.seniorvisio.service.RoomPresenceService
-import com.seniorvisio.ui.ReturnBannerOverlay
 import com.seniorvisio.ui.TranscriptionLabActivity
 
 /**
@@ -89,20 +88,13 @@ class AdminSettingsActivity : AppCompatActivity() {
         // Chaque ligne répond à une question précise qu'on se pose quand le
         // réveil ne se déclenche pas — et une seule d'entre elles sera fausse.
         view.text = buildString {
-            // Deux mécanismes d'écoute, deux unités. Afficher le niveau de la
-            // capture interne pendant que c'est le moteur d'Android qui écoute
-            // donnerait « 0 / seuil 3000 → sous le seuil » en permanence, y
-            // compris pendant que quelqu'un parle : de quoi conclure à un
-            // micro mort et régler le seuil à l'aveugle dans le mauvais sens.
-            val level = status.androidLevelDb
-            val threshold = status.androidThresholdDb
-            if (level != null && threshold != null) {
-                appendLine("Niveau mesuré : %.1f dB  (seuil %.1f dB)".format(level, threshold))
-                appendLine(if (level >= threshold) "  → au-dessus du seuil" else "  → sous le seuil")
-            } else {
-                appendLine("Niveau mesuré : ${status.lastRms}  (seuil ${status.threshold})")
-                appendLine(if (status.lastRms >= status.threshold) "  → au-dessus du seuil" else "  → sous le seuil")
-            }
+            // Une seule unité désormais : la valeur efficace sur 16 bits de
+            // notre capture. Il y en a eu deux, le temps que le moteur
+            // d'Android tienne parfois le micro et rende des décibels — deux
+            // unités dans un même champ font comparer des valeurs qui n'ont
+            // rien à voir, et c'est ce qu'il fallait éviter.
+            appendLine("Niveau mesuré : ${status.lastRms}  (seuil ${status.threshold})")
+            appendLine(if (status.lastRms >= status.threshold) "  → au-dessus du seuil" else "  → sous le seuil")
             appendLine("Capture micro : ${if (status.capturing) "active" else "ARRÊTÉE"}")
             status.captureError?.let { appendLine("  ⚠️ $it") }
             appendLine("Réveil au son : ${if (status.wakeEnabled) "activé" else "DÉSACTIVÉ"}")
@@ -139,15 +131,6 @@ class AdminSettingsActivity : AppCompatActivity() {
             append(status.speakerMode)
             status.jeanSimilarityPercent?.let { append("\nDernière ressemblance mesurée : $it %") }
             status.enrollmentResult?.let { append("\n$it") }
-        }
-
-        findViewById<TextView>(R.id.textHandoffState).text = buildString {
-            append(roomService?.describeHandoff() ?: "service non joignable")
-            append("\nBandeau de retour : ")
-            append(
-                if (Settings.canDrawOverlays(this@AdminSettingsActivity)) "autorisé"
-                else "NON autorisé — seul le bouton Accueil ramènera Jean"
-            )
         }
     }
 
@@ -328,30 +311,6 @@ class AdminSettingsActivity : AppCompatActivity() {
                 "Faites parler Jean jusqu'à ce que l'apprentissage atteigne 100 %",
                 Toast.LENGTH_LONG,
             ).show()
-        }
-
-        // L'autorisation de dessiner par-dessus les autres applications ne peut
-        // pas s'accorder par le code : elle est précisément la porte des
-        // attaques par recouvrement, et même un propriétaire d'appareil ne peut
-        // se la donner. Ce bouton ouvre la page où un proche la donne, une fois.
-        findViewById<Button>(R.id.buttonOverlayPermission).setOnClickListener {
-            try {
-                startActivity(ReturnBannerOverlay.permissionSettingsIntent(this))
-            } catch (e: ActivityNotFoundException) {
-                Toast.makeText(this, "Réglage de superposition introuvable sur cette tablette", Toast.LENGTH_LONG).show()
-            }
-        }
-
-        findViewById<Button>(R.id.buttonTestHandoff).setOnClickListener {
-            val service = roomService
-            if (service == null) {
-                Toast.makeText(this, "Service d'écoute non joignable", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val failure = service.testHandoff()
-            if (failure != null) {
-                Toast.makeText(this, "Bascule impossible : $failure", Toast.LENGTH_LONG).show()
-            }
         }
 
         findViewById<Button>(R.id.buttonForgetJeanVoice).setOnClickListener {

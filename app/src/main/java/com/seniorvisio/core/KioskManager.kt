@@ -65,7 +65,6 @@ object KioskManager {
         cancelBrowserAccessTimeout()
         dpm.setLockTaskPackages(admin, standardLockTaskPackages(activity))
         allowHomeButton(dpm, admin)
-        protectCompanionApps(activity, dpm, admin)
         grantLocationPermissionSilently(activity, dpm, admin)
         if (homeActivity != null) registerAsHomeApp(activity, dpm, admin, homeActivity)
 
@@ -99,29 +98,6 @@ object KioskManager {
         )
     }
 
-    /**
-     * Empêche la désinstallation des applications compagnes. Sans ça, une
-     * fausse manœuvre suffirait à faire disparaître la transcription de la
-     * tablette, avec pour seul symptôme un bouton qui ne fait plus rien —
-     * et aucun moyen de la réinstaller à distance, l'appareil n'ayant pas de
-     * compte Google.
-     *
-     * Silencieux si le paquet est absent : la tablette de Jean l'a
-     * préinstallée, mais un appareil de test n'y est pas tenu.
-     */
-    private fun protectCompanionApps(
-        activity: Activity,
-        dpm: DevicePolicyManager,
-        admin: ComponentName,
-    ) {
-        CompanionApps.allowedPackages.forEach { packageName ->
-            try {
-                dpm.setUninstallBlocked(admin, packageName, true)
-            } catch (_: IllegalArgumentException) {
-                // Paquet non installé sur cet appareil : rien à protéger.
-            }
-        }
-    }
 
     /**
      * Accorde silencieusement la localisation approximative (voir
@@ -179,8 +155,17 @@ object KioskManager {
         )
     }
 
+    /**
+     * Senior Visio, et rien d'autre.
+     *
+     * « Transcription instantanée » y a figuré, le temps que la bascule
+     * automatique existe (voir la branche archive/bascule-transcription). Elle
+     * en sort avec elle : plus rien ne la lance, et une application autorisée
+     * en mode kiosque que personne n'ouvre est une porte laissée ouverte sans
+     * raison.
+     */
     private fun standardLockTaskPackages(context: Context): Array<String> =
-        arrayOf(context.packageName) + CompanionApps.allowedPackages
+        arrayOf(context.packageName)
 
     private val handler = Handler(Looper.getMainLooper())
     private var browserAccessTimeout: Runnable? = null

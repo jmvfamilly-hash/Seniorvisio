@@ -70,6 +70,13 @@ TROP_COMMUNS = {
     "name", "type", "state", "index", "size", "text", "data", "result",
     "start", "stop", "close", "clear", "release", "invoke", "toString",
     "equals", "hashCode", "compareTo", "iterator", "next", "hasNext",
+    # Des méthodes du socle Android et Kotlin, qu'une recherche textuelle ne
+    # distingue pas d'une propriété du même nom. « commit » a été le premier :
+    # déclaré une fois dans un fichier supprimé, et appelé partout ailleurs
+    # sous la forme prefs.edit().commit().
+    "commit", "apply", "edit", "flush", "prepare", "describe", "remove",
+    "add", "put", "read", "write", "send", "post", "cancel", "update",
+    "show", "hide", "dismiss", "close", "open", "accept", "feed",
 }
 
 

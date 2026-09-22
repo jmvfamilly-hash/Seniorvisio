@@ -36,6 +36,12 @@ object UsageStats {
     /** Un moteur, tel qu'il apparaît dans les compteurs. */
     const val ENGINE_ASSEMBLYAI = "assemblyai"
     const val ENGINE_VOSK = "vosk"
+
+    /**
+     * Gardé alors que plus aucun moteur ne le produit : les journées déjà
+     * enregistrées portent des secondes sous ce nom, et le PWA les affiche.
+     * Le retirer ferait disparaître du relevé un temps réellement écouté.
+     */
     const val ENGINE_ANDROID = "android"
     const val ENGINE_GLADIA = "gladia"
 
@@ -52,7 +58,6 @@ object UsageStats {
     fun engineFor(choice: TranscriptionEngineChoice): String = when (choice) {
         TranscriptionEngineChoice.ASSEMBLYAI -> ENGINE_ASSEMBLYAI
         TranscriptionEngineChoice.VOSK -> ENGINE_VOSK
-        TranscriptionEngineChoice.ANDROID -> ENGINE_ANDROID
         TranscriptionEngineChoice.GLADIA -> ENGINE_GLADIA
         TranscriptionEngineChoice.AUTO -> ENGINE_VOSK
     }

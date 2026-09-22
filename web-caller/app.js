@@ -607,8 +607,6 @@ const els = {
   paidUsage: el("paidUsage"),
   voiceGateToggle: el("voiceGateToggle"),
   dimJeanSpeechToggle: el("dimJeanSpeechToggle"),
-  roomHandoffToggle: el("roomHandoffToggle"),
-  handoffReturnSlider: el("handoffReturnSlider"),
   speakerEngineSelect: el("speakerEngineSelect"),
   thresholdEmbeddedSlider: el("thresholdEmbeddedSlider"),
   thresholdPicovoiceSlider: el("thresholdPicovoiceSlider"),
@@ -1131,7 +1129,6 @@ const ADMIN_SLIDER_FIELDS = [
   ["thresholdPicovoiceSlider", "jeanVoiceThreshold_picovoice"],
   // Zéro est légitime ici — « pas de retour minuté » — comme pour les
   // plafonds mensuels.
-  ["handoffReturnSlider", "roomHandoffReturnMinutes"],
 ];
 
 // Mêmes réglages d'appareil, mais en tout ou rien.
@@ -1141,7 +1138,6 @@ const ADMIN_TOGGLE_FIELDS = [
   ["blockWakeAtNightToggle", "blockWakeAtNight"],
   ["voiceGateToggle", "voiceGateEnabled"],
   ["dimJeanSpeechToggle", "dimJeanSpeech"],
-  ["roomHandoffToggle", "roomHandoffEnabled"],
   ["speechTraceToggle", "speechTraceEnabled"],
 ];
 
@@ -1817,7 +1813,7 @@ function applyDeviceSettings(data) {
     // revenir le curseur à dix heures à chaque signe de vie, en écrasant
     // silencieusement le choix de l'administrateur.
     const floor =
-      field.startsWith("quotaHours_") || field === "roomHandoffReturnMinutes" ? 0 : 1;
+      field.startsWith("quotaHours_") ? 0 : 1;
     if (Number.isFinite(value) && value >= floor) els[elementKey].value = value;
   }
   // Affecter .value par programme ne déclenche aucun événement « input » :
@@ -1840,7 +1836,6 @@ function applyDeviceSettings(data) {
   els.dimJeanSpeechToggle.checked = data.dimJeanSpeech !== false;
   // Faux par défaut côté tablette, contrairement aux autres : ce mode
   // change ce que Jean a sous les yeux, il ne s'arme pas tout seul.
-  els.roomHandoffToggle.checked = data.roomHandoffEnabled === true;
 
   // Le seuil ne se règle pas sans voir le niveau qu'il doit dépasser : la
   // tablette republie avec son signe de vie le pic mesuré depuis le précédent,

@@ -87,9 +87,22 @@ class MainActivity : AppCompatActivity() {
             // commande ne marche » ne distingue pas « le moteur ne rend rien »
             // de « rien n'a jamais été lancé » — deux pannes qui se cherchent
             // à des endroits opposés.
+            // ═══ ET LE MOTEUR EST NOMMÉ, CE QUI MANQUAIT ═══
+            //
+            // Cette ligne disait que l'écoute avait été DEMANDÉE, jamais PAR
+            // QUOI. Quand des sons d'interaction sont revenus dans la chambre
+            // toutes les dix secondes, rien dans le journal ne permettait de
+            // dire quel moteur tenait le micro : il a fallu le déduire du
+            // code, c'est-à-dire supposer.
+            //
+            // Le nom du moteur coûte trois mots et tranche la question.
+            // AUCUNE DONNÉE PERSONNELLE : un libellé d'énumération et deux
+            // états de réglage, jamais un mot entendu.
             CallTrace.record(
                 "VOIX écoute",
-                "transcription de la pièce demandée · commandes=" +
+                "transcription de la pièce demandée · moteur=" +
+                    adminConfig.roomEngine.adminLabel +
+                    " · commandes=" +
                     if (adminConfig.commandesVocalesActives) "actives" else "éteintes",
             )
             service.startRoomTranscription(
@@ -309,12 +322,6 @@ class MainActivity : AppCompatActivity() {
      */
     override fun onResume() {
         super.onResume()
-        // Senior Visio est de nouveau devant : si la tablette était basculée
-        // sur Transcription instantanée, elle ne l'est plus — que ce soit par
-        // le bouton Accueil ou par un appel qui a pris l'écran. Sans ce signal,
-        // le bandeau de retour continuerait de flotter par-dessus, et le micro
-        // ne serait jamais repris (voir RoomHandoffController).
-        RoomPresenceService.running?.noteBackOnHomeScreen()
         // L'écran revient au premier plan : il redemande la photo du créneau
         // en cours plutôt que d'attendre le prochain changement. C'est ce qui
         // fait qu'une dalle rallumée par un bruit montre déjà la photo du

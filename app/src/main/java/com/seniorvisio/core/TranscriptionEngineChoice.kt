@@ -43,17 +43,26 @@ enum class TranscriptionEngineChoice(
      */
     GLADIA("gladia", "Gladia (en ligne, payant à la durée)", billedByDuration = true),
 
-    VOSK("vosk", "Vosk (embarqué, gratuit, hors-ligne)"),
-
     /**
-     * La reconnaissance vocale d'Android lui-même (voir AndroidSpeechSession).
-     * Gratuite et déjà installée, mais avec une contrainte qui n'est pas la
-     * nôtre : son API n'écoute que le micro, on ne peut pas lui donner un flux
-     * audio. Elle ne vaut donc que pour la pièce — un appel arrive par WebRTC,
-     * jamais par le micro. Choisie pour les appels, le moteur le signale et
-     * retombe sur un autre (voir TranscriptionEngine.createRecognizerFor).
+     * ═══ IL Y A EU UNE ENTRÉE DE PLUS, ET ELLE FAISAIT DU BRUIT ═══
+     *
+     * La reconnaissance vocale d'Android a figuré ici. Gratuite et déjà
+     * installée, mais avec une contrainte qui n'était pas la nôtre : son API
+     * est modale — elle transcrit un énoncé, s'arrête, et doit être relancée.
+     * À chaque relance, le service de Google joue ses deux sons d'interaction,
+     * qu'aucun réglage ne désactive. Dans la chambre, toute la journée, toutes
+     * les dix secondes.
+     *
+     * Elle tenait aussi le microphone elle-même, sans jamais nous livrer le
+     * son : la reconnaissance de la voix de Jean était donc structurellement
+     * impossible tant qu'elle écoutait.
+     *
+     * Une valeur « android » encore stockée sur une tablette ne correspond
+     * plus à rien ici : fromRemoteValue rend null, et le lecteur de réglages
+     * retombe sur AUTO (voir AdminConfig.roomEngine). La migration se fait
+     * seule, sans écriture distante.
      */
-    ANDROID("android", "Reconnaissance Android (pièce seulement)");
+    VOSK("vosk", "Vosk (embarqué, gratuit, hors-ligne)");
 
     companion object {
         fun fromRemoteValue(value: String?): TranscriptionEngineChoice? =

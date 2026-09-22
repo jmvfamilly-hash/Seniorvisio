@@ -253,18 +253,10 @@ class DeviceStatusReporter(private val context: Context) {
         return buildString {
             append(status.listeningMode)
             status.captureError?.let { append(" ($it)") }
-            // Les deux mécanismes mesurent, mais pas dans la même unité : une
-            // valeur efficace sur 16 bits pour notre capture, des décibels
-            // relatifs pour le moteur d'Android. Chacun affiche la sienne
-            // face à son propre seuil — c'est ce qui permet de régler la
+            // Le pic face au seuil : c'est ce qui permet de régler la
             // sensibilité sur une mesure plutôt qu'au jugé.
-            val androidPeak = service.consumeAndroidPeakLevelDb()
-            val androidThreshold = status.androidThresholdDb
             if (status.capturing) {
                 append(" — pic ").append(peak).append(" / seuil ").append(status.threshold)
-            } else if (androidPeak != null && androidThreshold != null) {
-                append(" — pic ").append(format1(androidPeak))
-                append(" dB / seuil ").append(format1(androidThreshold)).append(" dB")
             }
             // Le portier de voix, quand il tourne. Sans ce chiffre, un
             // portier trop sévère ferait passer la transcription pour cassée
@@ -285,7 +277,6 @@ class DeviceStatusReporter(private val context: Context) {
             // ce qui l'en empêche. Les causes de refus — application absente,
             // fenêtre de nuit, pause après un retour — se ressemblent toutes
             // vues de loin : un mode qui ne bascule pas.
-            append(" — bascule : ").append(service.describeHandoff())
             if (!status.wakeEnabled) append(" — réveil désactivé")
             if (status.inNightWindow) append(" — réveil bloqué (nuit)")
             append(" — réveils demandés : ").append(status.wakeRequests)
@@ -338,13 +329,7 @@ class DeviceStatusReporter(private val context: Context) {
      * ancien pour contenir le champ.
      */
     private fun companionAppVersions(): Map<String, String> =
-        CompanionApps.allowedPackages.associateWith { packageName ->
-            try {
-                context.packageManager.getPackageInfo(packageName, 0).versionName ?: "inconnue"
-            } catch (_: PackageManager.NameNotFoundException) {
-                "absent"
-            }
-        }
+        emptyMap()
 
     /**
      * Écoute une mise à jour demandée à distance (URL de l'APK + version
@@ -615,12 +600,6 @@ class DeviceStatusReporter(private val context: Context) {
         // RoomPresenceService.startVoiceEnrollment).
         snapshot.getBoolean(FIELD_DIM_JEAN_SPEECH)?.let {
             adminConfig.dimJeanSpeech = it
-        }
-        snapshot.getBoolean(FIELD_ROOM_HANDOFF_ENABLED)?.let {
-            adminConfig.roomHandoffEnabled = it
-        }
-        snapshot.getLong(FIELD_ROOM_HANDOFF_RETURN_MINUTES)?.let {
-            adminConfig.roomHandoffReturnMinutes = it.toInt()
         }
         // Moteur de reconnaissance de locuteur, et son seuil — lequel est propre
         // à chaque moteur : les deux rendent un nombre entre 0 et 1, mais l'un
@@ -989,8 +968,6 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"
         private const val FIELD_VOICE_GATE_ENABLED = "voiceGateEnabled"
         private const val FIELD_DIM_JEAN_SPEECH = "dimJeanSpeech"
-        private const val FIELD_ROOM_HANDOFF_ENABLED = "roomHandoffEnabled"
-        private const val FIELD_ROOM_HANDOFF_RETURN_MINUTES = "roomHandoffReturnMinutes"
         private const val FIELD_SPEAKER_ENGINE = "speakerEngine"
         // Pas de champ pour la clé Picovoice : comme les deux clés de
         // transcription, elle se saisit sur la tablette ou vient d'un secret
