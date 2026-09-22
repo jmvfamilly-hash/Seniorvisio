@@ -5,12 +5,11 @@
      Une lune et non un symbole d'extinction : ce bouton ne coupe pas la
      tablette, il éteint la dalle. Le symbole d'arrêt aurait laissé croire que
      Jean vient de fermer quelque chose qu'il ne saurait pas rallumer — or
-     l'écran se rallume au premier appel, à la première parole dans la pièce,
-     ou au premier titre d'actualité.
+     l'écran se rallume au premier appel et à la première parole dans la pièce
+     (voir le réveil au son et son seuil réglable).
 
-     40dp plutôt que 48 comme les flèches de navigation : celui-ci vit dans le
-     bandeau de la date, pas dans une barre d'action, et doit rester en retrait
-     de ce qui s'y lit.
+     40dp plutôt que 48 : celui-ci vit dans le bandeau de la date, pas dans
+     une barre d'action, et doit rester en retrait de ce qui s'y lit.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="40dp"

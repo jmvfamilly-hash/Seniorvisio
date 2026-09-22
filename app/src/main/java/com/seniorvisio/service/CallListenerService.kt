@@ -23,7 +23,6 @@ import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.CallerPhotoCache
 import com.seniorvisio.core.DeviceStatusReporter
 import com.seniorvisio.core.Environnement
-import com.seniorvisio.recueil.RafraichisseurFlux
 import com.seniorvisio.recueil.RecueilStore
 import com.seniorvisio.core.UsageStats
 import com.seniorvisio.signaling.CallSignalingClient
@@ -72,25 +71,16 @@ class CallListenerService : LifecycleService() {
      */
     private val recueils = RecueilStore(this)
 
-    /**
-     * Tient à jour le recueil fait des titres de l'actualité.
-     *
-     * Éteint en production, faute d'adresse de flux (voir app/build.gradle) :
-     * un fil d'information qui apparaîtrait de lui-même sur la tablette de
-     * Jean serait un changement d'écran que personne ne lui a demandé.
-     */
-    val flux = RafraichisseurFlux(this)
 
     /**
-     * Cadence l'affichage des titres sur l'écran d'accueil et réveille la
-     * dalle à chaque changement.
+     * Cadence l'affichage des photos de la galerie sur l'écran d'accueil.
      *
      * Porté par ce service et non par l'écran : l'écran naît et meurt, ce
-     * service vit en permanence. Un titre doit changer à l'heure dite même
-     * quand personne ne regarde — c'est justement la condition pour qu'il soit
-     * déjà en place quand la dalle s'allume.
+     * service vit en permanence. La photo doit changer à l'heure dite même
+     * quand personne ne regarde — c'est justement la condition pour que la
+     * bonne soit déjà en place quand la dalle s'allume.
      */
-    val actualites = OrdonnanceurActualites(this)
+    val galerie = OrdonnanceurPhotos(this)
 
     // Sans ce verrou, Android coupe l'économiseur d'énergie Wi-Fi une fois
     // l'écran éteint : l'association tombe au bout de quelques heures, et la
@@ -130,15 +120,11 @@ class CallListenerService : LifecycleService() {
                 échecsDÉcoute++
                 startListening()
             }
-            // Rattrapage du fil d'information : si un réveil programmé
-            // s'est perdu — système qui a repoussé l'alarme, tablette éteinte
-            // à l'heure dite — le titre se remet d'aplomb ici. Sans réveiller
-            // la dalle : un rattrapage n'est pas un changement.
-            actualites.réévaluer(réveillerLÉcran = false)
+            // Rattrapage de la galerie : si un réveil programmé s'est
+            // perdu — système qui a repoussé l'alarme, tablette éteinte à
+            // l'heure dite — la photo se remet d'aplomb ici.
+            galerie.réévaluer()
             surveillerMémoireAuRepos()
-            // Le fil d'information vit-il ? Une ligne par battement, et rien
-            // quand un titre reste simplement posé (voir VieDuFil).
-            com.seniorvisio.core.VieDuFil.publierBilan()
             statusReporter.reportHeartbeat(échecsDÉcoute)
             heartbeatHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
         }
@@ -204,15 +190,17 @@ class CallListenerService : LifecycleService() {
         // ne dirait ce que cette tablette est censée présenter, et on
         // chercherait une galerie absente dans un journal qui ne la
         // mentionne jamais.
-        val galerie = AdminConfig(this).recueilPhotos
+        // Nommé « recueilChoisi » et non « galerie » : ce nom-là est déjà
+        // celui de l'ordonnanceur, quelques lignes plus bas. Un local qui le
+        // masque fait appeler démarrer() sur une chaîne de caractères.
+        val recueilChoisi = AdminConfig(this).recueilPhotos
         CallTrace.record(
             "GALERIE en place",
-            if (galerie.isBlank()) "aucune — l'accueil présente le fil d'information"
-            else "recueil « $galerie »",
+            if (recueilChoisi.isBlank()) "aucune — l'accueil reste au fond uni"
+            else "recueil « $recueilChoisi »",
         )
         recueils.démarrer()
-        flux.démarrer()
-        actualites.démarrer()
+        galerie.démarrer()
         // L'état de départ ne se déduit d'aucune diffusion : elles ne
         // signalent que les changements. Sans cette lecture initiale, tout le
         // temps précédant le premier basculement serait attribué au sommeil.
@@ -475,7 +463,7 @@ class CallListenerService : LifecycleService() {
         callListener = null
         recueils.arrêter()
         flux.arrêter()
-        actualites.arrêter()
+        galerie.arrêter()
         if (enService === this) enService = null
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
         wifiLock?.let { if (it.isHeld) it.release() }

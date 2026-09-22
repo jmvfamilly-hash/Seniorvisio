@@ -520,11 +520,11 @@ const els = {
   cancelButton: el("cancelButton"),
   forceConnectButton: el("forceConnectButton"),
   policeSelect: el("policeSelect"),
-  fluxActualites: el("fluxActualites"),
-  fluxActualitesSave: el("fluxActualitesSave"),
-  fluxActualitesStatus: el("fluxActualitesStatus"),
   galeriePreferee: el("galeriePreferee"),
   galeriePrefereeStatut: el("galeriePrefereeStatut"),
+  cadencePhotos: el("cadencePhotos"),
+  cadencePhotosValeur: el("cadencePhotosValeur"),
+  cadencePhotosStatut: el("cadencePhotosStatut"),
   retryButton: el("retryButton"),
   blockedMessage: el("blockedMessage"),
   hangupButton: el("hangupButton"),
@@ -581,10 +581,6 @@ const els = {
   identityStatus: el("identityStatus"),
   recueilBar: el("recueilBar"),
   recueilChoix: el("recueilChoix"),
-  jeanNews: el("jeanNews"),
-  jeanNewsImage: el("jeanNewsImage"),
-  jeanNewsTitre: el("jeanNewsTitre"),
-  jeanNewsOrigine: el("jeanNewsOrigine"),
   recueilOuvrir: el("recueilOuvrir"),
   recueilNav: el("recueilNav"),
   recueilPrec: el("recueilPrec"),
@@ -1250,6 +1246,25 @@ function renderVolumeWarning() {
 let galerieChoisie = "";
 
 /**
+ * La cadence telle que la tablette la rapporte, en minutes.
+ *
+ * Quinze par défaut, c'est-à-dire la valeur qu'applique la tablette tant que
+ * rien n'a été réglé (voir AdminConfig.cadencePhotosMinutes). Deux valeurs par
+ * défaut différentes des deux côtés donneraient un curseur qui ment jusqu'au
+ * premier réglage.
+ */
+let cadenceChoisie = 15;
+
+/** Repose le curseur et son libellé sur l'état de la tablette. */
+function rendreCadencePhotos() {
+  if (!els.cadencePhotos) return;
+  els.cadencePhotos.value = String(cadenceChoisie);
+  if (els.cadencePhotosValeur) {
+    els.cadencePhotosValeur.textContent = String(cadenceChoisie);
+  }
+}
+
+/**
  * Remplit le menu des galeries, en gardant le choix de la tablette.
  *
  * ═══ UNE GALERIE DISPARUE RESTE AFFICHÉE ═══
@@ -1307,7 +1322,7 @@ on("galeriePreferee", "change", async () => {
     galerieChoisie = id;
     els.galeriePrefereeStatut.textContent = id
       ? "✅ Galerie installée sur l'accueil — la première photo apparaîtra dans l'instant."
-      : "✅ Galerie retirée — l'accueil revient au fil d'information.";
+      : "✅ Galerie retirée — l'accueil revient au fond uni.";
   } catch (e) {
     // Remis à l'état de la tablette : laisser le menu sur un choix qui n'est
     // pas parti affirmerait un réglage qui n'existe pas.
@@ -1316,20 +1331,37 @@ on("galeriePreferee", "change", async () => {
   }
 });
 
-on("fluxActualitesSave", "click", async () => {
-  const liste = els.fluxActualites.value.trim();
-  els.fluxActualitesStatus.textContent = "Envoi…";
+/**
+ * La cadence de la galerie d'accueil, en minutes.
+ *
+ * ═══ DEUX ÉVÉNEMENTS, ET CE N'EST PAS UN DOUBLON ═══
+ *
+ * « input » ne fait que suivre le doigt : le nombre affiché à côté du curseur
+ * change pendant qu'on le déplace, sans rien envoyer. « change » part une
+ * seule fois, quand le doigt est relâché. Sans cette séparation, glisser de 15
+ * à 40 écrirait vingt-cinq fois dans Firestore — et la tablette
+ * reprogrammerait son alarme à chaque écriture.
+ */
+on("cadencePhotos", "input", () => {
+  if (els.cadencePhotosValeur) {
+    els.cadencePhotosValeur.textContent = els.cadencePhotos.value;
+  }
+});
+
+on("cadencePhotos", "change", async () => {
+  const minutes = Number(els.cadencePhotos.value);
+  els.cadencePhotosStatut.textContent = "Envoi…";
   try {
-    await engine.setDeviceSetting(CONFIG.deviceDocId, "fluxActualites", liste);
-    const nombre = liste.split(/[\n,;]/).filter((l) => l.trim()).length;
-    els.fluxActualitesStatus.textContent =
-      nombre === 0
-        ? "Liste vidée : la tablette revient aux fils livrés avec l'application."
-        : `${nombre} fil(s) enregistré(s). Relecture dans le quart d'heure.`;
+    await engine.setDeviceSetting(CONFIG.deviceDocId, "cadencePhotosMinutes", minutes);
+    cadenceChoisie = minutes;
+    els.cadencePhotosStatut.textContent =
+      `✅ Une photo toutes les ${minutes} min — appliqué au prochain changement.`;
   } catch (e) {
-    // Dit, et non avalé : une liste qui n'arrive pas ressemble en tout point à
-    // une liste arrivée mais sans effet, et on chercherait du mauvais côté.
-    els.fluxActualitesStatus.textContent = "Non transmis (réseau ?) : " + e.message;
+    // Remis à l'état de la tablette, comme le menu des galeries : un curseur
+    // laissé sur une valeur qui n'est pas partie affirme un réglage qui
+    // n'existe pas.
+    rendreCadencePhotos();
+    els.cadencePhotosStatut.textContent = `Réglage non transmis : ${e.message}`;
   }
 });
 
@@ -1589,10 +1621,8 @@ function renderUsageDays(days) {
 // vient chercher. Les noms sont ceux de UsageStats.GESTE_* — les changer d'un
 // seul côté ferait disparaître une colonne sans rien signaler.
 const LIBELLÉS_GESTES = [
-  ["actualitePrecedentBouton", "◀ titre (bouton)"],
-  ["actualitePrecedentGlissement", "◀ titre (glissement)"],
-  ["actualiteSuivantBouton", "▶ titre (bouton)"],
-  ["actualiteSuivantGlissement", "▶ titre (glissement)"],
+  ["photoPrecedenteGlissement", "◀ galerie (glissement)"],
+  ["photoSuivanteGlissement", "▶ galerie (glissement)"],
   ["recueilPrecedentBouton", "◀ photo (bouton)"],
   ["recueilPrecedentGlissement", "◀ photo (glissement)"],
   ["recueilSuivantBouton", "▶ photo (bouton)"],
@@ -1751,12 +1781,13 @@ function applyDeviceSettings(data) {
   // demandée : un <select> qui montre un choix jamais reçu ferait croire la
   // bascule faite, et on jugerait la lisibilité d'une police qui n'est pas à
   // l'écran.
-  // La liste des fils, telle que la tablette la rapporte. Jamais réécrite
-  // pendant que l'administrateur est en train de taper : un rafraîchissement
-  // du signe de vie, qui arrive chaque minute, effacerait sa saisie en cours.
-  if (typeof data.fluxActualites === "string" &&
-      document.activeElement !== els.fluxActualites) {
-    els.fluxActualites.value = data.fluxActualites;
+  // La cadence vient elle aussi de la TABLETTE. Jamais réécrite pendant que
+  // l'administrateur a le doigt sur le curseur : un rafraîchissement du signe
+  // de vie, qui arrive chaque minute, le ferait sauter sous son doigt.
+  if (typeof data.cadencePhotosMinutes === "number" &&
+      document.activeElement !== els.cadencePhotos) {
+    cadenceChoisie = data.cadencePhotosMinutes;
+    rendreCadencePhotos();
   }
 
   // La galerie choisie vient de la TABLETTE, pas de ce téléphone : plusieurs
@@ -2904,7 +2935,7 @@ function majListeRecueils(liste) {
   // cours, décodage qui échoue faute de mémoire — pour que le compte tombe à
   // zéro et que la fenêtre se referme au nez de Jean, EN PLEINE CONSULTATION.
   //
-  // Le journal de la tablette le montrait : « APPEL actualité 2/28 » puis, huit
+  // Le journal de la tablette le montrait : « APPEL recueil 2/28 » puis, huit
   // dixièmes de seconde plus tard, « APPEL recueil refermé ». Personne n'avait
   // rien touché.
   //
@@ -2914,10 +2945,6 @@ function majListeRecueils(liste) {
   if (recueilOuvertId && !existeEncore) {
     fermerRecueilPrésenté();
   }
-  // Le contenu vient d'être rafraîchi : la réplique doit suivre. Sans cela,
-  // elle garderait le titre d'avant le rafraîchissement du fil — le matin, à
-  // sept heures, quand toute la liste est remplacée d'un coup.
-  rendreNewsRépliquée();
 }
 
 function recueilCourant() {
@@ -2964,45 +2991,10 @@ function renderRecueilNav() {
 let rangAffiché = -1;
 let totalAffiché = 0;
 
-/**
- * Réplique le titre d'actualité affiché chez Jean.
- *
- * Masquée dès qu'on n'est pas dans un recueil d'actualités : la réplique doit
- * montrer ce que Jean a sous les yeux, donc se taire quand elle ne le sait
- * pas. Un titre laissé là après la fermeture serait pire qu'un cadre vide — il
- * affirmerait quelque chose de faux.
- */
-function rendreNewsRépliquée() {
-  if (!els.jeanNews) return;
-  const courant = recueilCourant();
-  const élément = courant && rangAffiché >= 0
-    ? (courant.prêts || [])[rangAffiché]
-    : null;
-  const texte = élément && élément.texte;
-  if (!texte) {
-    els.jeanNews.classList.add("hidden");
-    return;
-  }
-  els.jeanNewsTitre.textContent = texte;
-  const provenance = [élément.origine, élément.credit].filter(Boolean).join(" · ");
-  els.jeanNewsOrigine.textContent = provenance;
-  if (élément.source) {
-    els.jeanNewsImage.src = élément.source;
-    els.jeanNewsImage.classList.remove("hidden");
-  } else {
-    // L'attribut est retiré, et non vidé : une source vide fait tenter un
-    // chargement de la page courante et salit la console à chaque titre.
-    els.jeanNewsImage.removeAttribute("src");
-    els.jeanNewsImage.classList.add("hidden");
-  }
-  els.jeanNews.classList.remove("hidden");
-}
-
 engine.onRecueilAffiche((rang, total) => {
   rangAffiché = rang;
   totalAffiché = total;
   renderRecueilNav();
-  rendreNewsRépliquée();
 });
 
 async function présenterRecueil(id, rang) {
@@ -3022,7 +3014,6 @@ async function présenterRecueil(id, rang) {
   recueilOuvertId = id;
   recueilRang = rang;
   renderRecueilNav();
-  rendreNewsRépliquée();
 }
 
 async function fermerRecueilPrésenté() {
@@ -3030,7 +3021,6 @@ async function fermerRecueilPrésenté() {
   recueilRang = 0;
   rangAffiché = -1;
   totalAffiché = 0;
-  rendreNewsRépliquée();
   renderRecueilNav();
   await engine.montrerRecueil(null, 0);
 }

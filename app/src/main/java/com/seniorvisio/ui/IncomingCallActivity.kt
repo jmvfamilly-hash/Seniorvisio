@@ -222,7 +222,6 @@ class IncomingCallActivity : AppCompatActivity() {
                 // aux premières secondes de la sonnerie.
                 findViewById<View>(R.id.callRoot).setBackgroundColor(palette.background)
                 applyPaletteToAlert(palette)
-                appliquerPaletteAuxNews(palette)
                 screenIsDark = palette.isDark
                 publishScreenLayout()
             },
@@ -389,38 +388,6 @@ class IncomingCallActivity : AppCompatActivity() {
      * qu'une teinte unique ne permet pas. Le vert de remplissage, lui, ne
      * bouge pas — il contraste avec les deux.
      */
-    /**
-     * Peint le titre d'actualité comme l'accueil le peint.
-     *
-     * ═══ DEUX ÉCRANS, UNE SEULE SOURCE DE COULEUR ═══
-     *
-     * L'accueil peignait son titre avec palette.primaryText et posait dessous
-     * un fond arrondi palette.zoneBackground (voir
-     * HomeZonesController.applyPalette). Cet écran-ci écrivait en blanc fixe,
-     * sur rien. Les deux ne pouvaient donc pas s'accorder : rien ne les
-     * reliait, et la palette change avec l'heure de la journée.
-     *
-     * Le fond n'est pas décoratif. Ce bloc est posé sur la VIDÉO DU PROCHE,
-     * dont les couleurs sont quelconques : un titre sans fond devient
-     * illisible dès que la scène filmée est claire. C'est exactement la raison
-     * pour laquelle la zone d'information en a déjà un.
-     *
-     * L'origine et le crédit reçoivent la même couleur, leur transparence
-     * étant déjà posée dans la mise en page — c'est elle qui les met en
-     * retrait, pas une teinte à part.
-     */
-    private fun appliquerPaletteAuxNews(palette: ScreenTheme.Palette) {
-        findViewById<TextView>(R.id.texteActualite)?.setTextColor(palette.primaryText)
-        findViewById<TextView>(R.id.origineActualite)?.setTextColor(palette.primaryText)
-        findViewById<TextView>(R.id.creditActualite)?.setTextColor(palette.primaryText)
-        findViewById<View>(R.id.blocActualite)?.background =
-            android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = HomeZonesController.ZONE_CORNER_RADIUS_DP *
-                    resources.displayMetrics.density
-                setColor(palette.zoneBackground)
-            }
-    }
-
     private fun applyPaletteToAlert(palette: ScreenTheme.Palette) {
         findViewById<TextView>(R.id.textCallerName).setTextColor(palette.primaryText)
         findViewById<TextView>(R.id.textCountdownHint).setTextColor(palette.secondaryText)
@@ -586,21 +553,16 @@ class IncomingCallActivity : AppCompatActivity() {
     private fun afficherRecueil(état: LecteurRecueil.État) {
         val image = findViewById<ImageView>(R.id.imageRecueil) ?: return
         val message = findViewById<TextView>(R.id.textRecueilImpossible) ?: return
-        val blocActu = findViewById<View>(R.id.blocActualite)
-        val imageActu = findViewById<ImageView>(R.id.imageActualite)
-        val texteActu = findViewById<TextView>(R.id.texteActualite)
         val renderer = remoteRendererRef
 
-        // Trois affichages possibles se partagent la même bande. Les masquer
-        // TOUS avant d'en montrer un : sans ça, passer d'une photo à un titre
-        // laisserait la photo derrière le texte. Le coût est nul, et la règle
-        // survit à l'ajout d'un quatrième rendu — ce qui n'est pas le cas
-        // d'une bascule écrite à la main entre deux vues connues.
+        // Les affichages possibles se partagent la même bande. Les masquer
+        // TOUS avant d'en montrer un : sans ça, passer d'une photo à un motif
+        // de refus laisserait la photo derrière le texte. Le coût est nul, et
+        // la règle survit à l'ajout d'un rendu de plus — ce qui n'est pas le
+        // cas d'une bascule écrite à la main entre deux vues connues.
         image.setImageDrawable(null)
         image.visibility = View.GONE
         message.visibility = View.GONE
-        blocActu?.visibility = View.GONE
-        imageActu?.setImageDrawable(null)
 
         // Ce qui était posé jusqu'ici, retenu AVANT d'être remplacé. Voir
         // rendreImageRecueil : les octets d'un bitmap ne reviennent pas tout
@@ -632,71 +594,6 @@ class IncomingCallActivity : AppCompatActivity() {
                 CallTrace.record(
                     "APPEL recueil",
                     "« ${état.titre} » ${état.position}/${état.total}",
-                )
-            }
-            is Rendu.Texte -> {
-                if (blocActu == null || texteActu == null || imageActu == null) {
-                    // La mise en page de cet écran est réglable et a déjà
-                    // changé plusieurs fois : mieux vaut le dire que d'afficher
-                    // un titre invisible et laisser chercher pourquoi.
-                    message.text = "Cet écran ne sait pas afficher ce titre"
-                    message.visibility = View.VISIBLE
-                } else {
-                    texteActu.text = rendu.texte
-                    // L'image n'apparaît QUE si le flux en a fourni une.
-                    // Réserver sa place quand elle manque donnerait un titre
-                    // serré à droite d'un vide inexpliqué.
-                    // C'est la COLONNE qui se montre ou se cache, et non la
-                    // seule image : le crédit du photographe vit dedans, et
-                    // masquer l'image seule laisserait sa ligne flotter sous
-                    // une photo absente.
-                    val colonneActu = findViewById<View>(R.id.colonneImageActualite)
-                    if (rendu.vignette != null) {
-                        imageActu.setImageBitmap(rendu.vignette)
-                        imageRecueilPosée = rendu.vignette
-                        colonneActu?.visibility = View.VISIBLE
-                    } else {
-                        colonneActu?.visibility = View.GONE
-                    }
-                    findViewById<TextView>(R.id.creditActualite)?.let { vue ->
-                        if (rendu.crédit.isNullOrBlank() || rendu.vignette == null) {
-                            vue.visibility = View.GONE
-                        } else {
-                            vue.text = rendu.crédit
-                            vue.visibility = View.VISIBLE
-                        }
-                    }
-                    // La provenance, sous le titre, ou rien. Cherchée par
-                    // findViewById plutôt que retenue : cette mise en page a
-                    // déjà changé plusieurs fois, et une référence gardée sur
-                    // une vue disparue ferait planter l'écran d'appel au lieu
-                    // de simplement ne pas afficher une mention secondaire.
-                    findViewById<TextView>(R.id.origineActualite)?.let { vue ->
-                        if (rendu.origine.isNullOrBlank()) {
-                            vue.visibility = View.GONE
-                        } else {
-                            vue.text = rendu.origine
-                            vue.visibility = View.VISIBLE
-                        }
-                    }
-                    blocActu.visibility = View.VISIBLE
-                    ajusterBandeActualite()
-                }
-                renderer?.visibility = View.INVISIBLE
-                zones.setBackground(HomeZonesController.Background.SLIDESHOW)
-                // La provenance est JOURNALISÉE, et ce n'est pas décoratif.
-                // Le nom du fil ne s'affiche pas alors que l'analyseur le lit
-                // correctement — vérifié en l'exécutant sur le flux réel. Le
-                // défaut est donc entre l'analyse et l'écran, et rien ne
-                // permettait de dire lequel des deux : « rien ne s'affiche »
-                // se lit pareil quand la donnée manque et quand la vue est
-                // masquée. Cette ligne tranche, sans coûter de ligne en plus.
-                CallTrace.record(
-                    "APPEL actualité",
-                    "${état.position}/${état.total} · ${rendu.texte.length} signes · " +
-                        (if (rendu.vignette != null) "avec vignette" else "sans vignette") +
-                        " · origine=" + (rendu.origine ?: "ABSENTE") +
-                        " · crédit=" + (rendu.crédit ?: "absent"),
                 )
             }
             is Rendu.Impossible -> {
@@ -784,19 +681,17 @@ class IncomingCallActivity : AppCompatActivity() {
             déplacerRecueil(+1)
         }
 
-        // Le glissement est branché sur les deux vues qui portent un contenu —
-        // la photo et le bloc d'actualité — et pas sur la racine de l'écran :
-        // sur la racine, il capterait aussi les gestes faits au-dessus des
-        // boutons et des zones de texte.
-        listOf(R.id.imageRecueil, R.id.blocActualite).forEach { id ->
-            findViewById<View>(id)?.let { vue ->
-                GlissementHorizontal.brancher(vue) { versLAvant ->
-                    UsageStats.noteGeste(
-                        if (versLAvant) UsageStats.GESTE_RECUEIL_SUIVANT_GLISSE
-                        else UsageStats.GESTE_RECUEIL_PRECEDENT_GLISSE
-                    )
-                    déplacerRecueil(if (versLAvant) +1 else -1)
-                }
+        // Le glissement est branché sur la vue qui porte le contenu — la
+        // photo — et pas sur la racine de l'écran : sur la racine, il
+        // capterait aussi les gestes faits au-dessus des boutons et des zones
+        // de texte.
+        findViewById<View>(R.id.imageRecueil)?.let { vue ->
+            GlissementHorizontal.brancher(vue) { versLAvant ->
+                UsageStats.noteGeste(
+                    if (versLAvant) UsageStats.GESTE_RECUEIL_SUIVANT_GLISSE
+                    else UsageStats.GESTE_RECUEIL_PRECEDENT_GLISSE
+                )
+                déplacerRecueil(if (versLAvant) +1 else -1)
             }
         }
     }
@@ -850,14 +745,7 @@ class IncomingCallActivity : AppCompatActivity() {
      * passent donc par topOfVisibleTextZones.
      */
     /**
-     * Donne au bloc d'actualité la même bande que la vidéo et que les photos.
-     *
-     * Même calcul, même plancher, même repère pris sur les zones de texte
-     * réellement affichées : les trois passent par topOfVisibleTextZones, pour
-     * qu'aucun ne puisse dériver des deux autres.
-     */
-    /**
-     * La bande où Jean regarde : titres d'actualité ET photos d'un recueil.
+     * La bande où Jean regarde : les photos d'un recueil.
      *
      * ═══ DU BAS DU BOUTON DE SOMMEIL AU HAUT DU BOUTON « SUIVANT » ═══
      *
@@ -944,8 +832,6 @@ class IncomingCallActivity : AppCompatActivity() {
         vue.layoutParams = params
         return true
     }
-
-    private fun ajusterBandeActualite() = poserBande(findViewById<View>(R.id.blocActualite))
 
     private fun ajusterBandeRecueil() = poserBande(findViewById<ImageView>(R.id.imageRecueil))
 
@@ -1094,7 +980,6 @@ class IncomingCallActivity : AppCompatActivity() {
         zones.onTextZonesChanged = {
             fitVideoAboveCaptions()
             ajusterBandeRecueil()
-            ajusterBandeActualite()
         }
         remoteRenderer.post { fitVideoAboveCaptions(animate = false) }
         connectedAtMs = System.currentTimeMillis()
@@ -1284,8 +1169,7 @@ class IncomingCallActivity : AppCompatActivity() {
     private var policeAppliquée: com.seniorvisio.core.PoliceSenior? = null
 
     /**
-     * Le bitmap actuellement posé sur la bande du recueil — photo de famille
-     * ou vignette d'actualité, les deux partagent la place.
+     * Le bitmap actuellement posé sur la bande du recueil.
      *
      * Retenu pour pouvoir le reprendre quand le suivant arrive. Null quand
      * rien n'est affiché : la bande est alors rendue à la vidéo du proche.

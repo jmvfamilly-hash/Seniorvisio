@@ -119,29 +119,6 @@
           <video id="remoteVideo" autoplay playsinline></video>
           <img id="jeanSlideshow" class="jean-slideshow hidden" alt="Photo affichée chez Jean">
 
-          <!-- ═══ LE TITRE QUE JEAN LIT EN CE MOMENT ═══
-
-               Pendant la présentation des actualités, la réplique ne montrait
-               que la vidéo : le proche commentait un titre sans savoir lequel
-               était à l'écran, et sans le voir changer quand Jean naviguait
-               avec ses propres boutons.
-
-               Le rang vient de la TABLETTE (recueilRangAffiche), pas du
-               compteur local : c'est celui que Jean regarde, et non celui
-               qu'on lui a demandé de regarder. Les deux divergent dès qu'il
-               touche ses flèches.
-
-               Même disposition que chez lui — vignette à gauche, titre à
-               droite, provenance dessous — pour que le proche reconnaisse ce
-               qu'il décrit sans avoir à le traduire. -->
-          <div id="jeanNews" class="jean-news hidden">
-            <img id="jeanNewsImage" class="jean-news-image hidden" alt="">
-            <div class="jean-news-texte">
-              <p id="jeanNewsTitre" class="jean-news-titre"></p>
-              <p id="jeanNewsOrigine" class="jean-news-origine"></p>
-            </div>
-          </div>
-
           <!-- Plus de zone d'information ici. Elle répliquait la date, la
                météo et le moment de la journée affichés chez Jean — sauf que
                son écran ne les montre plus dès qu'un appel se présente (voir
@@ -514,31 +491,33 @@
           <h3 class="admin-section">Galerie photo sur l'écran d'accueil</h3>
           <p class="hint">
             Une des galeries installées par les proches, présentée en grand sur
-            l'écran d'accueil de Jean. Les photos tournent <strong>toutes les
-            quinze minutes</strong>.
+            l'écran d'accueil de Jean.
             <strong>Elles ne rallument jamais la dalle</strong> : elles rendent
             l'écran agréable quand Jean le regarde, elles ne réclament pas qu'il
             le regarde. Au réveil, c'est la photo de l'heure qui s'affiche.
-            Tant qu'aucune galerie n'est choisie, l'accueil garde le fil
-            d'information.
+            Tant qu'aucune galerie n'est choisie, l'accueil reste au fond uni.
           </p>
           <select id="galeriePreferee">
-            <option value="">— Aucune : garder le fil d'information —</option>
+            <option value="">— Aucune : garder le fond uni —</option>
           </select>
           <p class="hint" id="galeriePrefereeStatut"></p>
 
-          <h3 class="admin-section">Fils d'information</h3>
-          <p class="hint">
-            Une adresse RSS par ligne. La tablette les lit toutes une fois par
-            jour, à partir de 7 h, ne garde que les articles publiés
-            <em>aujourd'hui</em>, et affiche les 30 plus récents — répartis
-            entre les fils quand ils portent la même date. Changer cette liste
-            déclenche une relecture dans le quart d'heure, sans attendre demain.
-          </p>
-          <textarea id="fluxActualites" rows="4"
-                    placeholder="https://www.francetvinfo.fr/titres.rss"></textarea>
-          <button id="fluxActualitesSave" type="button">Enregistrer les fils</button>
-          <p class="hint" id="fluxActualitesStatus"></p>
+          <!-- ═══ LA CADENCE, ET POURQUOI ELLE SE RÈGLE D'ICI ═══
+
+               Quinze minutes est un point de départ, pas une vérité : ce qui
+               convient dépend du nombre de photos de la galerie et de l'usage
+               qu'en fait Jean. Une galerie de six photos qui tourne toutes les
+               quinze minutes a fait le tour en une heure et demie ; trente
+               photos toutes les deux minutes ressemblent à un diaporama qui
+               réclame l'attention, ce que cet écran refuse d'être.
+
+               Une valeur par défaut aurait donc été un pari. Celle-ci
+               s'observe et se corrige sans toucher à la tablette. -->
+          <label for="cadencePhotos">
+            Cadence : une photo toutes les <span id="cadencePhotosValeur">15</span> min
+          </label>
+          <input type="range" id="cadencePhotos" min="1" max="60" step="1" value="15">
+          <p class="hint" id="cadencePhotosStatut"></p>
 
           <h3 class="admin-section">Police des écrans de Jean</h3>
           <p class="hint">

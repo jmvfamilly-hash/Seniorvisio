@@ -2,14 +2,12 @@ package com.seniorvisio.ui
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
-import android.view.ViewOutlineProvider
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -82,14 +80,20 @@ class HomeZonesController(
     private var currentBackground = Background.SOLID
 
     /**
-     * Vrai quand un titre d'actualité occupe les deux zones du bas.
+     * Vrai quand une photo de la galerie occupe la dalle.
      *
-     * Ce n'est pas un affichage de plus posé par-dessus : l'actualité REMPLACE
-     * les deux zones de texte dans la pile. L'écran de Jean n'a alors que deux
-     * surfaces — le bandeau de la date, et le titre — ce qui est exactement la
-     * règle de cet écran : jamais plus de choses à regarder qu'il n'en faut.
+     * ═══ ELLE NE PREND LA PLACE DE RIEN ═══
+     *
+     * La photo est dessinée DERRIÈRE la pile, en plein cadre (voir
+     * imagePleinEcran dans activity_main.xml). Les trois zones restent donc
+     * exactement où elles sont, et l'écran ne se réorganise pas : c'est la
+     * règle de cet écran — rien ne bouge jamais, Jean retrouve chaque chose au
+     * même endroit.
+     *
+     * Ce drapeau ne sert plus qu'à savoir s'il y a une photo à rendre et si la
+     * transcription de la pièce doit se taire, plus à recomposer la pile.
      */
-    private var modeActualite = false
+    private var modePhoto = false
 
     /** Ordre courant des zones, sous la forme attendue par le PWA ("INFO,ROOM,CALL"). */
     fun zoneOrderNames(): String = adminConfig.zoneOrder.joinToString(",") { it.name }
@@ -103,25 +107,6 @@ class HomeZonesController(
     private val zoneInfo: View = root.findViewById(R.id.zoneInfo)
     private val zoneRoom: View = root.findViewById(R.id.zoneRoom)
     private val zoneCall: View = root.findViewById(R.id.zoneCall)
-    private val zoneActualite: View = root.findViewById(R.id.zoneActualite)
-    private val imageActualite: ImageView = root.findViewById(R.id.imageActualiteAccueil)
-    // La colonne qui porte la photo ET le crédit du photographe. C'est elle
-    // qu'on montre ou qu'on cache : masquer la seule image laisserait la ligne
-    // de crédit flotter sous une photo absente.
-    private val colonneImageActualite: View = root.findViewById(R.id.colonneImageAccueil)
-    private val creditActualite: TextView = root.findViewById(R.id.creditActualiteAccueil)
-    private val titreBandeauActualite: TextView = root.findViewById(R.id.titreBandeauActualite)
-    private val rangeeActualite: View = root.findViewById(R.id.rangeeActualite)
-
-    /**
-     * Le bandeau date + météo, masqué quand une photo occupe la dalle.
-     *
-     * Le bouton de sommeil, lui, vit dans zoneInfo mais HORS de ce bloc : il
-     * reste donc visible, flottant sur la photo. Éteindre son écran est le
-     * seul geste qu'on laisse à Jean, et il ne doit dépendre de rien.
-     */
-    private val blocInfoCentre: View = root.findViewById(R.id.blocInfoCentre)
-
     /**
      * La photo en plein cadre, sous la pile (voir activity_main.xml).
      *
@@ -133,27 +118,12 @@ class HomeZonesController(
     private val imagePleinEcran: ImageView? = root.findViewById(R.id.imagePleinEcran)
 
     /**
-     * La dernière palette reçue, pour pouvoir repeindre les fonds quand le
-     * MODE change et non seulement quand le thème change.
-     *
-     * Les deux décident ensemble de la même chose — zoneInfo et zoneActualite
-     * sont opaques en temps normal, transparentes devant une photo — et sans
-     * cette mémoire, entrer en mode photo entre deux changements de thème
-     * aurait laissé deux aplats posés sur l'image.
-     */
-    private var dernièrePalette: ScreenTheme.Palette? = null
-
-    /**
-     * La vignette actuellement posée sur la vue, pour pouvoir la reprendre
-     * quand la suivante arrive. Retenue ici et nulle part ailleurs : c'est
-     * cette classe qui sait ce qui est affiché, donc elle seule sait ce qui ne
+     * La photo actuellement posée sur la vue, pour pouvoir la reprendre quand
+     * la suivante arrive. Retenue ici et nulle part ailleurs : c'est cette
+     * classe qui sait ce qui est affiché, donc elle seule sait ce qui ne
      * l'est plus.
      */
-    private var vignetteActuelle: Bitmap? = null
-    private val texteActualite: TextView = root.findViewById(R.id.texteActualiteAccueil)
-    private val boutonActualitePrecedente: Button = root.findViewById(R.id.boutonActualitePrecedente)
-    private val boutonActualiteSuivante: Button = root.findViewById(R.id.boutonActualiteSuivante)
-    private val origineActualite: TextView = root.findViewById(R.id.origineActualiteAccueil)
+    private var photoActuelle: Bitmap? = null
     private val boutonSommeil: Button = root.findViewById(R.id.boutonSommeil)
 
     private val textMomentIcon: TextView = root.findViewById(R.id.textMomentIcon)
@@ -200,107 +170,23 @@ class HomeZonesController(
     }
 
     /**
-     * Montre un titre d'actualité à la place des deux zones de texte.
-     *
-     * La vignette n'apparaît QUE si l'article en fournit une : réserver sa
-     * place quand elle manque donnerait un titre serré à droite d'un vide
-     * inexpliqué, et ce flux-ci n'illustre pas tous ses articles.
-     *
-     * Les zones de texte sont vidées au passage. Sans ça, une phrase de la
-     * pièce restée en mémoire réapparaîtrait telle quelle à la fin de
-     * l'actualité, des heures après avoir été prononcée.
-     */
-    fun afficherActualite(
-        texte: String,
-        vignette: Bitmap?,
-        origine: String? = null,
-        crédit: String? = null,
-    ) {
-        // Un titre revient : la zone reprend sa disposition. Appelé ici et non
-        // par l'appelant, pour qu'aucun chemin d'affichage ne puisse l'oublier.
-        quitterModePhoto()
-        texteActualite.text = texte
-        // Masquée quand le fil ne se nomme pas — le cas de beaucoup de flux.
-        // Une ligne vide sous le titre prendrait de la hauteur sur une zone qui
-        // en manque déjà, et le titre descendrait d'autant vers son plancher de
-        // taille.
-        if (origine.isNullOrBlank()) {
-            origineActualite.visibility = View.GONE
-        } else {
-            origineActualite.text = origine
-            origineActualite.visibility = View.VISIBLE
-        }
-        // ═══ L'ANCIENNE VIGNETTE EST RENDUE, ET C'EST LE CŒUR DU CORRECTIF ═══
-        //
-        // Depuis Android 8 les pixels d'un bitmap vivent dans le tas NATIF,
-        // mais le ramasse-miettes se déclenche sur la pression du tas JAVA.
-        // Celui-ci est resté entre 9 et 20 mégaoctets sur 192 pendant que le
-        // natif montait à 883 : jamais assez plein pour qu'une collecte parte.
-        // Les vignettes mortes n'étaient donc JAMAIS reprises, et le système
-        // annonçait sans arrêt qu'il allait tuer des services.
-        //
-        // recycle() rend les octets tout de suite, sans attendre une collecte
-        // qui n'arrive pas.
-        //
-        // L'ORDRE COMPTE, ET LA GARDE AUSSI. Recycler un bitmap encore posé
-        // sur une vue fait planter le dessin à la frame suivante. On pose donc
-        // le nouveau D'ABORD, puis on reprend l'ancien — et jamais s'il s'agit
-        // de la même instance, ce qui arriverait si le même titre était
-        // réaffiché.
-        val ancienne = vignetteActuelle
-        if (vignette != null) {
-            imageActualite.setImageBitmap(vignette)
-            colonneImageActualite.visibility = View.VISIBLE
-        } else {
-            imageActualite.setImageDrawable(null)
-            colonneImageActualite.visibility = View.GONE
-        }
-        vignetteActuelle = vignette
-        if (ancienne != null && ancienne !== vignette && !ancienne.isRecycled) {
-            ancienne.recycle()
-        }
-        // Sous la photo, et seulement s'il y a une photo : un crédit de
-        // photographe sans photographie ne se rapporte à rien.
-        if (crédit.isNullOrBlank() || vignette == null) {
-            creditActualite.visibility = View.GONE
-        } else {
-            creditActualite.text = crédit
-            creditActualite.visibility = View.VISIBLE
-        }
-        if (!modeActualite) {
-            modeActualite = true
-            roomZone.clear()
-            callZone.clear()
-            applyZoneOrder()
-        }
-    }
-
-    /**
      * Une photo de la galerie, sur toute la dalle.
      *
-     * ═══ LA MÊME ZONE, ET DEUX CONTENUS ═══
+     * ═══ DERRIÈRE LES ZONES, ET NON DEDANS ═══
      *
-     * L'écran d'accueil ne savait afficher qu'un Rendu.Texte : une photo, qui
-     * est un Rendu.Image, y était purement et simplement masquée. C'était le
-     * seul vrai manque — tout le reste existait déjà, y compris les boutons de
-     * Jean, le glissement, le téléchargement et la réduction à la définition
-     * de la dalle.
+     * Elle est posée sur la vue de fond, DERRIÈRE la pile des trois zones,
+     * et non dans la pile : une photo rangée dans une zone n'aurait occupé
+     * qu'un tiers de la dalle, quand ce qu'on veut montrer à Jean est la
+     * photo, pas son timbre-poste.
      *
-     * La photo quitte la pile pour la vue de fond : dans la rangée, elle
-     * n'aurait occupé que la place d'un titre d'actualité.
+     * Passer null retire la photo — c'est ce que fait [masquerPhoto], et les
+     * deux chemins se rejoignent ici pour que le bitmap précédent soit rendu
+     * au même endroit dans les deux cas.
      */
-    fun afficherPhoto(image: Bitmap?, titreGalerie: String?) {
-        val ancienne = vignetteActuelle
-        modePhoto = true
+    fun afficherPhoto(image: Bitmap?) {
+        val ancienne = photoActuelle
+        modePhoto = image != null
 
-        // La rangée entière est masquée : elle ne porte plus rien en mode
-        // photo, et la laisser visible aurait réservé sa hauteur pour rien —
-        // c'est-à-dire repoussé les boutons vers le bas sur une surface vide.
-        rangeeActualite.visibility = View.GONE
-        // La date et la météo cèdent la place. Le bouton de sommeil, lui, vit
-        // hors de ce bloc et reste : voir blocInfoCentre.
-        blocInfoCentre.visibility = View.GONE
-        texteActualite.text = ""
         if (image != null) {
             imagePleinEcran?.setImageBitmap(image)
             imagePleinEcran?.visibility = View.VISIBLE
@@ -308,75 +194,28 @@ class HomeZonesController(
             imagePleinEcran?.setImageDrawable(null)
             imagePleinEcran?.visibility = View.GONE
         }
-        // L'ancienne ImageView est vidée dans tous les cas : sans cela elle
-        // retiendrait le bitmap précédent, que le recyclage ci-dessous rendrait
-        // au système — et le dessin suivant travaillerait sur des pixels
-        // repris. Une vue masquée dessine encore quand on la remontre.
-        imageActualite.setImageDrawable(null)
-        vignetteActuelle = image
+        photoActuelle = image
+        // L'ancienne est rendue au système APRÈS que la nouvelle a été posée :
+        // recycler d'abord ferait dessiner la vue sur des pixels repris le
+        // temps d'une image. Et une photo plein cadre pèse plusieurs
+        // mégaoctets : rien d'autre ne la reprendrait tant que l'écran vit
+        // (voir RenduElement, sur le tas natif que le ramasse-miettes ignore).
         if (ancienne != null && ancienne !== image && !ancienne.isRecycled) ancienne.recycle()
-
-        creditActualite.visibility = View.GONE
-        origineActualite.visibility = View.GONE
-        titreBandeauActualite.text = titreGalerie?.takeIf { it.isNotBlank() } ?: "Photos"
-
-        // Les fonds opaques des deux zones s'effacent, sinon ils masqueraient
-        // le haut et le milieu de la photo (voir peindreFondsDesZones).
-        peindreFondsDesZones()
-
-        if (!modeActualite) {
-            modeActualite = true
-            applyZoneOrder()
-        }
     }
-
-    /** Rend à la zone sa disposition de titre, quand on quitte les photos. */
-    private fun quitterModePhoto() {
-        if (!modePhoto) return
-        modePhoto = false
-        // La photo quitte le fond, et son bitmap est rendu : une image plein
-        // écran pèse plusieurs mégaoctets, et rien d'autre ne la reprendrait
-        // tant que l'écran vit.
-        imagePleinEcran?.setImageDrawable(null)
-        imagePleinEcran?.visibility = View.GONE
-        vignetteActuelle?.takeIf { !it.isRecycled }?.recycle()
-        vignetteActuelle = null
-        rangeeActualite.visibility = View.VISIBLE
-        blocInfoCentre.visibility = View.VISIBLE
-        peindreFondsDesZones()
-        titreBandeauActualite.text = "Nouvelles du jour"
-    }
-
-    private var modePhoto = false
-
-    /** Rend la place aux deux zones de texte. */
-    fun masquerActualite() {
-        if (!modeActualite) return
-        // ═══ ET ON SORT AUSSI DU MODE PHOTO ═══
-        //
-        // Sans cela, la pile reviendrait à ses zones de texte pendant que la
-        // photo resterait affichée DERRIÈRE, que plus rien ne piloterait — et
-        // la date resterait masquée, les fonds transparents.
-        quitterModePhoto()
-        modeActualite = false
-        imageActualite.setImageDrawable(null)
-        // Quitter le fil d'information rend aussi la dernière vignette : sans
-        // cela, huit mégaoctets restaient retenus tant que l'écran vivait.
-        vignetteActuelle?.takeIf { !it.isRecycled }?.recycle()
-        vignetteActuelle = null
-        applyZoneOrder()
-    }
-
-    val actualiteAffichee: Boolean get() = modeActualite
 
     /**
-     * Branche la navigation de Jean sur le fil d'information.
+     * Retire la photo et rend la dalle au fond uni.
      *
-     * Les rappels sont fournis par l'écran d'accueil, qui seul sait où en est
-     * la liste : ce contrôleur dessine, il ne décide pas de ce qui s'affiche.
-     *
-     * [surSwipe] reçoit vrai pour « suivant », faux pour « précédent ».
+     * La pile n'est pas touchée : elle n'a jamais bougé. La date, la météo et
+     * les deux zones de texte étaient devant la photo pendant tout ce temps.
      */
+    fun masquerPhoto() {
+        if (!modePhoto) return
+        afficherPhoto(null)
+    }
+
+    val photoAffichee: Boolean get() = modePhoto
+
     /**
      * Le bouton de sommeil, à droite du bandeau de la date.
      *
@@ -390,45 +229,31 @@ class HomeZonesController(
         }
     }
 
-    fun brancherNavigationActualite(
-        surPrécédent: () -> Unit,
-        surSuivant: () -> Unit,
-        surSwipe: (Boolean) -> Unit,
-    ) {
-        // Comptés ICI, au point où le geste est reçu, et non dans le
-        // déplacement qu'il provoque : c'est le MOYEN qu'on veut mesurer — le
-        // bouton ou le glissement — et les deux aboutissent au même
-        // déplacement. Compter plus loin les aurait confondus, c'est-à-dire
-        // perdu exactement ce qu'on cherche à savoir.
-        boutonActualitePrecedente.setOnClickListener {
-            UsageStats.noteGeste(UsageStats.GESTE_ACTUALITE_PRECEDENT)
-            surPrécédent()
-        }
-        boutonActualiteSuivante.setOnClickListener {
-            UsageStats.noteGeste(UsageStats.GESTE_ACTUALITE_SUIVANT)
-            surSuivant()
-        }
-        GlissementHorizontal.brancher(zoneActualite) { versLAvant ->
-            UsageStats.noteGeste(
-                if (versLAvant) UsageStats.GESTE_ACTUALITE_SUIVANT_GLISSE
-                else UsageStats.GESTE_ACTUALITE_PRECEDENT_GLISSE
-            )
-            surSwipe(versLAvant)
-        }
-    }
-
     /**
-     * Grise le bouton qui ne mène nulle part.
+     * Fait glisser Jean d'une photo à l'autre.
      *
-     * Grisé et non masqué : un bouton qui disparaît déplace celui d'à côté, et
-     * la cible que Jean visait n'est plus là où il l'a vue. Sur une main qui
-     * tremble, un déplacement de dernière seconde est pire qu'un bouton inerte.
+     * ═══ PLUS DE BOUTONS « PRÉCÉDENT » ET « SUIVANT » ═══
+     *
+     * Ils sont retirés : deux cibles permanentes posées sur une photo, pour un
+     * écran dont la règle est que Jean n'a jamais rien à faire. La galerie
+     * tourne seule à la cadence réglée par l'administrateur, et le glissement
+     * reste là pour qui veut avancer tout de suite.
+     *
+     * [surGlissement] reçoit vrai pour « suivant », faux pour « précédent ».
      */
-    fun majNavigationActualite(rang: Int, total: Int) {
-        boutonActualitePrecedente.isEnabled = rang > 0
-        boutonActualiteSuivante.isEnabled = rang < total - 1
-        boutonActualitePrecedente.alpha = if (rang > 0) 1f else 0.4f
-        boutonActualiteSuivante.alpha = if (rang < total - 1) 1f else 0.4f
+    fun brancherGlissementPhoto(surGlissement: (Boolean) -> Unit) {
+        // Compté ICI, au point où le geste est reçu, et non dans le
+        // déplacement qu'il provoque : c'est le MOYEN qu'on veut mesurer, et
+        // compter plus loin confondrait le geste de Jean avec le tour de
+        // cadence qui aboutit au même déplacement.
+        GlissementHorizontal.brancher(root) { versLAvant ->
+            if (!modePhoto) return@brancher
+            UsageStats.noteGeste(
+                if (versLAvant) UsageStats.GESTE_PHOTO_SUIVANTE_GLISSE
+                else UsageStats.GESTE_PHOTO_PRECEDENTE_GLISSE
+            )
+            surGlissement(versLAvant)
+        }
     }
 
     /** Vide les deux zones de texte immédiatement (fin d'appel, sortie d'écran). */
@@ -568,9 +393,9 @@ class HomeZonesController(
      * Parce que la boîte et son contenu ne coïncident pas. Pendant un appel,
      * zoneInfo pèse un tiers de la hauteur de l'écran alors qu'elle n'y écrit
      * que deux lignes et un bouton : son bas se trouve très en dessous de ce
-     * qu'on voit. Une bande d'actualité posée sous zoneInfo.bottom perdrait
-     * donc un tiers d'écran pour rien, et une bande posée sous le texte, si on
-     * l'avait devinée à la main, se serait décalée à la première retouche.
+     * qu'on voit. Une bande posée sous zoneInfo.bottom perdrait donc un tiers
+     * d'écran pour rien, et une bande posée sous le texte, si on l'avait
+     * devinée à la main, se serait décalée à la première retouche.
      *
      * Le repère demandé est « sous la date » sur l'accueil et « sous le bouton
      * de sommeil » pendant un appel. Ce sont les deux mêmes vues, et c'est la
@@ -641,75 +466,9 @@ class HomeZonesController(
      * état d'affichage et l'animation en cours survivent au changement.
      */
     private fun applyZoneOrder() {
-        // En mode actualité, la pile ne contient plus que deux surfaces. Le
-        // choix se fait ICI et nulle part ailleurs : c'est déjà la seule
-        // fonction qui décide de la composition de la pile, et un second
-        // endroit qui y toucherait finirait par la contredire.
-        val ordered = if (modeActualite) {
-            listOf(zoneInfo, zoneActualite)
-        } else {
-            val views = mapOf(HomeZone.INFO to zoneInfo, HomeZone.ROOM to zoneRoom, HomeZone.CALL to zoneCall)
-            adminConfig.zoneOrder.mapNotNull { views[it] }
-                .takeIf { it.size == views.size } ?: return
-        }
-        zoneActualite.visibility = if (modeActualite) View.VISIBLE else View.GONE
-        // ═══ LA BANDE D'INFORMATION REND SON TIERS AUX TITRES ═══
-        //
-        // En mode actualité la pile ne compte que deux surfaces, de poids 1 et
-        // 2 : un tiers de l'écran revenait donc à zoneInfo, pour deux lignes de
-        // texte et un bouton. Les titres n'occupaient que les deux tiers
-        // restants, et le vide au-dessus se voyait.
-        //
-        // Elle passe à sa hauteur utile, et zoneActualite — seule vue pondérée
-        // qui reste — prend tout le reste. Les titres commencent donc juste
-        // sous la date, et s'arrêtent au-dessus des boutons de navigation, qui
-        // sont déjà dans zoneActualite et hors de la rangée pondérée.
-        //
-        // Hors mode actualité, rien ne change : les trois zones se partagent la
-        // hauteur comme avant, et l'ordre reste celui de l'administrateur.
-        (zoneInfo.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
-            val hauteurVoulue = if (modeActualite) {
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            } else {
-                0
-            }
-            val poidsVoulu = if (modeActualite) 0f else 1f
-            if (lp.height != hauteurVoulue || lp.weight != poidsVoulu) {
-                lp.height = hauteurVoulue
-                lp.weight = poidsVoulu
-                zoneInfo.layoutParams = lp
-            }
-        }
-
-        // ═══ ET LA BANDE PASSE DEVANT LES TITRES ═══
-        //
-        // La cause du recouvrement est corrigée dans la mise en page (voir
-        // blocInfoCentre), mais une hauteur qui se mesure juste au pixel près
-        // reste une hauteur qu'un changement de police ou d'interligne peut
-        // faire déborder de nouveau. Or ce qui déborde ici, c'est la date —
-        // le seul repère permanent de la journée de Jean.
-        //
-        // Elle est donc posée DEVANT. Le haut du bloc des titres est vide :
-        // l'image et le texte y sont centrés verticalement, rien n'y est
-        // écrit. Une date qui empiète de quelques pixels s'y lit sans rien
-        // masquer, au lieu de disparaître sous un aplat.
-        //
-        // outlineProvider à NULL parce que zoneInfo porte un fond : sans cela,
-        // l'élévation projetterait une ombre portée sur les titres. On veut
-        // l'ordre de dessin, pas le relief.
-        //
-        // null, et non ViewOutlineProvider.NONE, qui n'existe pas : cette
-        // classe n'expose que BACKGROUND, BOUNDS et PADDED_BOUNDS. Une absence
-        // de contour se dit par l'absence de fournisseur.
-        //
-        // Sur zoneInfo et non sur la date elle-même : l'ordre de dessin se
-        // décide entre ENFANTS D'UN MÊME PARENT. Élever le texte ne l'aurait
-        // fait passer que devant ses voisins dans la bande, pas devant la zone
-        // des titres, qui est sa tante et non sa sœur.
-        val densité = context.resources.displayMetrics.density
-        zoneInfo.outlineProvider =
-            if (modeActualite) null else ViewOutlineProvider.BACKGROUND
-        zoneInfo.elevation = if (modeActualite) ÉLÉVATION_BANDE_INFO_DP * densité else 0f
+        val views = mapOf(HomeZone.INFO to zoneInfo, HomeZone.ROOM to zoneRoom, HomeZone.CALL to zoneCall)
+        val ordered = adminConfig.zoneOrder.mapNotNull { views[it] }
+            .takeIf { it.size == views.size } ?: return
         val déjàEnPlace = zoneStack.childCount == ordered.size &&
             ordered.withIndex().all { (index, view) -> zoneStack.getChildAt(index) === view }
         if (déjàEnPlace) return
@@ -718,34 +477,27 @@ class HomeZonesController(
     }
 
     /**
-     * Les fonds de la bande d'information et de la zone des titres.
+     * Le fond de la bande d'information.
      *
-     * ═══ DEVANT UNE PHOTO, ILS S'EFFACENT ═══
+     * ═══ IL RESTE, MÊME DEVANT UNE PHOTO ═══
      *
-     * Ces deux vues portent un aplat opaque, pour que la date reste lisible
-     * quand elle se retrouve posée sur la vidéo d'un proche. Le même aplat,
-     * posé sur une photo qui occupe la dalle entière, en masquerait le haut et
-     * le milieu — c'est-à-dire l'essentiel.
+     * Cet aplat existe pour que la date reste lisible quand elle se retrouve
+     * posée sur la vidéo d'un proche, dont les couleurs sont quelconques. Une
+     * photo de famille pose exactement le même problème — c'est même le cas le
+     * plus fréquent maintenant que la galerie occupe la dalle en permanence.
      *
-     * Écrit ici et appelé des deux côtés — changement de thème ET changement
-     * de mode — parce que ces deux événements décident de la même chose. Deux
-     * endroits qui peignent le même fond finissent toujours par se contredire.
+     * Il a été effacé un temps en mode photo, pour ne pas masquer le haut de
+     * l'image. Mais la consigne est que la date et la météo soient au premier
+     * plan hors appel : un repère illisible sur un ciel clair n'est pas un
+     * repère. L'aplat de la palette est déjà semi-transparent (voir
+     * ScreenTheme), la photo se voit au travers.
      */
-    private fun peindreFondsDesZones() {
-        val palette = dernièrePalette ?: return
-        val rayon = ZONE_CORNER_RADIUS_DP * context.resources.displayMetrics.density
-        val couleur = if (modePhoto) Color.TRANSPARENT else palette.zoneBackground
-        listOf(zoneInfo, zoneActualite).forEach { vue ->
-            vue.background = GradientDrawable().apply {
-                cornerRadius = rayon
-                setColor(couleur)
-            }
-        }
-    }
-
     private fun applyPalette(palette: ScreenTheme.Palette) {
-        dernièrePalette = palette
-        peindreFondsDesZones()
+        val rayon = ZONE_CORNER_RADIUS_DP * context.resources.displayMetrics.density
+        zoneInfo.background = GradientDrawable().apply {
+            cornerRadius = rayon
+            setColor(palette.zoneBackground)
+        }
         listOf(textMomentLabel, textWeatherLabel, textClockDate).forEach {
             it.setTextColor(palette.primaryText)
         }
@@ -757,24 +509,6 @@ class HomeZonesController(
         // que la scène filmée était claire.
         textMomentIcon.setTextColor(palette.primaryText)
         textWeatherIcon.setTextColor(palette.primaryText)
-        texteActualite.setTextColor(palette.primaryText)
-        // L'origine et le crédit aussi, alors qu'ils héritaient jusqu'ici du
-        // défaut du thème. Ce défaut n'était identique à la palette par aucune
-        // règle : il se trouvait simplement lui ressembler. L'écran d'appel
-        // venant d'être aligné sur cette palette, les laisser hériter aurait
-        // fait un TROISIÈME comportement — celui qui se remarque le jour où le
-        // thème change et où deux lignes sur trois suivent.
-        //
-        // Leur mise en retrait est portée par la transparence posée dans la
-        // mise en page, pas par une teinte à part.
-        origineActualite.setTextColor(palette.primaryText)
-        creditActualite.setTextColor(palette.primaryText)
-        // Le libellé de la barre aussi. Le laisser hériter du thème aurait
-        // recréé le comportement à part qu'on vient justement de retirer de
-        // l'origine et du crédit : trois textes peints par la palette et un
-        // quatrième qui suit sa propre règle, indiscernables tant que le thème
-        // ne change pas.
-        titreBandeauActualite.setTextColor(palette.primaryText)
         roomZone.applyColors(palette.primaryText, palette.zoneBackground)
         callZone.applyColors(palette.primaryText, palette.zoneBackground)
         onPalette(palette)
@@ -822,20 +556,12 @@ class HomeZonesController(
         /**
          * Le rayon des coins des zones, partagé avec l'écran d'appel.
          *
-         * Exposé et non privé : le bloc d'actualité de l'écran d'appel doit
-         * avoir EXACTEMENT le même fond, et recopier « 16f » là-bas rouvrirait
-         * la divergence qu'on vient de fermer — deux valeurs qui s'écartent le
+         * Exposé et non privé : les blocs de l'écran d'appel doivent avoir
+         * EXACTEMENT le même fond, et recopier « 16f » là-bas rouvrirait la
+         * divergence qu'on vient de fermer — deux valeurs qui s'écartent le
          * jour où l'une des deux est retouchée, sans que rien ne le signale.
          */
         const val ZONE_CORNER_RADIUS_DP = 16f
-
-        /**
-         * De combien la bande d'information passe devant les titres, en mode
-         * actualité. Quatre points suffisent : il ne s'agit pas de relief —
-         * l'ombre est justement désactivée — mais uniquement de décider qui
-         * est dessiné en dernier.
-         */
-        private const val ÉLÉVATION_BANDE_INFO_DP = 4f
 
         /** Même durée de fondu que les zones de texte, pour que tout l'écran respire au même rythme. */
         private const val FADE_MS = 400L

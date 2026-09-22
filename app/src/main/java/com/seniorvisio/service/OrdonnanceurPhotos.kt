@@ -7,10 +7,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
-import android.os.PowerManager
 import android.util.Log
 import com.seniorvisio.core.AdminConfig
-import com.seniorvisio.recueil.CadenceurActualites
+import com.seniorvisio.recueil.CadenceurPhotos
 import com.seniorvisio.recueil.Element
 import com.seniorvisio.recueil.Recueil
 import com.seniorvisio.recueil.RecueilStore
@@ -45,11 +44,11 @@ import java.time.ZoneId
  * qui en dure trente — sans conséquence — et le battement de cœur du service
  * rattrape de toute façon toute dérive.
  */
-class OrdonnanceurActualites(private val service: CallListenerService) {
+class OrdonnanceurPhotos(private val service: CallListenerService) {
 
     /** Ce que l'écran d'accueil doit montrer, ou null s'il n'y a rien. */
     fun interface Observateur {
-        fun surTitre(element: Element?, recueilId: String?)
+        fun surPhoto(element: Element?, recueilId: String?)
     }
 
     private val config by lazy { AdminConfig(service) }
@@ -60,12 +59,12 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
      *
      * ═══ UN RANG NE SUFFIT PAS À DIRE QU'UN CONTENU A CHANGÉ ═══
      *
-     * Le changement se décidait sur le seul rang. Or deux recueils — le fil
-     * d'information et une galerie photo — tirent leur rang de la MÊME heure
-     * de la journée. Installer une galerie à un moment où son rang coïncide
-     * avec celui du fil ne produisait donc aucun changement : l'observateur
-     * n'était pas prévenu, et l'écran gardait le titre d'actualité précédent
-     * jusqu'au créneau suivant.
+     * Le changement se décidait sur le seul rang. Or deux recueils tirent
+     * leur rang de la MÊME heure de la journée : basculer d'une galerie à une
+     * autre à un moment où leurs rangs coïncident ne produisait donc aucun
+     * changement. L'observateur n'était pas prévenu, et l'écran gardait la
+     * photo précédente — celle de l'ancienne galerie — jusqu'au créneau
+     * suivant.
      *
      * Le réglage était bien arrivé, l'ordonnanceur avait bien basculé, et
      * l'écran ne montrait rien de nouveau. Une panne sans cause visible, dont
@@ -85,33 +84,29 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
     private data class Présentation(
         val recueil: Recueil?,
         val voulu: String,
-        /** Vrai pour une galerie photo : cadence fixe, et JAMAIS de réveil. */
-        val estGalerie: Boolean,
     ) {
         val prêts: List<Element> get() = recueil?.prêts.orEmpty()
     }
 
     /**
-     * Ce que l'écran d'accueil doit présenter, d'après les réglages.
+     * La galerie que l'écran d'accueil doit présenter, ou null.
      *
-     * LA GALERIE PASSE DEVANT LE FIL quand elle est nommée. C'est le même
-     * garde-fou que pour les fils d'information : rien n'apparaît de soi-même
-     * sur l'écran de Jean, il faut l'avoir demandé.
+     * Null tant que l'administrateur n'en a pas choisi une : rien n'apparaît
+     * de soi-même sur l'écran de Jean, il faut l'avoir demandé. L'accueil
+     * garde alors ses zones de texte.
      */
-    private fun présentation(magasin: RecueilStore): Présentation {
-        val galerie = config.recueilPhotos.takeIf { it.isNotBlank() }
-        val voulu = galerie ?: RECUEIL_FLUX
+    private fun présentation(magasin: RecueilStore): Présentation? {
+        val voulu = config.recueilPhotos.takeIf { it.isNotBlank() } ?: return null
         return Présentation(
             recueil = magasin.disponibles().firstOrNull { it.id == voulu },
             voulu = voulu,
-            estGalerie = galerie != null,
         )
     }
 
     private val réveil = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            Log.i(TAG, "Réveil programmé : changement de titre")
-            réévaluer(réveillerLÉcran = true)
+            Log.i(TAG, "Réveil programmé : changement de photo")
+            réévaluer()
         }
     }
 
@@ -125,7 +120,7 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             service.registerReceiver(réveil, filtre)
         }
-        réévaluer(réveillerLÉcran = false)
+        réévaluer()
     }
 
     fun arrêter() {
@@ -143,59 +138,49 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
      * le titre se remet d'aplomb au prochain passage, sans rien de spécial à
      * prévoir pour ce cas.
      */
-    fun réévaluer(réveillerLÉcran: Boolean) {
+    fun réévaluer() {
         val magasin = RecueilStore.actif ?: return
         val p = présentation(magasin)
-        val prêts = p.prêts
+        val prêts = p?.prêts.orEmpty()
 
-        val créneau = créneauDe(p)
+        val créneau = p?.let { créneauDe(it) }
         if (créneau == null || créneau.finDuCreneau == null) {
             // Nuit, ou rien d'installé : l'écran d'accueil reprend ses zones
             // de texte, et rien n'est programmé avant le jour.
             if (rangCourant != -1 || recueilCourant != null) {
                 rangCourant = -1
                 recueilCourant = null
-                observateur?.surTitre(null, null)
+                observateur?.surPhoto(null, null)
             }
             programmerProchainRéveilDeJour(créneau == null)
             return
         }
 
         // Le RECUEIL compte autant que le rang : voir recueilCourant.
-        val changement = créneau.rang != rangCourant || p.voulu != recueilCourant
+        val changement = créneau.rang != rangCourant || p!!.voulu != recueilCourant
         rangCourant = créneau.rang
         recueilCourant = p.voulu
         if (changement) {
-            observateur?.surTitre(prêts.getOrNull(créneau.rang), p.recueil?.id)
-            CallTraceActualite.noter(créneau.rang, prêts.size, créneau.finDuCreneau, p.voulu)
+            observateur?.surPhoto(prêts.getOrNull(créneau.rang), p.recueil?.id)
+            TracePhoto.noter(créneau.rang, prêts.size, créneau.finDuCreneau, p.voulu)
         }
-        // ═══ UNE PHOTO NE RALLUME JAMAIS LA DALLE ═══
-        //
-        // Un titre d'actualité qui change vaut un réveil : c'est une nouvelle,
-        // et la dalle s'allume pour la donner. Une photo de famille, non — la
-        // galerie est là pour que l'écran soit agréable QUAND on le regarde,
-        // pas pour réclamer qu'on le regarde. Vingt-quatre réveils par jour
-        // pour faire défiler des photos, c'est une tablette qui s'allume
-        // toute seule toutes les heures dans une chambre.
-        //
-        // Elles restent donc « visibles seulement quand la tablette n'est pas
-        // en veille », exactement comme demandé — et la bonne photo est à
-        // l'écran dès qu'il se rallume, puisque le rang se déduit de l'heure
-        // (voir CadenceurActualites) et que le rebranchement la livre.
-        if (réveillerLÉcran && changement && !p.estGalerie) rallumerLÉcran()
-
         programmer(créneau.finDuCreneau)
     }
 
-    /** La cadence qui convient : fixe pour une galerie, divisée pour le fil. */
-    private fun créneauDe(p: Présentation): CadenceurActualites.Creneau? =
-        if (p.estGalerie) {
-            CadenceurActualites.creneauFixe(
-                LocalDateTime.now(), p.prêts.size, MINUTES_PAR_PHOTO, config,
-            )
-        } else {
-            CadenceurActualites.creneau(LocalDateTime.now(), p.prêts.size, config)
-        }
+    /**
+     * La cadence réglée par l'administrateur, bornée à la lecture.
+     *
+     * Bornée ICI et pas seulement dans le curseur du PWA : ce document est
+     * ouvert en écriture à qui en connaît l'adresse, et une valeur de zéro
+     * ferait tourner les photos à chaque battement — ou diviser par zéro.
+     */
+    private fun créneauDe(p: Présentation): CadenceurPhotos.Creneau? =
+        CadenceurPhotos.creneau(
+            LocalDateTime.now(),
+            p.prêts.size,
+            config.cadencePhotosMinutes.coerceIn(MINUTES_MIN, MINUTES_MAX),
+            config,
+        )
 
     var observateur: Observateur? = null
 
@@ -223,13 +208,13 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
         observateur = nouvel
         val magasin = RecueilStore.actif ?: return
         val p = présentation(magasin)
-        val créneau = créneauDe(p)
+        val créneau = p?.let { créneauDe(it) }
         if (créneau?.finDuCreneau == null) {
             // Nuit ou rien d'installé : l'écran doit le savoir aussi, sinon il
             // garderait la dernière photo affichée avant sa mise en pause.
             rangCourant = -1
             recueilCourant = null
-            nouvel.surTitre(null, null)
+            nouvel.surPhoto(null, null)
             return
         }
         // Ce qui vient d'être livré est MÉMORISÉ : sans ces deux lignes, le
@@ -238,8 +223,8 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
         // même élément — deux décodages de bitmap et un clignotement à chaque
         // retour d'écran.
         rangCourant = créneau.rang
-        recueilCourant = p.voulu
-        nouvel.surTitre(p.prêts.getOrNull(créneau.rang), p.recueil?.id)
+        recueilCourant = p!!.voulu
+        nouvel.surPhoto(p.prêts.getOrNull(créneau.rang), p.recueil?.id)
     }
 
     // ── Réveils ────────────────────────────────────────────────
@@ -256,85 +241,64 @@ class OrdonnanceurActualites(private val service: CallListenerService) {
     private fun programmer(quand: LocalDateTime) {
         val instant = quand.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         alarmes()?.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, instant, intentionDeRéveil())
-        Log.i(TAG, "Prochain titre à $quand")
+        Log.i(TAG, "Prochaine photo à $quand")
     }
 
     /** Rien à montrer pour l'instant : on se redonne rendez-vous dans un quart d'heure. */
-    private fun programmerProchainRéveilDeJour(aucunTitre: Boolean) {
+    private fun programmerProchainRéveilDeJour(aucunePhoto: Boolean) {
         val dans = System.currentTimeMillis() + RENDEZ_VOUS_À_VIDE_MS
         alarmes()?.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, dans, intentionDeRéveil())
-        if (aucunTitre) {
-            Log.i(TAG, "Aucun titre installé — nouvel essai dans 15 min")
-            // Et dans le journal, cette fois. Ce chemin n'écrivait que dans
-            // logcat : la tablette pouvait se redonner rendez-vous toutes les
-            // quinze minutes pendant des heures sans qu'une seule ligne ne le
-            // dise à qui relève le journal à distance.
-            com.seniorvisio.core.VieDuFil.noterAucunTitre()
+        if (aucunePhoto) {
+            // Dans le journal et pas seulement dans logcat : la tablette peut
+            // se redonner rendez-vous toutes les quinze minutes pendant des
+            // heures, et « aucune ligne » se lirait alors exactement comme
+            // « la tablette est éteinte ».
+            //
+            // Une seule fois par cause, sinon ces lignes évinceraient tout le
+            // reste du tampon d'état en une nuit.
+            if (!videSignalé) {
+                videSignalé = true
+                com.seniorvisio.core.CallTrace.record(
+                    "GALERIE vide",
+                    "aucune photo affichable — nouvel essai toutes les 15 min",
+                )
+            }
+            Log.i(TAG, "Aucune photo installée — nouvel essai dans 15 min")
+        } else {
+            videSignalé = false
         }
     }
 
-    /**
-     * Allume la dalle pour la durée réglée par l'administrateur.
-     *
-     * Le verrou porte sa propre échéance : si quoi que ce soit empêchait sa
-     * libération, l'écran ne resterait pas allumé indéfiniment. Ce projet a
-     * déjà écrit cette précaution ailleurs, pour la même raison (voir
-     * RoomPresenceService.ensureAwake).
-     */
-    private fun rallumerLÉcran() {
-        if (config.blockWakeAtNight && config.isCurrentlyNightWindow(LocalDateTime.now().hour)) return
-        val gestionnaire = service.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
-        val durée = config.dureeEveilActualiteSecondes.coerceIn(30, 3600) * 1000L
-
-        @Suppress("DEPRECATION")
-        val verrou = gestionnaire.newWakeLock(
-            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
-                PowerManager.ACQUIRE_CAUSES_WAKEUP or
-                PowerManager.ON_AFTER_RELEASE,
-            "SeniorVisio:Actualite",
-        )
-        verrou.acquire(durée)
-
-        // Écran déjà allumé : surtout ne pas ramener l'accueil par-dessus ce
-        // que Jean regarde — un appel en cours, par exemple.
-        if (gestionnaire.isInteractive) return
-        try {
-            service.startActivity(
-                Intent(service, MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "Réveil de l'écran refusé par le système", e)
-        }
-    }
+    /** Voir programmerProchainRéveilDeJour : une ligne par cause, pas par essai. */
+    private var videSignalé = false
 
     private companion object {
-        const val TAG = "OrdonnanceurActu"
-        const val ACTION_CHANGEMENT = "com.seniorvisio.ACTUALITE_SUIVANTE"
-        const val RECUEIL_FLUX = "flux-actualites"
+        const val TAG = "OrdonnanceurPhotos"
+        const val ACTION_CHANGEMENT = "com.seniorvisio.PHOTO_SUIVANTE"
 
         /**
-         * Un quart d'heure par photo, comme demandé.
+         * Les bornes de la cadence réglable (voir AdminConfig.cadencePhotosMinutes).
          *
-         * Assez long pour qu'une photo ne soit pas un défilement — une image
-         * qui change sous les yeux réclame l'attention au lieu de l'apaiser —
-         * et assez court pour qu'une galerie de trente photos fasse deux tours
-         * dans une journée éveillée.
+         * Une minute au plancher : en dessous, une photo qui change sous les
+         * yeux réclame l'attention au lieu de l'apaiser. Une heure au
+         * plafond : au-delà, la galerie ne tourne plus, et l'administrateur
+         * ferait mieux de n'y mettre qu'une photo.
          */
-        const val MINUTES_PAR_PHOTO = 15
+        const val MINUTES_MIN = 1
+        const val MINUTES_MAX = 60
         const val RENDEZ_VOUS_À_VIDE_MS = 15 * 60 * 1000L
     }
 }
 
 /** Trace lisible dans le journal technique, séparée pour ne pas alourdir la logique. */
-internal object CallTraceActualite {
+internal object TracePhoto {
     fun noter(rang: Int, total: Int, fin: LocalDateTime, recueil: String) {
         com.seniorvisio.core.CallTrace.record(
-            "ACCUEIL actualité",
+            "ACCUEIL photo",
             // Le recueil est NOMMÉ : un compte d'éléments n'est pas une
             // identité, et « 24/25 » a déjà dû être rapproché à la main d'un
             // « FLUX publié | 17 titre(s) » pour savoir ce qui était à l'écran.
-            "titre ${rang + 1}/$total · recueil=$recueil · jusqu'à ${fin.toLocalTime()}",
+            "photo ${rang + 1}/$total · recueil=$recueil · jusqu'à ${fin.toLocalTime()}",
         )
     }
 }

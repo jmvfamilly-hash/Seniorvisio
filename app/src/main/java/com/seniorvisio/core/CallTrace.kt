@@ -127,22 +127,6 @@ object CallTrace {
         "DÉMARRAGE",
         "REPOS mémoire",
         "MÉMOIRE",
-        // Le fil d'information se rafraîchit une fois par jour, donc toujours
-        // HORS appel. Ses lignes tombaient exactement dans le trou que ce
-        // tampon existe pour boucher : elles disaient quels fils ont été lus et
-        // sous quel nom, et le premier appel les effaçait. On cherchait ensuite
-        // pourquoi le nom du fil n'apparaît pas, avec un journal d'où la
-        // réponse avait été retirée.
-        "FLUX",
-        // Le bilan du fil, une ligne par battement de cinq minutes (voir
-        // VieDuFil). NOMMÉS UN PAR UN, et non par le préfixe « ACCUEIL
-        // actualité » : ce préfixe couvrirait aussi la ligne de rotation et
-        // celle de navigation, qui partent à chaque titre. C'est exactement ce
-        // qui s'était produit — cinquante-sept lignes d'affichage avaient
-        // évincé toutes les lignes FLUX, c'est-à-dire la réponse qu'on venait
-        // chercher.
-        "ACCUEIL actualité vivant",
-        "ACCUEIL actualité vide",
         // Le refus d'un élément : rare, et c'est la seule ligne qui dise
         // POURQUOI l'écran s'est vidé. Sans elle dans ce tampon, elle serait
         // partie au premier appel.
@@ -156,21 +140,19 @@ object CallTrace {
     /**
      * Ce qui ne s'évince pas tant qu'autre chose peut partir à sa place.
      *
-     * Le fil se rafraîchit UNE FOIS PAR JOUR : ses lignes sont rares, et ce
-     * sont celles qui disent pourquoi l'écran affiche ce qu'il affiche. Les
-     * relevés mémoire, eux, reviennent toutes les cinq minutes et le plus
-     * ancien ne manque à personne.
+     * Les lignes de la galerie sont rares — une à l'installation, une par
+     * refus — et ce sont celles qui disent pourquoi l'écran affiche ce qu'il
+     * affiche. Les relevés mémoire, eux, reviennent toutes les cinq minutes
+     * et le plus ancien ne manque à personne.
      *
      * Sans cette distinction, un tampon plein finissait par ne contenir que
      * les cinq dernières heures de relevés mémoire — et la lecture du matin,
      * la seule qui explique la journée, était partie depuis longtemps.
      */
     private val PRÉFIXES_PROTÉGÉS = listOf(
-        "FLUX",
         "DÉMARRAGE",
-        // Même raison que FLUX, et le même défaut constaté : un refus
-        // d'élément part une fois, puis l'écran reste vide pendant des heures
-        // en produisant des relevés mémoire qui l'évinceraient.
+        // Un refus d'élément part une fois, puis l'écran reste vide pendant
+        // des heures en produisant des relevés mémoire qui l'évinceraient.
         "ACCUEIL élément refusé",
         "GALERIE",
     )

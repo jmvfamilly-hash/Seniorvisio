@@ -92,43 +92,12 @@ data class Element(
     /**
      * Nom du fichier local une fois rangé. Null tant qu'il ne l'est pas.
      *
-     * Pour un élément TEXTE issu d'un flux, c'est la VIGNETTE — l'illustration
-     * qui accompagne le titre. Le même champ pour les deux : dans les deux cas
-     * c'est une image rangée sur la tablette, vérifiée par le même
-     * vérificateur, et lui en donner un second nom obligerait chaque lecteur à
-     * savoir de quel genre d'élément il s'occupe.
+     * Un seul champ quel que soit le type : dans tous les cas c'est un
+     * fichier rangé sur la tablette et vérifié par le même vérificateur, et
+     * lui donner un second nom obligerait chaque lecteur à savoir de quel
+     * genre d'élément il s'occupe.
      */
     val fichierLocal: String? = null,
-    /**
-     * Le texte à afficher, pour un élément TEXTE. Null pour une photo.
-     *
-     * Il vit ICI plutôt que dans un fichier : un titre de fil d'information
-     * pèse cent octets, et le ranger sur le disque pour le relire ensuite
-     * coûterait deux entrées-sorties par changement de titre, là où le
-     * document du recueil le porte sans effort.
-     */
-    val texte: String? = null,
-    /**
-     * D'où vient ce titre, tel que le fil se nomme lui-même.
-     *
-     * Lu dans <channel><title> du flux RSS. Affiché discrètement à côté du
-     * titre : depuis que plusieurs fils cohabitent, « d'où sort cette
-     * nouvelle » est une question qu'on se pose en la lisant, et à laquelle
-     * rien ne répondait.
-     *
-     * Null quand le fil ne se nomme pas — auquel cas rien ne s'affiche, plutôt
-     * qu'une mention vide ou un « source inconnue » qui prendrait de la place
-     * pour ne rien dire.
-     */
-    val origine: String? = null,
-    /**
-     * Le crédit du photographe, quand le fil en donne un (<media:credit>).
-     *
-     * Distinct d'[origine], et affiché à un autre endroit : celui-ci se
-     * rapporte à la PHOTO, l'autre à l'article. Réunis sous le titre, ils
-     * laisseraient croire que le fil s'appelle « LUDOVIC MARIN/AFP ».
-     */
-    val crédit: String? = null,
 )
 
 /**

@@ -147,9 +147,9 @@ class RecueilStore(private val context: Context) {
      * Firestore en sache rien, et un recueil déclaré installé mais vide serait
      * une panne muette.
      *
-     * Le cas d'un élément SANS fichier attendu — un titre que le flux livre
-     * sans illustration — est traité explicitement : il est complet tel quel,
-     * et le croire inachevé reviendrait à le réinstaller sans fin.
+     * Le cas d'un élément SANS source est traité explicitement : il est
+     * complet tel quel, et le croire inachevé reviendrait à le réinstaller
+     * sans fin.
      */
     private fun estInstallé(element: Element, dossier: File): Boolean = when {
         element.état != ÉtatElement.PRÊT -> false
@@ -159,7 +159,6 @@ class RecueilStore(private val context: Context) {
     }
 
     private fun installer(element: Element, dossier: File): Element {
-        if (element.type == TypeElement.TEXTE) return installerTexte(element, dossier)
         if (element.nature == NatureElement.FLUX) {
             return element.copy(
                 état = ÉtatElement.REFUSÉ,
@@ -179,46 +178,6 @@ class RecueilStore(private val context: Context) {
         } finally {
             // Le brut ne sert qu'à la vérification : le garder doublerait la
             // place occupée, pour un fichier que personne ne relira jamais.
-            brut.delete()
-        }
-    }
-
-    /**
-     * Un titre de fil d'information, et sa vignette quand il y en a une.
-     *
-     * ═══ UNE VIGNETTE MANQUANTE NE REFUSE JAMAIS LE TITRE ═══
-     *
-     * C'est la règle qui compte ici. Le texte est ce que Jean doit lire ;
-     * l'image n'est qu'un accompagnement. Un serveur d'illustrations lent,
-     * une adresse périmée, un format exotique — et le titre serait écarté
-     * alors qu'il s'affiche parfaitement sans image.
-     *
-     * L'échec du téléchargement est donc avalé à dessein, et l'élément reste
-     * PRÊT sans fichier local. L'écran d'appel le voit et donne alors toute la
-     * largeur au texte (voir RenduTexte et Rendu.Texte.vignette).
-     */
-    private fun installerTexte(element: Element, dossier: File): Element {
-        if (element.texte.isNullOrBlank()) {
-            return element.copy(état = ÉtatElement.REFUSÉ, cause = "Titre vide.")
-        }
-        if (element.source.isBlank()) {
-            return element.copy(état = ÉtatElement.PRÊT, fichierLocal = null)
-        }
-        val brut = File(context.cacheDir, "vignette-${element.id}")
-        return try {
-            TelechargementHttp.vers(element.source, brut, "vignette ${element.id}")
-            // Vérifiée comme une photo de famille, par le même chemin : un flux
-            // public n'a pas plus le droit qu'un proche de déposer ici une
-            // image que cette tablette ne sait pas décoder.
-            val vérifiée = VerificateurPhoto(côtéMax).vérifier(element, brut, dossier)
-            element.copy(
-                état = ÉtatElement.PRÊT,
-                fichierLocal = vérifiée.fichierLocal.takeIf { vérifiée.état == ÉtatElement.PRÊT },
-            )
-        } catch (e: Exception) {
-            Log.i(TAG, "Vignette indisponible pour ${element.id} — le titre reste affichable", e)
-            element.copy(état = ÉtatElement.PRÊT, fichierLocal = null)
-        } finally {
             brut.delete()
         }
     }
@@ -295,9 +254,6 @@ class RecueilStore(private val context: Context) {
                 fichierLocal = if (étatDepuis(vu?.get(CHAMP_ÉTAT) as? String) == ÉtatElement.PRÊT &&
                     File(dossierDe(id), "$élémentId.jpg").exists()
                 ) "$élémentId.jpg" else null,
-                texte = brut[CHAMP_TEXTE] as? String,
-                origine = (brut[CHAMP_ORIGINE] as? String)?.takeIf { it.isNotBlank() },
-                crédit = (brut[CHAMP_CRÉDIT] as? String)?.takeIf { it.isNotBlank() },
             )
         }
         return Recueil(
@@ -358,9 +314,6 @@ class RecueilStore(private val context: Context) {
         private const val CHAMP_VÉRIFICATION = "verification"
         private const val CHAMP_ÉTAT = "etat"
         private const val CHAMP_CAUSE = "cause"
-        private const val CHAMP_TEXTE = "texte"
-        private const val CHAMP_ORIGINE = "origine"
-        private const val CHAMP_CRÉDIT = "credit"
         private const val CHAMP_ÉTAT_GLOBAL = "etatGlobal"
         private const val CHAMP_VÉRIFIÉ_PAR = "verifiePar"
     }

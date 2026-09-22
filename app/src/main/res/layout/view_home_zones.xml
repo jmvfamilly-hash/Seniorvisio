@@ -3,9 +3,9 @@
      Les trois zones de l'écran de Jean, empilées verticalement par-dessus le
      fond (voir HomeZonesController). Inclus tel quel par l'écran d'accueil
      (activity_main) et par l'écran d'appel (activity_incoming_call) : c'est
-     le même écran pour Jean, seul le fond change — uni hors appel, remplacé
-     par la vidéo du proche pendant un appel, puis par ses photos s'il lance
-     un diaporama.
+     le même écran pour Jean, seul le fond change — uni au repos, occupé par
+     la galerie de photos choisie par l'administrateur, remplacé par la vidéo
+     du proche pendant un appel, puis par ses photos s'il lance un diaporama.
 
      Les trois occupent chacune exactement un tiers de la hauteur, en
      permanence. Les zones de texte vides sont rendues invisibles et non
@@ -53,20 +53,17 @@
          part : le bouton de sommeil vit à sa droite, et sans cette colonne il
          aurait décentré la date et la météo. Poids 1 pour que le bandeau reste
          centré sur la largeur qui lui reste, quelle que soit celle du bouton. -->
-    <!-- wrap_content, ET C'EST UN CORRECTIF.
+    <!-- wrap_content, ET ON N'Y REVIENT PAS.
 
-         Cette colonne était en match_parent. Tant que zoneInfo pesait un tiers
-         de l'écran, cela ne se voyait pas : il y avait de la place de reste.
+         Cette colonne a été en match_parent. Tant que zoneInfo pesait un tiers
+         de l'écran cela ne se voyait pas, mais le jour où zoneInfo s'est
+         réduite à son contenu, un enfant match_parent dans un parent
+         wrap_content n'a plus eu de hauteur définie — chacun attendait la
+         mesure de l'autre. La bande se mesurait trop court, la date de 38 sp
+         débordait par le bas, et ce qui était dessiné après la recouvrait.
 
-         Depuis que zoneInfo se réduit à son contenu en mode actualité, un
-         enfant match_parent dans un parent wrap_content n'a plus de hauteur
-         définie — chacun attend la mesure de l'autre. La bande se mesurait
-         donc trop court, la date de 38 sp débordait par le bas, et la zone des
-         titres, dessinée après elle, la recouvrait.
-
-         C'était bien « la date coupée par le fond des news », et la cause
-         n'était ni la couleur ni l'ordre de dessin : c'étaient deux hauteurs
-         qui se renvoyaient la question. -->
+         zoneInfo ne se réduit plus aujourd'hui, mais la dépendance circulaire,
+         elle, reviendrait telle quelle. -->
     <LinearLayout
         android:id="@+id/blocInfoCentre"
         android:layout_width="0dp"
@@ -142,12 +139,12 @@
              tablette : le geste le plus courant de la journée — « je ne veux
              plus de lumière » — n'avait aucune réponse à l'écran.
 
-             Rien d'irréversible : l'écran se rallume au premier appel, à la
-             première parole dans la pièce si le réveil au son est actif, et au
-             prochain titre d'actualité. C'est pourquoi le pictogramme est une
-             lune et non un symbole d'extinction, qui aurait laissé croire à
-             Jean qu'il vient de fermer quelque chose qu'il ne saurait pas
-             rouvrir.
+             Rien d'irréversible : l'écran se rallume au premier appel et à la
+             première parole dans la pièce, le réveil au son étant le seul
+             chemin de retour (voir DetecteurSon et le seuil réglé par
+             l'administrateur). C'est pourquoi le pictogramme est une lune et
+             non un symbole d'extinction, qui aurait laissé croire à Jean qu'il
+             vient de fermer quelque chose qu'il ne saurait pas rouvrir.
 
              Aux dimensions des consignes comme les autres — 88 dp de côté,
              relief déclaré, texte sans capitales — mais sans libellé étalé :
@@ -236,226 +233,5 @@
         </ScrollView>
     </LinearLayout>
 
-
-    <!-- ═══ L'ACTUALITÉ : ELLE PREND LES DEUX ZONES DU BAS ═══
-
-         Poids 2, soit exactement la place de zoneRoom et zoneCall réunies :
-         elle ne s'ajoute pas à la pile, elle s'y substitue (voir
-         HomeZonesController.modeActualite). L'écran de Jean garde donc
-         seulement deux surfaces — le bandeau de la date, et le titre.
-
-         Cette hauteur double n'est pas un confort : un titre de fil
-         d'information fait 156 signes en moyenne sur ce flux, et la vignette
-         qui l'accompagne est en 16/9. Dans une seule bande, l'image aurait
-         été réduite à un timbre-poste.
-
-         autoSizeTextType uniform : le texte rétrécit jusqu'à tenir plutôt que
-         d'être tronqué. Plancher à 22 sp — en dessous, plus personne ne lit
-         cet écran depuis un fauteuil. -->
-    <LinearLayout
-        android:id="@+id/zoneActualite"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="2"
-        android:orientation="vertical"
-        android:baselineAligned="false"
-        android:padding="20dp"
-        android:visibility="gone">
-
-    <!-- La rangée image + texte, qui prend toute la place restante une fois
-         la barre de navigation servie. Elle garde exactement la mise en page
-         d'avant : c'est le conteneur au-dessus qui est devenu vertical. -->
-    <LinearLayout
-        android:id="@+id/rangeeActualite"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:orientation="horizontal"
-        android:baselineAligned="false">
-
-        <!-- ═══ LA PHOTO ET SON CRÉDIT, DANS UNE SEULE COLONNE ═══
-
-             L'ImageView occupait cette place seule. Le crédit du photographe
-             se rapporte à l'image et non à l'article : il descend donc avec
-             elle, et non sous le titre où il passerait pour le nom du fil.
-
-             La photo prend le POIDS, le crédit son contenu. La photo se réduit
-             donc exactement de la hauteur du crédit, et la colonne entière
-             reste dans la hauteur de la rangée — celle du bloc de titre en
-             face. Sans cela, la ligne ajoutée pousserait la colonne au-delà et
-             le bas de la photo serait coupé.
-
-             fitCenter et non centerCrop : une photo de presse recadrée perd
-             souvent son sujet, et personne ne peut le signaler ici. -->
-        <LinearLayout
-            android:id="@+id/colonneImageAccueil"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="4"
-            android:layout_marginEnd="20dp"
-            android:orientation="vertical"
-            android:visibility="gone">
-
-            <ImageView
-                android:id="@+id/imageActualiteAccueil"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:scaleType="fitCenter"
-                android:contentDescription="Illustration de l'article" />
-
-            <TextView
-                android:id="@+id/creditActualiteAccueil"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:textSize="13sp"
-                android:alpha="0.55"
-                android:gravity="end"
-                android:maxLines="1"
-                android:ellipsize="end"
-                android:visibility="gone"
-                android:text="" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="6"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/texteActualiteAccueil"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:gravity="center_vertical"
-                android:autoSizeTextType="uniform"
-                android:autoSizeMinTextSize="22sp"
-                android:autoSizeMaxTextSize="64sp"
-                android:autoSizeStepGranularity="2sp" />
-
-            <!-- ═══ D'OÙ SORT CETTE NOUVELLE ═══
-
-                 Le fil se nomme lui-même dans <channel><title>. Depuis que
-                 plusieurs fils cohabitent, c'est une question qu'on se pose en
-                 lisant un titre, et à laquelle rien ne répondait.
-
-                 Discrètement, et le mot est à prendre au sérieux : c'est le
-                 TITRE que Jean doit lire. Petit corps, transparence réduite,
-                 sous le texte. Masqué quand le fil ne se nomme pas, plutôt
-                 qu'une mention vide ou un « source inconnue » qui prendrait de
-                 la place pour ne rien dire. -->
-            <TextView
-                android:id="@+id/origineActualiteAccueil"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:textSize="16sp"
-                android:alpha="0.55"
-                android:maxLines="1"
-                android:ellipsize="end"
-                android:visibility="gone"
-                android:text="" />
-        </LinearLayout>
-    </LinearLayout>
-
-        <!-- ═══ JEAN PEUT AVANCER DANS LES TITRES ═══
-
-             Le fil défile tout seul au rythme de la journée (voir
-             CadenceurActualites) : Jean n'a rien à faire, et ces boutons ne
-             changent rien à ça. Ils lui donnent seulement de quoi revenir sur
-             un titre entrevu, ou passer celui qui ne l'intéresse pas.
-
-             Un choix fait à la main tient jusqu'au prochain créneau, puis le
-             fil reprend sa route (voir MainActivity). Rien à annuler, rien à
-             refermer : l'écran se remet d'aplomb tout seul, ce qui est la
-             seule façon acceptable qu'une manipulation se termine ici.
-
-             L'espaceur central garantit le vide entre les deux cibles, quelles
-             que soient la police et la longueur des libellés. -->
-        <LinearLayout
-            android:id="@+id/barreNavigationActualite"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:baselineAligned="false"
-            android:layout_marginTop="16dp">
-
-            <Button
-                android:id="@+id/boutonActualitePrecedente"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Précédent"
-                android:textSize="24sp"
-                android:textAllCaps="false"
-                android:textColor="#FFFFFF"
-                android:drawableStart="@drawable/ic_precedent"
-                android:drawablePadding="16dp"
-                android:paddingStart="28dp"
-                android:paddingEnd="28dp"
-                android:paddingTop="16dp"
-                android:paddingBottom="16dp"
-                android:minHeight="88dp"
-                android:minWidth="240dp"
-                android:elevation="6dp"
-                android:background="@drawable/fond_bouton_navigation" />
-
-            <!-- ═══ « NOUVELLES DU JOUR », À LA PLACE DE L'ESPACEUR ═══
-
-                 Le vide entre les deux cibles était tenu par une View de
-                 largeur nulle et de poids 1. Ce libellé reprend EXACTEMENT ces
-                 deux propriétés : le vide reste donc garanti, quelles que
-                 soient la police et la longueur des libellés des boutons —
-                 c'était la raison d'être de l'espaceur, et elle n'a pas
-                 disparu.
-
-                 Il dit à Jean ce qu'il regarde. Deux flèches sans rien entre
-                 elles font naviguer dans quelque chose qui ne se nomme pas :
-                 on sait avancer, on ne sait pas dans quoi.
-
-                 Pas de capitales, conformément aux consignes de lisibilité, et
-                 un corps inférieur à celui des boutons : c'est une indication,
-                 pas une commande. Rien ici ne se touche.
-
-                 minWidth conservé : si un jour la barre devait se serrer, le
-                 libellé s'efface par ellipse plutôt que de coller les deux
-                 boutons l'un contre l'autre. -->
-            <TextView
-                android:id="@+id/titreBandeauActualite"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_gravity="center_vertical"
-                android:minWidth="24dp"
-                android:gravity="center"
-                android:maxLines="1"
-                android:ellipsize="end"
-                android:textSize="20sp"
-                android:textAllCaps="false"
-                android:alpha="0.75"
-                android:text="Nouvelles du jour" />
-
-            <Button
-                android:id="@+id/boutonActualiteSuivante"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Suivant"
-                android:textSize="24sp"
-                android:textAllCaps="false"
-                android:textColor="#FFFFFF"
-                android:drawableEnd="@drawable/ic_suivant"
-                android:drawablePadding="16dp"
-                android:paddingStart="28dp"
-                android:paddingEnd="28dp"
-                android:paddingTop="16dp"
-                android:paddingBottom="16dp"
-                android:minHeight="88dp"
-                android:minWidth="240dp"
-                android:elevation="6dp"
-                android:background="@drawable/fond_bouton_navigation" />
-        </LinearLayout>
-
-    </LinearLayout>
 
 </LinearLayout>

@@ -504,13 +504,49 @@ class DeviceStatusReporter(private val context: Context) {
         val adminConfig = AdminConfig(context)
         applyTraceSwitch(snapshot)
 
-        // La police des écrans de Jean, choisie depuis le PWA.
+        // ═══ LA GALERIE ET SA CADENCE, ET C'EST UN CORRECTIF ═══
         //
-        // Validée contre l'énumération avant d'être retenue : ce document est
-        // ouvert en écriture à qui en connaît l'adresse (voir firestore.rules),
-        // et une valeur inconnue rangée telle quelle laisserait la tablette
-        // dans un état qu'aucun écran n'affiche. On ignore ce qu'on ne
-        // reconnaît pas, et le réglage précédent tient.
+        // Le champ recueilPhotos était DÉCLARÉ ici et lu nulle part. Le PWA
+        // l'écrivait, le document le portait, l'ordonnanceur lisait la
+        // préférence locale — que rien ne renseignait jamais. Le sélecteur de
+        // galerie affichait donc un choix transmis, accepté, et sans effet :
+        // une réussite et une panne muette ont exactement la même apparence,
+        // et c'est la troisième fois dans ce projet.
+        //
+        // L'identifiant n'est pas validé contre les recueils installés : un
+        // recueil peut arriver après le réglage, et refuser ici ferait perdre
+        // un choix légitime. C'est l'ordonnanceur qui constate l'absence et le
+        // dit (voir « GALERIE vide »).
+        snapshot.getString(FIELD_RECUEIL_PHOTOS)?.let {
+            if (adminConfig.recueilPhotos != it) {
+                adminConfig.recueilPhotos = it
+                Log.i(TAG, "Galerie de l'accueil réglée à distance : ${it.ifBlank { "aucune" }}")
+                CallTrace.record(
+                    "GALERIE réglée",
+                    if (it.isBlank()) "aucune — l'accueil revient au fond uni"
+                    else "recueil « $it »",
+                )
+                // Sans ce rappel, le changement n'aurait pris effet qu'au
+                // prochain créneau — jusqu'à une heure d'attente devant un
+                // écran qu'on vient de régler et qui ne bouge pas.
+                CallListenerService.enService?.galerie?.réévaluer()
+            }
+        }
+
+        // Bornée ICI EN PLUS de l'ordonnanceur, et les deux comptent : ce
+        // document est ouvert en écriture à qui en connaît l'adresse, et une
+        // cadence de zéro ferait tourner les photos à chaque battement. La
+        // borne de lecture protège l'affichage, celle-ci évite de RANGER une
+        // valeur absurde qui survivrait au redémarrage.
+        snapshot.getLong(FIELD_CADENCE_PHOTOS)?.let {
+            val voulu = it.toInt().coerceIn(1, 60)
+            if (adminConfig.cadencePhotosMinutes != voulu) {
+                adminConfig.cadencePhotosMinutes = voulu
+                Log.i(TAG, "Cadence de la galerie réglée à distance : $voulu min")
+                CallListenerService.enService?.galerie?.réévaluer()
+            }
+        }
+
         // L'interligne des zones de transcription. Borné à la lecture comme à
         // l'écriture : ce document est ouvert en écriture à qui en connaît
         // l'adresse, et une valeur aberrante rendrait le texte d'appel
@@ -530,61 +566,14 @@ class DeviceStatusReporter(private val context: Context) {
             }
         }
 
-        // La liste des fils d'information, réglée depuis le PWA.
-        //
-        // Changer la liste remet la date du dernier remplacement à zéro : sans
-        // ça, l'administrateur qui retire un fil qui renvoie n'importe quoi
-        // devrait attendre 7 h le lendemain pour en voir l'effet — et
-        // conclurait entre-temps que son réglage n'a pas été reçu. Le
-        // remplacement a lieu au prochain contrôle, dans le quart d'heure.
-        // ═══ LA GALERIE PHOTO PRÉFÉRÉE ═══
-        //
-        // Vide = l'accueil reprend le fil d'information. Même garde-fou que
-        // pour les fils : rien n'apparaît de soi-même sur l'écran de Jean.
-        //
-        // Réévaluation IMMÉDIATE, contrairement au réglage d'affichage : ici
-        // c'est le contenu même de l'écran qui change, et attendre le
-        // battement suivant laisserait cinq minutes pendant lesquelles
-        // l'administrateur ne peut pas distinguer « mon choix n'est pas
-        // arrivé » de « il est arrivé et met du temps ».
-        snapshot.getString(FIELD_RECUEIL_PHOTOS)?.let { id ->
-            if (adminConfig.recueilPhotos != id) {
-                adminConfig.recueilPhotos = id
-                CallTrace.record(
-                    "GALERIE réglée",
-                    if (id.isBlank()) "aucune — l'accueil reprend le fil d'information"
-                    else "recueil « $id » présenté sur l'accueil",
-                )
-                CallListenerService.enService?.actualites?.réévaluer(réveillerLÉcran = false)
-            }
-        }
 
-        snapshot.getString(FIELD_FLUX_ACTUALITES)?.let { liste ->
-            if (adminConfig.fluxActualites != liste) {
-                adminConfig.fluxActualites = liste
-                // Remis à zéro ET drapeau levé : ce sont les deux filets si la
-                // relecture immédiate ci-dessous n'aboutit pas — service pas
-                // encore démarré, tablette qui redémarre dans la foulée. Le
-                // contrôle du quart d'heure reprendra alors la main.
-                adminConfig.fluxDernierRafraichissementMs = 0L
-                adminConfig.fluxListeChangee = true
-                val nombre = liste.split(",", "\n", ";").count { it.isNotBlank() }
-                Log.i(TAG, "Fils d'information réglés à distance : $nombre")
-                CallTrace.record("FLUX réglé", "$nombre fil(s) — relecture immédiate demandée")
-                // ═══ TOUT DE SUITE, ET NON AU PROCHAIN CONTRÔLE ═══
-                //
-                // Quinze minutes d'attente, c'est quinze minutes pendant
-                // lesquelles l'administrateur ne peut pas distinguer « mon
-                // réglage n'est pas arrivé » de « il est arrivé et met du
-                // temps ». Il règle, il regarde, et il conclut à tort.
-                //
-                // Le rafraîchisseur nettoie l'ancienne liste puis relit, sur
-                // son propre fil — ce rappel-ci s'exécute sur le fil principal,
-                // où un téléchargement lèverait aussitôt.
-                CallListenerService.enService?.flux?.rafraîchirMaintenant()
-            }
-        }
-
+        // La police des écrans de Jean, choisie depuis le PWA.
+        //
+        // Validée contre l'énumération avant d'être retenue : ce document est
+        // ouvert en écriture à qui en connaît l'adresse (voir firestore.rules),
+        // et une valeur inconnue rangée telle quelle laisserait la tablette
+        // dans un état qu'aucun écran n'affiche. On ignore ce qu'on ne
+        // reconnaît pas, et le réglage précédent tient.
         PoliceSenior.depuisValeurDistante(snapshot.getString(FIELD_POLICE_SENIOR))?.let {
             if (adminConfig.policeSenior != it.valeurDistante) {
                 adminConfig.policeSenior = it.valeurDistante
@@ -932,10 +921,12 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_LAST_UPDATE_AT = "lastUpdateAt"
         private const val FIELD_ROOM_ENGINE = "roomTranscriptionEngine"
         private const val FIELD_POLICE_SENIOR = "policeSenior"
-        private const val FIELD_FLUX_ACTUALITES = "fluxActualites"
 
-        /** L'identifiant de la galerie photo préférée, ou vide pour revenir au fil. */
+        /** L'identifiant de la galerie photo préférée, ou vide pour le fond uni. */
         private const val FIELD_RECUEIL_PHOTOS = "recueilPhotos"
+
+        /** Combien de minutes chaque photo de la galerie tient l'écran. */
+        private const val FIELD_CADENCE_PHOTOS = "cadencePhotosMinutes"
         private const val FIELD_COMMANDES_VOCALES = "commandesVocales"
         private const val FIELD_CAPTION_INTERLIGNE = "captionInterligne"
         private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"

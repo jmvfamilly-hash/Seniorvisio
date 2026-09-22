@@ -341,10 +341,16 @@ object UsageStats {
     // une faute de frappe créerait un compteur silencieux, qui monterait sans
     // que personne ne le lise jamais — et le compteur attendu resterait à zéro,
     // ce qui se conclurait par « la fonction ne sert pas ».
-    const val GESTE_ACTUALITE_SUIVANT = "actualiteSuivantBouton"
-    const val GESTE_ACTUALITE_PRECEDENT = "actualitePrecedentBouton"
-    const val GESTE_ACTUALITE_SUIVANT_GLISSE = "actualiteSuivantGlissement"
-    const val GESTE_ACTUALITE_PRECEDENT_GLISSE = "actualitePrecedentGlissement"
+    // Les deux gestes « bouton » de la galerie d'accueil ont disparu avec les
+    // boutons Précédent et Suivant : il ne reste que le glissement.
+    //
+    // Le NOM STOCKÉ change aussi (« actualite… » → « photo… »), et c'est
+    // volontaire : les journées déjà enregistrées gardent l'ancien nom, que
+    // plus rien n'incrémente. Les mélanger sous un même nom aurait additionné
+    // deux gestes différents — un titre feuilleté à la main et une photo de
+    // famille — dans une colonne qu'on lit justement pour savoir lequel sert.
+    const val GESTE_PHOTO_SUIVANTE_GLISSE = "photoSuivanteGlissement"
+    const val GESTE_PHOTO_PRECEDENTE_GLISSE = "photoPrecedenteGlissement"
     const val GESTE_RECUEIL_SUIVANT = "recueilSuivantBouton"
     const val GESTE_RECUEIL_PRECEDENT = "recueilPrecedentBouton"
     const val GESTE_RECUEIL_SUIVANT_GLISSE = "recueilSuivantGlissement"

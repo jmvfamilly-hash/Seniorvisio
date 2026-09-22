@@ -24,14 +24,14 @@
 
          PREMIER ENFANT, et c'est là tout le mécanisme : un FrameLayout dessine
          dans l'ordre de déclaration, donc cette image passe sous la pile des
-         zones. La date, le bouton de sommeil et les boutons de navigation
-         flottent alors par-dessus sans qu'aucun d'eux n'ait à changer de place
-         ni de parent.
+         zones. La date, la météo et le bouton de sommeil flottent alors
+         par-dessus sans qu'aucun d'eux n'ait à changer de place ni de parent —
+         ce qui est la consigne : la date et le temps restent au premier plan
+         hors appel.
 
-         C'était le seul moyen de rendre à une photo la dalle entière : dans la
-         pile, elle n'aurait occupé que la rangée laissée libre entre la bande
-         de date et les boutons — la place d'un titre d'actualité, deux à trois
-         fois plus petite.
+         C'était le seul moyen de rendre à une photo la dalle entière : rangée
+         dans la pile, elle n'aurait occupé qu'un tiers de la hauteur, deux à
+         trois fois moins.
 
          fitCenter, et jamais centerCrop : une photo de famille recadrée
          arbitrairement coupe des visages, et Jean n'a aucun moyen de le

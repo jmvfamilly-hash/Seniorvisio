@@ -226,21 +226,6 @@ class AdminConfig(context: Context) {
         get() = prefs.getString(KEY_LAST_COMMAND_ID, "") ?: ""
         set(value) = prefs.edit().putString(KEY_LAST_COMMAND_ID, value).apply()
 
-    // --- Fil d'information sur l'écran d'accueil (voir OrdonnanceurActualites) ---
-
-    /**
-     * Combien de temps la dalle reste allumée quand un nouveau titre arrive.
-     *
-     * Cinq minutes au départ, et réglable : c'est le nombre qu'il faudra
-     * corriger si la tablette s'allume trop souvent ou trop brièvement chez
-     * Jean, et le corriger ne doit pas demander de reconstruire l'application.
-     * Borné à l'usage entre 30 secondes et une heure — un écran allumé plus
-     * longtemps ne se distinguerait plus d'un écran jamais éteint.
-     */
-    var dureeEveilActualiteSecondes: Int
-        get() = prefs.getInt(KEY_DUREE_EVEIL_ACTUALITE, 300)
-        set(value) = prefs.edit().putInt(KEY_DUREE_EVEIL_ACTUALITE, value).apply()
-
     /**
      * La transcription de la PIÈCE s'affiche-t-elle encore sur l'accueil ?
      *
@@ -271,18 +256,6 @@ class AdminConfig(context: Context) {
      * Stocké en texte et non en rang : un ordinal se décale silencieusement le
      * jour où l'on insère une quatrième police au milieu de la liste, et la
      * tablette se mettrait alors dans une autre police que celle affichée.
-     */
-    /**
-     * Les adresses des fils d'information, une par ligne.
-     *
-     * Vide = on s'en tient à la liste livrée avec l'APK (voir
-     * BuildConfig.FLUX_ACTUALITES), elle-même vide en production. Renseignée,
-     * elle la remplace entièrement.
-     *
-     * Réglable à distance, et il le faut : un fil d'information change
-     * d'adresse, disparaît, ou se révèle mal écrit. Attendre une reconstruction
-     * d'APK pour en retirer un qui renvoie n'importe quoi laisserait Jean
-     * devant n'importe quoi pendant ce temps.
      */
     /**
      * Jean peut-il commander la tablette à la voix ?
@@ -320,38 +293,19 @@ class AdminConfig(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_COMMANDES_VOCALES, value).apply()
 
     /**
-     * La liste des fils, posée à distance par l'administrateur.
-     *
-     * ELLE PASSE DEVANT celle livrée avec l'APK (voir
-     * RafraichisseurFlux.adresses), y compris en production où la valeur bâtie
-     * est vide. Remplir ce champ allume donc le fil d'information sur la
-     * tablette de Jean, sans reconstruction — c'est voulu, et c'est noté ici
-     * parce que le build.gradle a longtemps prétendu le contraire.
-     *
-     * Vide signifie « rien à dire », pas « éteins » : c'est le repli sur la
-     * valeur bâtie, et non une extinction. Éteindre une production qui a été
-     * allumée demande donc de vider ce champ ET de savoir que l'APK de
-     * production, lui, n'en propose aucun.
-     */
-    var fluxActualites: String
-        get() = prefs.getString(KEY_FLUX_ACTUALITES, null).orEmpty()
-        set(value) = prefs.edit().putString(KEY_FLUX_ACTUALITES, value).apply()
-
-    /**
      * L'identifiant de la galerie photo présentée sur l'écran d'accueil.
      *
      * ═══ VIDE PAR DÉFAUT, ET CE DÉFAUT EST LA RÈGLE DE CE PROJET ═══
      *
      * Choisie par l'administrateur parmi les recueils que les proches ont
-     * installés. Tant qu'aucune n'est nommée, l'accueil garde le fil
-     * d'information — et si le fil est vide lui aussi, ses zones de texte.
+     * installés. Tant qu'aucune n'est nommée, l'accueil garde son fond uni.
      *
-     * Une galerie qui apparaîtrait d'elle-même chez Jean serait un changement
-     * d'écran que personne ne lui a demandé : même garde-fou que pour les
-     * fils, pour la même raison.
+     * Vide par défaut, et ce n'est pas une omission : une galerie qui
+     * apparaîtrait d'elle-même chez Jean serait un changement d'écran que
+     * personne ne lui a demandé.
      *
-     * Les photos tournent au quart d'heure et ne rallument JAMAIS la dalle
-     * (voir OrdonnanceurActualites) : elles rendent l'écran agréable quand on
+     * Les photos tournent à la cadence réglée et ne rallument JAMAIS la dalle
+     * (voir OrdonnanceurPhotos) : elles rendent l'écran agréable quand on
      * le regarde, elles ne réclament pas qu'on le regarde.
      */
     var recueilPhotos: String
@@ -359,61 +313,19 @@ class AdminConfig(context: Context) {
         set(value) = prefs.edit().putString(KEY_RECUEIL_PHOTOS, value).apply()
 
     /**
-     * Instant du dernier remplacement complet du fil, en millisecondes.
+     * Combien de minutes chaque photo tient l'écran.
      *
-     * Rangé dans les préférences et non en mémoire : c'est ce qui permet à la
-     * règle « une fois par jour » de survivre à un redémarrage. Sans ça, une
-     * tablette qui redémarre trois fois dans l'après-midi retéléchargerait
-     * trois fois — et remplacerait trois fois les titres sous les yeux de
-     * Jean, ce que « une fois par jour » interdit précisément.
+     * Quinze par défaut. Le bon rythme dépend de la galerie et de la personne
+     * — trois photos de petits-enfants ne se regardent pas comme cinquante
+     * photos de vacances — et cela se juge devant l'écran, pas dans le code.
+     *
+     * Borné aussi à la LECTURE, côté ordonnanceur : ce réglage voyage par un
+     * document Firestore ouvert en écriture, et une valeur de zéro ferait
+     * tourner les photos à chaque battement.
      */
-    /**
-     * L'administrateur vient-il de changer la liste des fils ?
-     *
-     * Ce drapeau lève, pour UN seul rafraîchissement, la règle « ne jamais
-     * écraser un flux qui marche par du vide » (voir RafraichisseurFlux).
-     *
-     * Cette règle protège d'une panne passagère. Appliquée à un ordre
-     * explicite, elle se retourne contre son but : une nouvelle liste qui ne
-     * donne rien laisserait l'ancien fil à l'écran, et le réglage aurait l'air
-     * d'avoir été ignoré. Un ordre doit produire un effet visible, même quand
-     * cet effet est un écran vide — c'est la seule façon d'apprendre quelque
-     * chose de son essai.
-     *
-     * Rangé dans les préférences et non en mémoire : le réglage peut arriver
-     * juste avant un redémarrage, et l'intention ne doit pas se perdre avec le
-     * processus.
-     */
-    /**
-     * La version de l'application qui a écrit le recueil du fil.
-     *
-     * ═══ POURQUOI CE CHAMP EXISTE ═══
-     *
-     * Le recueil n'est réécrit qu'une fois par jour. Cette règle porte sur le
-     * CONTENU — ne pas remplacer les titres sous les yeux de Jean à tout bout
-     * de champ — et elle est juste.
-     *
-     * Mais elle s'appliquait aussi, par effet de bord, aux changements de
-     * FORMAT. Ajouter un champ au recueil — la provenance du titre, par
-     * exemple — n'avait alors aucun effet visible avant le lendemain 7 h : on
-     * installait une version, on ne voyait rien, et rien ne disait que le
-     * document affiché datait d'avant. On cherche alors un défaut d'affichage
-     * qui n'existe pas.
-     *
-     * Un numéro de version qui ne correspond plus force donc une réécriture,
-     * une seule fois, au premier démarrage qui suit l'installation.
-     */
-    var fluxDerniereRevision: String
-        get() = prefs.getString(KEY_FLUX_REVISION, "").orEmpty()
-        set(value) = prefs.edit().putString(KEY_FLUX_REVISION, value).apply()
-
-    var fluxListeChangee: Boolean
-        get() = prefs.getBoolean(KEY_FLUX_LISTE_CHANGEE, false)
-        set(value) = prefs.edit().putBoolean(KEY_FLUX_LISTE_CHANGEE, value).apply()
-
-    var fluxDernierRafraichissementMs: Long
-        get() = prefs.getLong(KEY_FLUX_DERNIER_JOUR, 0L)
-        set(value) = prefs.edit().putLong(KEY_FLUX_DERNIER_JOUR, value).apply()
+    var cadencePhotosMinutes: Int
+        get() = prefs.getInt(KEY_CADENCE_PHOTOS, 15)
+        set(value) = prefs.edit().putInt(KEY_CADENCE_PHOTOS, value).apply()
 
     var policeSenior: String
         get() = prefs.getString(KEY_POLICE_SENIOR, null) ?: PoliceSenior.PAR_DÉFAUT.valeurDistante
@@ -607,16 +519,12 @@ class AdminConfig(context: Context) {
         private const val KEY_CAPTION_CLEAR_DELAY_SECONDS = "caption_clear_delay_seconds"
         private const val KEY_LAST_COMMAND_ID = "last_command_id"
         private const val KEY_ROOM_WAKE_ENABLED = "room_wake_enabled"
-        private const val KEY_DUREE_EVEIL_ACTUALITE = "duree_eveil_actualite_s"
         private const val KEY_TRANSCRIPTION_PIECE_AFFICHEE = "transcription_piece_affichee"
         private const val KEY_POLICE_SENIOR = "police_senior"
-        private const val KEY_FLUX_ACTUALITES = "flux_actualites"
         private const val KEY_RECUEIL_PHOTOS = "recueil_photos"
+        private const val KEY_CADENCE_PHOTOS = "cadence_photos_minutes"
         private const val KEY_COMMANDES_VOCALES = "commandes_vocales_actives"
-        private const val KEY_FLUX_DERNIER_JOUR = "flux_dernier_rafraichissement"
-        private const val KEY_FLUX_LISTE_CHANGEE = "flux_liste_changee"
         private const val KEY_CAPTION_INTERLIGNE = "caption_interligne"
-        private const val KEY_FLUX_REVISION = "flux_derniere_revision"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
         private const val KEY_DIM_JEAN_SPEECH = "dim_jean_speech"
         private const val KEY_ROOM_HANDOFF_ENABLED = "room_handoff_enabled"

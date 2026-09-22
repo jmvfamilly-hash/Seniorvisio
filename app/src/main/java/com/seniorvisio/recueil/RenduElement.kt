@@ -30,23 +30,6 @@ sealed class Rendu {
     data class Image(val bitmap: Bitmap) : Rendu()
 
     /**
-     * Un texte à lire, et l'illustration qui l'accompagne — ou rien.
-     *
-     * La vignette est FACULTATIVE, et ce n'est pas une précaution de style :
-     * tous les fils d'information n'en fournissent pas, et rien ne garantit
-     * qu'un article donné en ait une. Un écran qui réserverait la moitié de sa
-     * place à une image absente donnerait un titre serré à côté d'un trou.
-     * L'écran d'appel s'en sert donc pour choisir sa disposition (voir
-     * IncomingCallActivity.afficherRecueil).
-     */
-    data class Texte(
-        val texte: String,
-        val vignette: Bitmap?,
-        val origine: String? = null,
-        val crédit: String? = null,
-    ) : Rendu()
-
-    /**
      * Rien à montrer, et une phrase qui dit pourquoi.
      *
      * Écrite pour être lue par Jean s'il faut, donc sans terme technique : un
@@ -87,7 +70,7 @@ sealed class Rendu {
  *
  * Réduire ne suffit pas à guérir cela — cela divise la vitesse de la fuite,
  * pas la fuite. C'est le recyclage explicite, côté écran, qui rend les octets
- * (voir HomeZonesController.afficherActualite). Mais décoder huit mégaoctets
+ * (voir HomeZonesController.afficherPhoto). Mais décoder huit mégaoctets
  * pour en afficher deux était de toute façon du gâchis pur.
  */
 private fun décoderRéduit(fichier: File, côtéVisé: Int, tag: String): Bitmap? {
@@ -154,53 +137,6 @@ class RenduPhoto(private val côtéVisé: Int) : RenduElement {
 }
 
 /**
- * Les titres d'un fil d'information, et leur vignette si le flux en donne une.
- *
- * Le texte voyage dans le document du recueil, pas dans un fichier : un titre
- * pèse cent octets. La vignette, elle, est un vrai fichier image, rangée et
- * vérifiée par le même chemin qu'une photo de famille — un flux public n'a pas
- * plus le droit qu'un proche d'envoyer à cette tablette une image qu'elle ne
- * sait pas décoder.
- */
-class RenduTexte(private val côtéVisé: Int) : RenduElement {
-    override fun préparer(element: Element, fichier: File?): Rendu {
-        val texte = element.texte?.takeIf { it.isNotBlank() }
-            ?: return Rendu.Impossible("Ce texte est arrivé vide")
-
-        // L'absence de vignette n'est PAS un échec : c'est le cas courant.
-        // Un titre sans image reste un titre, et il occupera toute la largeur.
-        val vignette = fichier?.takeIf { it.exists() }?.let {
-            try {
-                // LA MOITIÉ DE LA DALLE, ET NON LA DALLE ENTIÈRE.
-                //
-                // La vignette occupe la colonne de gauche, qui pèse 4 sur 10
-                // dans la rangée (voir view_home_zones.xml) : elle ne sera
-                // jamais vue à plus de 40 % de la largeur. Viser la dalle
-                // entière rendait un facteur de réduction de 1 — c'est-à-dire
-                // aucune réduction — sur des fichiers rangés à 1920 px, donc
-                // huit mégaoctets et demi pour en afficher deux.
-                //
-                // Le facteur passe à 2, et l'image à 2,1 Mo. Quatre fois moins,
-                // sans qu'on puisse le voir : elle reste plus fine que la place
-                // où elle est posée.
-                décoderRéduit(it, côtéVisé / 2, TAG)
-            } catch (e: OutOfMemoryError) {
-                Log.w(TAG, "Vignette trop lourde pour ${element.id}", e)
-                null
-            } catch (e: Exception) {
-                Log.w(TAG, "Vignette illisible pour ${element.id}", e)
-                null
-            }
-        }
-        return Rendu.Texte(texte, vignette, element.origine, element.crédit)
-    }
-
-    private companion object {
-        const val TAG = "RenduTexte"
-    }
-}
-
-/**
  * Les types déclarés mais pas encore affichables.
  *
  * Existe DÈS MAINTENANT, et ce n'est pas de la place perdue : un recueil
@@ -223,6 +159,6 @@ class RenduNonPrisEnCharge(private val quoi: String) : RenduElement {
 fun renduPour(type: TypeElement, côtéVisé: Int): RenduElement = when (type) {
     TypeElement.PHOTO -> RenduPhoto(côtéVisé)
     TypeElement.VIDEO -> RenduNonPrisEnCharge("Une vidéo")
-    TypeElement.TEXTE -> RenduTexte(côtéVisé)
+    TypeElement.TEXTE -> RenduNonPrisEnCharge("Un texte")
     TypeElement.INCONNU -> RenduNonPrisEnCharge("Un contenu d'un type inconnu")
 }

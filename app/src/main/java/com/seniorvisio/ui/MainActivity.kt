@@ -31,7 +31,6 @@ import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.AlertVolume
 import com.seniorvisio.core.CallTrace
-import com.seniorvisio.core.VieDuFil
 import com.seniorvisio.core.CommandesVocales
 import com.seniorvisio.core.MiseEnVeille
 import com.seniorvisio.core.Environnement
@@ -42,7 +41,7 @@ import com.seniorvisio.recueil.Element
 import com.seniorvisio.recueil.RecueilStore
 import com.seniorvisio.recueil.Rendu
 import com.seniorvisio.recueil.renduPour
-import com.seniorvisio.service.OrdonnanceurActualites
+import com.seniorvisio.service.OrdonnanceurPhotos
 import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.signaling.CallSignalingClient
 
@@ -131,7 +130,7 @@ class MainActivity : AppCompatActivity() {
                         // reconnue (voir traiterCommandeVocale) — plutôt qu'en
                         // refusant une catégorie entière de résultats.
                         traiterCommandeVocale(text)
-                        if (adminConfig.transcriptionPieceAffichee && !zones.actualiteAffichee) {
+                        if (adminConfig.transcriptionPieceAffichee && !zones.photoAffichee) {
                             zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal, fromJean)
                         }
                     }
@@ -316,11 +315,11 @@ class MainActivity : AppCompatActivity() {
         // le bandeau de retour continuerait de flotter par-dessus, et le micro
         // ne serait jamais repris (voir RoomHandoffController).
         RoomPresenceService.running?.noteBackOnHomeScreen()
-        // L'écran revient au premier plan : il redemande le titre du créneau
+        // L'écran revient au premier plan : il redemande la photo du créneau
         // en cours plutôt que d'attendre le prochain changement. C'est ce qui
-        // fait qu'une dalle allumée par un bruit, ou par Jean lui-même, montre
-        // déjà l'actualité de l'heure au lieu d'un écran vide.
-        brancherActualites()
+        // fait qu'une dalle rallumée par un bruit montre déjà la photo du
+        // moment au lieu d'un écran vide.
+        brancherGalerie()
         // Cet écran, c'est la définition de « pas en appel » : la tablette y
         // revient dès qu'une conversation se termine. Les alertes y
         // descendent au plus bas, ce qui fait taire les sons du moteur de
@@ -371,21 +370,21 @@ class MainActivity : AppCompatActivity() {
      * tablette-ci cela se voit.
      */
     /**
-     * Les titres installés, et celui que Jean regarde en ce moment.
+     * Les photos installées, et celle que Jean regarde en ce moment.
      *
      * ═══ POURQUOI L'ÉCRAN TIENT SON PROPRE RANG ═══
      *
-     * L'ordonnanceur décide du titre de l'heure ; il ne sait pas, et n'a pas à
-     * savoir, que Jean a peut-être touché un bouton. Si cet écran se contentait
-     * de montrer ce que l'ordonnanceur lui envoie, un geste de Jean serait
-     * effacé au prochain battement du service.
+     * L'ordonnanceur décide de la photo du créneau ; il ne sait pas, et n'a
+     * pas à savoir, que Jean a peut-être fait glisser l'image. Si cet écran se
+     * contentait de montrer ce que l'ordonnanceur lui envoie, un geste de Jean
+     * serait effacé au prochain battement du service.
      *
      * L'écran garde donc sa propre position. L'ordonnanceur la repose au
      * changement de créneau, et seulement là — ce qui donne exactement le
-     * comportement voulu : un choix fait à la main tient, puis le fil reprend
-     * sa route tout seul. Rien à annuler, rien à refermer.
+     * comportement voulu : un choix fait à la main tient, puis la galerie
+     * reprend sa route toute seule. Rien à annuler, rien à refermer.
      */
-    private var titresActualite: List<Element> = emptyList()
+    private var photosGalerie: List<Element> = emptyList()
 
     /**
      * Le dernier motif de refus journalisé, pour ne pas le répéter.
@@ -395,17 +394,13 @@ class MainActivity : AppCompatActivity() {
      * première, et cet écran ne vit que le temps qu'il est affiché.
      */
     private var dernierRefus: String? = null
-    private var recueilActualiteId: String? = null
-    private var rangActualite = 0
+    private var recueilGalerieId: String? = null
+    private var rangPhoto = 0
 
-    private fun brancherActualites() {
+    private fun brancherGalerie() {
         zones.brancherSommeil { endormir() }
-        zones.brancherNavigationActualite(
-            surPrécédent = { déplacerActualite(-1) },
-            surSuivant = { déplacerActualite(+1) },
-            // Glissement vers la gauche = on avance, comme on tourne une page.
-            surSwipe = { versLAvant -> déplacerActualite(if (versLAvant) +1 else -1) },
-        )
+        // Glissement vers la gauche = on avance, comme on tourne une page.
+        zones.brancherGlissementPhoto { versLAvant -> déplacerPhoto(if (versLAvant) +1 else -1) }
 
         val service = CallListenerService.enService
         if (service == null) {
@@ -415,14 +410,14 @@ class MainActivity : AppCompatActivity() {
         }
         // brancher, et non « observateur = » : la pose seule ne livrait rien
         // tant que le rang n'avait pas bougé, et l'écran restait vide après
-        // chaque mise en pause (voir OrdonnanceurActualites.brancher). C'est
+        // chaque mise en pause (voir OrdonnanceurPhotos.brancher). C'est
         // aussi ce qui rend tenable la règle « une photo ne rallume pas la
         // dalle » : l'écran qui se rallume reçoit la photo du moment.
-        service.actualites.brancher(OrdonnanceurActualites.Observateur { element, recueilId ->
+        service.galerie.brancher(OrdonnanceurPhotos.Observateur { element, recueilId ->
             if (element == null || recueilId == null) {
                 runOnUiThread {
-                    titresActualite = emptyList()
-                    zones.masquerActualite()
+                    photosGalerie = emptyList()
+                    zones.masquerPhoto()
                 }
                 return@Observateur
             }
@@ -430,18 +425,18 @@ class MainActivity : AppCompatActivity() {
             val recueil = magasin?.disponibles()?.firstOrNull { it.id == recueilId }
             val prêts = recueil?.prêts.orEmpty()
             runOnUiThread {
-                titresActualite = prêts
-                recueilActualiteId = recueilId
+                photosGalerie = prêts
+                recueilGalerieId = recueilId
                 // L'ordonnanceur impose SA position : c'est un changement de
                 // créneau, donc le fil a repris la main sur le choix de Jean.
-                rangActualite = prêts.indexOf(element).coerceAtLeast(0)
-                afficherActualiteCourante()
+                rangPhoto = prêts.indexOf(element).coerceAtLeast(0)
+                afficherPhotoCourante()
             }
         })
         // Toujours après : brancher livre l'état, réévaluer reprogramme
         // l'alarme et rattrape un réveil perdu. Les deux ne font pas la même
         // chose, et celui-ci ne poussera rien de plus — le rang n'a pas bougé.
-        service.actualites.réévaluer(réveillerLÉcran = false)
+        service.galerie.réévaluer()
     }
 
     /**
@@ -485,8 +480,8 @@ class MainActivity : AppCompatActivity() {
         dernièreCommandeMs = maintenant
         CallTrace.record("VOIX commande", commande.name.lowercase())
         when (commande) {
-            CommandesVocales.Commande.SUIVANT -> déplacerActualite(+1)
-            CommandesVocales.Commande.PRECEDENT -> déplacerActualite(-1)
+            CommandesVocales.Commande.SUIVANT -> déplacerPhoto(+1)
+            CommandesVocales.Commande.PRECEDENT -> déplacerPhoto(-1)
             CommandesVocales.Commande.SOMMEIL -> endormir()
         }
     }
@@ -543,29 +538,29 @@ class MainActivity : AppCompatActivity() {
     /**
      * Un cran en avant ou en arrière, sans jamais boucler.
      *
-     * Pas de rebouclage aux extrémités, volontairement : arriver au dernier
-     * titre et retomber sur le premier donne l'impression d'une liste sans fin,
-     * où l'on ne sait plus si l'on a tout vu. Le bouton se grise, et c'est
-     * clair.
+     * Pas de rebouclage aux extrémités, volontairement : arriver à la dernière
+     * photo et retomber sur la première donne l'impression d'une liste sans
+     * fin, où l'on ne sait plus si l'on a tout vu. Le glissement ne donne
+     * simplement plus rien, et c'est clair.
      */
-    private fun déplacerActualite(pas: Int) {
-        if (titresActualite.isEmpty()) return
-        val nouveau = (rangActualite + pas).coerceIn(0, titresActualite.size - 1)
-        if (nouveau == rangActualite) return
-        rangActualite = nouveau
-        CallTrace.record("ACCUEIL actualité main", "titre ${nouveau + 1}/${titresActualite.size}")
-        afficherActualiteCourante()
+    private fun déplacerPhoto(pas: Int) {
+        if (photosGalerie.isEmpty()) return
+        val nouveau = (rangPhoto + pas).coerceIn(0, photosGalerie.size - 1)
+        if (nouveau == rangPhoto) return
+        rangPhoto = nouveau
+        CallTrace.record("ACCUEIL photo main", "photo ${nouveau + 1}/${photosGalerie.size}")
+        afficherPhotoCourante()
     }
 
     /**
      * ═══ UN SEUL FIL DE DÉCODAGE, ET SEULE LA DERNIÈRE DEMANDE COMPTE ═══
      *
-     * Chaque changement de titre lançait un Thread neuf, qui décodait sa propre
-     * vignette. Le journal a montré les titres défiler toutes les deux dixièmes
-     * de seconde — bouton maintenu, ou glissement qui se répète — et le tas
-     * natif passer de 39 à 759 mégaoctets en dix secondes. Sept cent vingt
-     * mégaoctets, à huit et demi par image : quatre-vingt-sept vignettes
-     * décodées en même temps, pour une seule qui sera vue.
+     * Chaque changement d'image lançait un Thread neuf, qui décodait sa propre
+     * photo. Le journal a montré les images défiler toutes les deux dixièmes
+     * de seconde — un glissement qui se répète — et le tas natif passer de 39 à
+     * 759 mégaoctets en dix secondes. Sept cent vingt mégaoctets, à huit et
+     * demi par image : quatre-vingt-sept photos décodées en même temps, pour
+     * une seule qui sera vue.
      *
      * LecteurRecueil, qui fait le même travail pour l'écran d'appel, tenait
      * déjà la bonne forme : un exécuteur à fil unique et un compteur de
@@ -577,68 +572,40 @@ class MainActivity : AppCompatActivity() {
      * rafale de vingt changements ne laisse jamais plus d'une image décodée à
      * la fois.
      */
-    private val décodeurActualite: java.util.concurrent.ExecutorService =
+    private val décodeurPhoto: java.util.concurrent.ExecutorService =
         java.util.concurrent.Executors.newSingleThreadExecutor { r ->
-            Thread(r, "SeniorVisio-ActualiteAccueil").apply { isDaemon = true }
+            Thread(r, "SeniorVisio-PhotoAccueil").apply { isDaemon = true }
         }
 
-    private var demandeActualite = 0
+    private var demandePhoto = 0
 
-    private fun afficherActualiteCourante() {
-        val element = titresActualite.getOrNull(rangActualite) ?: return
+    private fun afficherPhotoCourante() {
+        val element = photosGalerie.getOrNull(rangPhoto) ?: return
         val magasin = RecueilStore.actif
-        val recueil = magasin?.disponibles()?.firstOrNull { it.id == recueilActualiteId }
+        val recueil = magasin?.disponibles()?.firstOrNull { it.id == recueilGalerieId }
         val fichier = if (recueil != null) magasin.fichier(recueil, element) else null
         val côté = magasin?.définitionDeLaDalle ?: 1280
-        val mienne = ++demandeActualite
-        décodeurActualite.execute {
+        val mienne = ++demandePhoto
+        décodeurPhoto.execute {
             val rendu = renduPour(element.type, côté).préparer(element, fichier)
             runOnUiThread {
-                // Périmée : Jean a déjà demandé un autre titre. On ne la pose
+                // Périmée : Jean a déjà demandé une autre photo. On ne la pose
                 // pas, donc rien ne la retient, donc elle peut être reprise.
-                if (mienne != demandeActualite) return@runOnUiThread
+                if (mienne != demandePhoto) return@runOnUiThread
                 when (rendu) {
-                    is Rendu.Texte -> {
-                        zones.afficherActualite(
-                            rendu.texte,
-                            rendu.vignette,
-                            rendu.origine,
-                            rendu.crédit,
-                        )
-                        // COMPTÉ, ET NON ÉCRIT. Cette ligne partait à chaque
-                        // rotation et remplissait à elle seule le tampon qui
-                        // garde l'état de la machine : cinquante-sept
-                        // affichages avaient évincé toutes les lignes FLUX,
-                        // c'est-à-dire précisément celles qui disent si le fil
-                        // a pu être lu. L'instrument chassait sa réponse.
-                        //
-                        // Le bilan part sur le battement du service (voir
-                        // VieDuFil), une ligne toutes les cinq minutes.
-                        VieDuFil.noterAffichage(
-                            rangActualite,
-                            titresActualite.size,
-                            rendu.origine,
-                        )
-                        zones.majNavigationActualite(rangActualite, titresActualite.size)
-                    }
                     // ═══ UNE PHOTO, ET NON PLUS UN ÉCRAN VIDE ═══
                     //
                     // Ce chemin masquait la zone. Un élément PHOTO — donc
                     // toute photo d'une galerie — tombait ici et disparaissait
                     // sans qu'aucune ligne ne le dise.
                     is Rendu.Image -> {
-                        zones.afficherPhoto(
-                            rendu.bitmap,
-                            magasin?.disponibles()
-                                ?.firstOrNull { it.id == recueilActualiteId }?.titre,
-                        )
-                        zones.majNavigationActualite(rangActualite, titresActualite.size)
+                        zones.afficherPhoto(rendu.bitmap)
                         // La mesure va avec l'essai : une photo plein écran
                         // pèse plusieurs mégaoctets, et on vient de passer deux
                         // jours à mal mesurer exactement cela.
                         CallTrace.record(
                             "ACCUEIL photo",
-                            "${rangActualite + 1}/${titresActualite.size} · " +
+                            "${rangPhoto + 1}/${photosGalerie.size} · " +
                                 "${rendu.bitmap.width}×${rendu.bitmap.height} px · " +
                                 "${rendu.bitmap.byteCount / (1024 * 1024)} Mo · " +
                                 "résident=${CallTrace.résidentMo() ?: "?"} Mo",
@@ -663,15 +630,15 @@ class MainActivity : AppCompatActivity() {
                     // fermée de phrases du code, le type est un nom
                     // d'énumération, le reste est un compte.
                     is Rendu.Impossible -> {
-                        zones.masquerActualite()
+                        zones.masquerPhoto()
                         val motif = "${rendu.raison} · type=${element.type.étiquette} · " +
                             "fichier=${if (fichier == null) "aucun" else "présent"} · " +
-                            "recueil=$recueilActualiteId"
+                            "recueil=$recueilGalerieId"
                         if (motif != dernierRefus) {
                             dernierRefus = motif
                             CallTrace.record(
                                 "ACCUEIL élément refusé",
-                                "${rangActualite + 1}/${titresActualite.size} · $motif",
+                                "${rangPhoto + 1}/${photosGalerie.size} · $motif",
                             )
                         }
                     }
@@ -684,7 +651,7 @@ class MainActivity : AppCompatActivity() {
         // Le service est permanent, cet écran ne l'est pas : lui laisser un
         // rappel qui capture l'Activity la retiendrait en mémoire bien après sa
         // fermeture. On se débranche, et on se rebranchera à onResume.
-        CallListenerService.enService?.actualites?.observateur = null
+        CallListenerService.enService?.galerie?.observateur = null
         super.onPause()
         zones.onPause()
         screenAwakeHandler.removeCallbacks(screenAwakeTicker)
@@ -706,7 +673,7 @@ class MainActivity : AppCompatActivity() {
         // recréation d'activité en laisserait un de plus derrière elle à chaque
         // fois, tous inactifs et tous vivants — la fuite qu'on vient de fermer,
         // sous une autre forme.
-        décodeurActualite.shutdownNow()
+        décodeurPhoto.shutdownNow()
         zones.release()
         super.onDestroy()
     }
