@@ -462,7 +462,6 @@ class CallListenerService : LifecycleService() {
         callListener?.remove()
         callListener = null
         recueils.arrêter()
-        flux.arrêter()
         galerie.arrêter()
         if (enService === this) enService = null
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
