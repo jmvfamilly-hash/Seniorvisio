@@ -558,11 +558,25 @@
                peut pas lui donner le son d'un appel, qui arrive par WebRTC. -->
           <p class="hint">
             La reconnaissance d'Android ne vaut que pour la pièce, et c'est elle
-            qui prend alors le micro : c'est donc elle qui déclenche le réveil de
-            l'écran, <strong>à la voix entendue</strong> plutôt qu'au seuil de
-            bruit réglé plus haut. La reconnaissance de la voix de Jean est en
-            revanche impossible tant qu'elle écoute — elle tient le micro et ne
-            livre aucun son à analyser.
+            qui prend alors le micro. C'est donc elle qui déclenche le réveil de
+            l'écran, <strong>sur le même seuil que ci-dessus mais dans son
+            échelle à elle</strong> — des décibels, là où notre propre capture
+            mesure une valeur efficace. La position du curseur est transposée
+            d'une échelle à l'autre ; le nombre affiché dans le diagnostic
+            change donc de nature selon le moteur qui écoute, et c'est celui-là
+            qu'il faut lire pour régler.
+          </p>
+          <p class="hint">
+            La reconnaissance de la voix de Jean est en revanche impossible tant
+            que ce moteur écoute : il tient le micro et ne livre aucun son à
+            analyser.
+          </p>
+          <p class="hint">
+            ⚠️ <strong>Il lui faut le modèle français installé sur la
+            tablette</strong>, dans les paramètres de Google, reconnaissance
+            vocale hors connexion. Sans lui, le moteur démarre, émet ses sons,
+            et ne rend jamais aucun texte. Le diagnostic d'écoute ci-dessus le
+            nomme explicitement quand c'est le cas.
           </p>
           <p class="hint">
             ⚠️ <strong>Ce moteur émet deux sons à chaque reprise d'écoute</strong>,

@@ -415,7 +415,7 @@ class AndroidSpeechSession(
         }
 
         override fun onError(error: Int) {
-            TranscriptionTrace.record("API onError", "code $error")
+            TranscriptionTrace.record("API onError", "code $error — ${nomDErreur(error)}")
             // Quel que soit le motif, ce qui était dit avant l'erreur a été
             // dit. Une erreur tardive était l'un des chemins par lesquels une
             // phrase disparaissait sans jamais avoir été écrite.
@@ -449,7 +449,10 @@ class AndroidSpeechSession(
                     // bon — l'économie d'une reconstruction ne vaut pas une
                     // transcription morte.
                     releaseRecognizer()
-                    TranscriptionTrace.record("APP moteur reconstruit", "après le code $error")
+                    TranscriptionTrace.record(
+                        "APP moteur reconstruit",
+                        "après le code $error — ${nomDErreur(error)}",
+                    )
                     consecutiveErrors++
                     // ═══ ON NE RENONCE PLUS JAMAIS POUR DE BON ═══
                     //
@@ -469,18 +472,60 @@ class AndroidSpeechSession(
                     // marche » qui ne rend rien.
                     if (consecutiveErrors == MAX_CONSECUTIVE_ERRORS) {
                         diagnose(
-                            "reconnaissance Android en échec répété (code $error) — " +
-                                "nouvel essai toutes les ${MAX_RESTART_DELAY_MS / 1000} s"
+                            "reconnaissance Android en échec répété : ${nomDErreur(error)} " +
+                                "(code $error) — nouvel essai toutes les " +
+                                "${MAX_RESTART_DELAY_MS / 1000} s"
                         )
                         TranscriptionTrace.record(
                             "APP échec répété",
-                            "$consecutiveErrors erreurs de suite, code $error — on continue d'essayer",
+                            "$consecutiveErrors erreurs de suite — ${nomDErreur(error)} " +
+                                "(code $error) — on continue d'essayer",
                         )
                     }
                     scheduleRestart()
                 }
             }
         }
+    }
+
+    /**
+     * Le code d'erreur du moteur, en toutes lettres.
+     *
+     * ═══ « CODE 12 » NE DIT RIEN À PERSONNE ═══
+     *
+     * Ces lignes sont lues depuis le PWA, par quelqu'un qui cherche pourquoi
+     * la pièce ne s'écrit plus. Un nombre nu l'oblige à aller chercher la
+     * table des codes d'Android — c'est-à-dire, en pratique, à renoncer.
+     *
+     * Trois d'entre eux se règlent sur la tablette et nulle part ailleurs :
+     * le modèle français absent, la langue non prise en charge, le micro
+     * refusé. Les nommer, c'est la différence entre « la transcription ne
+     * marche pas » et « il manque le modèle français, ça s'installe dans les
+     * paramètres de Google ».
+     *
+     * Les codes 10 à 15 sont écrits en chiffres et non par leurs constantes :
+     * elles n'existent que depuis Android 12 et 13, et ce fichier tourne
+     * aussi sur plus ancien. Leur nom est dans la phrase, qui est ce qu'on
+     * lit.
+     */
+    private fun nomDErreur(code: Int): String = when (code) {
+        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "réseau : délai dépassé"
+        SpeechRecognizer.ERROR_NETWORK -> "réseau indisponible"
+        SpeechRecognizer.ERROR_AUDIO -> "capture audio en échec"
+        SpeechRecognizer.ERROR_SERVER -> "le service de reconnaissance a répondu par une erreur"
+        SpeechRecognizer.ERROR_CLIENT -> "erreur côté application"
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "silence : personne n'a parlé"
+        SpeechRecognizer.ERROR_NO_MATCH -> "rien de reconnu"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "moteur occupé"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "permission micro refusée"
+        10 -> "trop de demandes (TOO_MANY_REQUESTS)"
+        11 -> "service déconnecté (SERVER_DISCONNECTED)"
+        12 -> "LANGUE NON PRISE EN CHARGE — le français n'est pas reconnu par ce moteur"
+        13 -> "MODÈLE FRANÇAIS ABSENT — à installer dans les paramètres de Google, " +
+            "reconnaissance vocale hors connexion"
+        14 -> "impossible de vérifier la prise en charge (CANNOT_CHECK_SUPPORT)"
+        15 -> "impossible de suivre le téléchargement du modèle (CANNOT_LISTEN_TO_DOWNLOAD_EVENTS)"
+        else -> "code inconnu"
     }
 
     private fun firstResult(bundle: Bundle?): String? =
