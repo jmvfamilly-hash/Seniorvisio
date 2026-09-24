@@ -214,8 +214,6 @@ class HomeZonesController(
         afficherPhoto(null)
     }
 
-    val photoAffichee: Boolean get() = modePhoto
-
     /**
      * Le bouton de sommeil, à droite du bandeau de la date.
      *

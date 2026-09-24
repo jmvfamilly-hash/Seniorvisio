@@ -182,9 +182,23 @@ class AdminConfig(context: Context) {
     // tomber au mauvais moment. Mettre AssemblyAI sur les seuls appels
     // distants reste raisonnable, sur la pièce beaucoup moins : elle est
     // écoutée des heures par jour, et la facture suit la durée. ---
+    /**
+     * ═══ LA PIÈCE PART SUR LE MOTEUR D'ANDROID, PAS SUR AUTO ═══
+     *
+     * Demandé explicitement : « le moteur installé par Android ». AUTO mène au
+     * moteur embarqué, donc laisser AUTO par défaut aurait rendu la consigne
+     * sans effet sur toute tablette dont le réglage n'a jamais été touché.
+     *
+     * Les APPELS gardent AUTO : ce moteur n'écoute que le micro, et le son
+     * d'un appel arrive par WebRTC. Il ne peut pas les transcrire.
+     *
+     * Ce défaut fait aussi revenir les deux sons de reprise d'écoute, qui
+     * n'ont pas de réglage (voir RoomPresenceService.startListening). C'est un
+     * choix assumé de l'administrateur, pas un oubli.
+     */
     var roomEngine: TranscriptionEngineChoice
         get() = TranscriptionEngineChoice.fromRemoteValue(prefs.getString(KEY_ROOM_ENGINE, null))
-            ?: TranscriptionEngineChoice.AUTO
+            ?: TranscriptionEngineChoice.ANDROID
         set(value) = prefs.edit().putString(KEY_ROOM_ENGINE, value.remoteValue).apply()
 
     var callEngine: TranscriptionEngineChoice
@@ -227,18 +241,21 @@ class AdminConfig(context: Context) {
         set(value) = prefs.edit().putString(KEY_LAST_COMMAND_ID, value).apply()
 
     /**
-     * La transcription de la PIÈCE s'affiche-t-elle encore sur l'accueil ?
+     * La transcription de la PIÈCE s'affiche-t-elle sur l'accueil ?
      *
-     * Mise de côté à la demande de l'administrateur : c'est sa zone que le fil
-     * d'information occupe désormais. Le réglage reste, plutôt qu'un
-     * retrait pur et simple du code — « jusqu'à nouvel ordre » veut dire qu'un
-     * ordre contraire peut venir, et il ne doit pas coûter une reconstruction.
+     * ═══ VRAI DE NOUVEAU, ET C'EST L'ORDRE CONTRAIRE ANNONCÉ ═══
+     *
+     * Elle avait été mise de côté parce que le fil d'information occupait sa
+     * zone. Le réglage avait été gardé plutôt que le code retiré, en disant
+     * que « jusqu'à nouvel ordre » veut dire qu'un ordre contraire peut venir
+     * et ne doit pas coûter une reconstruction. Le fil est parti, l'ordre est
+     * venu, et la bascule aura effectivement coûté une ligne.
      *
      * Sans effet sur l'écoute de la pièce PENDANT un appel, que le proche
      * déclenche depuis le PWA : c'est un autre chemin, et il n'est pas touché.
      */
     var transcriptionPieceAffichee: Boolean
-        get() = prefs.getBoolean(KEY_TRANSCRIPTION_PIECE_AFFICHEE, false)
+        get() = prefs.getBoolean(KEY_TRANSCRIPTION_PIECE_AFFICHEE, true)
         set(value) = prefs.edit().putBoolean(KEY_TRANSCRIPTION_PIECE_AFFICHEE, value).apply()
 
     /**

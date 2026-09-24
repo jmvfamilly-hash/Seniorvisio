@@ -320,6 +320,9 @@ class TranscriptionEngine(
     private fun isConfigured(wanted: TranscriptionEngineChoice): Boolean = when (wanted) {
         TranscriptionEngineChoice.VOSK -> VoskModelProvider.getModel() != null
         TranscriptionEngineChoice.GLADIA -> AdminConfig(context).gladiaApiKey.isNotBlank()
+        // Jamais ici : ce moteur écoute le micro lui-même et ne passe pas par
+        // cette chaîne (voir AndroidSpeechSession, RoomPresenceService).
+        TranscriptionEngineChoice.ANDROID -> false
         else -> AdminConfig(context).assemblyAiApiKey.isNotBlank()
     }
 
@@ -341,6 +344,15 @@ class TranscriptionEngine(
             val used = UsageStats.monthlySecondsFor(UsageStats.engineFor(wanted)) / 3600
             diagnose("plafond mensuel ${wanted.adminLabel} atteint (${used}h) : moteur embarqué en relais")
             wanted = TranscriptionEngineChoice.VOSK
+        }
+        // La reconnaissance d'Android n'écoute que le micro : on ne peut pas
+        // lui donner le son d'un appel, qui arrive par WebRTC. Le dire plutôt
+        // que de rester muet — un réglage qui ne s'applique pas sans
+        // explication, c'est une heure perdue à chercher pourquoi.
+        if (wanted == TranscriptionEngineChoice.ANDROID) {
+            diagnose("la reconnaissance Android n'écoute que le micro : impossible sur un appel")
+            wanted = if (VoskModelProvider.getModel() != null) TranscriptionEngineChoice.VOSK
+            else TranscriptionEngineChoice.ASSEMBLYAI
         }
         if (wanted == TranscriptionEngineChoice.VOSK) {
             if (VoskModelProvider.getModel() != null) return buffered(VoskSpeechRecognizer())

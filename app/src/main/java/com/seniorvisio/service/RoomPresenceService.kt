@@ -18,6 +18,7 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.AndroidSpeechSession
 import com.seniorvisio.core.EagleSpeakerRecogniser
 import com.seniorvisio.core.EmbeddedSpeakerRecogniser
 import com.seniorvisio.core.RoomVoiceGate
@@ -79,6 +80,13 @@ class RoomPresenceService : Service() {
      * rien ne garantit que la valeur écrite d'un côté soit vue de l'autre.
      */
     @Volatile private var lastLoudAtMs = 0L
+
+    /**
+     * La session du moteur d'Android, quand c'est lui qui écoute la pièce.
+     * Null le reste du temps : les deux mécanismes s'excluent (voir
+     * startListening).
+     */
+    private var androidSpeech: AndroidSpeechSession? = null
 
     private var transcription: TranscriptionEngine? = null
     private var voiceGate: RoomVoiceGate? = null
@@ -182,8 +190,18 @@ class RoomPresenceService : Service() {
         val transcribing: Boolean,
         val captureError: String?,
         val voskModel: String,
-        /** Si notre capture tient le micro, ou rien (voir startListening). */
+        /** Lequel des deux mécanismes tient le micro (voir startListening). */
         val listeningMode: String,
+
+        /**
+         * Niveau instantané et seuil du moteur d'Android, en décibels relatifs
+         * à ce moteur — nuls quand ce n'est pas lui qui écoute. Séparés de
+         * lastRms et threshold volontairement : ce ne sont pas les mêmes
+         * unités, et les confondre dans un même champ ferait comparer des
+         * valeurs qui n'ont rien à voir.
+         */
+        val androidLevelDb: Float? = null,
+        val androidThresholdDb: Float? = null,
 
         /**
          * Part du temps jugée vocale par le portier depuis la dernière
@@ -248,14 +266,14 @@ class RoomPresenceService : Service() {
         transcribing = transcription?.activeSource() != null,
         captureError = lastCaptureError,
         voskModel = VoskModelProvider.describeState(),
-        listeningMode = if (isCapturing) "capture interne" else "aucune écoute",
+        listeningMode = if (androidSpeech?.isRunning() == true) "reconnaissance Android"
+        else if (isCapturing) "capture interne"
+        else "aucune écoute",
+        androidLevelDb = androidSpeech?.takeIf { it.isRunning() }?.lastLevelDb(),
+        androidThresholdDb = androidSpeech?.takeIf { it.isRunning() }?.wakeThresholdDb(),
         voiceSharePercent = voiceGate?.consumeVoiceShare(),
         speakerMode = describeSpeakerRecognition(),
-        // Toujours vrai désormais : la seule écoute qui existe est la nôtre,
-        // et elle nous livre le son. Le champ reste parce que l'écran
-        // d'administration et le PWA l'affichent — dire « oui » sans détour
-        // vaut mieux que retirer une ligne d'état que quelqu'un lit.
-        canRecogniseSpeaker = true,
+        canRecogniseSpeaker = adminConfig.roomEngine != TranscriptionEngineChoice.ANDROID,
         jeanSimilarityPercent = speakerGate?.lastSimilarityPercent(),
         jeanSharePercent = speakerGate?.consumeJeanSharePercent(),
         enrollmentProgressPercent = enrollmentProgress()?.let { (it * 100).toInt() },
@@ -272,6 +290,8 @@ class RoomPresenceService : Service() {
         val engine = adminConfig.speakerEngine
         return when {
             enrollment != null -> "apprentissage en cours avec « ${engine.adminLabel} »"
+            adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID ->
+                "impossible : la reconnaissance Android tient le micro, aucun son à analyser"
             !adminConfig.dimJeanSpeech -> "atténuation désactivée"
             // L'erreur avant tout le reste : c'est elle qui distingue « pas
             // encore de son » d'une clé absente ou d'un profil illisible, trois
@@ -281,6 +301,16 @@ class RoomPresenceService : Service() {
             else -> "${engine.adminLabel}, seuil ${adminConfig.jeanVoiceThresholdPercent(engine)}%"
         }
     }
+
+    /**
+     * Pendant du consumePeakRms de l'autre mécanisme d'écoute, et séparé de
+     * currentStatus() pour la même raison qu'elle : lire le pic le remet à
+     * zéro. L'écran d'administration de la tablette interroge l'état chaque
+     * seconde ; si la lecture du pic était faite là, le signe de vie n'en
+     * verrait plus jamais aucun, et inversement.
+     */
+    fun consumeAndroidPeakLevelDb(): Float? =
+        androidSpeech?.takeIf { it.isRunning() }?.consumePeakLevelDb()
 
     /**
      * `fromJean` dit si la prise de parole en cours est attribuée à Jean (voir
@@ -356,43 +386,78 @@ class RoomPresenceService : Service() {
      * Ce réglage ne fait que dispenser ensureAwake() d'agir, plus bas.
      */
     /**
-     * Démarre l'écoute de la pièce. Un seul mécanisme, et c'est le nôtre.
+     * Démarre l'écoute de la pièce par le mécanisme choisi par
+     * l'administrateur — et c'est le seul endroit qui décide lequel.
      *
-     * ═══ LE MOTEUR D'ANDROID A QUITTÉ LA PIÈCE ═══
+     * Deux mécanismes exclusifs, parce qu'un seul composant à la fois peut
+     * tenir le micro. Le nôtre (AudioRecord) mesure le niveau sonore et
+     * alimente un moteur qu'on nourrit ; celui d'Android écoute le micro
+     * lui-même et ne nous laisse rien à mesurer — c'est donc lui qui signale
+     * la parole pour le réveil (voir AndroidSpeechSession). Les lancer tous
+     * les deux ferait échouer l'un des deux, au hasard.
      *
-     * Il y en avait deux, exclusifs, parce qu'un seul composant à la fois peut
-     * tenir le microphone. Celui d'Android l'écoutait lui-même et ne nous
-     * laissait rien à mesurer ; le nôtre capte le son, en tire le niveau, et
-     * alimente un moteur qu'on nourrit.
+     * ═══ LE MOTEUR D'ANDROID EST REVENU, ET AVEC LUI SES SONS ═══
      *
-     * Celui d'Android est parti, et pour une raison qui s'entendait depuis
-     * l'autre bout de la chambre : son interface est MODALE — elle transcrit
-     * un énoncé, s'arrête, et doit être relancée. À chaque relance, le service
-     * de Google joue ses deux sons d'interaction, qu'aucun réglage ne
-     * désactive et que notre processus n'émet pas. Toute la journée, toutes
-     * les dix secondes.
+     * Il a été retiré d'ici une journée, parce qu'il fait du bruit : son
+     * interface est MODALE — un énoncé, une clôture, une relance — et le
+     * service de Google joue ses deux sons d'interaction à chaque reprise.
+     * Il est remis à la demande de l'administrateur, qui le veut pour ce
+     * qu'il transcrit.
      *
-     * Baisser le flux « Notifications » n'était pas un correctif (voir
-     * AlertVolume) : Android refuse le silence complet sans une autorisation
-     * qu'un propriétaire d'appareil ne peut pas s'accorder, donc les sons
-     * restaient audibles, simplement plus bas.
+     * CES SONS NE SE DÉSACTIVENT PAS, et ce n'est pas faute d'avoir cherché :
+     * le banc d'essai Papyrus, construit pour observer ce moteur seul, le
+     * conclut en toutes lettres — « les bips appartiennent au moteur, ils
+     * reviennent à chaque relance, c'est un fait à constater, pas un réglage
+     * à trouver ». La logique de session ici est la dernière mesurée, et elle
+     * réduit le TEMPS MORT entre deux sessions, pas le nombre de sessions.
      *
-     * Ce qui disparaît avec lui n'est pas une perte :
+     * Dans une pièce silencieuse, le moteur rend ERROR_SPEECH_TIMEOUT au bout
+     * de quelques secondes et la session repart : c'est de là que vient un
+     * son qui revient régulièrement sans que personne n'ait parlé.
      *
-     *  - les commandes vocales cessent de dépendre d'un moteur qui ne lève pas
-     *    toujours le drapeau « définitif » (voir MainActivity, où ce défaut a
-     *    déjà coûté un correctif) ;
-     *  - la reconnaissance de la voix de Jean devient POSSIBLE, alors qu'elle
-     *    était structurellement hors d'atteinte sous ce moteur, qui ne livrait
-     *    aucun son à analyser.
-     *
-     * Une tablette encore réglée sur « android » se répare toute seule : la
-     * valeur stockée ne correspond plus à aucune entrée de l'énumération,
-     * fromRemoteValue rend null, et le repli sur AUTO du lecteur de réglages
-     * l'amène au moteur embarqué (voir AdminConfig.roomEngine).
+     * Le seul palliatif en place est le volume (voir AlertVolume), qui
+     * descend les notifications à leur plus bas cran audible — jamais zéro,
+     * qu'Android refuse sans une autorisation qu'un propriétaire d'appareil
+     * ne peut pas s'accorder.
      */
     private fun startListening() {
-        startCapture()
+        if (adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID) {
+            stopCapture()
+            startAndroidSpeech()
+        } else {
+            stopAndroidSpeech()
+            startCapture()
+        }
+    }
+
+    private fun startAndroidSpeech() {
+        if (androidSpeech?.isRunning() == true) return
+        val session = AndroidSpeechSession(
+            context = this,
+            // Ce moteur tient le microphone lui-même et ne nous livre aucun
+            // son : aucune reconnaissance du locuteur n'y est possible, et tout
+            // s'affiche en clair. Dit dans l'état (voir Status.speakerMode)
+            // plutôt que laissé à constater comme une panne.
+            onText = { text, isFinal -> roomTranscriptionOnText?.invoke(text, isFinal, false) },
+            // Ce moteur ne nous donne pas de niveau sonore exploitable, mais il
+            // dit quand quelqu'un se met à parler : c'est tout ce dont le
+            // réveil a besoin, et c'est même plus sûr qu'un seuil à calibrer.
+            onSpeechDetected = {
+                lastLoudAtMs = System.currentTimeMillis()
+                ensureAwake()
+            },
+            onDiagnostic = { message ->
+                lastCaptureError = message
+                roomTranscriptionOnError?.invoke(message)
+            },
+        )
+        androidSpeech = session
+        session.start()
+    }
+
+    private fun stopAndroidSpeech() {
+        androidSpeech?.stop()
+        androidSpeech = null
     }
 
     /**
@@ -489,6 +554,7 @@ class RoomPresenceService : Service() {
     }
 
     private fun stopListening() {
+        stopAndroidSpeech()
         stopCapture()
     }
 

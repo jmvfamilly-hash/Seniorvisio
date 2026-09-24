@@ -143,7 +143,25 @@ class MainActivity : AppCompatActivity() {
                         // reconnue (voir traiterCommandeVocale) — plutôt qu'en
                         // refusant une catégorie entière de résultats.
                         traiterCommandeVocale(text)
-                        if (adminConfig.transcriptionPieceAffichee && !zones.photoAffichee) {
+                        // ═══ LA PHOTO NE FAIT PLUS TAIRE LA TRANSCRIPTION ═══
+                        //
+                        // Ce « et pas de photo affichée » datait du temps où
+                        // l'image occupait la rangée du bas, celle-là même où
+                        // le texte s'écrit : les deux se seraient disputé la
+                        // place, et la photo gagnait.
+                        //
+                        // Elle est désormais dessinée DERRIÈRE la pile, en
+                        // plein cadre (voir activity_main.xml). Les zones de
+                        // texte flottent par-dessus, exactement comme elles
+                        // flottent sur la vidéo d'un proche pendant un appel —
+                        // et avec le même fond semi-opaque qui les garde
+                        // lisibles. Il n'y a plus rien à départager.
+                        //
+                        // Garder ce garde-fou aurait rendu la consigne
+                        // inapplicable : une galerie étant installée en
+                        // permanence, la transcription ne se serait affichée
+                        // jamais.
+                        if (adminConfig.transcriptionPieceAffichee) {
                             zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal, fromJean)
                         }
                     }
