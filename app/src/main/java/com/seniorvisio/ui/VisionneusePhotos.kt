@@ -10,7 +10,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
+import com.seniorvisio.core.ChargeurImages
 import kotlinx.coroutines.delay
 import me.saket.telephoto.zoomable.coil.ZoomableAsyncImage
 import me.saket.telephoto.zoomable.rememberZoomableImageState
@@ -143,6 +145,11 @@ fun VisionneusePhotos(
 
         ZoomableAsyncImage(
             model = photos[page],
+            // Le nôtre, et non celui que Coil fabrique tout seul : son cache
+            // par défaut se dimensionne en pourcentage de la mémoire de
+            // l'appareil, ce qui autorise près de cinq cents mégaoctets de
+            // bitmaps sur cette tablette. Voir ChargeurImages.
+            imageLoader = ChargeurImages.pour(LocalContext.current),
             // Null et non une description : cet écran n'est pas lu par un
             // lecteur d'écran, et une description inventée à partir d'un nom
             // de fichier serait pire que rien.

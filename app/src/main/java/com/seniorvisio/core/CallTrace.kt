@@ -392,8 +392,13 @@ object CallTrace {
         // Le RÉSIDENT en tête, et l'allocateur étiqueté pour ce qu'il est.
         // Deux jours de recherche ont été menés sur un chiffre qui ne mesurait
         // pas l'empreinte ; le nom porte désormais l'avertissement.
+        // Le cache d'images est nommé À PART, et ce n'est pas un détail : une
+        // montée du résident ne dit pas d'où elle vient, et on a déjà passé
+        // deux jours sur un chiffre qui ne mesurait pas ce qu'on croyait.
+        // « images=42 Mo » face à un plafond connu tranche en une seconde.
+        val images = ChargeurImages.tailleCacheMo()?.let { " · images=$it Mo" } ?: ""
         return "résident=${résidentMo() ?: "?"} Mo · échangé=${échangéMo() ?: "?"} Mo · " +
-            "java=${javaUtilisé}/${javaMax} Mo · natif alloué=$natif Mo"
+            "java=${javaUtilisé}/${javaMax} Mo · natif alloué=$natif Mo" + images
     }
 
     /**

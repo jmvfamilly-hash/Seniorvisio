@@ -141,6 +141,29 @@ class AndroidSpeechSession(
     private var reportedEngine = false
 
     /**
+     * Le dernier code d'erreur déjà signalé, pour ne pas le répéter.
+     *
+     * ═══ LE DIAGNOSTIC NE POUVAIT PAS PARTIR ═══
+     *
+     * Il n'était publié qu'à la HUITIÈME erreur consécutive. Or
+     * onReadyForSpeech remet ce compteur à zéro, et un moteur qui refuse
+     * proprement passe par « prêt » avant de rendre son erreur : prêt, erreur,
+     * relance, prêt, erreur… Le compteur ne dépassait jamais un, et le
+     * diagnostic n'était jamais écrit.
+     *
+     * Conséquence exacte : une pièce qui ne s'écrit plus, et pas une ligne
+     * pour dire pourquoi — alors que le moteur, lui, donnait la raison à
+     * chaque tour. C'est la panne muette que ce projet passe son temps à
+     * fermer, reproduite par l'instrument censé la révéler.
+     *
+     * Le premier code non silencieux est donc signalé tout de suite, puis taxé
+     * de silence tant qu'il se répète : le redire toutes les trente secondes
+     * noierait le journal. Remis à zéro dès qu'un texte arrive, pour qu'une
+     * panne revenant après une guérison se redise.
+     */
+    private var codeSignalé = 0
+
+    /**
      * Le dernier partiel reçu, pas encore figé à l'écran.
      *
      * Il existe parce que la conclusion n°3 impose de pouvoir figer l'ancien
@@ -395,6 +418,9 @@ class AndroidSpeechSession(
             // l'écran entre la ligne en cours et les lignes figées.
             val current = raw.trim()
             if (current.isEmpty()) return
+            // Du texte arrive : la panne précédente, s'il y en avait une, est
+            // passée. Un retour de la même erreur sera donc redit.
+            codeSignalé = 0
             // Écho d'une ligne qu'on vient de figer, à ne pas réafficher en
             // dessous d'elle-même.
             if (pendingText.isEmpty() && current == lastCommitted) return
@@ -436,6 +462,13 @@ class AndroidSpeechSession(
                 }
 
                 else -> {
+                    // Signalé DÈS LA PREMIÈRE FOIS, et non au bout de huit :
+                    // voir codeSignalé, où l'ancien compteur ne pouvait
+                    // jamais être atteint.
+                    if (error != codeSignalé) {
+                        codeSignalé = error
+                        diagnose("reconnaissance Android : ${nomDErreur(error)} (code $error)")
+                    }
                     // Le moteur réutilisé est jeté ici, et seulement ici. Une
                     // erreur autre qu'un silence signifie qu'il est peut-être
                     // dans un état dont il ne sortira pas ; la relance en
