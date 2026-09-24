@@ -112,6 +112,21 @@ DÉCLARATION = re.compile(
     re.M,
 )
 
+# ═══ UNE FONCTION PEUT COMMENCER PAR UNE MAJUSCULE, ET COMPOSE NE FAIT QUE ÇA ═══
+#
+# Le filet ne connaissait que les classes, les objets et les interfaces. Un
+# « @Composable fun VisionneusePhotos(...) » — dont la majuscule est la
+# convention de Compose, pas une fantaisie — était donc vu comme un type
+# utilisé sans import, dans le fichier même qui le déclare.
+#
+# Signalé dès le premier composable écrit dans ce dépôt.
+FONCTION_MAJUSCULE = re.compile(
+    r"^\s*(?:@\w+(?:\([^)]*\))?\s*)*"
+    r"(?:public\s+|internal\s+|private\s+|inline\s+|suspend\s+|expect\s+|actual\s+)*"
+    r"fun\s+(?:<[^>]*>\s*)?([A-Z][A-Za-z0-9_]*)\s*\(",
+    re.M,
+)
+
 
 # ═══ « += » SUR UNE LISTE DE LISTES ═══
 #
@@ -156,6 +171,7 @@ def main() -> int:
         paquet = (PAQUET.search(code) or [None, ""])[1] if PAQUET.search(code) else ""
         contenus[f] = (paquet, code)
         par_paquet.setdefault(paquet, set()).update(DÉCLARATION.findall(code))
+        par_paquet.setdefault(paquet, set()).update(FONCTION_MAJUSCULE.findall(code))
         # BuildConfig et R sont générés dans le paquet applicatif.
         par_paquet.setdefault("com.seniorvisio", set())
 

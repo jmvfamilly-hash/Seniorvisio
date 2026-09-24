@@ -194,6 +194,20 @@ android {
     buildFeatures {
         viewBinding true
         buildConfig true
+        // Compose n'est activé QUE pour la visionneuse de photos (voir
+        // VisionneusePhotos.kt). Tout le reste de l'application reste en vues
+        // Android classiques : on n'ouvre pas un chantier de migration au
+        // milieu d'un appareil en service chez quelqu'un.
+        compose true
+    }
+
+    // ═══ CETTE VERSION N'EST PAS LIBRE ═══
+    //
+    // Le compilateur Compose est apparié au compilateur Kotlin, version par
+    // version : 1.5.14 est celui de Kotlin 1.9.24, et lui seul. En choisir un
+    // autre ne dégrade pas, il refuse de compiler.
+    composeOptions {
+        kotlinCompilerExtensionVersion '1.5.14'
     }
 }
 
@@ -258,6 +272,40 @@ dependencies {
     // capture caméra, prête à l'emploi (pas besoin de CameraX/ML Kit ici).
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
     implementation 'com.google.zxing:core:3.5.2'
+
+    // ═══ TELEPHOTO : LE ZOOM, LE GLISSEMENT ET LES TRANSITIONS ═══
+    //
+    // Demandé explicitement, et pour la bonne raison : ne pas réinventer des
+    // gestes tactiles ni des transitions qu'une bibliothèque fait mieux. Le
+    // pincement, la double-tape, l'inertie et le retour aux bords viennent
+    // d'ici, pas de nous.
+    //
+    // Ce qu'elle apporte et qu'on n'aurait pas écrit : le DÉCODAGE PAR TUILES
+    // (sub-sampling-image, tiré en dépendance). C'est lui qui rend « garder la
+    // résolution d'origine » compatible avec une mémoire bornée — seule la
+    // portion visible est décodée, à la finesse où on la regarde. Sans lui,
+    // une photo d'appareil moderne en plein cadre, c'est cinquante mégaoctets
+    // de pixels pour une dalle qui en affiche deux.
+    //
+    // ═══ 0.14.0 ET PAS LA DERNIÈRE, POUR LA RAISON DE SILERO ═══
+    //
+    // La 0.15.0 est compilée avec Kotlin 2.1, que le compilateur 1.9 de ce
+    // projet ne sait pas lire. Ce dépôt a déjà payé exactement cette erreur
+    // avec Silero : l'ajout cassait la compilation du module ENTIER, fichiers
+    // intouchés compris, avec des erreurs qui ne désignent jamais la vraie
+    // cause. Vérifié avant de choisir, sur les métadonnées publiées : la
+    // 0.14.0 déclare kotlin-stdlib 1.9.24, exactement la nôtre.
+    //
+    // À revoir le jour où ce projet passera à Kotlin 2 — une montée du
+    // compilateur touche tout ce que Jean utilise et mérite d'être faite pour
+    // elle-même, pas en passager clandestin.
+    //
+    // Coil arrive avec elle (coil-compose 2.7.0) : c'est lui qui charge les
+    // fichiers, gère le cache et les transitions de chargement.
+    implementation platform('androidx.compose:compose-bom:2024.06.00')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.foundation:foundation'
+    implementation 'me.saket.telephoto:zoomable-image-coil:0.14.0'
 
     // WebSocket vers AssemblyAI (transcription temps réel du flux audio
     // distant reçu par l'appel, voir core/AssemblyAiRealtimeTranscriber.kt) :
