@@ -25,6 +25,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import android.widget.TextView
 import com.seniorvisio.BuildConfig
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.ComposeView
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.AlertVolume
@@ -37,7 +40,6 @@ import com.seniorvisio.core.UsageStats
 import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.recueil.LecteurRecueil
 import com.seniorvisio.recueil.RecueilStore
-import com.seniorvisio.recueil.Rendu
 import com.seniorvisio.signaling.CallSignalingClient
 import com.seniorvisio.service.IncomingCallService
 import com.seniorvisio.service.RoomPresenceService
@@ -551,31 +553,28 @@ class IncomingCallActivity : AppCompatActivity() {
      * vidéo n'a jamais cessé de tourner derrière.
      */
     private fun afficherRecueil(état: LecteurRecueil.État) {
-        val image = findViewById<ImageView>(R.id.imageRecueil) ?: return
         val message = findViewById<TextView>(R.id.textRecueilImpossible) ?: return
         val renderer = remoteRendererRef
 
         // Les affichages possibles se partagent la même bande. Les masquer
         // TOUS avant d'en montrer un : sans ça, passer d'une photo à un motif
-        // de refus laisserait la photo derrière le texte. Le coût est nul, et
-        // la règle survit à l'ajout d'un rendu de plus — ce qui n'est pas le
-        // cas d'une bascule écrite à la main entre deux vues connues.
-        image.setImageDrawable(null)
-        image.visibility = View.GONE
+        // de refus laisserait la photo derrière le texte.
         message.visibility = View.GONE
 
-        // Ce qui était posé jusqu'ici, retenu AVANT d'être remplacé. Voir
-        // rendreImageRecueil : les octets d'un bitmap ne reviennent pas tout
-        // seuls sur cette tablette.
-        val ancienne = imageRecueilPosée
-        // Remis à zéro TOUT DE SUITE : les branches qui posent une image le
-        // renseignent, les autres — recueil refermé, rendu impossible — le
-        // laissent nul, et l'ancienne est alors reprise au lieu de rester
-        // retenue par un champ qui ne correspond plus à rien d'affiché.
-        imageRecueilPosée = null
+        when {
+            état.problème != null -> {
+                photosRecueil.value = emptyList()
+                hoteRecueil?.visibility = View.GONE
+                message.text = état.problème
+                message.visibility = View.VISIBLE
+                renderer?.visibility = View.INVISIBLE
+                zones.setBackground(HomeZonesController.Background.SLIDESHOW)
+                CallTrace.record("APPEL recueil", "inaffichable : ${état.problème}")
+            }
 
-        when (val rendu = état.rendu) {
-            null -> {
+            état.fichiers.isEmpty() -> {
+                photosRecueil.value = emptyList()
+                hoteRecueil?.visibility = View.GONE
                 // INVISIBLE et non GONE pour la vidéo, ici comme ailleurs dans
                 // cet écran : une surface de rendu retirée de la mise en page
                 // est détruite, et la recréer donne un écran noir de plusieurs
@@ -584,10 +583,11 @@ class IncomingCallActivity : AppCompatActivity() {
                 zones.setBackground(HomeZonesController.Background.VIDEO)
                 CallTrace.record("APPEL recueil", "refermé")
             }
-            is Rendu.Image -> {
-                image.setImageBitmap(rendu.bitmap)
-                imageRecueilPosée = rendu.bitmap
-                image.visibility = View.VISIBLE
+
+            else -> {
+                photosRecueil.value = état.fichiers
+                rangRecueil.value = (état.position - 1).coerceAtLeast(0)
+                hoteRecueil?.visibility = View.VISIBLE
                 renderer?.visibility = View.INVISIBLE
                 zones.setBackground(HomeZonesController.Background.SLIDESHOW)
                 ajusterBandeRecueil()
@@ -596,30 +596,17 @@ class IncomingCallActivity : AppCompatActivity() {
                     "« ${état.titre} » ${état.position}/${état.total}",
                 )
             }
-            is Rendu.Impossible -> {
-                message.text = rendu.raison
-                message.visibility = View.VISIBLE
-                renderer?.visibility = View.INVISIBLE
-                zones.setBackground(HomeZonesController.Background.SLIDESHOW)
-                CallTrace.record("APPEL recueil", "inaffichable : ${rendu.raison}")
-            }
         }
-        // ═══ L'ANCIENNE IMAGE EST RENDUE, APRÈS QUE LA NOUVELLE EST POSÉE ═══
+        // ═══ PLUS AUCUN BITMAP À REPRENDRE ICI ═══
         //
-        // Même correctif que sur l'accueil, et pour la même raison : depuis
-        // Android 8 les pixels vivent dans le tas natif, mais le ramasse-
-        // miettes se déclenche sur le tas Java, qui reste ici sous vingt
-        // mégaoctets sur cent quatre-vingt-douze. Une collecte ne part donc
-        // jamais, et les photos feuilletées pendant un appel s'accumulent —
-        // huit mégaoctets et demi chacune, jusqu'à 883 mégaoctets constatés.
+        // Il y avait à cet endroit un recyclage soigneux, avec garde
+        // d'identité et ordre de pose : depuis Android 8 les pixels vivent
+        // dans le tas natif tandis que le ramasse-miettes se déclenche sur le
+        // tas Java, et les photos feuilletées pendant un appel s'accumulaient
+        // jusqu'à 883 mégaoctets constatés.
         //
-        // L'ordre et la garde d'identité sont la sûreté de l'opération :
-        // recycler un bitmap encore posé fait planter le dessin à la frame
-        // suivante, et le lecteur peut republier le MÊME état — donc la même
-        // instance — sans que rien n'ait changé.
-        if (ancienne != null && ancienne !== imageRecueilPosée && !ancienne.isRecycled) {
-            ancienne.recycle()
-        }
+        // Cet écran ne décode plus rien. Coil tient un cache borné pour toute
+        // l'application, et Telephoto ne lit que les tuiles visibles.
         majBarreNavigationRecueil(état)
         publierPositionRecueil(état)
     }
@@ -640,7 +627,7 @@ class IncomingCallActivity : AppCompatActivity() {
         val précédent = findViewById<Button>(R.id.boutonRecueilPrecedent) ?: return
         val suivant = findViewById<Button>(R.id.boutonRecueilSuivant) ?: return
 
-        val visible = état.rendu != null && état.total > 1
+        val visible = état.fichiers.isNotEmpty() && état.total > 1
         barre.visibility = if (visible) View.VISIBLE else View.GONE
         if (!visible) return
 
@@ -681,18 +668,25 @@ class IncomingCallActivity : AppCompatActivity() {
             déplacerRecueil(+1)
         }
 
-        // Le glissement est branché sur la vue qui porte le contenu — la
-        // photo — et pas sur la racine de l'écran : sur la racine, il
-        // capterait aussi les gestes faits au-dessus des boutons et des zones
-        // de texte.
-        findViewById<View>(R.id.imageRecueil)?.let { vue ->
-            GlissementHorizontal.brancher(vue) { versLAvant ->
-                UsageStats.noteGeste(
-                    if (versLAvant) UsageStats.GESTE_RECUEIL_SUIVANT_GLISSE
-                    else UsageStats.GESTE_RECUEIL_PRECEDENT_GLISSE
-                )
-                déplacerRecueil(if (versLAvant) +1 else -1)
-            }
+        // ═══ LE GLISSEMENT VIENT DU PAGER, PLUS DE NOUS ═══
+        //
+        // Il était détecté à la main sur la vue de la photo. C'est la
+        // visionneuse qui s'en charge désormais, exactement comme sur
+        // l'accueil — même code, donc mêmes gestes, même inertie, même
+        // rattrapage de bord.
+        //
+        // Le contenu de l'hôte est posé UNE SEULE FOIS : setContent décrit
+        // quoi afficher en fonction d'états, il ne pose pas une image. Le
+        // rappeler à chaque photo reconstruirait le pager et son défilement
+        // repartirait de zéro à chaque commande du proche.
+        hoteRecueil?.setContent {
+            val fichiers by photosRecueil
+            val rang by rangRecueil
+            VisionneusePhotos(
+                photos = fichiers,
+                rang = rang,
+                surRang = { voulu -> allerAuRecueil(voulu) },
+            )
         }
     }
 
@@ -709,6 +703,29 @@ class IncomingCallActivity : AppCompatActivity() {
         val lecteur = lecteurRecueil ?: return
         CallTrace.record("APPEL recueil main", "Jean demande la ${if (pas > 0) "suivante" else "précédente"}")
         if (pas > 0) lecteur.suivant() else lecteur.précédent()
+    }
+
+    /**
+     * Jean a fait glisser jusqu'à une photo précise.
+     *
+     * Passe par le lecteur plutôt que de poser le rang directement : c'est lui
+     * qui tient la position de référence, et c'est son état republié qui
+     * prévient le proche (voir publierPositionRecueil). Court-circuiter le
+     * lecteur ferait diverger ce que Jean voit de ce que le proche commente —
+     * très exactement le défaut que ce canal existe pour éviter.
+     *
+     * La garde sur le rang courant n'est pas une optimisation : sans elle,
+     * l'état republié replacerait le pager, qui rappellerait, qui republierait.
+     */
+    private fun allerAuRecueil(rang: Int) {
+        val lecteur = lecteurRecueil ?: return
+        if (rang == rangRecueil.value) return
+        UsageStats.noteGeste(
+            if (rang > rangRecueil.value) UsageStats.GESTE_RECUEIL_SUIVANT_GLISSE
+            else UsageStats.GESTE_RECUEIL_PRECEDENT_GLISSE
+        )
+        CallTrace.record("APPEL recueil main", "Jean glisse jusqu'à la photo ${rang + 1}")
+        lecteur.allerA(rang)
     }
 
     /**
@@ -833,7 +850,7 @@ class IncomingCallActivity : AppCompatActivity() {
         return true
     }
 
-    private fun ajusterBandeRecueil() = poserBande(findViewById<ImageView>(R.id.imageRecueil))
+    private fun ajusterBandeRecueil() = poserBande(hoteRecueil)
 
     private fun connectVideoCall() {
         // Deux chemins mènent ici (fin du décompte et demande de connexion
@@ -1169,12 +1186,19 @@ class IncomingCallActivity : AppCompatActivity() {
     private var policeAppliquée: com.seniorvisio.core.PoliceSenior? = null
 
     /**
-     * Le bitmap actuellement posé sur la bande du recueil.
+     * L'hôte de la visionneuse, dans la bande du recueil (voir
+     * activity_incoming_call.xml et VisionneusePhotos).
      *
-     * Retenu pour pouvoir le reprendre quand le suivant arrive. Null quand
-     * rien n'est affiché : la bande est alors rendue à la vidéo du proche.
+     * LA MÊME visionneuse que l'accueil, et c'est tout l'objet : les photos de
+     * la galerie de Jean et celles qu'un proche lui présente passaient par
+     * deux chemins entièrement séparés — deux décodages, deux gestions de
+     * mémoire, deux façons de changer d'image. Ils ne peuvent plus diverger.
      */
-    private var imageRecueilPosée: android.graphics.Bitmap? = null
+    private val hoteRecueil: ComposeView? by lazy { findViewById<ComposeView>(R.id.hoteRecueil) }
+
+    /** Ce que la visionneuse de cet écran a sous les yeux (voir afficherRecueil). */
+    private val photosRecueil = mutableStateOf<List<java.io.File>>(emptyList())
+    private val rangRecueil = mutableStateOf(0)
 
     private fun applyCaptionErgonomics() {
         zones.setVisibleLines(adminConfig.captionVisibleLines)

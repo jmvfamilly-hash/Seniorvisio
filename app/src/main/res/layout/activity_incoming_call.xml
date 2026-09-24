@@ -81,17 +81,24 @@
          une seule est visible à la fois, coûtent quelques octets et retirent
          toute une classe d'erreurs.
 
-         La hauteur est posée par le code, comme pour la vidéo. wrap_content en
-         largeur avec adjustViewBounds : la vue prend les proportions de la
-         photo dans la bande accordée, plutôt que d'étirer. -->
-    <ImageView
-        android:id="@+id/imageRecueil"
-        android:layout_width="wrap_content"
+         La hauteur est posée par le code, comme pour la vidéo.
+
+         ═══ UNE ComposeView, ET TOUTE LA LARGEUR ═══
+
+         C'était une ImageView en wrap_content avec adjustViewBounds, pour
+         qu'elle prenne les proportions de la photo dans la bande accordée.
+
+         C'est désormais l'hôte de la visionneuse (voir VisionneusePhotos) — la
+         MÊME que sur l'accueil, ce qui était tout l'objet de la manœuvre. Elle
+         prend match_parent en largeur parce qu'un pager doit disposer de toute
+         la largeur pour faire glisser d'une photo à l'autre ; c'est la photo
+         elle-même qui se centre dans cette largeur, en conservant ses
+         proportions (ContentScale.Fit). -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/hoteRecueil"
+        android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_gravity="top|center_horizontal"
-        android:adjustViewBounds="true"
-        android:scaleType="fitCenter"
-        android:contentDescription="Photo d'un recueil, présentée par le proche"
         android:visibility="gone" />
 
     <!-- Ce que la tablette ne sait pas afficher, ou n'a pas trouvé : dit à

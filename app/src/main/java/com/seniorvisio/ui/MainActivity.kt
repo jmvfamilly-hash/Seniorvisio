@@ -40,7 +40,6 @@ import com.seniorvisio.core.UsageStats
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.recueil.Element
 import com.seniorvisio.recueil.RecueilStore
-import com.seniorvisio.recueil.Rendu
 import com.seniorvisio.service.OrdonnanceurPhotos
 import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.signaling.CallSignalingClient

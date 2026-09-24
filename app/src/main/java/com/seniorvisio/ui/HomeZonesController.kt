@@ -249,33 +249,6 @@ class HomeZonesController(
         }
     }
 
-    /**
-     * Fait glisser Jean d'une photo à l'autre.
-     *
-     * ═══ PLUS DE BOUTONS « PRÉCÉDENT » ET « SUIVANT » ═══
-     *
-     * Ils sont retirés : deux cibles permanentes posées sur une photo, pour un
-     * écran dont la règle est que Jean n'a jamais rien à faire. La galerie
-     * tourne seule à la cadence réglée par l'administrateur, et le glissement
-     * reste là pour qui veut avancer tout de suite.
-     *
-     * [surGlissement] reçoit vrai pour « suivant », faux pour « précédent ».
-     */
-    fun brancherGlissementPhoto(surGlissement: (Boolean) -> Unit) {
-        // Compté ICI, au point où le geste est reçu, et non dans le
-        // déplacement qu'il provoque : c'est le MOYEN qu'on veut mesurer, et
-        // compter plus loin confondrait le geste de Jean avec le tour de
-        // cadence qui aboutit au même déplacement.
-        GlissementHorizontal.brancher(root) { versLAvant ->
-            if (!modePhoto) return@brancher
-            UsageStats.noteGeste(
-                if (versLAvant) UsageStats.GESTE_PHOTO_SUIVANTE_GLISSE
-                else UsageStats.GESTE_PHOTO_PRECEDENTE_GLISSE
-            )
-            surGlissement(versLAvant)
-        }
-    }
-
     /** Vide les deux zones de texte immédiatement (fin d'appel, sortie d'écran). */
     fun clearTranscriptions() {
         roomZone.clear()

@@ -3,7 +3,7 @@ package com.seniorvisio.recueil
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import java.util.concurrent.Executors
+import java.io.File
 
 /**
  * Tient le recueil ouvert et l'élément courant, et prépare ce qu'il faut
@@ -44,34 +44,44 @@ class LecteurRecueil(private val store: RecueilStore) {
     var onAffichage: ((état: État) -> Unit)? = null
 
     /**
+     * Ce qu'il y a à montrer, et où on en est.
+     *
+     * ═══ DES FICHIERS, ET PLUS UN RENDU ═══
+     *
+     * Cette classe décodait la photo courante hors du fil principal et
+     * publiait un bitmap. Elle publie désormais la LISTE des fichiers prêts :
+     * c'est la visionneuse qui décode, par tuiles, et qui fait glisser d'une
+     * image à l'autre (voir VisionneusePhotos).
+     *
+     * La liste entière et non l'élément courant, pour la même raison que sur
+     * l'accueil : le glissement appartient au pager, et lui donner les photos
+     * une par une reviendrait à le priver de ce pour quoi on l'a pris.
+     *
      * @param position rang de l'élément courant, à partir de 1, pour être
      *   montré tel quel (« 3 / 12 »). Zéro quand rien n'est ouvert.
+     * @param problème phrase écrite POUR LE PROCHE quand il n'y a rien à
+     *   montrer. Remplace le rendu impossible d'avant, et garde ce qui
+     *   comptait : un recueil qui ne s'affiche pas doit le dire, pas laisser
+     *   un écran noir au milieu d'un appel.
      */
     data class État(
-        val rendu: Rendu?,
+        val fichiers: List<File> = emptyList(),
         val titre: String? = null,
         val position: Int = 0,
         val total: Int = 0,
+        val problème: String? = null,
     )
 
     private var recueil: Recueil? = null
     private var index: Int = 0
 
-    // Le décodage d'une photo ne se fait pas sur le fil principal : une image
-    // d'appareil moderne y prendrait des dizaines de millisecondes, pendant
-    // lesquelles la vidéo de l'appel se fige. Un seul fil, car deux photos
-    // décodées en parallèle ne servent à rien — seule la dernière demandée
-    // compte.
-    private val décodeur = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "lecteur-recueil").apply { isDaemon = true }
-    }
+    // ═══ IL Y AVAIT ICI UN FIL DE DÉCODAGE ET UN COMPTEUR DE GÉNÉRATION ═══
+    //
+    // Ils servaient à ne pas figer la vidéo de l'appel pendant qu'une photo se
+    // décodait, et à ce qu'un défilement rapide n'affiche pas les images dans
+    // l'ordre où les décodages se terminent. Les deux problèmes ont disparu
+    // avec le décodage : plus rien ne se décode ici.
     private val principal = Handler(Looper.getMainLooper())
-
-    // Garde-fou contre le défilement rapide : si le proche appuie trois fois
-    // sur « suivant » pendant qu'une photo se décode, seules les demandes
-    // encore d'actualité aboutissent. Sans ça, les photos s'afficheraient dans
-    // l'ordre où les décodages se terminent, pas dans celui des appuis.
-    @Volatile private var demande = 0
 
     val estOuvert: Boolean get() = recueil != null
 
@@ -88,12 +98,12 @@ class LecteurRecueil(private val store: RecueilStore) {
         if (trouvé == null) {
             Log.w(TAG, "Recueil $recueilId absent de cette tablette")
             recueil = null
-            publier(État(Rendu.Impossible("Ce recueil n'est pas encore arrivé sur la tablette")))
+            publier(État(problème = "Ce recueil n'est pas encore arrivé sur la tablette"))
             return
         }
         if (trouvé.prêts.isEmpty()) {
             recueil = null
-            publier(État(Rendu.Impossible("Aucune photo de ce recueil n'a pu être préparée")))
+            publier(État(problème = "Aucune photo de ce recueil n'a pu être préparée"))
             return
         }
         recueil = trouvé
@@ -126,36 +136,35 @@ class LecteurRecueil(private val store: RecueilStore) {
         if (recueil == null) return
         recueil = null
         index = 0
-        demande++ // annule un décodage en cours qui arriverait après la fermeture
-        publier(État(rendu = null))
+        publier(État())
     }
 
-    fun libérer() {
-        décodeur.shutdownNow()
-    }
+    /** Plus rien à libérer : le fil de décodage est parti avec le décodage. */
+    fun libérer() = Unit
 
     private fun afficherCourant() {
         val courant = recueil ?: return
-        val élément = courant.prêts.getOrNull(index) ?: return
-        val fichier = store.fichier(courant, élément)
-        val rendu = renduPour(élément.type, store.définitionDeLaDalle)
-        val mienne = ++demande
 
-        décodeur.execute {
-            val résultat = rendu.préparer(élément, fichier)
-            principal.post {
-                // Périmée : le proche a déjà demandé autre chose entre-temps.
-                if (mienne != demande) return@post
-                publier(
-                    État(
-                        rendu = résultat,
-                        titre = courant.titre,
-                        position = index + 1,
-                        total = courant.prêts.size,
-                    )
-                )
-            }
+        // Les fichiers réellement présents. Un élément déclaré PRÊT dont le
+        // fichier a disparu — vidage de cache, élagage mal tombé — rend null
+        // ici. On l'écarte plutôt que de laisser un trou au milieu du recueil
+        // que le proche est en train de commenter.
+        val fichiers = courant.prêts.mapNotNull { store.fichier(courant, it) }
+        if (fichiers.isEmpty()) {
+            publier(État(problème = "Les photos de ce recueil ne sont plus sur la tablette"))
+            return
         }
+
+        val rang = index.coerceIn(0, fichiers.lastIndex)
+        index = rang
+        publier(
+            État(
+                fichiers = fichiers,
+                titre = courant.titre,
+                position = rang + 1,
+                total = fichiers.size,
+            )
+        )
     }
 
     private fun publier(état: État) {
