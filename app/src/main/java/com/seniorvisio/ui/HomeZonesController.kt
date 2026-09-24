@@ -1,7 +1,6 @@
 package com.seniorvisio.ui
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
@@ -9,10 +8,12 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.ComposeView
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.HomeZone
@@ -23,6 +24,7 @@ import com.seniorvisio.core.UsageStats
 import com.seniorvisio.core.WeatherClient
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.io.File
 import java.util.Locale
 
 /**
@@ -85,7 +87,7 @@ class HomeZonesController(
      * ═══ ELLE NE PREND LA PLACE DE RIEN ═══
      *
      * La photo est dessinée DERRIÈRE la pile, en plein cadre (voir
-     * imagePleinEcran dans activity_main.xml). Les trois zones restent donc
+     * hotePhotos dans activity_main.xml). Les trois zones restent donc
      * exactement où elles sont, et l'écran ne se réorganise pas : c'est la
      * règle de cet écran — rien ne bouge jamais, Jean retrouve chaque chose au
      * même endroit.
@@ -108,22 +110,33 @@ class HomeZonesController(
     private val zoneRoom: View = root.findViewById(R.id.zoneRoom)
     private val zoneCall: View = root.findViewById(R.id.zoneCall)
     /**
-     * La photo en plein cadre, sous la pile (voir activity_main.xml).
+     * L'hôte de la visionneuse, en plein cadre sous la pile (voir
+     * activity_main.xml et VisionneusePhotos).
      *
      * NULLABLE, et pas par précaution : l'écran d'appel construit ce même
-     * contrôleur sur une autre mise en page, où cette vue n'existe pas — les
-     * recueils y ont leur propre chemin par-dessus la vidéo. Un findViewById
-     * non nul y aurait fait tomber l'écran d'appel entier.
+     * contrôleur sur une autre mise en page, où cette vue n'existe pas — il
+     * pose sa propre visionneuse par-dessus la vidéo du proche. Un
+     * findViewById non nul y aurait fait tomber l'écran d'appel entier.
      */
-    private val imagePleinEcran: ImageView? = root.findViewById(R.id.imagePleinEcran)
+    private val hotePhotos: ComposeView? = root.findViewById(R.id.hotePhotos)
 
     /**
-     * La photo actuellement posée sur la vue, pour pouvoir la reprendre quand
-     * la suivante arrive. Retenue ici et nulle part ailleurs : c'est cette
-     * classe qui sait ce qui est affiché, donc elle seule sait ce qui ne
-     * l'est plus.
+     * Ce que la visionneuse a sous les yeux. Des ÉTATS Compose et non des
+     * champs ordinaires : c'est leur modification qui déclenche le
+     * redessin, sans qu'on ait à reconstruire le contenu de l'hôte à chaque
+     * changement de photo.
      */
-    private var photoActuelle: Bitmap? = null
+    private val photosAffichées = mutableStateOf<List<File>>(emptyList())
+    private val rangAffiché = mutableStateOf(0)
+
+    /**
+     * Prévenu quand JEAN change de photo au doigt.
+     *
+     * Posé par l'écran hôte, qui seul tient le rang de référence. Vide par
+     * défaut plutôt que nul : un glissement avant branchement ne doit rien
+     * casser, il n'a simplement personne à prévenir.
+     */
+    private var surRangChoisi: (Int) -> Unit = {}
     private val boutonSommeil: Button = root.findViewById(R.id.boutonSommeil)
 
     private val textMomentIcon: TextView = root.findViewById(R.id.textMomentIcon)
@@ -170,48 +183,57 @@ class HomeZonesController(
     }
 
     /**
-     * Une photo de la galerie, sur toute la dalle.
+     * La galerie, sur toute la dalle.
      *
      * ═══ DERRIÈRE LES ZONES, ET NON DEDANS ═══
      *
-     * Elle est posée sur la vue de fond, DERRIÈRE la pile des trois zones,
-     * et non dans la pile : une photo rangée dans une zone n'aurait occupé
+     * Elle est posée sur la vue de fond, DERRIÈRE la pile des trois zones, et
+     * non dans la pile : des photos rangées dans une zone n'auraient occupé
      * qu'un tiers de la dalle, quand ce qu'on veut montrer à Jean est la
      * photo, pas son timbre-poste.
      *
-     * Passer null retire la photo — c'est ce que fait [masquerPhoto], et les
-     * deux chemins se rejoignent ici pour que le bitmap précédent soit rendu
-     * au même endroit dans les deux cas.
+     * ═══ DES FICHIERS, ET PLUS UN BITMAP ═══
+     *
+     * Cette méthode recevait une image déjà décodée, et cette classe gérait sa
+     * mémoire à la main — recyclage, ordre de pose, comptage. Tout cela est
+     * parti avec la visionneuse : c'est Coil qui décode, Telephoto qui ne lit
+     * que les tuiles visibles, et personne ici qui n'a plus de pixels à
+     * reprendre.
+     *
+     * Elle reçoit la LISTE ENTIÈRE et non la photo courante, parce que c'est
+     * le pager qui fait glisser d'une image à l'autre : lui donner les photos
+     * une par une, ce serait lui retirer ce pour quoi on l'a pris.
+     *
+     * Une liste vide retire la galerie — c'est ce que fait [masquerPhotos].
      */
-    fun afficherPhoto(image: Bitmap?) {
-        val ancienne = photoActuelle
-        modePhoto = image != null
-
-        if (image != null) {
-            imagePleinEcran?.setImageBitmap(image)
-            imagePleinEcran?.visibility = View.VISIBLE
-        } else {
-            imagePleinEcran?.setImageDrawable(null)
-            imagePleinEcran?.visibility = View.GONE
-        }
-        photoActuelle = image
-        // L'ancienne est rendue au système APRÈS que la nouvelle a été posée :
-        // recycler d'abord ferait dessiner la vue sur des pixels repris le
-        // temps d'une image. Et une photo plein cadre pèse plusieurs
-        // mégaoctets : rien d'autre ne la reprendrait tant que l'écran vit
-        // (voir RenduElement, sur le tas natif que le ramasse-miettes ignore).
-        if (ancienne != null && ancienne !== image && !ancienne.isRecycled) ancienne.recycle()
+    fun afficherPhotos(fichiers: List<File>, rang: Int) {
+        modePhoto = fichiers.isNotEmpty()
+        photosAffichées.value = fichiers
+        rangAffiché.value = rang.coerceAtLeast(0)
+        hotePhotos?.visibility = if (modePhoto) View.VISIBLE else View.GONE
     }
 
     /**
-     * Retire la photo et rend la dalle au fond uni.
+     * Retire la galerie et rend la dalle au fond uni.
      *
      * La pile n'est pas touchée : elle n'a jamais bougé. La date, la météo et
-     * les deux zones de texte étaient devant la photo pendant tout ce temps.
+     * les deux zones de texte étaient devant les photos pendant tout ce temps.
      */
-    fun masquerPhoto() {
+    fun masquerPhotos() {
         if (!modePhoto) return
-        afficherPhoto(null)
+        afficherPhotos(emptyList(), 0)
+    }
+
+    /**
+     * Branche ce qui doit savoir que Jean a fait glisser l'image.
+     *
+     * Le rang de référence vit dans l'écran hôte, pas ici : cette classe
+     * dessine, elle ne décide pas de ce qui s'affiche. Sans ce retour, un
+     * glissement serait effacé au prochain changement de créneau, qui
+     * reposerait le rang que l'ordonnanceur croit courant.
+     */
+    fun brancherRangPhoto(surRang: (Int) -> Unit) {
+        surRangChoisi = surRang
     }
 
     /**
@@ -429,6 +451,27 @@ class HomeZonesController(
     }
 
     init {
+        // ═══ POSÉ UNE SEULE FOIS, ET C'EST LE POINT ═══
+        //
+        // setContent décrit ce qu'il faut afficher EN FONCTION d'états, il ne
+        // pose pas une image. Le rappeler à chaque changement de photo
+        // reconstruirait l'arbre entier — donc le pager, donc son état de
+        // défilement — et le glissement repartirait de zéro à chaque créneau.
+        //
+        // Ce sont les deux états lus ici qui déclenchent le redessin quand
+        // afficherPhotos les modifie.
+        hotePhotos?.setContent {
+            val fichiers by photosAffichées
+            val rang by rangAffiché
+            VisionneusePhotos(
+                photos = fichiers,
+                rang = rang,
+                // Passe par le champ et non directement par surRangChoisi :
+                // le branchement peut arriver après la pose du contenu, et
+                // capturer la valeur d'alors figerait un rappel vide.
+                surRang = { surRangChoisi(it) },
+            )
+        }
         applyZoneOrder()
         roomZone.onDisplayChanged = { onTextZonesChanged?.invoke() }
         callZone.onDisplayChanged = { onTextZonesChanged?.invoke() }

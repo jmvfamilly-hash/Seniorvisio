@@ -36,11 +36,11 @@ import com.seniorvisio.core.MiseEnVeille
 import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.TranscriptionSource
+import com.seniorvisio.core.UsageStats
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.recueil.Element
 import com.seniorvisio.recueil.RecueilStore
 import com.seniorvisio.recueil.Rendu
-import com.seniorvisio.recueil.renduPour
 import com.seniorvisio.service.OrdonnanceurPhotos
 import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.signaling.CallSignalingClient
@@ -424,8 +424,22 @@ class MainActivity : AppCompatActivity() {
 
     private fun brancherGalerie() {
         zones.brancherSommeil { endormir() }
-        // Glissement vers la gauche = on avance, comme on tourne une page.
-        zones.brancherGlissementPhoto { versLAvant -> déplacerPhoto(if (versLAvant) +1 else -1) }
+        // ═══ LE GLISSEMENT VIENT DU PAGER, PLUS DE NOUS ═══
+        //
+        // Il était détecté à la main par GlissementHorizontal. C'est la
+        // visionneuse qui s'en charge désormais, avec l'inertie et le
+        // rattrapage de bord d'une vraie bibliothèque — demandé en ces termes :
+        // ne pas inventer les interactions tactiles.
+        //
+        // Ce rappel ne fait donc plus glisser : il ENREGISTRE où Jean s'est
+        // arrêté, pour que le prochain changement de créneau ne le ramène pas
+        // en arrière.
+        zones.brancherRangPhoto { rang ->
+            if (rang == rangPhoto) return@brancherRangPhoto
+            rangPhoto = rang
+            UsageStats.noteGeste(UsageStats.GESTE_PHOTO_SUIVANTE_GLISSE)
+            CallTrace.record("ACCUEIL photo main", "photo ${rang + 1}/${photosGalerie.size}")
+        }
 
         val service = CallListenerService.enService
         if (service == null) {
@@ -442,7 +456,7 @@ class MainActivity : AppCompatActivity() {
             if (element == null || recueilId == null) {
                 runOnUiThread {
                     photosGalerie = emptyList()
-                    zones.masquerPhoto()
+                    zones.masquerPhotos()
                 }
                 return@Observateur
             }
@@ -578,98 +592,70 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * ═══ UN SEUL FIL DE DÉCODAGE, ET SEULE LA DERNIÈRE DEMANDE COMPTE ═══
+     * Remet la galerie sous les yeux de Jean, au rang courant.
      *
-     * Chaque changement d'image lançait un Thread neuf, qui décodait sa propre
-     * photo. Le journal a montré les images défiler toutes les deux dixièmes
-     * de seconde — un glissement qui se répète — et le tas natif passer de 39 à
-     * 759 mégaoctets en dix secondes. Sept cent vingt mégaoctets, à huit et
-     * demi par image : quatre-vingt-sept photos décodées en même temps, pour
-     * une seule qui sera vue.
+     * ═══ TOUT LE DÉCODAGE A DISPARU D'ICI ═══
      *
-     * LecteurRecueil, qui fait le même travail pour l'écran d'appel, tenait
-     * déjà la bonne forme : un exécuteur à fil unique et un compteur de
-     * génération. Ce chemin-ci ne l'avait pas, et rien ne le signalait tant que
-     * personne ne feuilletait vite.
+     * Cette méthode tenait un exécuteur à fil unique, un compteur de
+     * génération, et posait des bitmaps qu'il fallait ensuite recycler à la
+     * main. Elle existait sous cette forme à cause d'une panne mesurée : le
+     * tas natif passant de 39 à 759 mégaoctets en dix secondes, quand chaque
+     * changement d'image lançait son propre décodage.
      *
-     * Le compteur ne fait pas qu'éviter d'afficher une image périmée : il
-     * ÉVITE DE LA POSER, donc de la garder en vie. Combiné au fil unique, une
-     * rafale de vingt changements ne laisse jamais plus d'une image décodée à
-     * la fois.
+     * Rien de tout cela n'est nécessaire avec la visionneuse : Coil décode
+     * hors du fil principal et n'garde qu'un cache borné, Telephoto ne lit que
+     * les tuiles visibles. On passe des FICHIERS, et la question de la mémoire
+     * cesse d'être la nôtre.
+     *
+     * ═══ LA LISTE ENTIÈRE, ET NON LA PHOTO COURANTE ═══
+     *
+     * C'est le pager qui fait glisser d'une image à l'autre. Lui donner les
+     * photos une par une reviendrait à lui retirer ce pour quoi on l'a pris.
      */
-    private val décodeurPhoto: java.util.concurrent.ExecutorService =
-        java.util.concurrent.Executors.newSingleThreadExecutor { r ->
-            Thread(r, "SeniorVisio-PhotoAccueil").apply { isDaemon = true }
-        }
-
-    private var demandePhoto = 0
-
     private fun afficherPhotoCourante() {
-        val element = photosGalerie.getOrNull(rangPhoto) ?: return
         val magasin = RecueilStore.actif
         val recueil = magasin?.disponibles()?.firstOrNull { it.id == recueilGalerieId }
-        val fichier = if (recueil != null) magasin.fichier(recueil, element) else null
-        val côté = magasin?.définitionDeLaDalle ?: 1280
-        val mienne = ++demandePhoto
-        décodeurPhoto.execute {
-            val rendu = renduPour(element.type, côté).préparer(element, fichier)
-            runOnUiThread {
-                // Périmée : Jean a déjà demandé une autre photo. On ne la pose
-                // pas, donc rien ne la retient, donc elle peut être reprise.
-                if (mienne != demandePhoto) return@runOnUiThread
-                when (rendu) {
-                    // ═══ UNE PHOTO, ET NON PLUS UN ÉCRAN VIDE ═══
-                    //
-                    // Ce chemin masquait la zone. Un élément PHOTO — donc
-                    // toute photo d'une galerie — tombait ici et disparaissait
-                    // sans qu'aucune ligne ne le dise.
-                    is Rendu.Image -> {
-                        zones.afficherPhoto(rendu.bitmap)
-                        // La mesure va avec l'essai : une photo plein écran
-                        // pèse plusieurs mégaoctets, et on vient de passer deux
-                        // jours à mal mesurer exactement cela.
-                        CallTrace.record(
-                            "ACCUEIL photo",
-                            "${rangPhoto + 1}/${photosGalerie.size} · " +
-                                "${rendu.bitmap.width}×${rendu.bitmap.height} px · " +
-                                "${rendu.bitmap.byteCount / (1024 * 1024)} Mo · " +
-                                "résident=${CallTrace.résidentMo() ?: "?"} Mo",
-                        )
-                    }
-                    // ═══ LE SEUL CHEMIN QUI NE DISAIT RIEN ═══
-                    //
-                    // Rendu.Impossible porte une phrase écrite exprès pour
-                    // être lue — « cette photo n'est plus sur la tablette »,
-                    // « n'a pas pu être ouverte », « est trop lourde ». Elle
-                    // était construite, puis jetée : l'écran se vidait, et le
-                    // journal n'en gardait aucune trace.
-                    //
-                    // UNE FOIS PAR MOTIF, et non par vue : cette ligne est
-                    // protégée dans le tampon d'état. Sans filtre, Jean
-                    // faisant défiler vingt photos refusées produirait vingt
-                    // lignes protégées, qui chasseraient les lignes FLUX — le
-                    // défaut même que ce tampon corrige, réintroduit par
-                    // l'instrument censé le servir.
-                    //
-                    // AUCUNE DONNÉE PERSONNELLE : la raison vient d'une liste
-                    // fermée de phrases du code, le type est un nom
-                    // d'énumération, le reste est un compte.
-                    is Rendu.Impossible -> {
-                        zones.masquerPhoto()
-                        val motif = "${rendu.raison} · type=${element.type.étiquette} · " +
-                            "fichier=${if (fichier == null) "aucun" else "présent"} · " +
-                            "recueil=$recueilGalerieId"
-                        if (motif != dernierRefus) {
-                            dernierRefus = motif
-                            CallTrace.record(
-                                "ACCUEIL élément refusé",
-                                "${rangPhoto + 1}/${photosGalerie.size} · $motif",
-                            )
-                        }
-                    }
-                }
-            }
+        if (magasin == null || recueil == null) {
+            zones.masquerPhotos()
+            return
         }
+
+        // Les fichiers réellement présents. Un élément déclaré PRÊT dont le
+        // fichier a disparu — vidage de cache, élagage mal tombé — rend null
+        // ici, et on l'écarte plutôt que de laisser la visionneuse afficher un
+        // trou au milieu de la galerie.
+        val fichiers = photosGalerie.mapNotNull { magasin.fichier(recueil, it) }
+        if (fichiers.isEmpty()) {
+            zones.masquerPhotos()
+            // ═══ LE SEUL CHEMIN QUI NE DIRAIT RIEN ═══
+            //
+            // Une galerie installée, un écran vide, et aucune ligne pour
+            // l'expliquer : c'est exactement la panne muette que ce journal
+            // existe pour éviter.
+            //
+            // UNE FOIS PAR MOTIF et non par affichage : cette ligne est
+            // protégée dans le tampon d'état, et vingt occurrences
+            // chasseraient les lignes qu'on vient y chercher.
+            //
+            // AUCUNE DONNÉE PERSONNELLE : des comptes et un identifiant de
+            // recueil, jamais un mot entendu ni un nom de fichier.
+            val motif = "aucun fichier présent sur ${photosGalerie.size} élément(s) · " +
+                "recueil=$recueilGalerieId"
+            if (motif != dernierRefus) {
+                dernierRefus = motif
+                CallTrace.record("ACCUEIL élément refusé", motif)
+            }
+            return
+        }
+        dernierRefus = null
+
+        val rang = rangPhoto.coerceIn(0, fichiers.lastIndex)
+        rangPhoto = rang
+        zones.afficherPhotos(fichiers, rang)
+        CallTrace.record(
+            "ACCUEIL photo",
+            "${rang + 1}/${fichiers.size} · résident=${CallTrace.résidentMo() ?: "?"} Mo",
+        )
     }
 
     override fun onPause() {
@@ -694,11 +680,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        // Le fil de décodage meurt avec l'écran. Sans cela, une rotation ou une
-        // recréation d'activité en laisserait un de plus derrière elle à chaque
-        // fois, tous inactifs et tous vivants — la fuite qu'on vient de fermer,
-        // sous une autre forme.
-        décodeurPhoto.shutdownNow()
+        // Plus de fil de décodage à arrêter ici : il est parti avec le
+        // décodage manuel des photos (voir afficherPhotoCourante). Coil tient
+        // le sien, borné, et pour toute l'application.
         zones.release()
         super.onDestroy()
     }

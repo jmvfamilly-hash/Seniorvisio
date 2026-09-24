@@ -33,24 +33,31 @@
          dans la pile, elle n'aurait occupé qu'un tiers de la hauteur, deux à
          trois fois moins.
 
-         fitCenter, et jamais centerCrop : une photo de famille recadrée
-         arbitrairement coupe des visages, et Jean n'a aucun moyen de le
-         signaler. Une photo en portrait sur une dalle en paysage laissera donc
-         des bandes sur les côtés. C'est le prix, et c'est le bon.
+         ═══ UNE ComposeView, ET NON UNE ImageView ═══
+
+         C'était une ImageView, qu'on nourrissait de bitmaps décodés à la main.
+         Elle ne savait ni zoomer, ni glisser d'une photo à l'autre, ni
+         enchaîner deux images autrement que par un remplacement sec.
+
+         C'est désormais l'hôte de la visionneuse (voir VisionneusePhotos), qui
+         apporte tout cela — et le décodage par tuiles, sans lequel garder les
+         photos en pleine définition ne tiendrait pas en mémoire.
+
+         Compose n'est activé que pour ça. Le reste de l'application demeure en
+         vues Android : on n'ouvre pas un chantier de migration au milieu d'un
+         appareil en service chez quelqu'un.
 
          Aucune couleur de fond : le fond de l'écran est posé en code selon
-         l'heure (voir ScreenTheme), et il se voit à travers ces bandes.
+         l'heure (voir ScreenTheme), et il se voit à travers les bandes que
+         laisse une photo dont les proportions diffèrent de la dalle.
 
-         ABSENTE DE L'ÉCRAN D'APPEL, volontairement : là-bas les recueils
-         passent par un autre chemin (voir IncomingCallActivity.afficherRecueil),
-         qui a sa propre mise en page par-dessus la vidéo. Le contrôleur la
-         cherche donc sans exiger qu'elle existe. -->
-    <ImageView
-        android:id="@+id/imagePleinEcran"
+         ABSENTE DE L'ÉCRAN D'APPEL, volontairement : là-bas la visionneuse est
+         posée sur une autre vue, par-dessus la vidéo du proche. Le contrôleur
+         la cherche donc sans exiger qu'elle existe. -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/hotePhotos"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:scaleType="fitCenter"
-        android:contentDescription="@null"
         android:visibility="gone" />
 
     <include layout="@layout/view_home_zones" />
