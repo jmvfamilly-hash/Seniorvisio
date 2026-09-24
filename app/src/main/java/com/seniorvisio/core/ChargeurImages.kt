@@ -48,8 +48,12 @@ object ChargeurImages {
      *
      * Les tuiles de Telephoto ne passent pas par ce cache : elles sont
      * décodées à part et bornées par ce qui est visible.
+     *
+     * Un Int et non un Long, parce que c'est ce que Coil attend. Soixante-
+     * quatre mégaoctets tiennent très largement dans un entier signé ; c'est
+     * d'ailleurs la raison pour laquelle cette signature peut se le permettre.
      */
-    private const val PLAFOND_OCTETS = 64L * 1024L * 1024L
+    private const val PLAFOND_OCTETS = 64 * 1024 * 1024
 
     @Volatile private var chargeur: ImageLoader? = null
 
