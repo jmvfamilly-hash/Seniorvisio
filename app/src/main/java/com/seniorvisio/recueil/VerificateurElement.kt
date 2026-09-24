@@ -1,10 +1,8 @@
 package com.seniorvisio.recueil
 
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
 import java.io.File
-import java.io.FileOutputStream
 
 /**
  * Décide si CETTE tablette sait afficher un élément, en essayant réellement.
@@ -43,10 +41,44 @@ interface VerificateurElement {
 /**
  * Le seul type pris en charge aujourd'hui.
  *
- * @param côtéMax définition de rangement. Prise sur la dalle réelle et non
- *   figée ici : la tablette de Jean et celle du banc d'essai n'ont pas le
- *   même écran, et ranger du 1920 sur une dalle de 1280 ne ferait que
- *   remplir le disque.
+ * ═══ LA PHOTO EST RANGÉE TELLE QU'ELLE EST ARRIVÉE ═══
+ *
+ * Elle était réduite à la définition de la dalle, puis réencodée en JPEG. Ce
+ * n'est plus le cas, et c'est la condition du zoom : on ne peut pas agrandir
+ * ce qui a été jeté à l'installation. Demandé en ces termes — « les photos
+ * doivent garder leur résolution initiale pour permettre le zoom et la
+ * navigation ».
+ *
+ * Ce que la réduction protégeait est protégé autrement. Elle évitait de
+ * charger cinquante mégaoctets de pixels pour une dalle qui en affiche deux ;
+ * c'est désormais le décodage par tuiles de la visionneuse qui s'en charge, en
+ * ne lisant que la portion visible à la finesse où on la regarde (voir
+ * VisionneusePhotos). Le coût se déplace de la mémoire vive vers le disque, et
+ * le disque est déjà borné en amont : le PWA refuse tout fichier au-delà de
+ * vingt-cinq mégaoctets.
+ *
+ * ═══ ET LA VÉRIFICATION, ELLE, RESTE ENTIÈRE ═══
+ *
+ * C'est la raison d'être de cette classe, et elle ne change pas : rien
+ * n'atteint l'écran de Jean sans que la tablette ait prouvé savoir le décoder.
+ * Un proche — ou n'importe qui sachant écrire dans ce Firestore — ne dépose
+ * pas ici un fichier qui ferait tomber l'écran d'appel.
+ *
+ * La preuve se fait sur un décodage RÉDUIT et non sur l'image entière. Un
+ * échantillon suffit à établir que le décodeur accepte ce fichier, et décoder
+ * en pleine taille pour le seul plaisir de le vérifier rouvrirait exactement
+ * le risque de mémoire qu'on vient de fermer.
+ *
+ * ═══ UN EFFET DE BORD QUI CORRIGE UN DÉFAUT ═══
+ *
+ * Réencoder perdait les métadonnées EXIF, dont l'orientation. Une photo prise
+ * en portrait était rangée sans son quart de tour, et rien ne le rétablissait
+ * à l'affichage : elle apparaissait couchée. En copiant le fichier d'origine,
+ * l'orientation voyage avec lui et Coil l'applique.
+ *
+ * @param côtéMax définition de la dalle. Ne sert plus à ranger, seulement à
+ *   dimensionner le décodage de contrôle : inutile d'en lire plus que ce
+ *   qu'un écran peut montrer pour prouver qu'un fichier se décode.
  */
 class VerificateurPhoto(private val côtéMax: Int) : VerificateurElement {
 
@@ -58,11 +90,10 @@ class VerificateurPhoto(private val côtéMax: Int) : VerificateurElement {
             )
         }
 
-        // Première passe sans allouer l'image : on veut ses dimensions pour
-        // calculer le facteur de réduction. Décoder une photo de 12 Mpx en
-        // pleine taille sur une tablette ancienne, pour la réduire ensuite,
-        // est le meilleur moyen de manquer de mémoire — précisément sur les
-        // fichiers qu'on cherche à traiter.
+        // Première passe sans allouer l'image : ses dimensions suffisent à
+        // dimensionner le contrôle. Décoder une photo de 12 Mpx en pleine
+        // taille sur une tablette ancienne est le meilleur moyen de manquer de
+        // mémoire — précisément sur les fichiers qu'on cherche à traiter.
         val mesure = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(téléchargé.absolutePath, mesure)
         if (mesure.outWidth <= 0 || mesure.outHeight <= 0) {
@@ -72,10 +103,12 @@ class VerificateurPhoto(private val côtéMax: Int) : VerificateurElement {
             )
         }
 
+        // Le décodage de contrôle. Son résultat n'est pas gardé : on ne veut
+        // savoir qu'une chose, est-ce que ce fichier produit des pixels.
         val options = BitmapFactory.Options().apply {
             inSampleSize = facteurDeRéduction(mesure.outWidth, mesure.outHeight, côtéMax)
         }
-        val image = try {
+        val témoin = try {
             BitmapFactory.decodeFile(téléchargé.absolutePath, options)
         } catch (e: OutOfMemoryError) {
             // Attrapé explicitement : ce n'est pas une Exception, un catch
@@ -90,12 +123,18 @@ class VerificateurPhoto(private val côtéMax: Int) : VerificateurElement {
             état = ÉtatElement.REFUSÉ,
             cause = "Image illisible — fichier probablement abîmé.",
         )
+        // Rendu tout de suite : il a fini son office, et le garder le temps de
+        // la copie ferait cohabiter sans raison des pixels et un fichier.
+        témoin.recycle()
 
         return try {
+            // Le nom garde son extension .jpg quel que soit le format réel du
+            // fichier. C'est délibéré : plusieurs endroits cherchent
+            // « <id>.jpg » pour savoir si un élément est installé (voir
+            // RecueilStore.estInstallé), et le décodeur reconnaît un format à
+            // son contenu, jamais à son nom.
             val nom = "${element.id}.jpg"
-            FileOutputStream(File(dossier, nom)).use { sortie ->
-                image.compress(Bitmap.CompressFormat.JPEG, QUALITÉ_RANGEMENT, sortie)
-            }
+            téléchargé.copyTo(File(dossier, nom), overwrite = true)
             element.copy(état = ÉtatElement.PRÊT, cause = null, fichierLocal = nom)
         } catch (e: Exception) {
             Log.e(TAG, "Rangement impossible pour ${element.id}", e)
@@ -103,8 +142,6 @@ class VerificateurPhoto(private val côtéMax: Int) : VerificateurElement {
                 état = ÉtatElement.REFUSÉ,
                 cause = "La tablette n'a pas pu la ranger (${e.javaClass.simpleName}).",
             )
-        } finally {
-            image.recycle()
         }
     }
 
@@ -122,7 +159,6 @@ class VerificateurPhoto(private val côtéMax: Int) : VerificateurElement {
 
     private companion object {
         const val TAG = "VerificateurPhoto"
-        const val QUALITÉ_RANGEMENT = 88
     }
 }
 

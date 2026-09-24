@@ -1,5 +1,6 @@
 package com.seniorvisio.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -57,6 +58,19 @@ import java.io.File
  *   après une cadence rappellerait l'extérieur, qui replacerait le pager : une
  *   boucle.
  */
+/*
+ * ═══ POURQUOI UN CONSENTEMENT EXPLICITE ═══
+ *
+ * HorizontalPager et son état sont encore marqués expérimentaux dans Compose
+ * 1.6 — celui qu'impose Kotlin 1.9. Ils sont stabilisés en 1.7, qui exige
+ * Kotlin 2. Le compilateur refuse de les employer sans cette ligne : dix
+ * erreurs, toutes identiques, à la première compilation.
+ *
+ * C'est un aveu de dette, pas une formalité. Le jour où ce projet passera à
+ * Kotlin 2 et Compose 1.7, cette annotation devra disparaître — et si les
+ * signatures ont changé d'ici là, c'est ici que ça se verra.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VisionneusePhotos(
     photos: List<File>,
