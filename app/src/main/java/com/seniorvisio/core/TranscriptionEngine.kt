@@ -261,6 +261,18 @@ class TranscriptionEngine(
             TranscriptionSource.ROOM -> adminConfig.roomEngine
             TranscriptionSource.CALL -> adminConfig.callEngine
         }
+        // Mode « bascule vers Transcription instantanée » : jamais de service
+        // facturé pour la pièce. Ce mode existe précisément pour confier la
+        // transcription à une application gratuite ; ouvrir une session payante
+        // dans les quelques secondes qui précèdent la bascule ferait payer un
+        // texte que personne ne lira, puisque l'écran va changer.
+        if (source == TranscriptionSource.ROOM &&
+            adminConfig.roomHandoffEnabled &&
+            choice.billedByDuration
+        ) {
+            diagnose("bascule active : ${choice.adminLabel} écarté pour la pièce, moteur embarqué à la place")
+            return TranscriptionEngineChoice.VOSK
+        }
         if (choice != TranscriptionEngineChoice.AUTO) return choice
         // Tout sur le moteur embarqué : gratuit, hors-ligne, et il ne dépend
         // d'aucun service qui pourrait tomber au mauvais moment.

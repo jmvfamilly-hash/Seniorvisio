@@ -36,6 +36,7 @@ import com.seniorvisio.core.HomeZone
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.WifiConfigurator
 import com.seniorvisio.service.RoomPresenceService
+import com.seniorvisio.ui.ReturnBannerOverlay
 import com.seniorvisio.ui.TranscriptionLabActivity
 
 /**
@@ -138,6 +139,15 @@ class AdminSettingsActivity : AppCompatActivity() {
             append(status.speakerMode)
             status.jeanSimilarityPercent?.let { append("\nDernière ressemblance mesurée : $it %") }
             status.enrollmentResult?.let { append("\n$it") }
+        }
+
+        findViewById<TextView>(R.id.textHandoffState).text = buildString {
+            append(roomService?.describeHandoff() ?: "service non joignable")
+            append("\nBandeau de retour : ")
+            append(
+                if (Settings.canDrawOverlays(this@AdminSettingsActivity)) "autorisé"
+                else "NON autorisé — seul le bouton Accueil ramènera Jean"
+            )
         }
     }
 
@@ -318,6 +328,30 @@ class AdminSettingsActivity : AppCompatActivity() {
                 "Faites parler Jean jusqu'à ce que l'apprentissage atteigne 100 %",
                 Toast.LENGTH_LONG,
             ).show()
+        }
+
+        // L'autorisation de dessiner par-dessus les autres applications ne peut
+        // pas s'accorder par le code : elle est précisément la porte des
+        // attaques par recouvrement, et même un propriétaire d'appareil ne peut
+        // se la donner. Ce bouton ouvre la page où un proche la donne, une fois.
+        findViewById<Button>(R.id.buttonOverlayPermission).setOnClickListener {
+            try {
+                startActivity(ReturnBannerOverlay.permissionSettingsIntent(this))
+            } catch (e: ActivityNotFoundException) {
+                Toast.makeText(this, "Réglage de superposition introuvable sur cette tablette", Toast.LENGTH_LONG).show()
+            }
+        }
+
+        findViewById<Button>(R.id.buttonTestHandoff).setOnClickListener {
+            val service = roomService
+            if (service == null) {
+                Toast.makeText(this, "Service d'écoute non joignable", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val failure = service.testHandoff()
+            if (failure != null) {
+                Toast.makeText(this, "Bascule impossible : $failure", Toast.LENGTH_LONG).show()
+            }
         }
 
         findViewById<Button>(R.id.buttonForgetJeanVoice).setOnClickListener {

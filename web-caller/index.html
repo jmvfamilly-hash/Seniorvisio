@@ -752,6 +752,67 @@
           <p class="hint" id="callLogStatus"></p>
           <pre id="callLogText" class="call-log" hidden></pre>
 
+          <div class="caption-control">
+            <label>
+              <input type="checkbox" id="roomHandoffToggle">
+              🔀 Basculer vers Transcription instantanée quand une voix se fait entendre
+            </label>
+          </div>
+          <p class="hint">
+            L'écran de Jean passe automatiquement à l'application de Google, qui
+            transcrit <strong>en continu</strong> — ce qu'aucune application
+            tierce ne peut faire, l'interface publique d'Android ne transcrivant
+            qu'un énoncé à la fois avant de s'arrêter. C'est ce temps mort qui
+            coupe les phrases et mange les premiers mots.
+          </p>
+          <p class="hint">
+            Déclenché sur de la <em>parole</em>, jamais sur un bruit : un
+            aspirateur ne doit pas changer l'écran. Un appel entrant repasse
+            par-dessus. <strong>Aucun service payant n'est ouvert pour la pièce
+            dans ce mode</strong>, il devient inutile puisque c'est Google qui
+            transcrit.
+          </p>
+          <p class="hint">
+            Le déclencheur dépend du moteur choisi plus bas, et les deux n'ont
+            pas la même latence. Avec le <strong>moteur embarqué</strong>, c'est
+            un détecteur de voix qui décide, dès la première syllabe. Avec la
+            <strong>reconnaissance Android</strong>, qui tient le micro et ne
+            nous livre aucun son, c'est le premier <em>mot reconnu</em> : un peu
+            plus tard, mais plus sûr — un aspirateur ne produit pas de mots. Le
+            diagnostic d'écoute dit lequel des deux est armé.
+          </p>
+          <p class="hint">
+            <strong>Le retour normal, c'est la mise en veille</strong> : elle
+            survient quand la pièce se vide, et le micro est repris dans la
+            foulée pour que la surveillance du bruit reparte. S'y ajoutent le
+            bandeau en bas de l'écran et le bouton Accueil. Il n'y a en revanche
+            <strong>pas</strong> de retour au silence : pendant la bascule
+            l'application de Google tient le micro, la tablette est sourde et ne
+            peut pas savoir que la pièce s'est vidée. Le bandeau demande une
+            autorisation à donner une fois depuis l'écran d'administration de la
+            tablette.
+          </p>
+
+          <div class="caption-control">
+            <label for="handoffReturnSlider">Filet de sécurité : retour forcé après</label>
+            <input type="range" id="handoffReturnSlider"
+                   min="0" max="120" step="5" value="30" data-unit=" min">
+          </div>
+          <p class="hint">
+            Un filet, pas le chemin normal : il ne sert que si l'écran ne
+            s'éteint jamais — Transcription instantanée est faite pour être lue
+            en continu et pourrait le maintenir allumé. Le diagnostic compte
+            désormais les retours par cause : si tous se font par « écran
+            éteint », ce curseur peut être mis à zéro ; si tous se font par
+            « durée écoulée », c'est que la veille ne vient pas.
+          </p>
+          <p class="hint">
+            Après un retour, deux minutes s'écoulent avant qu'une nouvelle
+            bascule soit possible — sans quoi un mot prononcé renverrait Jean
+            aussitôt sur l'autre écran, et il ne pourrait jamais récupérer le
+            sien.
+          </p>
+
           <h3 class="admin-section">Plafond des services payants</h3>
           <p class="hint">
             Garde-fou de dernier recours : aucune détection de voix ne

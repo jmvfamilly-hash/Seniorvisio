@@ -339,6 +339,12 @@ class MainActivity : AppCompatActivity() {
      */
     override fun onResume() {
         super.onResume()
+        // Senior Visio est de nouveau devant : si la tablette était basculée
+        // sur Transcription instantanée, elle ne l'est plus — que ce soit par
+        // le bouton Accueil ou par un appel qui a pris l'écran. Sans ce signal,
+        // le bandeau de retour continuerait de flotter par-dessus, et le micro
+        // ne serait jamais repris (voir RoomHandoffController).
+        RoomPresenceService.running?.noteBackOnHomeScreen()
         // L'écran revient au premier plan : il redemande la photo du créneau
         // en cours plutôt que d'attendre le prochain changement. C'est ce qui
         // fait qu'une dalle rallumée par un bruit montre déjà la photo du

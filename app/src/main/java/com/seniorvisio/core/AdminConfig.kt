@@ -455,6 +455,43 @@ class AdminConfig(context: Context) {
             .apply()
     }
 
+    // --- Bascule automatique vers « Transcription instantanée » de Google dès
+    // qu'une voix est entendue dans la pièce (voir RoomHandoffController). ---
+
+    /**
+     * Le mode est-il actif ? **Faux par défaut**, et c'est délibéré : désactivé,
+     * tout se comporte exactement comme avant, transcription intégrée comprise.
+     * Ce mode change ce que Jean a sous les yeux — l'écran d'une autre
+     * application — et une bascule de cette ampleur ne s'active pas toute seule.
+     */
+    var roomHandoffEnabled: Boolean
+        get() = prefs.getBoolean(KEY_ROOM_HANDOFF_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_ROOM_HANDOFF_ENABLED, value).apply()
+
+    /**
+     * Filet de sécurité : au bout de combien de minutes on ramène l'écran de
+     * Jean si aucun autre chemin ne l'a fait.
+     *
+     * **Un filet, et non le chemin normal.** Celui-là est la mise en veille :
+     * elle survient quand la pièce se vide, c'est-à-dire exactement au bon
+     * moment, et le micro est repris dans la foulée pour que la surveillance du
+     * bruit reparte. La durée ne sert que si l'écran ne s'éteint jamais —
+     * Transcription instantanée est faite pour être lue en continu et pourrait
+     * le maintenir allumé. On ne le saura qu'en mesurant (voir
+     * RoomHandoffController.returnsByReason).
+     *
+     * Ce n'est en revanche jamais un retour au silence, qui serait pourtant le
+     * bon critère : pendant la bascule, l'application de Google tient le
+     * microphone et Senior Visio est **sourd**. Aucune ruse ne contourne cette
+     * exclusivité, sauf à reprendre le micro — c'est-à-dire à casser exactement
+     * ce qu'on est venu chercher.
+     *
+     * Zéro : pas de filet, les autres chemins subsistent.
+     */
+    var roomHandoffReturnMinutes: Int
+        get() = prefs.getInt(KEY_ROOM_HANDOFF_RETURN_MINUTES, DEFAULT_HANDOFF_RETURN_MINUTES)
+        set(value) = prefs.edit().putInt(KEY_ROOM_HANDOFF_RETURN_MINUTES, value.coerceIn(0, 120)).apply()
+
     fun isCurrentlyNightWindow(hourNow: Int): Boolean {
         return if (nightStartHour <= nightEndHour) {
             hourNow in nightStartHour until nightEndHour
@@ -500,6 +537,8 @@ class AdminConfig(context: Context) {
         private const val KEY_LAST_COMMAND_ID = "last_command_id"
         private const val KEY_ROOM_WAKE_ENABLED = "room_wake_enabled"
         private const val KEY_TRANSCRIPTION_PIECE_AFFICHEE = "transcription_piece_affichee"
+        private const val KEY_ROOM_HANDOFF_ENABLED = "room_handoff_enabled"
+        private const val KEY_ROOM_HANDOFF_RETURN_MINUTES = "room_handoff_return_minutes"
         private const val KEY_POLICE_SENIOR = "police_senior"
         private const val KEY_RECUEIL_PHOTOS = "recueil_photos"
         private const val KEY_CADENCE_PHOTOS = "cadence_photos_minutes"

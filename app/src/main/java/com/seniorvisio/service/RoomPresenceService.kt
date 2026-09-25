@@ -19,6 +19,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.AndroidSpeechSession
+import com.seniorvisio.core.RoomHandoffController
 import com.seniorvisio.core.EagleSpeakerRecogniser
 import com.seniorvisio.core.EmbeddedSpeakerRecogniser
 import com.seniorvisio.core.RoomVoiceGate
@@ -87,6 +88,26 @@ class RoomPresenceService : Service() {
      * startListening).
      */
     private var androidSpeech: AndroidSpeechSession? = null
+
+    /**
+     * Bascule vers Transcription instantanée sur voix entendue (voir
+     * RoomHandoffController). Créé paresseusement : inutile tant que le mode
+     * n'est pas armé.
+     */
+    private var handoff: RoomHandoffController? = null
+
+    /**
+     * Vrai quand on a relâché le micro exprès, au profit d'une autre
+     * application.
+     *
+     * Sans ce drapeau, scheduleCaptureRetry — qui par conception n'abandonne
+     * JAMAIS — reprendrait le micro à Transcription instantanée toutes les
+     * quelques secondes et la rendrait inutilisable. Cette obstination est une
+     * qualité dans tous les autres cas : une tablette dont le métier est
+     * d'écouter ne doit pas renoncer à écouter. Il faut donc lui dire
+     * explicitement que ce silence-ci est voulu.
+     */
+    @Volatile private var micYieldedToCompanion = false
 
     private var transcription: TranscriptionEngine? = null
     private var voiceGate: RoomVoiceGate? = null
@@ -358,7 +379,10 @@ class RoomPresenceService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_PAUSE -> stopListening()
+            ACTION_PAUSE -> {
+                endHandoffForCall()
+                stopListening()
+            }
             ACTION_RESUME -> startListening()
             else -> startListening()
         }
@@ -375,6 +399,11 @@ class RoomPresenceService : Service() {
         speakerGate = null
         enrollment?.close()
         enrollment = null
+        // Le bandeau de retour est une fenêtre système : la laisser derrière
+        // soi la ferait flotter sur la tablette sans plus personne pour la
+        // retirer.
+        handoff?.close()
+        handoff = null
         if (running === this) running = null
         super.onDestroy()
     }
@@ -432,13 +461,19 @@ class RoomPresenceService : Service() {
 
     private fun startAndroidSpeech() {
         if (androidSpeech?.isRunning() == true) return
+        // Même garde que pour notre capture : Transcription instantanée tient
+        // le micro, et le lui reprendre la rendrait inutilisable.
+        if (micYieldedToCompanion) return
         val session = AndroidSpeechSession(
             context = this,
             // Ce moteur tient le microphone lui-même et ne nous livre aucun
             // son : aucune reconnaissance du locuteur n'y est possible, et tout
             // s'affiche en clair. Dit dans l'état (voir Status.speakerMode)
             // plutôt que laissé à constater comme une panne.
-            onText = { text, isFinal -> roomTranscriptionOnText?.invoke(text, isFinal, false) },
+            onText = { text, isFinal ->
+                roomTranscriptionOnText?.invoke(text, isFinal, false)
+                basculerSurParoleReconnue()
+            },
             // Ce moteur ne nous donne pas de niveau sonore exploitable, mais il
             // dit quand quelqu'un se met à parler : c'est tout ce dont le
             // réveil a besoin, et c'est même plus sûr qu'un seuil à calibrer.
@@ -472,6 +507,9 @@ class RoomPresenceService : Service() {
 
     private fun startCapture() {
         if (isCapturing) return
+        // Micro cédé volontairement à une application compagne : ne pas le lui
+        // reprendre. C'est le seul cas où cette boucle doit se taire.
+        if (micYieldedToCompanion) return
         retryHandler.removeCallbacksAndMessages(null)
 
         val minBufferSize = AudioRecord.getMinBufferSize(
@@ -531,6 +569,7 @@ class RoomPresenceService : Service() {
      * redémarrage de la tablette, sans le moindre signe extérieur.
      */
     private fun scheduleCaptureRetry() {
+        if (micYieldedToCompanion) return
         captureRetries++
         // Jamais d'abandon définitif. La version précédente s'arrêtait au bout
         // de quinze tentatives, soit trente secondes : passé ce délai, la
@@ -556,6 +595,18 @@ class RoomPresenceService : Service() {
     private fun stopListening() {
         stopAndroidSpeech()
         stopCapture()
+    }
+
+    /**
+     * Un appel prend l'écran : la bascule doit cesser immédiatement.
+     *
+     * Sans ça, le bandeau de retour — une fenêtre système, posée au-dessus de
+     * tout — flotterait par-dessus le visage de l'appelant, et l'état interne
+     * croirait encore la tablette sur l'application de Google.
+     */
+    private fun endHandoffForCall() {
+        handoff?.returnToHomeScreen("appel entrant")
+        micYieldedToCompanion = false
     }
 
     private fun stopCapture() {
@@ -702,10 +753,128 @@ class RoomPresenceService : Service() {
             return
         }
 
+        // Bascule vers Transcription instantanée : sur de la VOIX et non un
+        // simple bruit. Basculer l'écran de Jean est un geste visible — bien
+        // plus qu'ouvrir une session — et un aspirateur ne doit pas le
+        // déclencher. Le portier Silero sert donc ici quel que soit le mode de
+        // facturation du moteur, puisque ce mode n'en ouvre aucun.
+        if (adminConfig.roomHandoffEnabled) {
+            // Nous sommes en train de lire le micro : il nous est donc revenu,
+            // et nous ne sommes plus basculés quoi qu'en dise l'état. Réconcilié
+            // ici plutôt que d'attendre un chemin de retour qui n'arrivera
+            // peut-être jamais.
+            ensureHandoff().noteMicrophoneHeld()
+            val voiceGate = ensureVoiceGate()
+            voiceGate.accept(buffer, length)
+            // Détecteur indisponible : on ne bascule PAS. Il rend alors « oui »
+            // à tout, par sécurité — un choix juste pour l'ouverture d'une
+            // session de transcription, où trop transcrire ne coûte que de
+            // l'argent. Ici il ferait changer l'écran de Jean au premier
+            // aspirateur, c'est-à-dire exactement ce que ce mode promet de ne
+            // pas faire. Mieux vaut ne pas basculer, et le dire.
+            if (!voiceGate.available) {
+                handoffUnavailableReason = "détection de voix indisponible, bascule suspendue"
+            } else {
+                handoffUnavailableReason = null
+                if (voiceGate.isVoiceActive()) ensureHandoff().onVoiceHeard()
+            }
+        }
+
         if (!adminConfig.dimJeanSpeech) return
         val gate = ensureSpeakerGate() ?: return
         gate.accept(buffer, length, now)
     }
+
+    /**
+     * Le déclencheur de la bascule quand c'est le moteur d'Android qui écoute.
+     *
+     * ═══ SANS CECI, LA BASCULE SERAIT UNE FONCTION MORTE ═══
+     *
+     * Le déclencheur d'origine vit dans notre boucle de capture, où un
+     * détecteur de voix analyse le son que nous lisons nous-mêmes. Cette
+     * boucle NE TOURNE PAS quand le moteur d'Android tient le micro — et c'est
+     * la configuration courante depuis qu'il est le moteur par défaut de la
+     * pièce.
+     *
+     * L'état le disait, d'ailleurs, et c'était la seule réponse honnête tant
+     * qu'aucun autre chemin n'existait : « impossible, la reconnaissance
+     * Android tient le micro, aucun son à analyser ». Restaurer la bascule
+     * sans ce second chemin aurait livré un réglage qui s'active, s'affiche,
+     * et ne fait jamais rien.
+     *
+     * ═══ ET LE SIGNAL EST MEILLEUR, PAS SEULEMENT DIFFÉRENT ═══
+     *
+     * On ne peut pas faire tourner le détecteur de voix ici : ce moteur ne
+     * nous livre aucun son. Mais il livre quelque chose de plus probant — DES
+     * MOTS RECONNUS. La règle que le détecteur servait à tenir était « sur de
+     * la voix et non un bruit, parce que basculer l'écran de Jean est un geste
+     * visible et qu'un aspirateur ne doit pas le déclencher ». Un texte
+     * reconnu satisfait cette règle mieux qu'une probabilité de parole : un
+     * aspirateur ne produit pas de mots.
+     *
+     * Le prix est un léger retard — il faut qu'un mot soit reconnu avant que
+     * l'écran bascule, là où le détecteur de voix partait sur la première
+     * syllabe. C'est le bon prix : la bascule est un changement d'écran, elle
+     * a le droit de coûter une demi-seconde de certitude.
+     */
+    private fun basculerSurParoleReconnue() {
+        if (!adminConfig.roomHandoffEnabled) return
+        ensureHandoff().onVoiceHeard()
+    }
+
+    private fun ensureHandoff(): RoomHandoffController {
+        handoff?.let { return it }
+        return RoomHandoffController(
+            context = this,
+            adminConfig = adminConfig,
+            onRelease = {
+                micYieldedToCompanion = true
+                stopListening()
+            },
+            onResume = {
+                micYieldedToCompanion = false
+                startListening()
+            },
+        ).also { handoff = it }
+    }
+
+    /** Senior Visio est revenu au premier plan : voir RoomHandoffController.noteBackOnHomeScreen. */
+    fun noteBackOnHomeScreen() {
+        handoff?.noteBackOnHomeScreen()
+    }
+
+    /**
+     * Pourquoi la bascule est suspendue alors qu'elle est armée. Distinct des
+     * refus du contrôleur lui-même : celui-ci ne peut pas savoir que le
+     * détecteur de voix qui l'alimente ne s'est pas chargé.
+     */
+    @Volatile private var handoffUnavailableReason: String? = null
+
+    /** Ce que fait la bascule, en une phrase, pour l'écran admin et le signe de vie. */
+    fun describeHandoff(): String = when {
+        !adminConfig.roomHandoffEnabled -> "désactivée"
+        // Le moteur d'Android ne nous livre aucun son, donc aucun détecteur
+        // de voix ne tourne — mais il rend des MOTS, et c'est de là que part
+        // la bascule dans ce mode (voir basculerSurParoleReconnue). Dit
+        // explicitement : les deux chemins n'ont pas la même latence ni la
+        // même sensibilité, et savoir lequel est en service change la façon
+        // de juger « ça n'a pas basculé ».
+        adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID ->
+            if (androidSpeech?.isRunning() == true || micYieldedToCompanion) {
+                "armée sur la parole reconnue par le moteur d'Android"
+            } else {
+                "reconnaissance Android arrêtée, rien pour déclencher"
+            }
+        !isCapturing && !micYieldedToCompanion -> "capture micro arrêtée, rien à analyser"
+        handoffUnavailableReason != null -> handoffUnavailableReason!!
+        else -> ensureHandoff().describe()
+    }
+
+    /**
+     * Bascule sur commande, sans condition, depuis l'écran d'administration.
+     * Rend le message d'échec, ou null si c'est parti.
+     */
+    fun testHandoff(): String? = ensureHandoff().forceHandOff()
 
     /**
      * Construit le portier, ou le reconstruit si le moteur, la signature ou le

@@ -270,6 +270,7 @@ class DeviceStatusReporter(private val context: Context) {
             // portier trop sévère ferait passer la transcription pour cassée
             // sans que rien ne le désigne — et on chercherait la panne du
             // mauvais côté.
+            append(" — bascule : ").append(service.describeHandoff())
             status.voiceSharePercent?.let { append(" — voix ").append(it).append("%") }
             // La reconnaissance du locuteur : ce qu'elle fait, et surtout ce
             // qu'elle mesure. Les deux nombres sont ce sur quoi le seuil doit
@@ -337,7 +338,13 @@ class DeviceStatusReporter(private val context: Context) {
      * ancien pour contenir le champ.
      */
     private fun companionAppVersions(): Map<String, String> =
-        emptyMap()
+        CompanionApps.allowedPackages.associateWith { packageName ->
+            try {
+                context.packageManager.getPackageInfo(packageName, 0).versionName ?: "inconnue"
+            } catch (_: PackageManager.NameNotFoundException) {
+                "absent"
+            }
+        }
 
     /**
      * Écoute une mise à jour demandée à distance (URL de l'APK + version
@@ -592,6 +599,12 @@ class DeviceStatusReporter(private val context: Context) {
                 adminConfig.callEngine = it
                 Log.i(TAG, "Moteur des appels réglé à distance : ${it.remoteValue}")
             }
+        }
+        snapshot.getBoolean(FIELD_ROOM_HANDOFF_ENABLED)?.let {
+            adminConfig.roomHandoffEnabled = it
+        }
+        snapshot.getLong(FIELD_ROOM_HANDOFF_RETURN_MINUTES)?.let {
+            adminConfig.roomHandoffReturnMinutes = it.toInt()
         }
         snapshot.getBoolean(FIELD_ROOM_WAKE_ENABLED)?.let {
             adminConfig.roomWakeEnabled = it
@@ -971,6 +984,8 @@ class DeviceStatusReporter(private val context: Context) {
 
         private const val RESTART_REQUEST_CODE = 4207
         private const val RESTART_DELAY_MS = 1_500L
+        private const val FIELD_ROOM_HANDOFF_ENABLED = "roomHandoffEnabled"
+        private const val FIELD_ROOM_HANDOFF_RETURN_MINUTES = "roomHandoffReturnMinutes"
         private const val FIELD_ROOM_WAKE_ENABLED = "roomWakeEnabled"
         private const val FIELD_ROOM_WAKE_THRESHOLD = "roomWakeThreshold"
         private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"

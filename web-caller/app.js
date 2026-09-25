@@ -520,6 +520,8 @@ const els = {
   cancelButton: el("cancelButton"),
   forceConnectButton: el("forceConnectButton"),
   policeSelect: el("policeSelect"),
+  roomHandoffToggle: el("roomHandoffToggle"),
+  handoffReturnSlider: el("handoffReturnSlider"),
   galeriePreferee: el("galeriePreferee"),
   galeriePrefereeStatut: el("galeriePrefereeStatut"),
   cadencePhotos: el("cadencePhotos"),
@@ -1129,6 +1131,7 @@ const ADMIN_SLIDER_FIELDS = [
   ["thresholdPicovoiceSlider", "jeanVoiceThreshold_picovoice"],
   // Zéro est légitime ici — « pas de retour minuté » — comme pour les
   // plafonds mensuels.
+  ["handoffReturnSlider", "roomHandoffReturnMinutes"],
 ];
 
 // Mêmes réglages d'appareil, mais en tout ou rien.
@@ -1138,6 +1141,7 @@ const ADMIN_TOGGLE_FIELDS = [
   ["blockWakeAtNightToggle", "blockWakeAtNight"],
   ["voiceGateToggle", "voiceGateEnabled"],
   ["dimJeanSpeechToggle", "dimJeanSpeech"],
+  ["roomHandoffToggle", "roomHandoffEnabled"],
   ["speechTraceToggle", "speechTraceEnabled"],
 ];
 
@@ -1813,7 +1817,7 @@ function applyDeviceSettings(data) {
     // revenir le curseur à dix heures à chaque signe de vie, en écrasant
     // silencieusement le choix de l'administrateur.
     const floor =
-      field.startsWith("quotaHours_") ? 0 : 1;
+      field.startsWith("quotaHours_") || field === "roomHandoffReturnMinutes" ? 0 : 1;
     if (Number.isFinite(value) && value >= floor) els[elementKey].value = value;
   }
   // Affecter .value par programme ne déclenche aucun événement « input » :
@@ -1830,6 +1834,7 @@ function applyDeviceSettings(data) {
   // est active. Montrer la case décochée ferait croire à une fonction éteinte.
   els.commandesVocalesToggle.checked = data.commandesVocales !== false;
   els.roomWakeEnabledToggle.checked = data.roomWakeEnabled !== false;
+  els.roomHandoffToggle.checked = data.roomHandoffEnabled === true;
   // Vrai par défaut côté tablette : un champ absent veut dire « jamais réglé
   // d'ici », pas « désactivé ».
   els.voiceGateToggle.checked = data.voiceGateEnabled !== false;
