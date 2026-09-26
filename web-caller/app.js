@@ -552,6 +552,7 @@ const els = {
   slideshowRememberToggle: el("slideshowRememberToggle"),
   sameRoomToggle: el("sameRoomToggle"),
   sameRoomStatus: el("sameRoomStatus"),
+  sameRoomReminder: el("sameRoomReminder"),
   slideshowStatus: el("slideshowStatus"),
   selfPreviewToggle: el("selfPreviewToggle"),
   scrollSpeedSlider: el("scrollSpeedSlider"),
@@ -2659,12 +2660,41 @@ async function appliquerMemePiece(sameRoom, { mémorisé = false } = {}) {
       // case cochée : Jean entend encore, et le curseur reste à sa main.
       ? "⚠️ La coupure n'a pas atteint la tablette — Jean vous entend toujours. Le volume reste réglable ci-dessus."
       : mémorisé
-        ? "Réglage mémorisé : décochez si vous n'êtes pas auprès de Jean. Son de la tablette entièrement coupé."
-        : "Son de la tablette entièrement coupé. Vos paroles continuent de s'écrire chez Jean.";
+        ? "Réglage mémorisé : décochez si vous n'êtes pas auprès de Jean. Son ET vidéo de cet appel entièrement coupés."
+        : "Son et vidéo entièrement coupés. Vos paroles continuent de s'écrire chez Jean.";
   // Sans objet quand on est déjà dans la pièce : la personne qui parle à Jean,
   // c'est soi, et son micro est justement coupé.
   els.micToRoomControl.classList.toggle("hidden", sameRoom);
   if (sameRoom && els.micToRoomToggle.checked) setMicToRoom(false);
+  mettreÀJourRappelMêmePièce();
+}
+
+/**
+ * Le rappel affiché sur l'écran d'attente, AVANT même d'appuyer sur
+ * « Démarrer l'appel ».
+ *
+ * ═══ POURQUOI IL FALLAIT UN SECOND ENDROIT ═══
+ *
+ * Le message ci-dessus (sameRoomStatus) dit déjà tout, mais seulement dans
+ * le panneau vidéo, une fois DÉJÀ connecté — donc une fois que le proche a
+ * déjà attendu la connexion sans image et sans son, et se demande si
+ * quelque chose est cassé. « Même pièce » se mémorise tout seul d'un appel à
+ * l'autre (voir saveSettings) : rien n'oblige à l'avoir cochée soi-même
+ * aujourd'hui pour en hériter.
+ *
+ * Ici, avant même de composer, le proche sait à quoi s'attendre — et sait
+ * quoi faire s'il ne s'y attendait pas : rouvrir « Sous-titres » ou les
+ * réglages n'est pas nécessaire, il suffit de ne pas s'inquiéter en voyant
+ * l'écran rester noir.
+ */
+function mettreÀJourRappelMêmePièce() {
+  if (!els.sameRoomReminder) return;
+  const actif = !!(loadSavedSettings() || DEFAULT_SETTINGS).sameRoom;
+  els.sameRoomReminder.classList.toggle("hidden", !actif);
+  if (actif) {
+    els.sameRoomReminder.textContent =
+      "📍 Réglé sur « même pièce » depuis un appel précédent : le prochain appel démarrera sans image ni son (vos paroles s'écriront quand même chez Jean). Décochez « Nous sommes dans la même pièce » une fois connecté si vous n'êtes plus auprès de lui.";
+  }
 }
 
 on("sameRoomToggle", "change", async () => {
@@ -3092,5 +3122,10 @@ on("recueilPrec", "click", () => {
   if (recueilRang > 0) présenterRecueil(recueilOuvertId, recueilRang - 1);
 });
 on("recueilFermer", "click", () => fermerRecueilPrésenté());
+
+// Avant tout appel, et pas seulement une fois connecté (voir
+// mettreÀJourRappelMêmePièce) : c'est sur l'écran d'attente qu'un proche qui
+// rouvre la page doit savoir ce qui l'attend.
+mettreÀJourRappelMêmePièce();
 
 signalerPageIncomplète();

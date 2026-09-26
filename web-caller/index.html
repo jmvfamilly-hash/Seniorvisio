@@ -20,6 +20,26 @@
     <p class="pwa-version" id="pwaVersion"></p>
 
     <div id="stateIdle" class="state">
+      <!-- ═══ LE RAPPEL QUI MANQUAIT ═══
+
+           « Même pièce » se mémorise tout seul d'un appel à l'autre (voir
+           appliquerMemePiece, saveSettings) — c'est voulu : un proche qui
+           s'assoit chaque soir près de Jean ne doit pas recocher la case à
+           chaque fois. Mais l'envers de cette mémoire, c'est qu'on peut
+           raccrocher SANS la décocher — parce qu'on a fini de tester, parce
+           qu'on part précipitamment — et le prochain appel, parfaitement
+           ordinaire de l'autre bout, hérite en silence d'un son ET D'UNE
+           VIDÉO coupés. Avant que la vidéo suive la même règle que le son,
+           ça ne coûtait qu'un silence ; désormais ça ressemble à un appel
+           entièrement cassé.
+
+           Ce message est le seul endroit qui le dit AVANT même d'appeler —
+           pas seulement dans le panneau de réglages une fois connecté, que
+           personne ne va rouvrir en pensant faire un appel comme les autres.
+           Rempli et affiché par mettreÀJourRappelMêmePièce(), à l'ouverture
+           de la page et chaque fois que le réglage change. -->
+      <p class="hint hidden" id="sameRoomReminder"></p>
+
       <button id="callButton">📹 Démarrer l'appel</button>
 
       <!-- ═══ « SOUS-TITRES » : QUAND ON EST DÉJÀ DANS LA PIÈCE ═══
