@@ -141,8 +141,19 @@ class RoomHandoffController(
             // décision » : une garde qui refuse cent fois et une garde qui n'a
             // jamais refusé donnent le même texte, et ce sont deux
             // diagnostics opposés.
-            refusalsByReason[reason] = (refusalsByReason[reason] ?: 0) + 1
+            val déjàVue = refusalsByReason[reason] ?: 0
+            refusalsByReason[reason] = déjàVue + 1
             lastDecision = reason
+            // Écrit au journal la PREMIÈRE fois seulement. « Pas de bascule »
+            // ne distinguait pas « le déclencheur n'est jamais parti » de
+            // « il part et une garde refuse » — deux pannes qui se cherchent à
+            // des endroits opposés, et on vient de perdre une journée dessus.
+            // Une fois par motif, parce qu'une garde qui refuse à chaque
+            // parole noierait le journal.
+            //
+            // AUCUNE DONNÉE PERSONNELLE : un motif pris dans une liste fermée
+            // de phrases du code, jamais un mot entendu.
+            if (déjàVue == 0) CallTrace.record("BASCULE refusée", reason)
             return
         }
         handOff()
@@ -237,6 +248,7 @@ class RoomHandoffController(
         // signale par une transcription vide sans expliquer pourquoi.
         onRelease()
         active = true
+        CallTrace.record("BASCULE partie", "micro relâché, Transcription instantanée lancée")
 
         try {
             context.startActivity(intent)
@@ -288,6 +300,7 @@ class RoomHandoffController(
         returnsByReason[reason] = (returnsByReason[reason] ?: 0) + 1
         lastDecision = "revenu ($reason)"
         Log.i(TAG, "Retour à l'écran de Jean : $reason")
+        CallTrace.record("BASCULE retour", reason)
 
         handler.removeCallbacks(timedReturn)
         banner.hide()

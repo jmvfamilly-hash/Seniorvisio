@@ -450,7 +450,7 @@ class RoomPresenceService : Service() {
      * ne peut pas s'accorder.
      */
     private fun startListening() {
-        if (adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID) {
+        if (écouteParLeMoteurAndroid()) {
             stopCapture()
             startAndroidSpeech()
         } else {
@@ -458,6 +458,60 @@ class RoomPresenceService : Service() {
             startCapture()
         }
     }
+
+    /**
+     * Qui tient le micro : le moteur d'Android, ou notre propre capture ?
+     *
+     * ═══ LA BASCULE PASSE DEVANT LE CHOIX DE MOTEUR ═══
+     *
+     * Et ce n'est pas une préférence : c'est une nécessité matérielle. La
+     * bascule se déclenche sur de la VOIX, détectée par un petit réseau de
+     * neurones qui a besoin du SON. Le moteur d'Android tient le micro
+     * lui-même et ne nous en livre jamais. Les deux ne peuvent pas coexister,
+     * et tant que le moteur d'Android écoute, aucun déclencheur n'existe.
+     *
+     * J'ai cru pouvoir contourner cela en déclenchant sur les MOTS que ce
+     * moteur reconnaît. C'était une faute de raisonnement : ce moteur ne rend
+     * aucun texte sur cette tablette — c'est précisément la panne qu'on
+     * cherche depuis deux jours. Le déclencheur était donc branché sur le seul
+     * chemin dont on savait déjà qu'il ne donne rien, et la bascule ne pouvait
+     * pas partir.
+     *
+     * ═══ ET ON NE PERD RIEN ═══
+     *
+     * Écarter le moteur d'Android quand la bascule est armée ne coûte aucune
+     * transcription : c'est l'application de Google qui transcrit dès qu'elle
+     * a l'écran, et elle le fait mieux — en continu, sans le découpage modal
+     * qui nous gêne. Le moteur local ne servirait qu'entre deux bascules.
+     *
+     * Le principe existait déjà dans ce projet, écrit pour les services
+     * payants : « bascule active, ce moteur est écarté pour la pièce » (voir
+     * TranscriptionEngine.engineFor). Il s'étend ici à celui d'Android, pour
+     * une raison plus forte encore — les autres étaient écartés par économie,
+     * celui-ci rend la bascule impossible.
+     *
+     * Effet de bord, et il est bienvenu : plus de moteur d'Android, donc plus
+     * de sons de reprise d'écoute.
+     */
+    /**
+     * Le moteur RÉELLEMENT en service pour la pièce, en clair.
+     *
+     * Distinct du réglage : la bascule armée écarte celui d'Android, et le
+     * journal annonçait pourtant « moteur=Reconnaissance Android » — c'est-à-
+     * dire le réglage, pas ce qui écoute. Une ligne de journal qui rapporte
+     * une intention au lieu d'un fait est pire qu'absente : on s'y fie pour ne
+     * pas chercher ailleurs.
+     */
+    fun moteurDeLaPièceEnClair(): String = when {
+        écouteParLeMoteurAndroid() -> adminConfig.roomEngine.adminLabel
+        adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID ->
+            "capture interne (Android écarté : bascule armée)"
+        else -> adminConfig.roomEngine.adminLabel
+    }
+
+    private fun écouteParLeMoteurAndroid(): Boolean =
+        adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID &&
+            !adminConfig.roomHandoffEnabled
 
     private fun startAndroidSpeech() {
         if (androidSpeech?.isRunning() == true) return
@@ -472,7 +526,6 @@ class RoomPresenceService : Service() {
             // plutôt que laissé à constater comme une panne.
             onText = { text, isFinal ->
                 roomTranscriptionOnText?.invoke(text, isFinal, false)
-                basculerSurParoleReconnue()
             },
             // Ce moteur ne nous donne pas de niveau sonore exploitable, mais il
             // dit quand quelqu'un se met à parler : c'est tout ce dont le
@@ -785,43 +838,6 @@ class RoomPresenceService : Service() {
         gate.accept(buffer, length, now)
     }
 
-    /**
-     * Le déclencheur de la bascule quand c'est le moteur d'Android qui écoute.
-     *
-     * ═══ SANS CECI, LA BASCULE SERAIT UNE FONCTION MORTE ═══
-     *
-     * Le déclencheur d'origine vit dans notre boucle de capture, où un
-     * détecteur de voix analyse le son que nous lisons nous-mêmes. Cette
-     * boucle NE TOURNE PAS quand le moteur d'Android tient le micro — et c'est
-     * la configuration courante depuis qu'il est le moteur par défaut de la
-     * pièce.
-     *
-     * L'état le disait, d'ailleurs, et c'était la seule réponse honnête tant
-     * qu'aucun autre chemin n'existait : « impossible, la reconnaissance
-     * Android tient le micro, aucun son à analyser ». Restaurer la bascule
-     * sans ce second chemin aurait livré un réglage qui s'active, s'affiche,
-     * et ne fait jamais rien.
-     *
-     * ═══ ET LE SIGNAL EST MEILLEUR, PAS SEULEMENT DIFFÉRENT ═══
-     *
-     * On ne peut pas faire tourner le détecteur de voix ici : ce moteur ne
-     * nous livre aucun son. Mais il livre quelque chose de plus probant — DES
-     * MOTS RECONNUS. La règle que le détecteur servait à tenir était « sur de
-     * la voix et non un bruit, parce que basculer l'écran de Jean est un geste
-     * visible et qu'un aspirateur ne doit pas le déclencher ». Un texte
-     * reconnu satisfait cette règle mieux qu'une probabilité de parole : un
-     * aspirateur ne produit pas de mots.
-     *
-     * Le prix est un léger retard — il faut qu'un mot soit reconnu avant que
-     * l'écran bascule, là où le détecteur de voix partait sur la première
-     * syllabe. C'est le bon prix : la bascule est un changement d'écran, elle
-     * a le droit de coûter une demi-seconde de certitude.
-     */
-    private fun basculerSurParoleReconnue() {
-        if (!adminConfig.roomHandoffEnabled) return
-        ensureHandoff().onVoiceHeard()
-    }
-
     private fun ensureHandoff(): RoomHandoffController {
         handoff?.let { return it }
         return RoomHandoffController(
@@ -853,18 +869,12 @@ class RoomPresenceService : Service() {
     /** Ce que fait la bascule, en une phrase, pour l'écran admin et le signe de vie. */
     fun describeHandoff(): String = when {
         !adminConfig.roomHandoffEnabled -> "désactivée"
-        // Le moteur d'Android ne nous livre aucun son, donc aucun détecteur
-        // de voix ne tourne — mais il rend des MOTS, et c'est de là que part
-        // la bascule dans ce mode (voir basculerSurParoleReconnue). Dit
-        // explicitement : les deux chemins n'ont pas la même latence ni la
-        // même sensibilité, et savoir lequel est en service change la façon
-        // de juger « ça n'a pas basculé ».
-        adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID ->
-            if (androidSpeech?.isRunning() == true || micYieldedToCompanion) {
-                "armée sur la parole reconnue par le moteur d'Android"
-            } else {
-                "reconnaissance Android arrêtée, rien pour déclencher"
-            }
+        // Ce cas ne devrait plus se présenter : la bascule armée écarte le
+        // moteur d'Android (voir écouteParLeMoteurAndroid). Gardé pour le dire
+        // si l'invariant se rompait un jour, plutôt que d'afficher une bascule
+        // « prête » qui ne peut pas partir.
+        écouteParLeMoteurAndroid() ->
+            "incohérence : la reconnaissance Android tient le micro, aucun son à analyser"
         !isCapturing && !micYieldedToCompanion -> "capture micro arrêtée, rien à analyser"
         handoffUnavailableReason != null -> handoffUnavailableReason!!
         else -> ensureHandoff().describe()

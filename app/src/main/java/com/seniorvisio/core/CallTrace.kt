@@ -135,6 +135,10 @@ object CallTrace {
         // processus, et elle répond à « qu'est-ce que cette tablette est
         // censée présenter ? ».
         "GALERIE",
+        // La bascule vers Transcription instantanée : rare, et c'est un
+        // changement d'écran visible pour Jean. Une bascule qui part le matin
+        // et un journal relevé le soir ne doivent pas s'ignorer.
+        "BASCULE",
     )
 
     /**
@@ -155,6 +159,7 @@ object CallTrace {
         // des heures en produisant des relevés mémoire qui l'évinceraient.
         "ACCUEIL élément refusé",
         "GALERIE",
+        "BASCULE",
     )
 
     private fun estLigneDeRepos(source: String): Boolean =

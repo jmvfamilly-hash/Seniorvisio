@@ -266,9 +266,17 @@ class TranscriptionEngine(
         // transcription à une application gratuite ; ouvrir une session payante
         // dans les quelques secondes qui précèdent la bascule ferait payer un
         // texte que personne ne lira, puisque l'écran va changer.
+        //
+        // Celui d'ANDROID est écarté pour une raison plus forte que l'argent :
+        // il tient le micro lui-même, donc il empêche le détecteur de voix de
+        // tourner, donc la bascule ne peut jamais partir (voir
+        // RoomPresenceService.écouteParLeMoteurAndroid). Le service d'écoute
+        // l'écarte déjà en amont ; on l'écarte ici aussi, sans quoi cette
+        // chaîne réclamerait un moteur qui n'écoute pas et poserait un
+        // diagnostic de repli à chaque session.
         if (source == TranscriptionSource.ROOM &&
             adminConfig.roomHandoffEnabled &&
-            choice.billedByDuration
+            (choice.billedByDuration || choice == TranscriptionEngineChoice.ANDROID)
         ) {
             diagnose("bascule active : ${choice.adminLabel} écarté pour la pièce, moteur embarqué à la place")
             return TranscriptionEngineChoice.VOSK

@@ -100,7 +100,7 @@ class MainActivity : AppCompatActivity() {
             CallTrace.record(
                 "VOIX écoute",
                 "transcription de la pièce demandée · moteur=" +
-                    adminConfig.roomEngine.adminLabel +
+                    service.moteurDeLaPièceEnClair() +
                     " · commandes=" +
                     if (adminConfig.commandesVocalesActives) "actives" else "éteintes",
             )
