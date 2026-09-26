@@ -520,7 +520,6 @@ const els = {
   cancelButton: el("cancelButton"),
   forceConnectButton: el("forceConnectButton"),
   policeSelect: el("policeSelect"),
-  roomHandoffToggle: el("roomHandoffToggle"),
   handoffReturnSlider: el("handoffReturnSlider"),
   galeriePreferee: el("galeriePreferee"),
   galeriePrefereeStatut: el("galeriePrefereeStatut"),
@@ -598,7 +597,6 @@ const els = {
   callEngineSelect: el("callEngineSelect"),
   voskModelSelect: el("voskModelSelect"),
   engineStatus: el("engineStatus"),
-  commandesVocalesToggle: el("commandesVocalesToggle"),
   interligneSlider: el("interligneSlider"),
   roomWakeEnabledToggle: el("roomWakeEnabledToggle"),
   roomWakeThresholdSlider: el("roomWakeThresholdSlider"),
@@ -1136,12 +1134,10 @@ const ADMIN_SLIDER_FIELDS = [
 
 // Mêmes réglages d'appareil, mais en tout ou rien.
 const ADMIN_TOGGLE_FIELDS = [
-  ["commandesVocalesToggle", "commandesVocales"],
   ["roomWakeEnabledToggle", "roomWakeEnabled"],
   ["blockWakeAtNightToggle", "blockWakeAtNight"],
   ["voiceGateToggle", "voiceGateEnabled"],
   ["dimJeanSpeechToggle", "dimJeanSpeech"],
-  ["roomHandoffToggle", "roomHandoffEnabled"],
   ["speechTraceToggle", "speechTraceEnabled"],
 ];
 
@@ -1833,9 +1829,7 @@ function applyDeviceSettings(data) {
   // !== false et non === true : le champ est absent tant que personne n'a
   // touché au réglage, et la tablette l'a alors à sa valeur par défaut, qui
   // est active. Montrer la case décochée ferait croire à une fonction éteinte.
-  els.commandesVocalesToggle.checked = data.commandesVocales !== false;
   els.roomWakeEnabledToggle.checked = data.roomWakeEnabled !== false;
-  els.roomHandoffToggle.checked = data.roomHandoffEnabled === true;
   // Vrai par défaut côté tablette : un champ absent veut dire « jamais réglé
   // d'ici », pas « désactivé ».
   els.voiceGateToggle.checked = data.voiceGateEnabled !== false;

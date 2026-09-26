@@ -58,8 +58,8 @@ DÉCLARATION = re.compile(
     r"infix\s+|tailrec\s+|companion\s+)*"
     r"(?:val|var|fun|class|object|interface|typealias)\s+"
     r"(?:<[^>]*>\s+)?"                      # fun <T> machin(...)
-    r"(?:[A-Za-z_][\w.]*\.)?"               # fun Truc.extension(...)
-    r"([A-Za-z_][A-Za-z0-9_]*)"
+    r"(?:[A-Za-zÀ-ÖØ-öø-ÿ_][\w.]*\.)?"               # fun Truc.extension(...)
+    r"([A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*)"
 )
 
 # Trop courts ou trop courants pour qu'une recherche textuelle dise quoi que
@@ -120,10 +120,10 @@ def déclarations(texte: str) -> set[str]:
 # Sans cette seconde passe, le filet noie le seul vrai signalement sous le
 # bruit, ce qui revient exactement à ne pas l'avoir.
 LIAISONS = [
-    re.compile(r"\b([a-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z_(]"),   # paramètre ou propriété typée
-    re.compile(r"\bfor\s*\(\s*([a-z_][A-Za-z0-9_]*)\s+in\b"),  # for (x in …)
-    re.compile(r"\bcatch\s*\(\s*([a-z_][A-Za-z0-9_]*)\s*:"),   # catch (e: …)
-    re.compile(r"[{(]\s*([a-z_][A-Za-z0-9_]*)\s*->"),          # { x -> … }
+    re.compile(r"\b([a-zà-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*)\s*:\s*[A-Za-zÀ-ÖØ-öø-ÿ_(]"),   # paramètre ou propriété typée
+    re.compile(r"\bfor\s*\(\s*([a-zà-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*)\s+in\b"),  # for (x in …)
+    re.compile(r"\bcatch\s*\(\s*([a-zà-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*)\s*:"),   # catch (e: …)
+    re.compile(r"[{(]\s*([a-zà-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*)\s*->"),          # { x -> … }
     re.compile(r"\bval\s*\(([^)]*)\)"),                        # val (a, b) = …
 ]
 
@@ -134,7 +134,7 @@ def noms_liés(texte: str) -> set[str]:
         for m in motif.findall(texte):
             for morceau in m.split(","):
                 nom = morceau.strip()
-                if re.fullmatch(r"[a-z_][A-Za-z0-9_]*", nom):
+                if re.fullmatch(r"[a-zà-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*", nom):
                     trouvés.add(nom)
     return trouvés
 
