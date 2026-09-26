@@ -47,6 +47,47 @@ class AdminConfig(context: Context) {
         get() = prefs.getInt(KEY_NIGHT_END_HOUR, 7)
         set(value) = prefs.edit().putInt(KEY_NIGHT_END_HOUR, value).apply()
 
+    // ═══ COMBIEN DE TEMPS DURE UN APPUI SUR « SOMMEIL » ═══
+    //
+    // Douze heures par défaut, et ce n'est pas une valeur prudente : c'est le
+    // sens même du bouton. Jean appuie le soir, l'écran reste noir jusqu'au
+    // matin. Avant ce réglage, « Sommeil » éteignait la dalle pour quelques
+    // secondes — le prochain créneau de photos, ou le premier bruit dans la
+    // pièce, la rallumait aussitôt. Le bouton avait donc l'air cassé alors
+    // qu'il faisait exactement ce que le code disait.
+    //
+    // Réglable parce que la bonne durée dépend de la pièce et de l'heure à
+    // laquelle Jean se couche, pas d'une règle générale.
+    //
+    // CE QUE LE SOMMEIL NE BLOQUE PAS : un appel. Douze heures pendant
+    // lesquelles la tablette ne sonnerait plus feraient de Jean quelqu'un
+    // d'injoignable une demi-journée sur deux, et personne — ni lui, ni ses
+    // proches — n'aurait de quoi le deviner. « Sommeil » veut dire « laissez
+    // l'écran tranquille », jamais « coupez-moi du monde ». ---
+    var sleepHours: Int
+        get() = prefs.getInt(KEY_SLEEP_HOURS, 12)
+        set(value) = prefs.edit().putInt(KEY_SLEEP_HOURS, value).apply()
+
+    /**
+     * L'instant, en horloge système, jusqu'auquel l'écran doit rester noir.
+     *
+     * Écrit ici et non gardé en mémoire : le service peut être relancé par
+     * Android à tout moment, et un sommeil qui s'annulerait à chaque
+     * redémarrage du processus ne tiendrait aucune de ses douze heures.
+     *
+     * Horloge MURALE et non temps depuis le démarrage : un sommeil doit
+     * survivre à un redémarrage de la tablette, qui remet le second à zéro.
+     * En contrepartie un changement d'heure système peut l'écourter ou le
+     * prolonger — conséquence acceptable, et bornée par [sleepHours].
+     */
+    var sleepUntilMs: Long
+        get() = prefs.getLong(KEY_SLEEP_UNTIL_MS, 0L)
+        set(value) = prefs.edit().putLong(KEY_SLEEP_UNTIL_MS, value).apply()
+
+    /** Vrai tant que l'écran doit rester noir à la demande de Jean. */
+    fun isSleeping(nowMs: Long = System.currentTimeMillis()): Boolean =
+        nowMs < sleepUntilMs
+
     // --- Durée de l'alerte avant connexion automatique (paramétrable, 30s par défaut) ---
     var countdownSeconds: Int
         get() = prefs.getInt(KEY_COUNTDOWN_SECONDS, 30)
@@ -505,6 +546,8 @@ class AdminConfig(context: Context) {
     fun toDebugJson(): String = JSONObject().apply {
         put("visualAlertModeEnabled", visualAlertModeEnabled)
         put("blockWakeAtNight", blockWakeAtNight)
+        put("sleepHours", sleepHours)
+        put("sleepUntilMs", sleepUntilMs)
         put("nightStartHour", nightStartHour)
         put("nightEndHour", nightEndHour)
         put("countdownSeconds", countdownSeconds)
@@ -517,6 +560,8 @@ class AdminConfig(context: Context) {
         private const val KEY_NIGHT_START_HOUR = "night_start_hour"
         private const val KEY_NIGHT_END_HOUR = "night_end_hour"
         private const val KEY_COUNTDOWN_SECONDS = "countdown_seconds"
+        private const val KEY_SLEEP_HOURS = "sleep_hours"
+        private const val KEY_SLEEP_UNTIL_MS = "sleep_until_ms"
         private const val KEY_BLOCKING_ENABLED = "blocking_enabled"
         private const val KEY_ADMIN_PIN = "admin_pin"
         private const val KEY_ACCESS_PASSWORD = "access_password"

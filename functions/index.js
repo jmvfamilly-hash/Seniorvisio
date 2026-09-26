@@ -60,6 +60,17 @@ async function réveillerTablette(environnement, event) {
       type: "incoming_call",
       callId: event.params.callId,
       callerName: String(call.callerName || "un proche"),
+      // Le mode « Sous-titres » : le proche est dans la pièce, la tablette ne
+      // doit pas sonner. Transporté ici parce que cette voie-ci est la seule
+      // qui traverse la veille profonde d'Android — donc justement celle
+      // qu'emprunte un appel lancé pendant que Jean a mis l'écran en sommeil.
+      //
+      // Une CHAÎNE et non un booléen : la charge utile d'un message de
+      // données FCM n'accepte que des chaînes, et un booléen y est refusé.
+      // La tablette relit de toute façon le document si ce champ manque (voir
+      // CallSignalingClient.fetchSousTitresMode), mais un déploiement en
+      // retard ferait alors sonner la tablette une fraction de seconde.
+      sousTitres: String(!!call.sousTitresMode),
     },
   });
 }

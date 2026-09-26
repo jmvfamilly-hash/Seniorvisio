@@ -438,7 +438,9 @@ class CallListenerService : LifecycleService() {
 
     private fun startListening() {
         if (!signaling.isAvailable()) return
-        callListener = signaling.listenForRingingCalls(onErreur = ::réarmerAprèsErreur) { callId, callerName, callerPhotoBase64 ->
+        callListener = signaling.listenForRingingCalls(
+            onErreur = ::réarmerAprèsErreur,
+        ) { callId, callerName, callerPhotoBase64, sousTitres ->
             // La photo passe par un fichier, jamais par l'extra directement
             // (voir CallerPhotoCache) : au-delà d'une certaine taille, elle
             // fait planter ce démarrage de service avec
@@ -447,6 +449,7 @@ class CallListenerService : LifecycleService() {
                 putExtra(IncomingCallService.EXTRA_CALL_ID, callId)
                 putExtra(IncomingCallService.EXTRA_CALLER_NAME, callerName)
                 putExtra(IncomingCallService.EXTRA_CALLER_PHOTO_PATH, CallerPhotoCache.save(this@CallListenerService, callerPhotoBase64))
+                putExtra(IncomingCallService.EXTRA_SOUS_TITRES, sousTitres)
             }
             startForegroundService(alertIntent)
         }

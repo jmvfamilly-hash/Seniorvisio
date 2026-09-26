@@ -517,6 +517,7 @@ const els = {
   blocked: el("stateBlocked"),
   connected: el("stateConnected"),
   callButton: el("callButton"),
+  sousTitresButton: el("sousTitresButton"),
   cancelButton: el("cancelButton"),
   forceConnectButton: el("forceConnectButton"),
   policeSelect: el("policeSelect"),
@@ -601,6 +602,7 @@ const els = {
   roomWakeEnabledToggle: el("roomWakeEnabledToggle"),
   roomWakeThresholdSlider: el("roomWakeThresholdSlider"),
   blockWakeAtNightToggle: el("blockWakeAtNightToggle"),
+  sleepHoursSlider: el("sleepHoursSlider"),
   roomListeningStatus: el("roomListeningStatus"),
   deviceHealth: el("deviceHealth"),
   transcriptionDiagnostic: el("transcriptionDiagnostic"),
@@ -686,6 +688,16 @@ function showState(name) {
     recueilOuvertId = null;
     recueilRang = 0;
     renderRecueilNav();
+  }
+
+  // Le mode « Sous-titres » ne survit pas à la fin de l'appel. Retiré ici et
+  // non dans le gestionnaire de « Raccrocher » : l'appel se termine aussi de
+  // cinq autres façons — la tablette qui raccroche, un blocage, la perte de
+  // la connexion, le silence de cinq minutes, le bouton « Sommeil » de Jean —
+  // et toutes passent par ici. Une classe oubliée laisserait l'appel SUIVANT
+  // sans vidéo, sans que rien n'explique pourquoi.
+  if (name === "idle" || name === "blocked") {
+    document.body.classList.remove("mode-sous-titres");
   }
 }
 
@@ -899,9 +911,39 @@ function applyScreenState(state) {
   els.captionOverflowIndicator.classList.toggle("hidden", !lagging);
 }
 
-on("callButton", "click", async () => {
-  const settings = loadSavedSettings() || DEFAULT_SETTINGS;
-  els.callingHint.textContent = "Connexion à sa tablette…";
+/**
+ * Le départ d'un appel, dans ses deux formes.
+ *
+ * ═══ UNE SEULE FONCTION POUR DEUX BOUTONS ═══
+ *
+ * « Sous-titres » n'est pas un autre appel : c'est le même, avec le son et
+ * l'image éteints du côté de Jean. Tout ce qui suit — la remise à zéro des
+ * consignes du dernier appel, la restauration des réglages mémorisés, la
+ * réplique de son écran, la photo de l'appelant — vaut mot pour mot dans les
+ * deux cas.
+ *
+ * En faire deux gestionnaires aurait figé la copie du jour où elle a été
+ * prise. Ce fichier a déjà payé ce prix : les remises à zéro écrites à un
+ * endroit et les réglages mémorisés à un autre se sont annulés pendant des
+ * semaines, et personne ne pouvait le voir en lisant l'un des deux.
+ *
+ * @param sousTitres vrai quand le proche est dans la pièce et veut seulement
+ *   que ses paroles s'écrivent sur la tablette.
+ */
+async function lancerAppel({ sousTitres = false } = {}) {
+  const mémorisés = loadSavedSettings() || DEFAULT_SETTINGS;
+  // « Même pièce » n'est pas une préférence ici, c'est la définition du mode :
+  // le proche EST dans la pièce. Forcé pour cet appel sans toucher à ce qui
+  // est mémorisé — il retrouvera ses réglages habituels au prochain appel
+  // ordinaire.
+  const settings = sousTitres ? { ...mémorisés, sameRoom: true } : mémorisés;
+  // La classe commande tout l'habillage (voir style.css) : ni vidéo, ni
+  // caméra, ni curseur de volume — il n'y a rien à régler quand rien ne sort
+  // du haut-parleur.
+  document.body.classList.toggle("mode-sous-titres", sousTitres);
+  els.callingHint.textContent = sousTitres
+    ? "Vos paroles vont s'écrire sur sa tablette…"
+    : "Connexion à sa tablette…";
   els.countdownFill.style.width = "0%";
   els.countdownText.textContent = "";
   // Remis à zéro à chaque appel : un micro resté coupé d'un appel précédent
@@ -965,10 +1007,24 @@ on("callButton", "click", async () => {
     // reviendrait en écho depuis la pièce où il se trouve.
     sameRoomMode: !!settings.sameRoom,
     tabletMicMuted: !!settings.sameRoom,
+    // ═══ LA TRANSCRIPTION N'EST PAS UNE OPTION DE CE MODE, C'EST LE MODE ═══
+    //
+    // Elle suit la case mémorisée pour un appel ordinaire. Ici, la laisser
+    // suivre produirait exactement ce qu'un proche ne peut pas diagnostiquer :
+    // un appel qui se connecte, aucun son, aucune image, et rien qui s'écrit.
+    captionModeEnabled: sousTitres ? true : settings.captionEnabled,
+    sousTitresMode: sousTitres,
     callerPhotoBase64: identity.photoBase64 || null,
   });
   els.forceConnectButton.disabled = false;
-});
+}
+
+on("callButton", "click", () => lancerAppel());
+
+// Le proche est auprès de Jean et veut simplement que ses paroles s'écrivent
+// sur la tablette : ni sonnerie, ni vidéo, ni son — Jean l'entend, il est à
+// côté. L'écran de Jean ne change pas, le texte se pose par-dessus ses photos.
+on("sousTitresButton", "click", () => lancerAppel({ sousTitres: true }));
 
 // Le bouton reste, alors que tout est désormais retenu à chaque changement.
 // Le retirer priverait d'un accusé de réception : sans lui, rien ne dit que la
@@ -1130,6 +1186,10 @@ const ADMIN_SLIDER_FIELDS = [
   // Zéro est légitime ici — « pas de retour minuté » — comme pour les
   // plafonds mensuels.
   ["handoffReturnSlider", "roomHandoffReturnMinutes"],
+  // Zéro est exclu par le curseur lui-même (min=1), et la tablette le borne
+  // une seconde fois à la lecture : un sommeil de zéro heure ferait un bouton
+  // qui ne fait rien, ce qui est précisément le défaut qu'il corrige.
+  ["sleepHoursSlider", "sleepHours"],
 ];
 
 // Mêmes réglages d'appareil, mais en tout ou rien.

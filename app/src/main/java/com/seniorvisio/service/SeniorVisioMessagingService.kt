@@ -31,9 +31,15 @@ class SeniorVisioMessagingService : FirebaseMessagingService() {
         if (message.data["type"] != TYPE_INCOMING_CALL) return
         val callId = message.data["callId"] ?: return
         val callerName = message.data["callerName"] ?: "un proche"
+        // Une chaîne, parce qu'une charge utile FCM n'en transporte pas
+        // d'autres (voir functions/index.js). Absente d'un déploiement plus
+        // ancien de la fonction : l'écran d'appel relit alors le document
+        // pour se corriger, au prix d'un début de sonnerie.
+        val sousTitres = message.data["sousTitres"] == "true"
         val intent = Intent(this, IncomingCallService::class.java).apply {
             putExtra(IncomingCallService.EXTRA_CALL_ID, callId)
             putExtra(IncomingCallService.EXTRA_CALLER_NAME, callerName)
+            putExtra(IncomingCallService.EXTRA_SOUS_TITRES, sousTitres)
         }
         startForegroundService(intent)
     }

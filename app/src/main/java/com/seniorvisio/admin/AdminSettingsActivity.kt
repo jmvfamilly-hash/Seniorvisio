@@ -190,6 +190,7 @@ class AdminSettingsActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.textInstalledVersion).text = "Version installée : ${BuildConfig.BUILD_REV}"
 
         val inputCountdown = findViewById<EditText>(R.id.inputCountdownSeconds)
+        val inputSleepHours = findViewById<EditText>(R.id.inputSleepHours)
         val inputPin = findViewById<EditText>(R.id.inputAdminPin)
         val inputAccess = findViewById<EditText>(R.id.inputAccessPassword)
         val buttonSave = findViewById<Button>(R.id.buttonSaveAdminSettings)
@@ -204,6 +205,7 @@ class AdminSettingsActivity : AppCompatActivity() {
         val inputRoomWakeThreshold = findViewById<EditText>(R.id.inputRoomWakeThreshold)
 
         inputCountdown.setText(adminConfig.countdownSeconds.toString())
+        inputSleepHours.setText(adminConfig.sleepHours.toString())
         inputPin.setText(adminConfig.adminPin)
         inputAccess.setText(adminConfig.accessPassword)
         inputAssemblyAiKey.setText(adminConfig.assemblyAiApiKey)
@@ -234,6 +236,13 @@ class AdminSettingsActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             adminConfig.countdownSeconds = seconds
+            // Une valeur hors bornes est IGNORÉE, pas rejetée — même règle
+            // que les heures de nuit juste en dessous : perdre tout le
+            // formulaire pour une faute de frappe sur un champ secondaire
+            // coûte plus cher que de garder l'ancienne durée.
+            inputSleepHours.text.toString().toIntOrNull()
+                ?.takeIf { it in 1..24 }
+                ?.let { adminConfig.sleepHours = it }
             adminConfig.adminPin = inputPin.text.toString().ifBlank { adminConfig.adminPin }
             // Le vide est accepté ici, contrairement au PIN : c'est ainsi
             // qu'on RETIRE la protection du PWA. Reprendre l'ancienne valeur

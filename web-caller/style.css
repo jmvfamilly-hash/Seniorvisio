@@ -887,3 +887,36 @@ body.verrouille { overflow: hidden; }
 body.mode-proches #openSettingsButton,
 body.mode-proches #openAdminIdleButton { display: none; }
 
+
+/* ═══ MODE « SOUS-TITRES » (proche assis à côté de Jean) ═══
+
+   Rien n'est retiré du document : tout est masqué par cette seule classe,
+   posée au départ de l'appel et retirée à son retour au repos (voir app.js,
+   lancerAppel et showState). Deux écrans séparés auraient dupliqué la
+   réplique de l'écran de Jean, la transcription et le raccroché — les trois
+   choses qui comptent ici et qui existent déjà.
+
+   Ce qui disparaît, et pourquoi chacun :
+
+   - la vidéo dans les deux sens : personne ne la regarde, le proche a Jean
+     devant lui ;
+   - le volume chez Jean : il est coupé, et un curseur qui ne commande rien
+     est pire qu'un curseur absent ;
+   - la caméra et les photos : sans flux vidéo, ces boutons échoueraient ;
+   - « Montrer à Jean sa propre image » et « écrire ce qui se dit dans la
+     pièce » : la première n'a pas d'image à montrer, la seconde désigne
+     justement la personne qui parle. */
+body.mode-sous-titres #localVideo,
+body.mode-sous-titres #remoteVideo,
+body.mode-sous-titres #mirrorHint,
+body.mode-sous-titres .volume-control-visio,
+body.mode-sous-titres #switchCameraButton,
+body.mode-sous-titres #openSlideshowButton,
+body.mode-sous-titres #micToRoomControl,
+body.mode-sous-titres #micToRoomBanner { display: none; }
+
+/* La réplique de l'écran de Jean garde sa place, vidée de sa vidéo : c'est
+   elle qui porte le texte, et c'est la seule chose que le proche vient
+   vérifier ici — que ses paroles arrivent bien. Une hauteur minimale, sinon
+   le cadre se referme sur lui-même avant la première phrase. */
+body.mode-sous-titres .jean-screen { min-height: 40vh; }

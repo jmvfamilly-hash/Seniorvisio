@@ -29,13 +29,27 @@ import com.seniorvisio.admin.SeniorVisioDeviceAdminReceiver
  * est cassée alors qu'elle marche chez Jean. Le chemin emprunté est donc écrit
  * dans le journal à chaque fois.
  *
- * ═══ CE QUE ÇA NE FAIT PAS ═══
+ * ═══ ET MAINTENANT, ÇA DURE ═══
  *
- * Rien n'est arrêté : ni l'écoute des appels, ni le service, ni le fil
- * d'information. L'écran se rallume au premier appel, au premier son de la
- * pièce si le réveil au son est actif, et au prochain changement de titre. Jean
- * ne peut donc pas se couper du monde en appuyant sur ce bouton, ce qui est la
- * condition pour le lui donner.
+ * Ce bouton éteignait la dalle, et rien de plus. Le prochain créneau de
+ * photos la rallumait un quart d'heure plus tard, ou le premier bruit dans la
+ * pièce quelques secondes après. Du point de vue de Jean, le bouton ne
+ * marchait pas — alors qu'il faisait précisément ce que le code disait.
+ *
+ * Un appui pose désormais une échéance, douze heures par défaut (voir
+ * AdminConfig.sleepHours), et les deux chemins de réveil la respectent : le
+ * changement de photo (OrdonnanceurPhotos.rallumerLÉcran) et le son de la
+ * pièce (RoomPresenceService). Jean appuie le soir, l'écran reste noir
+ * jusqu'au matin.
+ *
+ * ═══ CE QUE LE SOMMEIL NE BLOQUE PAS ═══
+ *
+ * Un appel. Rien n'est arrêté : ni l'écoute des appels, ni le service. La
+ * tablette sonne, et l'échéance est levée au passage — sans quoi l'écran
+ * resterait noir pendant que quelqu'un essaie de joindre Jean.
+ *
+ * C'est la condition pour lui donner ce bouton : il doit pouvoir faire taire
+ * son écran sans jamais pouvoir se couper du monde.
  */
 object MiseEnVeille {
 
@@ -48,6 +62,16 @@ object MiseEnVeille {
      */
     fun endormir(context: Context, fenêtre: android.view.Window?) {
         fenêtre?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        val config = AdminConfig(context)
+        // Bornée à la lecture comme à l'écriture : ce réglage transite par un
+        // document Firestore ouvert en écriture à qui en connaît l'adresse
+        // (voir DeviceStatusReporter). Une valeur aberrante — négative, ou
+        // mille heures — ferait un écran noir que personne sur place ne
+        // saurait rallumer.
+        val heures = config.sleepHours.coerceIn(MIN_HEURES, MAX_HEURES)
+        config.sleepUntilMs = System.currentTimeMillis() + heures * 3_600_000L
+        CallTrace.record("SOMMEIL demandé", "écran noir pour $heures h, sauf appel")
 
         val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
         val admin = ComponentName(context, SeniorVisioDeviceAdminReceiver::class.java)
@@ -69,5 +93,39 @@ object MiseEnVeille {
         }
     }
 
+    /**
+     * Lève le sommeil en cours, s'il y en a un.
+     *
+     * Appelée à l'arrivée d'un appel, et par le bouton « Réveiller » du
+     * panneau d'administration. Rend vrai quand il y avait effectivement un
+     * sommeil à lever, pour que l'appelant puisse le dire au journal sans
+     * avoir à relire le réglage lui-même.
+     */
+    fun réveiller(context: Context, motif: String): Boolean {
+        val config = AdminConfig(context)
+        if (!config.isSleeping()) return false
+        val restantMin = (config.sleepUntilMs - System.currentTimeMillis()) / 60_000L
+        config.sleepUntilMs = 0L
+        CallTrace.record("SOMMEIL levé", "$motif — il restait $restantMin min")
+        return true
+    }
+
+    /** Ce que le panneau d'administration et le signe de vie affichent. */
+    fun décrire(context: Context): String {
+        val config = AdminConfig(context)
+        if (!config.isSleeping()) return "éveillée (appui sur « Sommeil » : ${config.sleepHours} h)"
+        val restantMin = (config.sleepUntilMs - System.currentTimeMillis()) / 60_000L
+        return "en sommeil encore $restantMin min"
+    }
+
     private const val TAG = "MiseEnVeille"
+
+    /**
+     * Une heure au minimum : en dessous, le bouton retombe dans le défaut
+     * qu'on corrige ici — un écran qui se rallume avant que Jean ait eu le
+     * temps de s'endormir. Vingt-quatre au plus : au-delà, plus personne ne
+     * se souvient d'avoir appuyé.
+     */
+    private const val MIN_HEURES = 1
+    private const val MAX_HEURES = 24
 }

@@ -1098,6 +1098,10 @@ class RoomPresenceService : Service() {
     private fun ensureAwake() {
         if (!adminConfig.roomWakeEnabled) return
         if (adminConfig.blockWakeAtNight && adminConfig.isCurrentlyNightWindow(LocalDateTime.now().hour)) return
+        // Jean a appuyé sur « Sommeil » (voir MiseEnVeille). C'était jusqu'ici
+        // le chemin qui annulait son geste le plus vite : un raclement de
+        // gorge, et l'écran se rallumait dans la seconde.
+        if (adminConfig.isSleeping()) return
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
 

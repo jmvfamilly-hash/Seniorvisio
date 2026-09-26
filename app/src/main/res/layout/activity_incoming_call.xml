@@ -15,6 +15,32 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- ═══ LES PHOTOS DE L'ACCUEIL, EN MODE « SOUS-TITRES » ═══
+
+         PREMIER ENFANT, donc dessiné sous tout le reste — même mécanisme et
+         même rôle que hotePhotos dans activity_main.xml, dont ceci est le
+         jumeau. En mode « Sous-titres », l'écran de Jean ne doit pas changer :
+         ses photos continuent de défiler, la date et la météo restent en
+         place, et le texte du proche se pose par-dessus.
+
+         Une vue à part plutôt que hoteRecueil, qui existe déjà plus bas :
+         celui-ci est contraint dans une bande au-dessus du texte, pour les
+         photos qu'un proche présente pendant un appel ordinaire. Ce sont deux
+         usages différents de la même visionneuse, et leur donner la même vue
+         forcerait chacun à défaire la mise en page de l'autre.
+
+         Alimentée par LE MÊME OrdonnanceurPhotos que l'accueil (voir
+         IncomingCallActivity.brancherPhotosAmbiantes) : pas une seconde
+         galerie, pas une seconde cadence, pas un second rang.
+
+         GONE partout ailleurs : pendant un appel ordinaire, c'est le visage
+         du proche qui occupe la dalle. -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/hotePhotosAmbiantes"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <org.webrtc.SurfaceViewRenderer
         android:id="@+id/remoteRenderer"
         android:layout_width="match_parent"

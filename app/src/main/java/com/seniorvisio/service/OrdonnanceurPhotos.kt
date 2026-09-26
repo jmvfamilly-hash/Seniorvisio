@@ -201,6 +201,11 @@ class OrdonnanceurPhotos(private val service: CallListenerService) {
      */
     private fun rallumerLÉcran() {
         if (config.blockWakeAtNight && config.isCurrentlyNightWindow(LocalDateTime.now().hour)) return
+        // Jean a demandé le silence de l'écran (voir MiseEnVeille). C'est le
+        // seul geste qu'il ait sur cette tablette, et il doit peser plus lourd
+        // qu'un changement de photo : sans cette ligne, sa demande tenait
+        // jusqu'au prochain créneau, un quart d'heure au plus.
+        if (config.isSleeping()) return
         val gestionnaire = service.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
 
         @Suppress("DEPRECATION")

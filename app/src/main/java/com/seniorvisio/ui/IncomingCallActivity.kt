@@ -33,6 +33,7 @@ import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.AlertVolume
 import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
+import com.seniorvisio.core.MiseEnVeille
 import com.seniorvisio.core.ScreenTheme
 import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.TranscriptionSource
@@ -41,7 +42,9 @@ import com.seniorvisio.core.WebRtcCallEngine
 import com.seniorvisio.recueil.LecteurRecueil
 import com.seniorvisio.recueil.RecueilStore
 import com.seniorvisio.signaling.CallSignalingClient
+import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.service.IncomingCallService
+import com.seniorvisio.service.OrdonnanceurPhotos
 import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.service.TimedCallAlertController
 import org.webrtc.RendererCommon
@@ -130,6 +133,54 @@ class IncomingCallActivity : AppCompatActivity() {
     // (voir onCreate), et il n'y a donc plus rien à afficher là pendant ces
     // quelques secondes. La zone 3, elle, reste alimentée par le son de
     // l'appel une fois connecté (voir WebRtcCallEngine).
+
+    // ═══ LE MODE « SOUS-TITRES » ═══
+    //
+    // Un proche assis dans la même pièce que Jean appuie sur « Sous-titres »
+    // depuis son téléphone. Ce qu'il dit s'écrit sur la tablette, et rien
+    // d'autre ne change : pas de sonnerie, pas de vidéo, pas de son dans le
+    // haut-parleur — Jean l'entend de ses oreilles, il est à côté. L'écran
+    // garde ses photos, sa date et sa météo ; le texte se pose par-dessus.
+    //
+    // C'est techniquement un appel, et c'est tout l'intérêt : la chaîne de
+    // transcription, la mise en page du texte, la coupure du haut-parleur et
+    // celle du micro existent déjà et sont éprouvées. Ce mode ne fait que les
+    // convoquer sans rien montrer d'un appel.
+    private var modeSousTitres = false
+    private var nomAppelant = "un proche"
+
+    /**
+     * Vrai quand la consigne « même pièce » (voir listenForSameRoomMode)
+     * demande de cacher la vidéo du proche — qu'elle vienne du mode
+     * « Sous-titres », qui l'impose dès le départ, ou d'une case cochée en
+     * cours d'un appel vidéo ordinaire. Conservée même avant la connexion :
+     * remoteRendererRef n'existe pas encore, mais la consigne peut être
+     * connue avant (voir onCreate).
+     */
+    private var vidéoCachéeMêmePièce = false
+
+    /**
+     * Le minuteur qui raccroche après un silence prolongé.
+     *
+     * Sans lui, un proche qui range son téléphone sans appuyer sur
+     * « Arrêter » laisse la tablette en communication indéfiniment : micro
+     * pris, transcription facturée, et Jean devant un écran qu'il croit au
+     * repos. Le compteur repart à chaque parole reconnue — c'est la
+     * conversation qu'on mesure, pas le bruit de la pièce (une télévision
+     * tiendrait l'appel ouvert toute la soirée).
+     */
+    private val silenceHandler = Handler(Looper.getMainLooper())
+    private val raccrocherAprèsSilence = Runnable {
+        if (!callHandled) {
+            CallTrace.record(
+                "SOUS-TITRES fin",
+                "aucune parole depuis ${SILENCE_SOUS_TITRES_MS / 60_000} min",
+            )
+            callHandled = true
+            callEngine.hangUp()
+            terminer("mode sous-titres : silence prolongé")
+        }
+    }
 
     private val screenStateHandler = Handler(Looper.getMainLooper())
     private val screenStatePublisher = object : Runnable {
@@ -245,6 +296,8 @@ class IncomingCallActivity : AppCompatActivity() {
         handledCallId = callId
 
         val callerName = intent.getStringExtra("callerName") ?: "un proche"
+        nomAppelant = callerName
+        modeSousTitres = intent.getBooleanExtra(EXTRA_SOUS_TITRES, false)
         val textCallerName = findViewById<TextView>(R.id.textCallerName)
         val countdownFill = findViewById<View>(R.id.countdownProgressFill)
         buttonBlock = findViewById(R.id.buttonBlock)
@@ -329,7 +382,9 @@ class IncomingCallActivity : AppCompatActivity() {
         // et que la piste audio distante n'arrive, sans quoi la tablette
         // émet et diffuse le temps d'un aller-retour Firestore — assez pour
         // un larsen franc quand le téléphone du proche est dans la pièce.
-        callEngine.listenForSameRoomMode()
+        callEngine.listenForSameRoomMode { enabled ->
+            runOnUiThread { appliquerMêmePièceVidéo(enabled) }
+        }
 
         // Le bouton « Connexion immédiate » du PWA écrit cette demande (voir
         // web-caller/app.js), et le proche peut le toucher AVANT que l'offre
@@ -359,6 +414,49 @@ class IncomingCallActivity : AppCompatActivity() {
             }
         }
 
+        // ═══ LE MODE « SOUS-TITRES » NE SONNE PAS ═══
+        //
+        // Le proche est dans la pièce, assis à côté de Jean. Faire sonner la
+        // tablette devant lui n'annoncerait rien qu'il ne voie déjà, et le
+        // décompte de trente secondes ferait attendre pour rien avant que la
+        // première phrase puisse s'écrire.
+        //
+        // Ni sonnerie, ni décompte, ni photo d'appelant : on connecte dès que
+        // l'offre WebRTC est là. isPrepared peut déjà être vrai si elle est
+        // arrivée pendant la construction de l'écran — d'où les deux chemins,
+        // exactement comme pour la demande de connexion immédiate du PWA.
+        if (modeSousTitres) {
+            préparerÉcranSousTitres()
+            if (isPrepared) connectVideoCall() else pendingForceConnect = true
+            return
+        }
+
+        // ═══ LA RELECTURE QUI RATTRAPE LA VOIE PUSH ═══
+        //
+        // L'extra vient de l'écoute Firestore. Quand Android suspend cette
+        // écoute — écran éteint depuis un moment, donc précisément après un
+        // appui sur « Sommeil » — l'appel arrive par notification push, dont
+        // la charge utile est composée par une fonction Cloud déployée à
+        // part. Un déploiement de retard, et l'extra manque.
+        //
+        // La sonnerie a déjà commencé à ce stade : on ne peut pas dé-sonner.
+        // Mais on peut l'arrêter tout de suite et tenir le reste de la
+        // promesse — pas de vidéo, les photos conservées, le texte par-dessus.
+        // Un début de sonnerie vaut mieux qu'un mode qui ne marche pas.
+        callEngine.fetchSousTitresMode { sousTitres ->
+            runOnUiThread {
+                if (!sousTitres || modeSousTitres || isConnected || callHandled) return@runOnUiThread
+                modeSousTitres = true
+                CallTrace.record(
+                    "SOUS-TITRES rattrapé",
+                    "le mode manquait dans l'intention — sonnerie interrompue",
+                )
+                alertController.cancel()
+                préparerÉcranSousTitres()
+                if (isPrepared) connectVideoCall() else pendingForceConnect = true
+            }
+        }
+
         val durationSeconds = adminConfig.countdownSeconds
         callEngine.signalAlertStarted(durationSeconds)
         playDiscreetAlertSound()
@@ -375,6 +473,120 @@ class IncomingCallActivity : AppCompatActivity() {
             onTimeoutConnect = { connectVideoCall() },
             onBlocked = { /* déclenché via le bouton, voir ci-dessus */ }
         )
+    }
+
+    /**
+     * Efface tout ce qui ferait un écran d'appel, et rend à Jean son écran
+     * habituel.
+     *
+     * Rien ici n'est nouveau à l'écran : la date, la météo, les photos et la
+     * zone de texte sont celles de l'accueil, aux mêmes places. C'est ce qui
+     * est demandé — le texte s'affiche « au-dessus de ce qui est présent à
+     * l'écran », et non à la place.
+     */
+    private fun préparerÉcranSousTitres() {
+        callEngine.setModeSousTitres(true)
+        findViewById<View>(R.id.alertContent).visibility = View.GONE
+        findViewById<View>(R.id.imageCallerPhoto).visibility = View.GONE
+        findViewById<View>(R.id.callerPhotoScrim).visibility = View.GONE
+        findViewById<View>(R.id.remoteRenderer).visibility = View.GONE
+        findViewById<View>(R.id.localRenderer).visibility = View.INVISIBLE
+
+        // SOLID et non VIDEO : c'est ce qui ramène la zone d'information, que
+        // l'arrivée d'un appel efface. Ici il n'y a pas d'appel à annoncer, et
+        // la date reste ce qu'elle est le reste du temps — un repère.
+        zones.setBackground(HomeZonesController.Background.SOLID, animate = false)
+
+        // Qui parle, au-dessus de ce qu'il dit. Sans visage ni sonnerie, c'est
+        // la seule chose à l'écran qui réponde à la question.
+        findViewById<TextView>(R.id.textCallCaptionTitre)?.apply {
+            text = if (nomAppelant.equals("un proche", ignoreCase = true)) {
+                "Paroles d'un proche"
+            } else {
+                "Paroles de $nomAppelant"
+            }
+            visibility = View.VISIBLE
+        }
+
+        // ═══ LE BOUTON « SOMMEIL » DOIT MARCHER ICI AUSSI ═══
+        //
+        // L'écran ressemble à l'accueil, donc Jean y voit son bouton. Jusqu'à
+        // présent cet écran-ci ne le branchait pas — il n'en avait pas besoin,
+        // un appel occupant toute la dalle. En mode « Sous-titres », un bouton
+        // visible et inerte serait le pire des deux mondes.
+        //
+        // Il met fin au mode : « Sommeil » endort maintenant la tablette pour
+        // douze heures (voir MiseEnVeille), et garder une transcription
+        // ouverte douze heures derrière un écran noir n'aurait aucun sens.
+        zones.brancherSommeil {
+            CallTrace.record("SOUS-TITRES fin", "Jean a demandé le sommeil")
+            callHandled = true
+            callEngine.hangUp()
+            zones.clearTranscriptions()
+            MiseEnVeille.endormir(this, window)
+            terminer("mode sous-titres : Jean a appuyé sur Sommeil")
+        }
+
+        brancherPhotosAmbiantes()
+        armerSilenceSousTitres()
+        CallTrace.record("SOUS-TITRES début", "appel silencieux, sans vidéo — $nomAppelant")
+    }
+
+    /**
+     * Les photos de l'accueil, dans l'écran d'appel.
+     *
+     * Le même ordonnanceur, et c'est la consigne : « utiliser la même logique
+     * pour la gestion des photos, pas de duplication du code ». Il n'y a
+     * qu'un emplacement d'observateur, et l'accueil libère le sien en se
+     * mettant en pause quand cet écran passe devant — il le reprendra de
+     * lui-même au retour.
+     *
+     * Aucune navigation branchée ici : le glissement et le zoom viennent de
+     * la visionneuse elle-même (voir VisionneusePhotos), mais le rang choisi
+     * par Jean n'est pas renvoyé à l'ordonnanceur comme il l'est sur
+     * l'accueil. Ce mode dure quelques minutes ; le prochain créneau remettra
+     * les choses en place.
+     */
+    private fun brancherPhotosAmbiantes() {
+        val hôte = findViewById<ComposeView>(R.id.hotePhotosAmbiantes) ?: return
+        hôte.setContent {
+            val fichiers by photosAmbiantes
+            val rang by rangAmbiant
+            VisionneusePhotos(photos = fichiers, rang = rang, surRang = { voulu -> rangAmbiant.value = voulu })
+        }
+
+        val service = CallListenerService.enService
+        if (service == null) {
+            CallTrace.record("SOUS-TITRES photos", "service absent — fond uni")
+            return
+        }
+        service.galerie.brancher(OrdonnanceurPhotos.Observateur { element, recueilId ->
+            if (element == null || recueilId == null) {
+                runOnUiThread {
+                    photosAmbiantes.value = emptyList()
+                    hôte.visibility = View.GONE
+                }
+                return@Observateur
+            }
+            val recueil = RecueilStore.actif?.disponibles()?.firstOrNull { it.id == recueilId }
+            val prêts = recueil?.prêts.orEmpty()
+            runOnUiThread {
+                photosAmbiantes.value = prêts
+                rangAmbiant.value = prêts.indexOf(element).coerceAtLeast(0)
+                hôte.visibility = if (prêts.isEmpty()) View.GONE else View.VISIBLE
+            }
+        })
+        service.galerie.réévaluer()
+    }
+
+    /**
+     * (Re)lance le minuteur de silence. Appelé à chaque parole reconnue : ce
+     * qu'on mesure est la conversation, pas le temps écoulé.
+     */
+    private fun armerSilenceSousTitres() {
+        if (!modeSousTitres) return
+        silenceHandler.removeCallbacks(raccrocherAprèsSilence)
+        silenceHandler.postDelayed(raccrocherAprèsSilence, SILENCE_SOUS_TITRES_MS)
     }
 
     /**
@@ -867,7 +1079,11 @@ class IncomingCallActivity : AppCompatActivity() {
         // Sans effet dans le cas courant, le fond étant déjà en VIDEO depuis
         // onCreate : conservé pour le chemin où un diaporama s'est intercalé
         // avant la connexion (voir showSlideshowPhoto).
-        zones.setBackground(HomeZonesController.Background.VIDEO)
+        //
+        // Sauté en mode « Sous-titres » : le fond y est resté SOLID pour que
+        // la date et la météo demeurent, et les photos de l'accueil sont
+        // dessinées derrière (voir préparerÉcranSousTitres).
+        if (!modeSousTitres) zones.setBackground(HomeZonesController.Background.VIDEO)
         findViewById<View>(R.id.alertContent).visibility = View.GONE
         // La photo et son voile sont des calques plein écran, frères de
         // alertContent et non ses enfants : sans ça ils resteraient affichés
@@ -886,8 +1102,22 @@ class IncomingCallActivity : AppCompatActivity() {
         // attachRenderers). INVISIBLE garde la vue mise en page normalement
         // (donc sa surface bien créée), juste non dessinée à l'écran.
         localRenderer.visibility = View.INVISIBLE
-        remoteRenderer.visibility = View.VISIBLE
-        callEngine.attachRenderers(localRenderer, remoteRenderer)
+        // ═══ EN MODE « SOUS-TITRES », AUCUNE SURFACE VIDÉO N'EST CRÉÉE ═══
+        //
+        // Ni l'une ni l'autre n'est affichée, et attachRenderers initialise un
+        // contexte EGL et deux surfaces qui ne serviraient à rien — sur cette
+        // tablette, c'est la partie la plus coûteuse d'un appel.
+        //
+        // Le flux vidéo du proche continue d'arriver s'il en envoie un ; il
+        // n'a simplement aucun destinataire à l'écran, ce qui est exactement
+        // la consigne. Le téléphone, lui, n'en envoie pas : le mode demande
+        // le micro seul (voir webrtc-engine.js).
+        // « Même pièce » (vidéoCachéeMêmePièce) obéit à la même règle que le
+        // mode « Sous-titres » pour la visibilité, mais pas pour l'attache :
+        // un appel ordinaire où la case serait décochée plus tard doit
+        // retrouver une vidéo déjà branchée, pas la découvrir à ce moment-là.
+        remoteRenderer.visibility = if (modeSousTitres || vidéoCachéeMêmePièce) View.GONE else View.VISIBLE
+        if (!modeSousTitres) callEngine.attachRenderers(localRenderer, remoteRenderer)
         // L'image entière du proche, à ses proportions réelles.
         //
         // Le réglage par défaut d'un SurfaceViewRenderer est un compromis qui
@@ -1041,7 +1271,36 @@ class IncomingCallActivity : AppCompatActivity() {
      * L'animation dure le temps du fondu du texte (voir RollingCaptionZone) :
      * l'image s'agrandit pendant que la phrase s'efface, en un seul geste.
      */
+    /**
+     * « Même pièce » ne coupe pas que le son : la vidéo du proche n'a pas
+     * davantage de raison de rester à l'écran quand il est assis juste à côté
+     * de Jean — la voir en double (le proche en vrai, et son image sur la
+     * tablette) n'apporte rien, et prend une place que le texte pourrait
+     * utiliser.
+     *
+     * Réagit aussi bien à l'activation qu'à la désactivation EN COURS d'un
+     * appel vidéo ordinaire (voir web-caller/app.js, case « Nous sommes dans
+     * la même pièce ») : ce n'est pas propre au mode « Sous-titres », qui
+     * l'impose dès le départ et ne le désactive jamais.
+     *
+     * attachRenderers a pu ne pas encore avoir eu lieu (consigne arrivée
+     * avant la connexion) : la valeur est retenue dans tous les cas
+     * ([vidéoCachéeMêmePièce]), et c'est connectVideoCall qui l'applique à ce
+     * moment-là.
+     */
+    private fun appliquerMêmePièceVidéo(enabled: Boolean) {
+        vidéoCachéeMêmePièce = enabled
+        val renderer = remoteRendererRef ?: return
+        renderer.visibility = if (enabled || modeSousTitres) View.GONE else View.VISIBLE
+        fitVideoAboveCaptions()
+    }
+
     private fun fitVideoAboveCaptions(animate: Boolean = true) {
+        // Aucune vidéo à loger en mode « Sous-titres », ni tant que « même
+        // pièce » la cache (voir appliquerMêmePièceVidéo) : la mesurer et
+        // l'animer consommerait une passe de mise en page à chaque phrase
+        // reconnue, pour redimensionner une vue que personne ne voit.
+        if (modeSousTitres || vidéoCachéeMêmePièce) return
         val renderer = remoteRendererRef ?: return
         val root = findViewById<View>(R.id.callRoot) ?: return
         if (root.height == 0) return
@@ -1200,6 +1459,10 @@ class IncomingCallActivity : AppCompatActivity() {
     private val photosRecueil = mutableStateOf<List<java.io.File>>(emptyList())
     private val rangRecueil = mutableStateOf(0)
 
+    /** Les photos de l'accueil, en mode « Sous-titres » (voir brancherPhotosAmbiantes). */
+    private val photosAmbiantes = mutableStateOf<List<java.io.File>>(emptyList())
+    private val rangAmbiant = mutableStateOf(0)
+
     private fun applyCaptionErgonomics() {
         zones.setVisibleLines(adminConfig.captionVisibleLines)
         zones.setScrollSpeedDpPerSec(adminConfig.captionScrollSpeedDp.toFloat())
@@ -1238,7 +1501,15 @@ class IncomingCallActivity : AppCompatActivity() {
         // savoir laquelle (voir HomeZonesController).
         callEngine.listenForCaptions { source, text, isFinal ->
             noteCaptionShape(source, text, isFinal)
-            runOnUiThread { zones.submitTranscription(source, text, isFinal) }
+            runOnUiThread {
+                zones.submitTranscription(source, text, isFinal)
+                // Une phrase reconnue : la conversation continue, le minuteur
+                // de silence repart. Sur les textes partiels comme sur les
+                // définitifs — quelqu'un qui parle longuement sans pause
+                // produit des partiels pendant des dizaines de secondes, et
+                // raccrocher au milieu d'une phrase serait absurde.
+                if (text.isNotBlank()) armerSilenceSousTitres()
+            }
         }
 
         // Ergonomie de lecture : réglages d'administrateur, pas d'appel. Ils
@@ -1464,6 +1735,10 @@ class IncomingCallActivity : AppCompatActivity() {
         // chauffe/marquage d'écran sinon.
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         screenStateHandler.removeCallbacks(screenStatePublisher)
+        // Le minuteur du mode « Sous-titres » tient une référence sur cette
+        // activité : sans ce retrait, il la garde en mémoire jusqu'à son
+        // échéance, et il raccrocherait un appel qui n'existe plus.
+        silenceHandler.removeCallbacks(raccrocherAprèsSilence)
         videoHeightAnimator?.cancel()
         videoHeightAnimator = null
         // Le fil de décodage du lecteur est un fil démon, donc il n'empêcherait
@@ -1515,6 +1790,17 @@ class IncomingCallActivity : AppCompatActivity() {
          * toute la règle est que rien ne surprenne Jean.
          */
         private const val VIDEO_RESIZE_MS = 400L
+
+        /**
+         * Le silence au bout duquel le mode « Sous-titres » se termine de
+         * lui-même.
+         *
+         * Cinq minutes, comme demandé. Ce n'est pas une durée d'appel : le
+         * compteur repart à chaque parole reconnue. Il ne se déclenche donc
+         * que si le proche a réellement quitté la pièce sans appuyer sur
+         * « Arrêter » — le cas qu'il existe pour couvrir.
+         */
+        private const val SILENCE_SOUS_TITRES_MS = 5 * 60 * 1000L
 
         private const val SCREEN_STATE_PUBLISH_MS = 1_000L
         private const val LAG_PUBLISH_THRESHOLD_SECONDS = 0.5f

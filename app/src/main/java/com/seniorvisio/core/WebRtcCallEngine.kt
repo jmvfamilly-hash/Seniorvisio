@@ -91,6 +91,9 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     /** Voir listenForSameRoomMode : coupe entièrement le son, quel que soit le curseur de volume. */
     @Volatile private var sameRoomMode = false
 
+    /** Voir setModeSousTitres : la tablette n'émet ni son ni image. */
+    @Volatile private var modeSousTitres = false
+
     private var callerCandidatesListener: ListenerRegistration? = null
     private var callId: String? = null
 
@@ -765,8 +768,16 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * ramènerait l'écho sans que rien n'indique pourquoi. Le texte, lui,
      * continue d'être affiché : c'est même souvent la seule raison d'appeler
      * depuis le fauteuil d'à côté.
+     *
+     * @param onEnabled prévient l'écran d'appel qu'il doit cacher ou montrer
+     *   la vidéo du proche (voir IncomingCallActivity.appliquerMêmePièceVidéo).
+     *   « Même pièce » ne coupe pas que le son : voir Jean l'image du proche
+     *   ALORS QU'IL EST ASSIS À CÔTÉ n'apporte rien, et occupe une place que
+     *   le texte pourrait utiliser. Ce n'est pas propre au mode « Sous-titres »
+     *   — un appel vidéo ordinaire où le proche coche cette case en cours de
+     *   conversation doit obéir à la même règle.
      */
-    fun listenForSameRoomMode() {
+    fun listenForSameRoomMode(onEnabled: (Boolean) -> Unit = {}) {
         val id = callId ?: return
         sameRoomListener = signaling.listenForSameRoomMode(id) { enabled ->
             CallTrace.guard(
@@ -776,8 +787,46 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                 sameRoomMode = enabled
                 localAudioTrack?.setEnabled(!enabled && !pendingMicMuted)
                 rampVolumeTo(pendingVolume)
+                onEnabled(enabled)
             }
         }
+    }
+
+    /**
+     * Relit dans le document d'appel si le proche a lancé le mode
+     * « Sous-titres » (voir CallSignalingClient.fetchSousTitresMode).
+     *
+     * L'écran d'appel le reçoit déjà dans son intention. Cette relecture
+     * existe pour le chemin où l'appel arrive par notification push, dont la
+     * charge utile est composée par une fonction Cloud déployée séparément et
+     * peut donc être en retard d'une version.
+     */
+    /**
+     * Le mode « Sous-titres » : rien de la tablette ne part vers le proche.
+     *
+     * Le micro était déjà coupé par le mode même pièce, que ce mode implique
+     * (voir app.js). Reste la caméra : le proche est assis à côté de Jean, il
+     * le voit. Lui envoyer son image reviendrait à filmer quelqu'un pour
+     * l'afficher à deux mètres de lui, en payant la batterie, le réseau et le
+     * processeur pour ça.
+     *
+     * La piste est DÉSACTIVÉE, pas supprimée : la capture caméra reste en
+     * place, seule l'émission cesse. Retirer la piste changerait la
+     * négociation WebRTC, et le chemin d'appel de Jean n'est pas l'endroit où
+     * l'on tente ce genre de chose. La diode de la caméra peut donc rester
+     * allumée — c'est un défaut assumé, et il vaut mieux le dire que le
+     * laisser croire réglé.
+     *
+     * À poser AVANT answer(), qui crée les pistes.
+     */
+    fun setModeSousTitres(enabled: Boolean) {
+        modeSousTitres = enabled
+        localVideoTrack?.setEnabled(!enabled)
+    }
+
+    fun fetchSousTitresMode(onResult: (Boolean) -> Unit) {
+        val id = callId ?: return onResult(false)
+        signaling.fetchSousTitresMode(id, onResult)
     }
 
     /** Écoute l'activation à distance de l'aperçu de sa propre caméra affiché à Jean (masqué par défaut). */
@@ -1842,6 +1891,10 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
         val videoTrack = factory.createVideoTrack("SVIO_VIDEO", videoSource)
         localVideoTrack = videoTrack
+        // Même raison que pour le micro juste en dessous : la consigne peut
+        // être déjà connue, et la piste ne doit pas émettre le temps d'un
+        // aller-retour. En mode « Sous-titres », le proche est dans la pièce.
+        videoTrack.setEnabled(!modeSousTitres)
         localRenderer?.let { videoTrack.addSink(it) }
 
         // Démarré avant la première piste : c'est lui qui consomme la file, et
@@ -1963,6 +2016,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         sameRoomListener?.remove()
         sameRoomListener = null
         sameRoomMode = false
+        modeSousTitres = false
         slideshowListener?.remove()
         slideshowListener = null
         recueilListener?.remove()

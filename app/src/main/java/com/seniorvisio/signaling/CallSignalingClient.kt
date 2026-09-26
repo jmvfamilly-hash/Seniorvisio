@@ -68,7 +68,12 @@ class CallSignalingClient {
          * avant onErreur, ce rappel-ci ne pouvait pas être fourni ainsi — le
          * bloc allait remplir onErreur, et le compilateur réclamait onIncoming.
          */
-        onIncoming: (callId: String, callerName: String, callerPhotoBase64: String?) -> Unit,
+        onIncoming: (
+            callId: String,
+            callerName: String,
+            callerPhotoBase64: String?,
+            sousTitres: Boolean,
+        ) -> Unit,
     ): ListenerRegistration {
         var isFirstSnapshot = true
         return db.collection(CALLS_COLLECTION)
@@ -85,10 +90,43 @@ class CallSignalingClient {
                     if (change.type == DocumentChange.Type.ADDED) {
                         val callerName = change.document.getString(FIELD_CALLER_NAME) ?: "un proche"
                         val photo = change.document.getString(FIELD_CALLER_PHOTO)
-                        onIncoming(change.document.id, callerName, photo)
+                        // Lu ICI, dans le même instantané que le nom, et non
+                        // par une seconde lecture : le mode décide s'il faut
+                        // faire sonner la tablette, et cette décision se prend
+                        // avant tout le reste. Une lecture séparée arriverait
+                        // après le premier son.
+                        val sousTitres = change.document.getBoolean(FIELD_SOUS_TITRES_MODE) == true
+                        onIncoming(change.document.id, callerName, photo, sousTitres)
                     }
                 }
             }
+    }
+
+    /**
+     * Relit le mode « Sous-titres » directement dans le document d'appel.
+     *
+     * ═══ POURQUOI UNE SECONDE SOURCE POUR LA MÊME INFORMATION ═══
+     *
+     * Le chemin normal porte le mode dans l'extra de l'intention, lu dans le
+     * même instantané Firestore que le nom de l'appelant. Mais ce n'est pas
+     * le seul chemin : quand Android suspend la connexion Firestore (Doze,
+     * écran éteint depuis un moment — donc précisément après un appui sur
+     * « Sommeil »), l'appel arrive par notification push, dont la charge
+     * utile est composée par une fonction Cloud déployée séparément.
+     *
+     * Deux versions déployées à des moments différents finissent toujours par
+     * diverger. Si cette fonction-là est en retard d'un déploiement, l'extra
+     * manque, et un appel « Sous-titres » ferait sonner la tablette à côté
+     * d'un proche assis dans la pièce.
+     *
+     * Le document, lui, porte la vérité dans les deux cas. L'extra reste la
+     * voie rapide — elle évite le tout premier son — et cette lecture-ci
+     * corrige si elle s'est trompée.
+     */
+    fun fetchSousTitresMode(callId: String, onResult: (Boolean) -> Unit) {
+        callDoc(callId).get()
+            .addOnSuccessListener { doc -> onResult(doc.getBoolean(FIELD_SOUS_TITRES_MODE) == true) }
+            .addOnFailureListener { onResult(false) }
     }
 
     fun fetchOfferSdp(callId: String, onResult: (String?) -> Unit) {
@@ -533,6 +571,18 @@ class CallSignalingClient {
         private const val FIELD_CAPTION_DEBUG = "captionDebugMessage"
         private const val FIELD_MIC_MUTED = "tabletMicMuted"
         private const val FIELD_SAME_ROOM_MODE = "sameRoomMode"
+
+        /**
+         * Le mode « Sous-titres », posé par le proche à la création de
+         * l'appel et jamais changé ensuite.
+         *
+         * IMMUABLE POUR UNE RAISON : il décide s'il faut faire sonner, et on
+         * ne peut pas dé-sonner. Les autres consignes de cet écran — volume,
+         * micro coupé, même pièce — se règlent en pleine conversation ; celle
+         * -ci se décide une fois, au départ, et le document la porte dès sa
+         * création (voir app.js, demarrerSousTitres).
+         */
+        private const val FIELD_SOUS_TITRES_MODE = "sousTitresMode"
         private const val FIELD_SLIDESHOW_PHOTO = "slideshowPhotoBase64"
 
         /**

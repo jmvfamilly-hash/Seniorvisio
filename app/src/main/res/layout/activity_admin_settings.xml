@@ -39,6 +39,26 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="24dp"
+        android:text="Durée du bouton « Sommeil » de Jean (heures, 1 à 24)"
+        android:textSize="16sp" />
+
+    <EditText
+        android:id="@+id/inputSleepHours"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="number" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="Un appel réveille toujours la tablette, quelle que soit cette durée."
+        android:textSize="13sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
         android:text="PIN admin"
         android:textSize="16sp" />
 

@@ -459,8 +459,16 @@ class RealCallEngine extends CallEngine {
       // souhait : le navigateur s'en approche et n'échoue jamais pour cette
       // raison. Sur un appareil qui ne sait pas faire 720p, on retombe
       // simplement sur ce qu'il sait faire.
+      // ═══ EN MODE « SOUS-TITRES », LE MICRO SEUL ═══
+      //
+      // Le proche est assis à côté de Jean : son image n'est affichée nulle
+      // part. La demander allumerait sa caméra, sa diode et sa batterie pour
+      // un flux que personne ne regarde.
+      //
+      // Le tout dernier avertissement ci-dessus tient toujours : `audio: true`
+      // reste intact, c'est seulement la vidéo qui disparaît.
       localStream = await navigator.mediaDevices.getUserMedia({
-        video: this._définitionSouhaitée(),
+        video: initialSettings.sousTitresMode ? false : this._définitionSouhaitée(),
         audio: true,
       });
     } catch (e) {
@@ -490,6 +498,14 @@ class RealCallEngine extends CallEngine {
     }
     this._localStream = localStream;
     document.getElementById("localVideo").srcObject = localStream;
+    // « Même pièce » mémorisé d'un appel précédent : la caméra est demandée
+    // normalement ci-dessus (ce n'est pas le mode « Sous-titres », qui la
+    // demande déjà éteinte), mais rien ne sert d'envoyer ce qu'elle capte —
+    // Jean ne le verra jamais (voir setSameRoomMode, même mécanisme).
+    if (initialSettings.sameRoomMode) {
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) videoTrack.enabled = false;
+    }
     localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
     const remoteStream = new MediaStream();
@@ -568,12 +584,26 @@ class RealCallEngine extends CallEngine {
         // est connu, pas ici.
         sameRoomMode: initialSettings.sameRoomMode ?? false,
         tabletMicMuted: initialSettings.tabletMicMuted ?? false,
+        // ═══ LE MODE « SOUS-TITRES », POSÉ ICI ET JAMAIS AILLEURS ═══
+        //
+        // Il décide si la tablette doit sonner. Cette décision se prend avant
+        // le premier son, donc avant tout aller-retour Firestore — un réglage
+        // envoyé après la création du document arriverait toujours trop tard
+        // pour la sonnerie, qui ne se rattrape pas.
+        //
+        // C'est aussi pourquoi il n'a pas de setter : contrairement au volume
+        // ou au micro, on ne change pas d'avis là-dessus en pleine
+        // conversation.
+        sousTitresMode: initialSettings.sousTitresMode ?? false,
         // Faux au départ, et remis à vrai en cours d'appel seulement : la
         // connexion immédiate par le bouton « Connexion immédiate » (voir
         // forceConnect). Écrit ici plutôt qu'omis : la tablette lit ce
         // document dès le premier instantané, et un champ absent l'obligerait
         // à distinguer « pas encore reçu » de « explicitement faux ».
-        forceConnectRequested: false,
+        // Vrai d'emblée en mode « Sous-titres » : il n'y a personne à
+        // prévenir, le proche est dans la pièce, et attendre trente secondes
+        // avant la première phrase n'apporterait rien.
+        forceConnectRequested: initialSettings.sousTitresMode ?? false,
         // ═══ EN DERNIER, DONC PRIORITAIRE ═══
         //
         // Toute consigne posée avant l'existence du document entre ici, dans
@@ -862,8 +892,24 @@ class RealCallEngine extends CallEngine {
    * Champ dédié plutôt qu'un simple volume à zéro : la tablette a besoin de
    * savoir qu'elle est dans ce mode, pas seulement de recevoir un réglage
    * qu'un curseur pourrait défaire par accident à l'écran suivant.
+   *
+   * ═══ LA VIDÉO S'ARRÊTE AUSSI, ET DES DEUX CÔTÉS ═══
+   *
+   * Ce que la tablette affiche est réglé côté Android (voir
+   * IncomingCallActivity.appliquerMêmePièceVidéo) : Jean ne voit plus le
+   * proche, qui est assis à côté de lui. Mais si le téléphone continue à
+   * filmer et à encoder pendant ce temps, la caméra reste allumée et la
+   * batterie continue de payer un flux que plus personne ne regarde.
+   *
+   * `track.enabled = false` coupe l'ENVOI sans renégociation — exactement
+   * le mécanisme déjà utilisé pour le micro côté tablette (voir
+   * localAudioTrack.setEnabled). La piste existe toujours, elle cesse
+   * seulement de transporter des images ; la réactiver au décochage suffit à
+   * tout reprendre, sans reconstruire la connexion.
    */
   async setSameRoomMode(enabled) {
+    const videoTrack = this._localStream && this._localStream.getVideoTracks()[0];
+    if (videoTrack) videoTrack.enabled = !enabled;
     return this._envoyerConsigne("nous sommes dans la même pièce", { sameRoomMode: enabled });
   }
 

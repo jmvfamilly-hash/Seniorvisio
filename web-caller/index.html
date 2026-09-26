@@ -22,6 +22,28 @@
     <div id="stateIdle" class="state">
       <button id="callButton">📹 Démarrer l'appel</button>
 
+      <!-- ═══ « SOUS-TITRES » : QUAND ON EST DÉJÀ DANS LA PIÈCE ═══
+
+           Techniquement un appel, et rien à l'écran de Jean n'en a l'air :
+           pas de sonnerie, pas de vidéo, pas un son dans le haut-parleur.
+           Ses photos continuent de défiler, la date et la météo restent en
+           place, et ce que dit le proche s'écrit par-dessus.
+
+           C'est le cas de la personne assise à côté de lui : elle parle
+           normalement, Jean l'entend de ses oreilles, et il LIT en même
+           temps ce qu'il n'aurait pas saisi. Le son de l'appel ne doit
+           surtout pas être rejoué — il reviendrait en écho dans le téléphone
+           et en décalage dans la pièce.
+
+           Sous « Démarrer l'appel » et non à côté : c'est le geste rare, et
+           l'appel ordinaire doit rester celui qui tombe sous le pouce. -->
+      <button id="sousTitresButton" class="secondary">💬 Sous-titres — je suis dans la même pièce</button>
+      <p class="hint">
+        Ce que vous dites s'écrit sur la tablette de Jean, sans sonnerie, sans
+        vidéo et sans aucun son&nbsp;: il vous entend directement. S'arrête
+        tout seul après cinq minutes sans parole.
+      </p>
+
       <!-- Identité de l'appelant, mémorisée dans ce navigateur uniquement :
            chaque proche renseigne la sienne depuis son propre téléphone, sans
            compte à créer ni annuaire partagé à tenir (même principe que les
@@ -477,6 +499,22 @@
             </label>
           </div>
 
+          <!-- ═══ COMBIEN DE TEMPS DURE UN APPUI SUR « SOMMEIL » ═══
+
+               Le bouton éteignait la dalle, et rien de plus : le créneau de
+               photos suivant la rallumait un quart d'heure plus tard, ou le
+               premier bruit dans la pièce quelques secondes après. Du point
+               de vue de Jean, le bouton ne marchait pas.
+
+               Douze heures par défaut : il appuie le soir, l'écran reste noir
+               jusqu'au matin. Un appel le réveille toujours — « Sommeil » veut
+               dire « laissez l'écran tranquille », jamais « coupez-moi du
+               monde ». -->
+          <div class="volume-control">
+            <label for="sleepHoursSlider">😴 Durée du bouton « Sommeil » de Jean</label>
+            <input type="range" id="sleepHoursSlider" min="1" max="24" value="12" step="1" data-unit=" h">
+          </div>
+
           <!-- Le seuil ne se règle pas à l'aveugle : sans le niveau réellement
                mesuré en face, on ne peut pas distinguer « le son n'atteint pas
                le seuil » de « la capture ne tourne plus ». -->
@@ -488,9 +526,12 @@
           <p class="hint">
             Une des galeries installées par les proches, présentée en grand sur
             l'écran d'accueil de Jean.
-            <strong>Elles ne rallument jamais la dalle</strong> : elles rendent
-            l'écran agréable quand Jean le regarde, elles ne réclament pas qu'il
-            le regarde. Au réveil, c'est la photo de l'heure qui s'affiche.
+            <strong>Chaque changement de photo rallume la dalle</strong>, sauf
+            la nuit si la case ci-dessus est cochée, et sauf pendant le sommeil
+            demandé par Jean. Ce texte affirmait l'inverse — « elles ne
+            rallument jamais la dalle » — bien après que le comportement eut
+            changé&nbsp;: un réglage décrit à l'envers se paie en heures de
+            recherche du côté de la panne.
             Tant qu'aucune galerie n'est choisie, l'accueil reste au fond uni.
           </p>
           <select id="galeriePreferee">

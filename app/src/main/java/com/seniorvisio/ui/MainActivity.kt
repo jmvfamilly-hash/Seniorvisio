@@ -389,6 +389,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Toute interaction de Jean lève le sommeil, même celui qu'il vient de
+     * demander lui-même.
+     *
+     * ═══ POURQUOI CE N'EST PAS UNE CONTRADICTION ═══
+     *
+     * « Sommeil » veut dire, avant tout, que les photos et le bruit de la
+     * pièce cessent de rallumer l'écran pendant la durée réglée par
+     * l'administrateur (voir MiseEnVeille, AdminConfig.sleepHours) — pas que
+     * la tablette doit rester injoignable au toucher pendant tout ce temps.
+     * Si Jean pose la main sur l'écran, ou qu'un proche présent appuie sur un
+     * bouton, c'est qu'il y a quelque chose à regarder MAINTENANT : le
+     * sommeil n'a alors plus d'objet, et le garder actif ferait revivre
+     * exactement le défaut que ce bouton corrige — un écran qui semble ne pas
+     * réagir à ce qu'on fait devant lui.
+     *
+     * onUserInteraction() est l'appel du système prévu pour ça : Android
+     * l'invoque à CHAQUE toucher ou touche reçu par cette activité pendant
+     * qu'elle est au premier plan, y compris ceux que ses vues consomment
+     * elles-mêmes (le bouton Sommeil compris) — donc aussi bien un geste sur
+     * la photo qu'un appui sur un bouton visible à l'écran.
+     */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        if (adminConfig.isSleeping()) {
+            MiseEnVeille.réveiller(this, "Jean a touché l'écran ou un bouton")
+        }
+    }
+
+    /**
      * Le bouton « Sous-titres », en haut à gauche.
      *
      * ═══ SANS AUCUNE CONDITION, ET C'EST LA DEMANDE ═══

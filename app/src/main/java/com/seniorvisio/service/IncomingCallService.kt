@@ -8,6 +8,7 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.MiseEnVeille
 import com.seniorvisio.signaling.CallSignalingClient
 import com.seniorvisio.ui.IncomingCallActivity
 
@@ -70,11 +71,19 @@ class IncomingCallService : LifecycleService() {
         val callerName = intent?.getStringExtra(EXTRA_CALLER_NAME) ?: "un proche"
         val callerPhotoPath = intent?.getStringExtra(EXTRA_CALLER_PHOTO_PATH)
         val callId = intent?.getStringExtra(EXTRA_CALL_ID)
+        val sousTitres = intent?.getBooleanExtra(EXTRA_SOUS_TITRES, false) == true
         if (callId != null) {
             if (isBusyWithAnotherCall(callId)) {
                 signaling.updateStatus(callId, CallSignalingClient.STATUS_BUSY)
             } else {
-                launchAlertScreen(callId, callerName, callerPhotoPath, signalReceivedAtMs)
+                // Un appel lève le sommeil demandé par Jean : « Sommeil » veut
+                // dire « laissez l'écran tranquille », jamais « coupez-moi du
+                // monde ». Sans cette levée, l'écran resterait noir jusqu'à
+                // douze heures pendant qu'un proche essaie de le joindre — et
+                // le réveil au son, déjà désarmé par le sommeil, ne le
+                // rattraperait pas.
+                MiseEnVeille.réveiller(this, "appel entrant")
+                launchAlertScreen(callId, callerName, callerPhotoPath, signalReceivedAtMs, sousTitres)
             }
         }
         releaseWakeLock()
@@ -113,12 +122,19 @@ class IncomingCallService : LifecycleService() {
      * déclarée dans le manifest. `startActivity` reste tenté en complément,
      * sans conséquence s'il échoue silencieusement.
      */
-    private fun launchAlertScreen(callId: String, callerName: String, callerPhotoPath: String?, signalReceivedAtMs: Long) {
+    private fun launchAlertScreen(
+        callId: String,
+        callerName: String,
+        callerPhotoPath: String?,
+        signalReceivedAtMs: Long,
+        sousTitres: Boolean,
+    ) {
         val alertIntent = Intent(this, IncomingCallActivity::class.java).apply {
             putExtra(IncomingCallActivity.EXTRA_CALL_ID, callId)
             putExtra("callerName", callerName)
             putExtra(IncomingCallActivity.EXTRA_CALLER_PHOTO_PATH, callerPhotoPath)
             putExtra(IncomingCallActivity.EXTRA_SIGNAL_RECEIVED_AT, signalReceivedAtMs)
+            putExtra(IncomingCallActivity.EXTRA_SOUS_TITRES, sousTitres)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
 
@@ -170,6 +186,17 @@ class IncomingCallService : LifecycleService() {
         const val EXTRA_CALLER_NAME = "extra_caller_name"
         const val EXTRA_CALLER_PHOTO_PATH = "extra_caller_photo_path"
         const val EXTRA_CALL_ID = "extra_call_id"
+
+        /**
+         * Vrai quand le proche a lancé le mode « Sous-titres » : il est dans
+         * la pièce, la tablette ne doit ni sonner ni afficher de vidéo.
+         *
+         * Absent de la voie par notification push, dont la charge utile est
+         * composée par une fonction Cloud déployée à part : l'activité relit
+         * donc le document d'appel pour se corriger (voir
+         * CallSignalingClient.fetchSousTitresMode).
+         */
+        const val EXTRA_SOUS_TITRES = "extra_sous_titres"
         const val CALL_NOTIFICATION_ID = 44
         private const val FOREGROUND_ID = 42
         private const val SERVICE_CHANNEL_ID = "senior_visio_service"

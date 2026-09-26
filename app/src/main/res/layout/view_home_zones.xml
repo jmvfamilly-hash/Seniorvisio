@@ -235,10 +235,37 @@
         android:visibility="invisible"
         android:alpha="0">
 
+        <!-- ═══ QUI PARLE, AU-DESSUS DE CE QU'IL DIT ═══
+
+             Masqué partout sauf en mode « Sous-titres » (voir
+             IncomingCallActivity) : pendant un appel ordinaire, le visage du
+             proche occupe l'écran et répond déjà à la question. En mode
+             « Sous-titres » il n'y a ni visage ni sonnerie — du texte
+             apparaît par-dessus les photos, et sans cette ligne rien ne dit
+             de qui il est.
+
+             GONE et non INVISIBLE : la place qu'il prendrait autrement est
+             retirée au texte, qui n'en a jamais trop. -->
+        <TextView
+            android:id="@+id/textCallCaptionTitre"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
+            android:gravity="center"
+            android:textStyle="bold"
+            android:textSize="22sp"
+            android:visibility="gone"
+            android:text="" />
+
+        <!-- 0dp + poids, et non match_parent : le titre ci-dessus est
+             désormais un frère dans une pile verticale, et un match_parent y
+             réclamerait la hauteur ENTIÈRE de la zone en plus de celle du
+             titre — les dernières lignes du texte sortiraient par le bas. -->
         <ScrollView
             android:id="@+id/callCaptionScroll"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:scrollbars="none">
 
             <TextView

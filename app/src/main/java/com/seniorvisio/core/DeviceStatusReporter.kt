@@ -642,6 +642,14 @@ class DeviceStatusReporter(private val context: Context) {
             adminConfig.blockWakeAtNight = it
         }
 
+        // Combien de temps dure un appui sur « Sommeil ». Borné à la lecture
+        // comme partout ailleurs sur ce chemin : ce document est ouvert en
+        // écriture à qui en connaît l'adresse, et une valeur aberrante
+        // donnerait un écran noir que personne sur place ne saurait rallumer.
+        snapshot.getLong(FIELD_SLEEP_HOURS)?.let {
+            adminConfig.sleepHours = it.toInt().coerceIn(1, 24)
+        }
+
         // Plafonds mensuels, réglables à distance comme le reste : c'est
         // l'administrateur qui décide ce qu'il accepte de dépenser, et il n'a
         // pas à se déplacer jusqu'à la tablette pour le dire.
@@ -989,6 +997,7 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_ROOM_WAKE_ENABLED = "roomWakeEnabled"
         private const val FIELD_ROOM_WAKE_THRESHOLD = "roomWakeThreshold"
         private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"
+        private const val FIELD_SLEEP_HOURS = "sleepHours"
         private const val FIELD_VOICE_GATE_ENABLED = "voiceGateEnabled"
         private const val FIELD_DIM_JEAN_SPEECH = "dimJeanSpeech"
         private const val FIELD_SPEAKER_ENGINE = "speakerEngine"
