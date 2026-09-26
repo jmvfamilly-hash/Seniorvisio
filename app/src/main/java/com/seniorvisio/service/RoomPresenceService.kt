@@ -18,6 +18,7 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.AndroidSpeechSession
 import com.seniorvisio.core.RoomHandoffController
 import com.seniorvisio.core.EagleSpeakerRecogniser
@@ -656,11 +657,49 @@ class RoomPresenceService : Service() {
         micYieldedToCompanion = false
     }
 
+    /**
+     * Arrête la capture et REND VRAIMENT le microphone avant de revenir.
+     *
+     * ═══ POURQUOI ATTENDRE LE FIL, ET CE QUE COÛTAIT DE NE PAS LE FAIRE ═══
+     *
+     * Ce code posait isCapturing à faux, interrompait le fil, puis appelait
+     * stop() et release() depuis le fil appelant. Or interrupt() NE DÉBLOQUE
+     * PAS AudioRecord.read() : c'est un appel natif bloquant, insensible à
+     * l'interruption. Le fil de capture pouvait donc être encore à
+     * l'intérieur de read() pendant qu'on libérait l'objet sous lui.
+     *
+     * Deux conséquences. La première est une course franche — libérer une
+     * ressource native pendant qu'un autre fil la lit. La seconde est celle
+     * qui s'est vue : le micro n'était pas réellement rendu au retour de
+     * cette fonction, et l'application lancée juste après démarrait sur un
+     * micro encore pris. Elle ne dit rien dans ce cas : elle affiche une
+     * transcription vide.
+     *
+     * C'est exactement le symptôme rapporté — première bascule muette,
+     * seconde correcte, parce qu'entre les deux le fil avait fini par sortir
+     * de read().
+     *
+     * L'attente est bornée : un fil qui ne sort pas ne doit pas figer
+     * l'appelant, qui est ici le fil principal. Au-delà, on libère quand même
+     * et on le dit.
+     */
     private fun stopCapture() {
         retryHandler.removeCallbacksAndMessages(null)
+        val fil = captureThread
         isCapturing = false
-        captureThread?.interrupt()
         captureThread = null
+        if (fil != null && fil.isAlive) {
+            val début = System.currentTimeMillis()
+            fil.join(ATTENTE_FIN_CAPTURE_MS)
+            val attendu = System.currentTimeMillis() - début
+            if (fil.isAlive) {
+                Log.w(TAG, "Le fil de capture n'a pas rendu la main en $attendu ms")
+                CallTrace.record(
+                    "MICRO libération",
+                    "le fil de capture tient encore après $attendu ms — micro peut-être occupé",
+                )
+            }
+        }
         audioRecord?.let {
             try {
                 it.stop()
@@ -1178,6 +1217,18 @@ class RoomPresenceService : Service() {
          */
         private const val SPEAKER_GATE_RETRY_MS = 60_000L
         private const val MAX_WAKE_LOCK_MS = 30 * 60 * 1000L
+        /**
+         * Combien de temps on attend que le fil de capture sorte de
+         * AudioRecord.read() avant de libérer quand même.
+         *
+         * Une demi-seconde : un bloc de lecture dure quelques dizaines de
+         * millisecondes, donc dix fois la marge. Au-delà, c'est que quelque
+         * chose ne va pas, et figer le fil principal plus longtemps ferait
+         * une tablette qui ne répond plus — ce qui est pire qu'un micro
+         * rendu avec retard.
+         */
+        private const val ATTENTE_FIN_CAPTURE_MS = 500L
+
         private const val CAPTURE_RETRY_DELAY_MS = 2_000L
 
         /** Plafond de l'espacement entre deux tentatives : on insiste sans marteler. */

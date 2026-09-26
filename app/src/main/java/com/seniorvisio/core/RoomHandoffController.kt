@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -235,6 +236,56 @@ class RoomHandoffController(
         return if (active) null else lastDecision
     }
 
+    /**
+     * Remet le système audio dans l'état où une autre application peut
+     * enregistrer, et dit ce qu'elle a trouvé.
+     *
+     * ═══ LE SYMPTÔME QUI A CONDUIT ICI ═══
+     *
+     * Rapporté : une bascule faite JUSTE APRÈS un appel lance l'application
+     * de Google, qui ne reçoit aucun son ; revenir à Senior Visio puis
+     * rebasculer fonctionne. Deux ressources peuvent n'être pas encore
+     * rendues à cet instant, et la seconde est invisible.
+     *
+     * Le micro, d'abord — traité par ailleurs, en attendant réellement la fin
+     * du fil de capture (voir RoomPresenceService.stopCapture).
+     *
+     * Le MODE AUDIO ensuite. Un appel place le système en
+     * MODE_IN_COMMUNICATION, qui réoriente la capture vers la voie
+     * téléphonique. Tant qu'il n'est pas revenu à MODE_NORMAL, une
+     * application qui enregistre le microphone reçoit un flux vide ou
+     * inutilisable — sans la moindre erreur pour le dire.
+     *
+     * ═══ POURQUOI LE REMETTRE PLUTÔT QUE LE CONSTATER ═══
+     *
+     * Le moteur d'appel le restaure déjà à la fin de chaque appel. S'il ne
+     * l'a pas fait — appel interrompu autrement que prévu, nettoyage joué
+     * deux fois, processus relancé entre-temps — personne d'autre ne le fera,
+     * et l'état faux survivra à tous les retours suivants.
+     *
+     * Le remettre ici est sûr : on ne bascule que hors appel, et hors appel
+     * MODE_NORMAL est l'état juste. Ce n'est pas une correction au jugé,
+     * c'est la seule valeur correcte à ce moment-là.
+     *
+     * Ce qui a été trouvé part au journal dans les deux cas. Si le mode était
+     * déjà normal, l'hypothèse est écartée et il faudra chercher ailleurs —
+     * et cela se lira au lieu de se supposer.
+     */
+    private fun rendreLAudioÀLÉtatNormal(): String {
+        val audioManager =
+            context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                ?: return "audio=gestionnaire indisponible"
+        val avant = audioManager.mode
+        if (avant == AudioManager.MODE_NORMAL) return "audio=déjà normal"
+        return try {
+            audioManager.mode = AudioManager.MODE_NORMAL
+            "audio=mode $avant remis à normal (reliquat d'appel)"
+        } catch (e: Exception) {
+            Log.w(TAG, "Mode audio non modifiable", e)
+            "audio=mode $avant NON modifiable : ${e.message}"
+        }
+    }
+
     private fun handOff() {
         val intent = CompanionApps.transcriptionLaunchIntent(context)?.addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -248,7 +299,11 @@ class RoomHandoffController(
         // signale par une transcription vide sans expliquer pourquoi.
         onRelease()
         active = true
-        CallTrace.record("BASCULE partie", "micro relâché, Transcription instantanée lancée")
+        val audio = rendreLAudioÀLÉtatNormal()
+        CallTrace.record(
+            "BASCULE partie",
+            "micro relâché, Transcription instantanée lancée · $audio",
+        )
 
         try {
             context.startActivity(intent)
