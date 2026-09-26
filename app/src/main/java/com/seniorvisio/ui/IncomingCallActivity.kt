@@ -568,12 +568,29 @@ class IncomingCallActivity : AppCompatActivity() {
                 }
                 return@Observateur
             }
-            val recueil = RecueilStore.actif?.disponibles()?.firstOrNull { it.id == recueilId }
-            val prêts = recueil?.prêts.orEmpty()
+            val magasin = RecueilStore.actif
+            val recueil = magasin?.disponibles()?.firstOrNull { it.id == recueilId }
+            if (magasin == null || recueil == null) {
+                runOnUiThread {
+                    photosAmbiantes.value = emptyList()
+                    hôte.visibility = View.GONE
+                }
+                return@Observateur
+            }
+            // L'ordonnanceur ne livre que des Éléments (une entrée du recueil,
+            // avec son état et son nom de fichier) : VisionneusePhotos veut des
+            // File, exactement comme sur l'accueil (voir MainActivity.
+            // afficherPhotoCourante). mapNotNull écarte un élément déclaré
+            // PRÊT dont le fichier aurait disparu, plutôt que de laisser la
+            // visionneuse échouer sur un trou dans la liste.
+            val fichiers = recueil.prêts.mapNotNull { magasin.fichier(recueil, it) }
+            val fichierCourant = magasin.fichier(recueil, element)
             runOnUiThread {
-                photosAmbiantes.value = prêts
-                rangAmbiant.value = prêts.indexOf(element).coerceAtLeast(0)
-                hôte.visibility = if (prêts.isEmpty()) View.GONE else View.VISIBLE
+                photosAmbiantes.value = fichiers
+                rangAmbiant.value = fichierCourant
+                    ?.let { fichiers.indexOf(it).coerceAtLeast(0) }
+                    ?: 0
+                hôte.visibility = if (fichiers.isEmpty()) View.GONE else View.VISIBLE
             }
         })
         service.galerie.réévaluer()
@@ -1825,5 +1842,15 @@ class IncomingCallActivity : AppCompatActivity() {
         const val EXTRA_CALL_ID = "extra_call_id"
         const val EXTRA_CALLER_PHOTO_PATH = "extra_caller_photo_path"
         const val EXTRA_SIGNAL_RECEIVED_AT = "extra_signal_received_at"
+
+        /**
+         * Vrai quand le proche a lancé le mode « Sous-titres » (voir onCreate,
+         * préparerÉcranSousTitres). Déclarée ici, et non seulement dans
+         * IncomingCallService : c'est cette activité-ci qui la lit
+         * (getBooleanExtra), et IncomingCallService la qualifie en
+         * IncomingCallActivity.EXTRA_SOUS_TITRES en construisant l'intention
+         * qui la lance — même convention que EXTRA_CALL_ID juste au-dessus.
+         */
+        const val EXTRA_SOUS_TITRES = "extra_sous_titres"
     }
 }
