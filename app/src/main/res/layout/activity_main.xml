@@ -62,6 +62,55 @@
 
     <include layout="@layout/view_home_zones" />
 
+    <!-- ═══ « SOUS-TITRES » : JEAN APPELLE LA TRANSCRIPTION QUAND IL VEUT ═══
+
+         Bascule vers « Transcription instantanée » de Google, SANS AUCUNE
+         CONDITION : ni le mode automatique armé, ni une voix détectée, ni les
+         gardes qui retiennent la bascule automatique (voir
+         RoomHandoffController.forceHandOff). Jean appuie, l'écran change.
+
+         Le mode automatique répond à « quelqu'un parle, écris-le ». Ce bouton
+         répond à une autre question, et elle est à lui : « je veux lire, tout
+         de suite ». Les conditions qui protègent le premier — ne pas basculer
+         sur un aspirateur, ne pas repartir trois secondes après un retour —
+         n'ont aucun sens quand c'est lui qui demande.
+
+         ═══ POURQUOI DANS LE CADRE ET NON DANS LA BANDE D'INFORMATION ═══
+
+         L'ordre des trois zones est réglable par l'administrateur (voir
+         HomeZone). Posé dans la bande de la date, ce bouton descendrait au
+         milieu ou en bas de l'écran le jour où quelqu'un change cet ordre.
+         Ici, il est en haut à gauche, et il y reste.
+
+         Déclaré APRÈS la pile : il flotte donc par-dessus, y compris sur une
+         photo en plein cadre — comme le bouton de sommeil, avec lequel il
+         fait paire aux deux coins hauts.
+
+         Masqué quand l'application de Google n'est pas installée (voir
+         MainActivity) : une cible qui ne peut rien faire est pire qu'une
+         absence, parce qu'on y revient. -->
+    <Button
+        android:id="@+id/boutonTranscription"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="28dp"
+        android:minWidth="88dp"
+        android:minHeight="88dp"
+        android:text="Sous-titres"
+        android:textSize="20sp"
+        android:textAllCaps="false"
+        android:textColor="#FFFFFF"
+        android:drawableTop="@drawable/ic_transcription"
+        android:drawablePadding="4dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:elevation="6dp"
+        android:visibility="gone"
+        android:background="@drawable/fond_bouton_navigation" />
+
     <!-- Plus aucun QR code sur cet écran. Il en a porté un, puis les réglages
          admin l'ont porté à leur tour, et il a fini par ne plus rien servir :
          le mode simplifié du PWA qu'il ouvrait n'existe plus. L'écran de Jean

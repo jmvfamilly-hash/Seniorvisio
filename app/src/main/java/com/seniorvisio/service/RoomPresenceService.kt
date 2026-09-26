@@ -868,7 +868,16 @@ class RoomPresenceService : Service() {
 
     /** Ce que fait la bascule, en une phrase, pour l'écran admin et le signe de vie. */
     fun describeHandoff(): String = when {
-        !adminConfig.roomHandoffEnabled -> "désactivée"
+        // ═══ « DÉSACTIVÉE » NE VOULAIT PAS DIRE « RIEN NE SE PASSE » ═══
+        //
+        // Le bouton « Sous-titres » bascule sans consulter ce réglage (voir
+        // MainActivity). L'état annonçait donc « désactivée » pendant que la
+        // tablette était effectivement sur l'application de Google — un
+        // diagnostic qui contredit ce qu'on a sous les yeux est pire que pas
+        // de diagnostic du tout.
+        !adminConfig.roomHandoffEnabled ->
+            handoff?.let { "automatique désactivée — ${it.describe()}" }
+                ?: "automatique désactivée (le bouton « Sous-titres » reste utilisable)"
         // Ce cas ne devrait plus se présenter : la bascule armée écarte le
         // moteur d'Android (voir écouteParLeMoteurAndroid). Gardé pour le dire
         // si l'invariant se rompait un jour, plutôt que d'afficher une bascule

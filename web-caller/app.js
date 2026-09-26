@@ -1627,6 +1627,7 @@ const LIBELLÉS_GESTES = [
   ["recueilPrecedentGlissement", "◀ photo (glissement)"],
   ["recueilSuivantBouton", "▶ photo (bouton)"],
   ["recueilSuivantGlissement", "▶ photo (glissement)"],
+  ["transcriptionBouton", "🗒 sous-titres (bouton)"],
   ["sommeil", "sommeil"],
 ];
 

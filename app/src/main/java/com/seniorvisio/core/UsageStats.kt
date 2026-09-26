@@ -358,6 +358,18 @@ object UsageStats {
     const val GESTE_RECUEIL_PRECEDENT_GLISSE = "recueilPrecedentGlissement"
     const val GESTE_SOMMEIL = "sommeil"
 
+    /**
+     * Le bouton « Sous-titres », par lequel Jean appelle lui-même la
+     * transcription de Google.
+     *
+     * Compté à part de la bascule automatique, et c'est tout l'intérêt : si ce
+     * compteur monte pendant que le mode automatique ne part jamais, c'est que
+     * le déclencheur automatique ne convient pas — et inversement, s'il reste
+     * à zéro alors que la bascule automatique tourne, le bouton ne sert à rien
+     * et encombre l'écran.
+     */
+    const val GESTE_TRANSCRIPTION = "transcriptionBouton"
+
     private const val KEY_DAY_PREFIX = "day_"
     private const val KEY_MONTH_PREFIX = "month_"
     private const val KEY_LAST_FLUSH = "last_flush_at"
