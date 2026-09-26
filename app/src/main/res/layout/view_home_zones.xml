@@ -131,6 +131,25 @@
             android:textSize="38sp"
             android:gravity="center"
             android:text="" />
+
+        <!-- ═══ LA CONSIGNE DU BOUTON « SOUS-TITRES », POUR LES VISITEURS ═══
+
+             Remplace la bascule automatique à la voix, retirée : c'est
+             désormais au visiteur d'appuyer, et cette ligne le lui dit.
+
+             Masquée par défaut, affichée par l'accueil en même temps que le
+             bouton (voir MainActivity.brancherBoutonTranscription) : une
+             consigne qui renvoie à un bouton absent serait pire que rien.
+             Reste masquée sur l'écran d'appel, qui n'a pas ce bouton. -->
+        <TextView
+            android:id="@+id/textConsigneSousTitres"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textSize="22sp"
+            android:gravity="center"
+            android:visibility="gone"
+            android:text="Pour que Jean puisse lire ce que vous dites, appuyez sur le bouton « Sous-titres »" />
     </LinearLayout>
 
         <!-- ═══ « SOMMEIL » : JEAN ÉTEINT SA DALLE QUAND IL VEUT ═══

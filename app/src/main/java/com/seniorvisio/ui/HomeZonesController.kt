@@ -144,6 +144,7 @@ class HomeZonesController(
     private val textMomentWeatherSeparator: TextView = root.findViewById(R.id.textMomentWeatherSeparator)
     private val textWeatherIcon: TextView = root.findViewById(R.id.textWeatherIcon)
     private val textWeatherLabel: TextView = root.findViewById(R.id.textWeatherLabel)
+    private val textConsigneSousTitres: TextView = root.findViewById(R.id.textConsigneSousTitres)
     private val textClockDate: TextView = root.findViewById(R.id.textClockDate)
 
     private val roomZone = RollingCaptionZone(
@@ -516,6 +517,7 @@ class HomeZonesController(
             it.setTextColor(palette.primaryText)
         }
         textMomentWeatherSeparator.setTextColor(palette.secondaryText)
+        textConsigneSousTitres.setTextColor(palette.secondaryText)
         // La zone d'information reçoit le même fond que les deux autres, alors
         // qu'elle n'a pas de texte à faire ressortir en temps normal : pendant
         // un appel, elle se retrouve posée sur la vidéo du proche, dont les

@@ -450,13 +450,16 @@ class RoomPresenceService : Service() {
      * ne peut pas s'accorder.
      */
     private fun startListening() {
-        if (écouteParLeMoteurAndroid()) {
-            stopCapture()
-            startAndroidSpeech()
-        } else {
-            stopAndroidSpeech()
-            startCapture()
-        }
+        // ═══ PLUS D'ÉCOUTE DE LA VOIX, SEULEMENT DU NIVEAU SONORE ═══
+        //
+        // La transcription de la pièce, les commandes vocales et la bascule
+        // automatique sur la voix sont retirées (voir MainActivity) : trop de
+        // pannes, dont un processus tué pendant la capture. Le moteur
+        // d'Android n'est donc plus jamais lancé ici, quel que soit le réglage
+        // de moteur : la capture interne ne sert plus qu'au réveil au son,
+        // seul chemin de retour après « Sommeil ».
+        stopAndroidSpeech()
+        startCapture()
     }
 
     /**
@@ -502,16 +505,9 @@ class RoomPresenceService : Service() {
      * une intention au lieu d'un fait est pire qu'absente : on s'y fie pour ne
      * pas chercher ailleurs.
      */
-    fun moteurDeLaPièceEnClair(): String = when {
-        écouteParLeMoteurAndroid() -> adminConfig.roomEngine.adminLabel
-        adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID ->
-            "capture interne (Android écarté : bascule armée)"
-        else -> adminConfig.roomEngine.adminLabel
-    }
+    fun moteurDeLaPièceEnClair(): String = "aucun (écoute de la voix retirée — réveil au son seul)"
 
-    private fun écouteParLeMoteurAndroid(): Boolean =
-        adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID &&
-            !adminConfig.roomHandoffEnabled
+    private fun écouteParLeMoteurAndroid(): Boolean = false
 
     private fun startAndroidSpeech() {
         if (androidSpeech?.isRunning() == true) return
@@ -603,12 +599,10 @@ class RoomPresenceService : Service() {
                 val read = record.read(buffer, 0, buffer.size)
                 if (read > 0) {
                     val rms = computeRms(buffer, read)
+                    // Réveil au son uniquement. Plus de reconnaissance du
+                    // locuteur, de détection de voix ni de transcription :
+                    // l'écoute de la voix est retirée (voir startListening).
                     handleLevel(rms)
-                    // Avant la transcription, et sans condition liée à elle :
-                    // savoir qui parle ne dépend ni du moteur choisi ni de
-                    // l'écran affiché.
-                    feedSpeakerRecognition(buffer, read, rms)
-                    feedRoomTranscription(buffer, read, rms)
                 }
             }
         }.apply { start() }
@@ -806,32 +800,9 @@ class RoomPresenceService : Service() {
             return
         }
 
-        // Bascule vers Transcription instantanée : sur de la VOIX et non un
-        // simple bruit. Basculer l'écran de Jean est un geste visible — bien
-        // plus qu'ouvrir une session — et un aspirateur ne doit pas le
-        // déclencher. Le portier Silero sert donc ici quel que soit le mode de
-        // facturation du moteur, puisque ce mode n'en ouvre aucun.
-        if (adminConfig.roomHandoffEnabled) {
-            // Nous sommes en train de lire le micro : il nous est donc revenu,
-            // et nous ne sommes plus basculés quoi qu'en dise l'état. Réconcilié
-            // ici plutôt que d'attendre un chemin de retour qui n'arrivera
-            // peut-être jamais.
-            ensureHandoff().noteMicrophoneHeld()
-            val voiceGate = ensureVoiceGate()
-            voiceGate.accept(buffer, length)
-            // Détecteur indisponible : on ne bascule PAS. Il rend alors « oui »
-            // à tout, par sécurité — un choix juste pour l'ouverture d'une
-            // session de transcription, où trop transcrire ne coûte que de
-            // l'argent. Ici il ferait changer l'écran de Jean au premier
-            // aspirateur, c'est-à-dire exactement ce que ce mode promet de ne
-            // pas faire. Mieux vaut ne pas basculer, et le dire.
-            if (!voiceGate.available) {
-                handoffUnavailableReason = "détection de voix indisponible, bascule suspendue"
-            } else {
-                handoffUnavailableReason = null
-                if (voiceGate.isVoiceActive()) ensureHandoff().onVoiceHeard()
-            }
-        }
+        // La bascule vers Transcription instantanée ne part plus jamais sur
+        // la voix : seul le bouton « Sous-titres » la déclenche (voir
+        // testHandoff).
 
         if (!adminConfig.dimJeanSpeech) return
         val gate = ensureSpeakerGate() ?: return
@@ -859,35 +830,10 @@ class RoomPresenceService : Service() {
         handoff?.noteBackOnHomeScreen()
     }
 
-    /**
-     * Pourquoi la bascule est suspendue alors qu'elle est armée. Distinct des
-     * refus du contrôleur lui-même : celui-ci ne peut pas savoir que le
-     * détecteur de voix qui l'alimente ne s'est pas chargé.
-     */
-    @Volatile private var handoffUnavailableReason: String? = null
-
     /** Ce que fait la bascule, en une phrase, pour l'écran admin et le signe de vie. */
-    fun describeHandoff(): String = when {
-        // ═══ « DÉSACTIVÉE » NE VOULAIT PAS DIRE « RIEN NE SE PASSE » ═══
-        //
-        // Le bouton « Sous-titres » bascule sans consulter ce réglage (voir
-        // MainActivity). L'état annonçait donc « désactivée » pendant que la
-        // tablette était effectivement sur l'application de Google — un
-        // diagnostic qui contredit ce qu'on a sous les yeux est pire que pas
-        // de diagnostic du tout.
-        !adminConfig.roomHandoffEnabled ->
-            handoff?.let { "automatique désactivée — ${it.describe()}" }
-                ?: "automatique désactivée (le bouton « Sous-titres » reste utilisable)"
-        // Ce cas ne devrait plus se présenter : la bascule armée écarte le
-        // moteur d'Android (voir écouteParLeMoteurAndroid). Gardé pour le dire
-        // si l'invariant se rompait un jour, plutôt que d'afficher une bascule
-        // « prête » qui ne peut pas partir.
-        écouteParLeMoteurAndroid() ->
-            "incohérence : la reconnaissance Android tient le micro, aucun son à analyser"
-        !isCapturing && !micYieldedToCompanion -> "capture micro arrêtée, rien à analyser"
-        handoffUnavailableReason != null -> handoffUnavailableReason!!
-        else -> ensureHandoff().describe()
-    }
+    fun describeHandoff(): String =
+        handoff?.let { "bouton « Sous-titres » seul — ${it.describe()}" }
+            ?: "bouton « Sous-titres » seul (bascule automatique retirée)"
 
     /**
      * Bascule sur commande, sans condition, depuis l'écran d'administration.
