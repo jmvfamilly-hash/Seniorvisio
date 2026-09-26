@@ -33,7 +33,6 @@ import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.AlertVolume
 import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.CompanionApps
-import com.seniorvisio.core.CommandesVocales
 import com.seniorvisio.core.MiseEnVeille
 import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
@@ -73,101 +72,28 @@ class MainActivity : AppCompatActivity() {
     private var roomService: RoomPresenceService? = null
 
     /**
-     * Les paroles de la pièce viennent du service qui tient déjà le micro
-     * pour le réveil au son (voir RoomPresenceService) : une seule capture,
-     * deux usages. Ouvrir une seconde capture concurrente était précisément
-     * ce qui rendait les sous-titres peu fiables avant cette bascule.
+     * La liaison au service permanent.
+     *
+     * Elle servait à recevoir les paroles de la pièce. Cette écoute est
+     * retirée ; la liaison reste pour deux choses que le service seul peut
+     * faire : basculer vers Transcription instantanée quand Jean appuie sur
+     * « Sous-titres », et savoir que l'écran d'accueil est revenu au premier
+     * plan.
      */
     private val roomConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            val service = (binder as? RoomPresenceService.LocalBinder)?.getService() ?: return
-            roomService = service
-            // Argument nommé, pas un lambda en fin d'appel : celui-ci se
-            // rattacherait au DERNIER paramètre (onError), pas à onText.
-            // Dit que l'écoute a été DEMANDÉE. Sans cette ligne, « aucune
-            // commande ne marche » ne distingue pas « le moteur ne rend rien »
-            // de « rien n'a jamais été lancé » — deux pannes qui se cherchent
-            // à des endroits opposés.
-            // ═══ ET LE MOTEUR EST NOMMÉ, CE QUI MANQUAIT ═══
+            // ═══ ON NE DEMANDE PLUS LA TRANSCRIPTION DE LA PIÈCE ═══
             //
-            // Cette ligne disait que l'écoute avait été DEMANDÉE, jamais PAR
-            // QUOI. Quand des sons d'interaction sont revenus dans la chambre
-            // toutes les dix secondes, rien dans le journal ne permettait de
-            // dire quel moteur tenait le micro : il a fallu le déduire du
-            // code, c'est-à-dire supposer.
+            // Ce rappel posait ici un écouteur de texte, et l'écran affichait
+            // ce qui se disait autour de Jean. L'écoute de la pièce est
+            // retirée (voir RoomPresenceService.startListening) : il n'y a
+            // plus de texte à recevoir, et le demander ouvrirait un moteur
+            // que rien n'alimente.
             //
-            // Le nom du moteur coûte trois mots et tranche la question.
-            // AUCUNE DONNÉE PERSONNELLE : un libellé d'énumération et deux
-            // états de réglage, jamais un mot entendu.
-            CallTrace.record(
-                "VOIX écoute",
-                "transcription de la pièce demandée · moteur=" +
-                    service.moteurDeLaPièceEnClair() +
-                    " · commandes=" +
-                    if (adminConfig.commandesVocalesActives) "actives" else "éteintes",
-            )
-            service.startRoomTranscription(
-                onText = { text, isFinal, fromJean ->
-                    runOnUiThread {
-                        // La transcription de la pièce est mise de côté : c'est
-                        // sa zone que le fil d'information occupe désormais
-                        // (voir AdminConfig.transcriptionPieceAffichee). Le
-                        // réglage est relu à chaque phrase plutôt que mémorisé
-                        // au démarrage, pour qu'un retour en arrière prenne
-                        // effet sans relancer l'application.
-                        // ═══ LES COMMANDES D'ABORD, ET SEULEMENT SUR DU
-                        //     TEXTE DÉFINITIF ═══
-                        //
-                        // Avant le filtre d'affichage : les commandes doivent
-                        // marcher même quand la transcription de la pièce est
-                        // masquée, ce qui est le réglage par défaut depuis que
-                        // le fil d'information occupe sa place. Placées après,
-                        // elles n'auraient jamais été atteintes.
-                        //
-                        // ═══ PROVISOIRE COMPRIS, ET C'EST UN CORRECTIF ═══
-                        //
-                        // Ce traitement n'acceptait que les résultats marqués
-                        // DÉFINITIFS, pour éviter qu'un moteur corrigeant sa
-                        // phrase en route — « suit… », « suivant »,
-                        // « suivante » — ne déclenche trois fois la même
-                        // commande.
-                        //
-                        // C'était se rendre dépendant d'un drapeau que rien
-                        // n'oblige le moteur de la pièce à lever. Selon le
-                        // moteur réglé par l'administrateur, un flux continu
-                        // peut ne produire que des résultats provisoires : les
-                        // commandes n'étaient alors JAMAIS atteintes, sans que
-                        // rien ne le signale.
-                        //
-                        // La répétition est désormais empêchée là où elle se
-                        // produit — un délai de garde après chaque commande
-                        // reconnue (voir traiterCommandeVocale) — plutôt qu'en
-                        // refusant une catégorie entière de résultats.
-                        traiterCommandeVocale(text)
-                        // ═══ LA PHOTO NE FAIT PLUS TAIRE LA TRANSCRIPTION ═══
-                        //
-                        // Ce « et pas de photo affichée » datait du temps où
-                        // l'image occupait la rangée du bas, celle-là même où
-                        // le texte s'écrit : les deux se seraient disputé la
-                        // place, et la photo gagnait.
-                        //
-                        // Elle est désormais dessinée DERRIÈRE la pile, en
-                        // plein cadre (voir activity_main.xml). Les zones de
-                        // texte flottent par-dessus, exactement comme elles
-                        // flottent sur la vidéo d'un proche pendant un appel —
-                        // et avec le même fond semi-opaque qui les garde
-                        // lisibles. Il n'y a plus rien à départager.
-                        //
-                        // Garder ce garde-fou aurait rendu la consigne
-                        // inapplicable : une galerie étant installée en
-                        // permanence, la transcription ne se serait affichée
-                        // jamais.
-                        if (adminConfig.transcriptionPieceAffichee) {
-                            zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal, fromJean)
-                        }
-                    }
-                },
-            )
+            // La liaison RESTE, et ce n'est pas un vestige : le bouton
+            // « Sous-titres » a besoin du service pour basculer, et le retour
+            // au premier plan doit lui être signalé.
+            roomService = (binder as? RoomPresenceService.LocalBinder)?.getService()
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -388,7 +314,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        roomService?.stopRoomTranscription()
         roomService = null
         unbindService(roomConnection)
         zones.clearTranscriptions()
@@ -486,89 +411,9 @@ class MainActivity : AppCompatActivity() {
         service.galerie.réévaluer()
     }
 
-    /**
-     * Exécute une commande dite à voix haute, s'il y en a une.
-     *
-     * ═══ TROIS MOTS, ET AUCUN POUVOIR NOUVEAU ═══
-     *
-     * Chacune de ces commandes double un bouton présent à l'écran. C'est la
-     * même règle que pour le glissement du doigt, et pour la même raison : une
-     * fonction qui n'existerait qu'à la voix serait invisible — rien à l'écran
-     * ne dirait qu'elle existe — et perdue le jour où la reconnaissance
-     * bronche, ce qui arrive.
-     *
-     * Débrayable depuis le panneau d'administration, et il le faut : une
-     * commande vocale qui se déclencherait à tort pendant les visites se
-     * manifesterait par « l'écran fait n'importe quoi », sans que personne
-     * puisse relier l'effet à sa cause. Pouvoir l'éteindre à distance est ce
-     * qui permet de trancher en trente secondes.
-     */
-    private fun traiterCommandeVocale(texte: String) {
-        if (!adminConfig.commandesVocalesActives) {
-            noterÉcouteVocale(texte, "réglage éteint")
-            return
-        }
-        val commande = CommandesVocales.détecter(texte)
-        if (commande == null) {
-            noterÉcouteVocale(texte, "aucune commande")
-            return
-        }
-        // Délai de garde : un moteur rend la même phrase plusieurs fois en la
-        // corrigeant, et « suivant » arrive alors deux ou trois fois de suite.
-        // C'est ici que la répétition se traite, et non en refusant les
-        // résultats provisoires — ce qui rendait les commandes tributaires
-        // d'un drapeau que le moteur n'est pas obligé de lever.
-        val maintenant = System.currentTimeMillis()
-        if (commande == dernièreCommande && maintenant - dernièreCommandeMs < GARDE_COMMANDE_MS) {
-            noterÉcouteVocale(texte, "répétition ignorée")
-            return
-        }
-        dernièreCommande = commande
-        dernièreCommandeMs = maintenant
-        CallTrace.record("VOIX commande", commande.name.lowercase())
-        when (commande) {
-            CommandesVocales.Commande.SUIVANT -> déplacerPhoto(+1)
-            CommandesVocales.Commande.PRECEDENT -> déplacerPhoto(-1)
-            CommandesVocales.Commande.SOMMEIL -> endormir()
-        }
-    }
-
-    private var dernièreCommande: CommandesVocales.Commande? = null
-    private var dernièreCommandeMs = 0L
 
     /**
-     * Dit que de la parole est arrivée jusqu'ici, et ce qu'on en a fait.
-     *
-     * ═══ SANS UN SEUL MOT PRONONCÉ ═══
-     *
-     * CallTrace ne contient AUCUNE donnée personnelle, et cette garantie tient
-     * à ce qu'aucun texte reconnu n'y entre jamais — pas à une consigne qu'on
-     * se donne. Cette ligne compte donc des mots et des signes ; elle n'en
-     * transporte aucun.
-     *
-     * C'est déjà ce qu'il faut pour trancher entre trois causes qui demandent
-     * des recherches opposées : si aucune ligne n'apparaît, la transcription de
-     * la pièce ne produit rien et c'est le moteur qu'il faut regarder ; si des
-     * lignes apparaissent sans jamais de commande, le texte arrive mais ne
-     * correspond pas, et ce sont les formulations qu'il faut revoir ; si le
-     * réglage est éteint, la ligne le dit en toutes lettres.
-     *
-     * Espacé de deux secondes : un moteur en flux continu rend plusieurs
-     * résultats par seconde, et le journal n'a pas à être noyé par son propre
-     * instrument.
-     */
-    private fun noterÉcouteVocale(texte: String, issue: String) {
-        val maintenant = System.currentTimeMillis()
-        if (maintenant - dernièreÉcouteNotéeMs < ÉCOUTE_NOTÉE_MS) return
-        dernièreÉcouteNotéeMs = maintenant
-        val mots = texte.trim().split(Regex("\\s+")).count { it.isNotEmpty() }
-        CallTrace.record("VOIX entendue", "$mots mot(s), ${texte.length} signe(s) — $issue")
-    }
-
-    private var dernièreÉcouteNotéeMs = 0L
-
-    /**
-     * Éteint la dalle, à la demande de Jean — bouton ou voix.
+     * Éteint la dalle, à la demande de Jean.
      *
      * Le compteur d'inactivité est remis à zéro AVANT : sans ça, le battement
      * qui garde l'écran allumé tant qu'il reste du texte (voir

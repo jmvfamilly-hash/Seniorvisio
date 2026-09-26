@@ -245,51 +245,28 @@ class DeviceStatusReporter(private val context: Context) {
      * Comparé au seuil, ce pic dit tout de suite si le son de la pièce
      * atteint, ou non, de quoi réveiller l'écran.
      */
+    /**
+     * L'état de ce qui, côté pièce, peut encore être diagnostiqué.
+     *
+     * ═══ IL N'Y A PLUS D'ÉCOUTE À DÉCRIRE ═══
+     *
+     * Cette phrase rapportait le mécanisme d'écoute en service, son pic face
+     * à son seuil, le portier de voix, la reconnaissance du locuteur et les
+     * réveils demandés. Tout cela est parti avec l'écoute de la pièce.
+     *
+     * Reste la bascule vers Transcription instantanée, qui est désormais le
+     * seul chemin par lequel les paroles de la pièce atteignent l'écran de
+     * Jean — et donc la seule chose qu'il serve encore à diagnostiquer d'ici.
+     *
+     * Le nom de la fonction et l'identifiant du champ ne changent pas : le
+     * PWA les lit, et renommer un champ publié pour la beauté du geste
+     * casserait l'affichage sur une tablette qui n'a pas encore reçu la mise
+     * à jour.
+     */
     private fun describeRoomListening(): String {
         val service = RoomPresenceService.running
-            ?: return "service d'écoute non démarré"
-        val status = service.currentStatus()
-        val peak = service.consumePeakRms()
-        return buildString {
-            append(status.listeningMode)
-            status.captureError?.let { append(" ($it)") }
-            // Les deux mécanismes mesurent, mais pas dans la même unité : une
-            // valeur efficace sur 16 bits pour notre capture, des décibels
-            // relatifs pour le moteur d'Android. Chacun affiche la sienne
-            // face à son propre seuil — c'est ce qui permet de régler la
-            // sensibilité sur une mesure plutôt qu'au jugé.
-            val androidPeak = service.consumeAndroidPeakLevelDb()
-            val androidThreshold = status.androidThresholdDb
-            if (status.capturing) {
-                append(" — pic ").append(peak).append(" / seuil ").append(status.threshold)
-            } else if (androidPeak != null && androidThreshold != null) {
-                append(" — pic ").append(format1(androidPeak))
-                append(" dB / seuil ").append(format1(androidThreshold)).append(" dB")
-            }
-            // Le portier de voix, quand il tourne. Sans ce chiffre, un
-            // portier trop sévère ferait passer la transcription pour cassée
-            // sans que rien ne le désigne — et on chercherait la panne du
-            // mauvais côté.
-            append(" — bascule : ").append(service.describeHandoff())
-            status.voiceSharePercent?.let { append(" — voix ").append(it).append("%") }
-            // La reconnaissance du locuteur : ce qu'elle fait, et surtout ce
-            // qu'elle mesure. Les deux nombres sont ce sur quoi le seuil doit
-            // se régler — faire parler Jean puis un proche et lire les
-            // ressemblances dit où placer la limite, là où une valeur devinée
-            // ne peut que se tromper.
-            append(" — locuteur : ").append(status.speakerMode)
-            status.jeanSimilarityPercent?.let { append(", ressemblance ").append(it).append("%") }
-            status.jeanSharePercent?.let { append(", attribué à Jean ").append(it).append("%") }
-            status.enrollmentProgressPercent?.let { append(", apprentissage ").append(it).append("%") }
-            status.enrollmentResult?.let { append(" (").append(it).append(")") }
-            // La bascule vers Transcription instantanée : ce qu'elle fait, ou
-            // ce qui l'en empêche. Les causes de refus — application absente,
-            // fenêtre de nuit, pause après un retour — se ressemblent toutes
-            // vues de loin : un mode qui ne bascule pas.
-            if (!status.wakeEnabled) append(" — réveil désactivé")
-            if (status.inNightWindow) append(" — réveil bloqué (nuit)")
-            append(" — réveils demandés : ").append(status.wakeRequests)
-        }
+            ?: return "service non démarré"
+        return "la tablette n'écoute pas la pièce · bascule : ${service.describeHandoff()}"
     }
 
     /**

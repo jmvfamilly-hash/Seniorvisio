@@ -146,6 +146,16 @@ class HomeZonesController(
     private val textWeatherLabel: TextView = root.findViewById(R.id.textWeatherLabel)
     private val textClockDate: TextView = root.findViewById(R.id.textClockDate)
 
+    /**
+     * La consigne « appuyez sur Sous-titres », sous la date.
+     *
+     * NULLABLE : l'écran d'appel partage cette mise en page pour ses zones
+     * mais pas pour la bande d'information, et surtout la consigne n'y aurait
+     * aucun sens — pendant un appel, la transcription se fait déjà.
+     */
+    private val texteConsigneSousTitres: TextView? =
+        root.findViewById(R.id.texteConsigneSousTitres)
+
     private val roomZone = RollingCaptionZone(
         container = zoneRoom,
         scrollView = root.findViewById<ScrollView>(R.id.roomCaptionScroll),
@@ -523,6 +533,11 @@ class HomeZonesController(
         // que la scène filmée était claire.
         textMomentIcon.setTextColor(palette.primaryText)
         textWeatherIcon.setTextColor(palette.primaryText)
+        // Peinte par la palette comme le reste, plutôt que laissée au défaut
+        // du thème : ce défaut n'est identique à la palette par aucune règle,
+        // il se trouve seulement lui ressembler — et l'écart se voit le jour
+        // où le thème change et où trois textes sur quatre suivent.
+        texteConsigneSousTitres?.setTextColor(palette.primaryText)
         roomZone.applyColors(palette.primaryText, palette.zoneBackground)
         callZone.applyColors(palette.primaryText, palette.zoneBackground)
         onPalette(palette)

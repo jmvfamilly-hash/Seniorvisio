@@ -415,103 +415,36 @@ class RoomPresenceService : Service() {
      * Ce réglage ne fait que dispenser ensureAwake() d'agir, plus bas.
      */
     /**
-     * Démarre l'écoute de la pièce par le mécanisme choisi par
-     * l'administrateur — et c'est le seul endroit qui décide lequel.
+     * ═══ LA TABLETTE N'ÉCOUTE PLUS LA PIÈCE ═══
      *
-     * Deux mécanismes exclusifs, parce qu'un seul composant à la fois peut
-     * tenir le micro. Le nôtre (AudioRecord) mesure le niveau sonore et
-     * alimente un moteur qu'on nourrit ; celui d'Android écoute le micro
-     * lui-même et ne nous laisse rien à mesurer — c'est donc lui qui signale
-     * la parole pour le réveil (voir AndroidSpeechSession). Les lancer tous
-     * les deux ferait échouer l'un des deux, au hasard.
+     * Retiré sur demande. Il y avait ici deux mécanismes exclusifs — notre
+     * capture AudioRecord, et le moteur de reconnaissance d'Android — et un
+     * long commentaire pour expliquer lequel prenait le micro quand.
      *
-     * ═══ LE MOTEUR D'ANDROID EST REVENU, ET AVEC LUI SES SONS ═══
+     * Plus aucun ne le prend. Ce qui disparaît avec l'écoute :
      *
-     * Il a été retiré d'ici une journée, parce qu'il fait du bruit : son
-     * interface est MODALE — un énoncé, une clôture, une relance — et le
-     * service de Google joue ses deux sons d'interaction à chaque reprise.
-     * Il est remis à la demande de l'administrateur, qui le veut pour ce
-     * qu'il transcrit.
+     *  - la transcription de ce qui se dit dans la pièce ;
+     *  - le réveil de l'écran au son, remplacé par le changement de photo
+     *    (voir OrdonnanceurPhotos.rallumerLÉcran) ;
+     *  - la bascule AUTOMATIQUE vers Transcription instantanée, qui se
+     *    déclenchait sur la voix entendue ;
+     *  - les commandes vocales et la reconnaissance de la voix de Jean, qui
+     *    n'avaient de sens que sur un flux qu'on écoute.
      *
-     * CES SONS NE SE DÉSACTIVENT PAS, et ce n'est pas faute d'avoir cherché :
-     * le banc d'essai Papyrus, construit pour observer ce moteur seul, le
-     * conclut en toutes lettres — « les bips appartiennent au moteur, ils
-     * reviennent à chaque relance, c'est un fait à constater, pas un réglage
-     * à trouver ». La logique de session ici est la dernière mesurée, et elle
-     * réduit le TEMPS MORT entre deux sessions, pas le nombre de sessions.
+     * Ce qui reste : le bouton « Sous-titres » de l'écran d'accueil, qui
+     * bascule vers l'application de Google sans rien écouter ni attendre
+     * (voir testHandoff et MainActivity), et toute la transcription des
+     * APPELS, qui passe par le son de WebRTC et n'a jamais touché ce micro.
      *
-     * Dans une pièce silencieuse, le moteur rend ERROR_SPEECH_TIMEOUT au bout
-     * de quelques secondes et la session repart : c'est de là que vient un
-     * son qui revient régulièrement sans que personne n'ait parlé.
-     *
-     * Le seul palliatif en place est le volume (voir AlertVolume), qui
-     * descend les notifications à leur plus bas cran audible — jamais zéro,
-     * qu'Android refuse sans une autorisation qu'un propriétaire d'appareil
-     * ne peut pas s'accorder.
+     * La méthode est gardée plutôt que supprimée, et elle ARRÊTE : plusieurs
+     * chemins l'appellent encore — démarrage du service, reprise après un
+     * appel — et chacun doit se conclure par « rien n'écoute », pas par un
+     * appel manquant qui laisserait tourner ce qui tournait.
      */
     private fun startListening() {
-        if (écouteParLeMoteurAndroid()) {
-            stopCapture()
-            startAndroidSpeech()
-        } else {
-            stopAndroidSpeech()
-            startCapture()
-        }
+        stopAndroidSpeech()
+        stopCapture()
     }
-
-    /**
-     * Qui tient le micro : le moteur d'Android, ou notre propre capture ?
-     *
-     * ═══ LA BASCULE PASSE DEVANT LE CHOIX DE MOTEUR ═══
-     *
-     * Et ce n'est pas une préférence : c'est une nécessité matérielle. La
-     * bascule se déclenche sur de la VOIX, détectée par un petit réseau de
-     * neurones qui a besoin du SON. Le moteur d'Android tient le micro
-     * lui-même et ne nous en livre jamais. Les deux ne peuvent pas coexister,
-     * et tant que le moteur d'Android écoute, aucun déclencheur n'existe.
-     *
-     * J'ai cru pouvoir contourner cela en déclenchant sur les MOTS que ce
-     * moteur reconnaît. C'était une faute de raisonnement : ce moteur ne rend
-     * aucun texte sur cette tablette — c'est précisément la panne qu'on
-     * cherche depuis deux jours. Le déclencheur était donc branché sur le seul
-     * chemin dont on savait déjà qu'il ne donne rien, et la bascule ne pouvait
-     * pas partir.
-     *
-     * ═══ ET ON NE PERD RIEN ═══
-     *
-     * Écarter le moteur d'Android quand la bascule est armée ne coûte aucune
-     * transcription : c'est l'application de Google qui transcrit dès qu'elle
-     * a l'écran, et elle le fait mieux — en continu, sans le découpage modal
-     * qui nous gêne. Le moteur local ne servirait qu'entre deux bascules.
-     *
-     * Le principe existait déjà dans ce projet, écrit pour les services
-     * payants : « bascule active, ce moteur est écarté pour la pièce » (voir
-     * TranscriptionEngine.engineFor). Il s'étend ici à celui d'Android, pour
-     * une raison plus forte encore — les autres étaient écartés par économie,
-     * celui-ci rend la bascule impossible.
-     *
-     * Effet de bord, et il est bienvenu : plus de moteur d'Android, donc plus
-     * de sons de reprise d'écoute.
-     */
-    /**
-     * Le moteur RÉELLEMENT en service pour la pièce, en clair.
-     *
-     * Distinct du réglage : la bascule armée écarte celui d'Android, et le
-     * journal annonçait pourtant « moteur=Reconnaissance Android » — c'est-à-
-     * dire le réglage, pas ce qui écoute. Une ligne de journal qui rapporte
-     * une intention au lieu d'un fait est pire qu'absente : on s'y fie pour ne
-     * pas chercher ailleurs.
-     */
-    fun moteurDeLaPièceEnClair(): String = when {
-        écouteParLeMoteurAndroid() -> adminConfig.roomEngine.adminLabel
-        adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID ->
-            "capture interne (Android écarté : bascule armée)"
-        else -> adminConfig.roomEngine.adminLabel
-    }
-
-    private fun écouteParLeMoteurAndroid(): Boolean =
-        adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID &&
-            !adminConfig.roomHandoffEnabled
 
     private fun startAndroidSpeech() {
         if (androidSpeech?.isRunning() == true) return
@@ -806,33 +739,6 @@ class RoomPresenceService : Service() {
             return
         }
 
-        // Bascule vers Transcription instantanée : sur de la VOIX et non un
-        // simple bruit. Basculer l'écran de Jean est un geste visible — bien
-        // plus qu'ouvrir une session — et un aspirateur ne doit pas le
-        // déclencher. Le portier Silero sert donc ici quel que soit le mode de
-        // facturation du moteur, puisque ce mode n'en ouvre aucun.
-        if (adminConfig.roomHandoffEnabled) {
-            // Nous sommes en train de lire le micro : il nous est donc revenu,
-            // et nous ne sommes plus basculés quoi qu'en dise l'état. Réconcilié
-            // ici plutôt que d'attendre un chemin de retour qui n'arrivera
-            // peut-être jamais.
-            ensureHandoff().noteMicrophoneHeld()
-            val voiceGate = ensureVoiceGate()
-            voiceGate.accept(buffer, length)
-            // Détecteur indisponible : on ne bascule PAS. Il rend alors « oui »
-            // à tout, par sécurité — un choix juste pour l'ouverture d'une
-            // session de transcription, où trop transcrire ne coûte que de
-            // l'argent. Ici il ferait changer l'écran de Jean au premier
-            // aspirateur, c'est-à-dire exactement ce que ce mode promet de ne
-            // pas faire. Mieux vaut ne pas basculer, et le dire.
-            if (!voiceGate.available) {
-                handoffUnavailableReason = "détection de voix indisponible, bascule suspendue"
-            } else {
-                handoffUnavailableReason = null
-                if (voiceGate.isVoiceActive()) ensureHandoff().onVoiceHeard()
-            }
-        }
-
         if (!adminConfig.dimJeanSpeech) return
         val gate = ensureSpeakerGate() ?: return
         gate.accept(buffer, length, now)
@@ -867,27 +773,18 @@ class RoomPresenceService : Service() {
     @Volatile private var handoffUnavailableReason: String? = null
 
     /** Ce que fait la bascule, en une phrase, pour l'écran admin et le signe de vie. */
-    fun describeHandoff(): String = when {
-        // ═══ « DÉSACTIVÉE » NE VOULAIT PAS DIRE « RIEN NE SE PASSE » ═══
-        //
-        // Le bouton « Sous-titres » bascule sans consulter ce réglage (voir
-        // MainActivity). L'état annonçait donc « désactivée » pendant que la
-        // tablette était effectivement sur l'application de Google — un
-        // diagnostic qui contredit ce qu'on a sous les yeux est pire que pas
-        // de diagnostic du tout.
-        !adminConfig.roomHandoffEnabled ->
-            handoff?.let { "automatique désactivée — ${it.describe()}" }
-                ?: "automatique désactivée (le bouton « Sous-titres » reste utilisable)"
-        // Ce cas ne devrait plus se présenter : la bascule armée écarte le
-        // moteur d'Android (voir écouteParLeMoteurAndroid). Gardé pour le dire
-        // si l'invariant se rompait un jour, plutôt que d'afficher une bascule
-        // « prête » qui ne peut pas partir.
-        écouteParLeMoteurAndroid() ->
-            "incohérence : la reconnaissance Android tient le micro, aucun son à analyser"
-        !isCapturing && !micYieldedToCompanion -> "capture micro arrêtée, rien à analyser"
-        handoffUnavailableReason != null -> handoffUnavailableReason!!
-        else -> ensureHandoff().describe()
-    }
+    /**
+     * Ce que fait la bascule, en une phrase, pour l'écran admin et le signe
+     * de vie.
+     *
+     * Elle n'a plus qu'un déclencheur — le bouton « Sous-titres » — depuis
+     * que l'écoute de la pièce est retirée. Les six gardes qui retenaient la
+     * bascule automatique ne sont plus consultées par personne, et les
+     * décrire ici laisserait croire qu'elles agissent encore.
+     */
+    fun describeHandoff(): String =
+        handoff?.let { "manuelle — ${it.describe()}" }
+            ?: "manuelle : bouton « Sous-titres » sur l'écran d'accueil"
 
     /**
      * Bascule sur commande, sans condition, depuis l'écran d'administration.

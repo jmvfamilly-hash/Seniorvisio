@@ -131,6 +131,35 @@
             android:textSize="38sp"
             android:gravity="center"
             android:text="" />
+
+        <!-- ═══ LA CONSIGNE N'EST PAS POUR JEAN ═══
+
+             Elle s'adresse à qui entre dans la pièce : un proche, une
+             aide-soignante, un visiteur. Eux seuls peuvent agir sur ce que
+             cette phrase demande, et eux seuls savent lire un écran qu'ils
+             découvrent.
+
+             C'est aussi ce qui explique le bouton d'à côté. Un pictogramme,
+             même bien choisi, ne dit pas À QUOI IL SERT DANS CETTE
+             PIÈCE-CI — « appuyez pour que Jean vous lise » le dit, et en une
+             seule phrase.
+
+             Plus petite que la date et sans emphase : la date est le repère
+             permanent de Jean, cette phrase est une indication pour quelqu'un
+             d'autre. Elle ne doit pas lui passer devant.
+
+             La couleur vient de la palette comme tout le reste (voir
+             HomeZonesController.applyPalette), avec une transparence qui la
+             met en retrait sans la rendre illisible. -->
+        <TextView
+            android:id="@+id/texteConsigneSousTitres"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:textSize="20sp"
+            android:alpha="0.75"
+            android:gravity="center"
+            android:text="Pour que Jean puisse lire vos paroles sur la tablette, appuyez sur Sous-titres" />
     </LinearLayout>
 
         <!-- ═══ « SOMMEIL » : JEAN ÉTEINT SA DALLE QUAND IL VEUT ═══

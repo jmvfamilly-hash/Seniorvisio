@@ -520,7 +520,6 @@ const els = {
   cancelButton: el("cancelButton"),
   forceConnectButton: el("forceConnectButton"),
   policeSelect: el("policeSelect"),
-  roomHandoffToggle: el("roomHandoffToggle"),
   handoffReturnSlider: el("handoffReturnSlider"),
   galeriePreferee: el("galeriePreferee"),
   galeriePrefereeStatut: el("galeriePrefereeStatut"),
@@ -598,20 +597,12 @@ const els = {
   callEngineSelect: el("callEngineSelect"),
   voskModelSelect: el("voskModelSelect"),
   engineStatus: el("engineStatus"),
-  commandesVocalesToggle: el("commandesVocalesToggle"),
   interligneSlider: el("interligneSlider"),
-  roomWakeEnabledToggle: el("roomWakeEnabledToggle"),
-  roomWakeThresholdSlider: el("roomWakeThresholdSlider"),
   blockWakeAtNightToggle: el("blockWakeAtNightToggle"),
   roomListeningStatus: el("roomListeningStatus"),
   deviceHealth: el("deviceHealth"),
   transcriptionDiagnostic: el("transcriptionDiagnostic"),
   paidUsage: el("paidUsage"),
-  voiceGateToggle: el("voiceGateToggle"),
-  dimJeanSpeechToggle: el("dimJeanSpeechToggle"),
-  speakerEngineSelect: el("speakerEngineSelect"),
-  thresholdEmbeddedSlider: el("thresholdEmbeddedSlider"),
-  thresholdPicovoiceSlider: el("thresholdPicovoiceSlider"),
   quotaAssemblyaiSlider: el("quotaAssemblyaiSlider"),
   quotaGladiaSlider: el("quotaGladiaSlider"),
   refreshUsageButton: el("refreshUsageButton"),
@@ -1117,7 +1108,6 @@ const ADMIN_SLIDER_FIELDS = [
   ["scrollSpeedSlider", "captionScrollSpeedDp"],
   ["interligneSlider", "captionInterligne"],
   ["captionClearDelaySlider", "captionClearDelaySeconds"],
-  ["roomWakeThresholdSlider", "roomWakeThreshold"],
   // Plafonds mensuels des services payants. Le champ porte le nom du moteur
   // pour que l'ajout d'un troisième service n'oblige pas à inventer une
   // nouvelle convention (voir DeviceStatusReporter, FIELD_QUOTA_PREFIX).
@@ -1127,8 +1117,6 @@ const ADMIN_SLIDER_FIELDS = [
   // moteur : leurs scores ne sont pas comparables, et un curseur commun
   // appliquerait à l'un une exigence réglée pour l'autre (voir
   // SpeakerEngineChoice).
-  ["thresholdEmbeddedSlider", "jeanVoiceThreshold_embedded"],
-  ["thresholdPicovoiceSlider", "jeanVoiceThreshold_picovoice"],
   // Zéro est légitime ici — « pas de retour minuté » — comme pour les
   // plafonds mensuels.
   ["handoffReturnSlider", "roomHandoffReturnMinutes"],
@@ -1136,12 +1124,7 @@ const ADMIN_SLIDER_FIELDS = [
 
 // Mêmes réglages d'appareil, mais en tout ou rien.
 const ADMIN_TOGGLE_FIELDS = [
-  ["commandesVocalesToggle", "commandesVocales"],
-  ["roomWakeEnabledToggle", "roomWakeEnabled"],
   ["blockWakeAtNightToggle", "blockWakeAtNight"],
-  ["voiceGateToggle", "voiceGateEnabled"],
-  ["dimJeanSpeechToggle", "dimJeanSpeech"],
-  ["roomHandoffToggle", "roomHandoffEnabled"],
   ["speechTraceToggle", "speechTraceEnabled"],
 ];
 
@@ -1750,7 +1733,6 @@ const ENGINE_SELECT_FIELDS = [
   ["roomEngineSelect", "roomTranscriptionEngine"],
   ["callEngineSelect", "callTranscriptionEngine"],
   ["voskModelSelect", "voskModelSize"],
-  ["speakerEngineSelect", "speakerEngine"],
 ];
 
 let lastDeviceData = null;
@@ -1833,13 +1815,8 @@ function applyDeviceSettings(data) {
   // !== false et non === true : le champ est absent tant que personne n'a
   // touché au réglage, et la tablette l'a alors à sa valeur par défaut, qui
   // est active. Montrer la case décochée ferait croire à une fonction éteinte.
-  els.commandesVocalesToggle.checked = data.commandesVocales !== false;
-  els.roomWakeEnabledToggle.checked = data.roomWakeEnabled !== false;
-  els.roomHandoffToggle.checked = data.roomHandoffEnabled === true;
   // Vrai par défaut côté tablette : un champ absent veut dire « jamais réglé
   // d'ici », pas « désactivé ».
-  els.voiceGateToggle.checked = data.voiceGateEnabled !== false;
-  els.dimJeanSpeechToggle.checked = data.dimJeanSpeech !== false;
   // Faux par défaut côté tablette, contrairement aux autres : ce mode
   // change ce que Jean a sous les yeux, il ne s'arme pas tout seul.
 

@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.recueil.CadenceurPhotos
@@ -163,8 +164,62 @@ class OrdonnanceurPhotos(private val service: CallListenerService) {
         if (changement) {
             observateur?.surPhoto(prêts.getOrNull(créneau.rang), p.recueil?.id)
             TracePhoto.noter(créneau.rang, prêts.size, créneau.finDuCreneau, p.voulu)
+            rallumerLÉcran()
         }
         programmer(créneau.finDuCreneau)
+    }
+
+    /**
+     * Allume la dalle quand la photo change.
+     *
+     * ═══ C'EST L'INVERSE DE LA RÈGLE PRÉCÉDENTE, ET C'EST VOULU ═══
+     *
+     * Il était écrit ici, et défendu, qu'« une photo ne rallume JAMAIS la
+     * dalle » : la galerie devait rendre l'écran agréable quand on le regarde,
+     * pas réclamer qu'on le regarde. Soixante réveils par jour dans une
+     * chambre, disait le commentaire.
+     *
+     * L'argument tenait tant que le réveil venait du SON. Il ne vient plus de
+     * nulle part : l'écoute de la pièce a été retirée, et sans elle la
+     * tablette ne se rallumait plus que pour un appel — donc restait noire
+     * toute la journée, galerie comprise. Le changement de photo devient le
+     * seul battement capable de la réveiller, et c'est ce qui a été demandé.
+     *
+     * ═══ LA NUIT RESTE PROTÉGÉE ═══
+     *
+     * Et ce n'est pas un ajout de ma part : le garde-fou existait déjà sur ce
+     * chemin avant que je le retire. Une tablette qui s'allume toutes les
+     * quinze minutes à trois heures du matin dans une chambre n'est pas un
+     * confort, c'est une nuisance — et Jean n'a aucun moyen de la faire
+     * cesser.
+     *
+     * Le verrou porte sa propre échéance : si quoi que ce soit empêchait sa
+     * libération, l'écran ne resterait pas allumé indéfiniment.
+     */
+    private fun rallumerLÉcran() {
+        if (config.blockWakeAtNight && config.isCurrentlyNightWindow(LocalDateTime.now().hour)) return
+        val gestionnaire = service.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+
+        @Suppress("DEPRECATION")
+        val verrou = gestionnaire.newWakeLock(
+            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                PowerManager.ON_AFTER_RELEASE,
+            "SeniorVisio:Photo",
+        )
+        verrou.acquire(DURÉE_ÉVEIL_MS)
+
+        // Écran déjà allumé : surtout ne pas ramener l'accueil par-dessus ce
+        // que Jean regarde — un appel en cours, par exemple.
+        if (gestionnaire.isInteractive) return
+        try {
+            service.startActivity(
+                Intent(service, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Réveil de l'écran refusé par le système", e)
+        }
     }
 
     /**
@@ -287,6 +342,17 @@ class OrdonnanceurPhotos(private val service: CallListenerService) {
         const val MINUTES_MIN = 1
         const val MINUTES_MAX = 60
         const val RENDEZ_VOUS_À_VIDE_MS = 15 * 60 * 1000L
+
+        /**
+         * Combien de temps la dalle reste allumée après un changement de
+         * photo.
+         *
+         * Deux minutes : assez pour qu'on lève les yeux et regarde l'image,
+         * trop peu pour qu'une tablette oubliée éclaire une pièce vide
+         * jusqu'au créneau suivant. La veille du système reprend ensuite la
+         * main normalement.
+         */
+        const val DURÉE_ÉVEIL_MS = 2 * 60 * 1000L
     }
 }
 

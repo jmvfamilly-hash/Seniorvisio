@@ -438,55 +438,24 @@
             <input type="range" id="captionClearDelaySlider" min="1" max="60" value="30" step="1" data-unit=" s">
           </div>
 
-          <h3 class="admin-section">Réveil au son</h3>
+          <h3 class="admin-section">Réveil de l'écran</h3>
           <p class="hint">
-            La tablette allume son écran quand elle entend du bruit dans la
-            pièce. Le seuil dépend du micro et de l'acoustique : trop haut,
-            l'écran ne s'allume jamais ; trop bas, il s'allume pour rien.
-            Réglez-le sur le pic mesuré, affiché juste en dessous — il se
-            compare directement à cette valeur.
+            La tablette n'écoute plus la pièce. L'écran se rallume donc au
+            <strong>changement de photo</strong> de la galerie — à la cadence
+            réglée plus bas — et à l'arrivée d'un appel. Le bouton
+            « Sommeil » de Jean l'éteint quand il veut.
           </p>
-
-          <div class="caption-control">
-            <label>
-              <input type="checkbox" id="roomWakeEnabledToggle">
-              👂 Réveiller l'écran au bruit de la pièce
-            </label>
-          </div>
-
-          <div class="volume-control">
-            <label for="roomWakeThresholdSlider">🔉 Seuil de déclenchement</label>
-            <input type="range" id="roomWakeThresholdSlider" min="500" max="15000" value="3000" step="250" data-unit="">
-          </div>
-
           <div class="caption-control">
             <label>
               <input type="checkbox" id="blockWakeAtNightToggle">
-              🌙 Ne pas réveiller l'écran la nuit (22h–7h)
+              🌙 Ne pas rallumer l'écran la nuit
             </label>
           </div>
-
-          <!-- Le seuil ne se règle pas à l'aveugle : sans le niveau réellement
-               mesuré en face, on ne peut pas distinguer « le son n'atteint pas
-               le seuil » de « la capture ne tourne plus ». -->
-          <p class="hint" id="roomListeningStatus">
-            En attente du premier signe de vie de la tablette…
-          </p>
-
-          <h3 class="admin-section">Commandes vocales de Jean</h3>
           <p class="hint">
-            Jean peut dire « suivant », « précédent » ou « sommeil » à voix
-            haute. Les trois font exactement ce que font les boutons de son
-            écran — rien de plus. Un mot n'est reconnu que s'il est dit seul :
-            « le suivant peut-être » dans une conversation ne déclenche rien.
-            À éteindre si la tablette réagit à tort pendant les visites.
+            Fortement conseillé : sans ça, une galerie qui tourne tous les
+            quarts d'heure allume la chambre toute la nuit, et Jean n'a aucun
+            moyen de faire cesser ça.
           </p>
-          <div class="caption-control">
-            <label>
-              <input type="checkbox" id="commandesVocalesToggle">
-              🗣️ Accepter les commandes vocales
-            </label>
-          </div>
 
           <h3 class="admin-section">Galerie photo sur l'écran d'accueil</h3>
           <p class="hint">
@@ -537,55 +506,24 @@
 
           <h3 class="admin-section">Moteur de transcription</h3>
           <p class="hint">
-            Une solution par source. Tout passe par défaut par le moteur
-            embarqué de la tablette : gratuit, hors-ligne, et il écoute la pièce
-            des heures par jour sans que ça coûte quoi que ce soit. AssemblyAI
-            est plus juste mais facturé à la durée — le mettre sur les appels
-            distants seuls reste raisonnable, sur la pièce beaucoup moins.
+            <strong>La tablette n'écoute plus la pièce en permanence.</strong>
+            Ces moteurs ne servent donc plus que pendant un appel : la voix du
+            proche, et — si le proche le demande depuis cet écran — ce qui se
+            dit autour de Jean, capté par le micro de l'appel.
+          </p>
+          <p class="hint">
+            Tout passe par défaut par le moteur embarqué : gratuit, hors-ligne,
+            et sans service en ligne qui puisse tomber au mauvais moment.
+            AssemblyAI est plus juste, mais facturé à la durée.
           </p>
 
-          <label for="roomEngineSelect">Paroles dans la pièce</label>
+          <label for="roomEngineSelect">Paroles de la pièce, pendant un appel</label>
           <select id="roomEngineSelect">
             <option value="auto">Automatique — moteur embarqué</option>
             <option value="vosk">Forcer le moteur embarqué Vosk (gratuit)</option>
-            <option value="android">Reconnaissance Android (gratuite, déjà installée)</option>
             <option value="assemblyai">Forcer AssemblyAI (payant)</option>
             <option value="gladia">Forcer Gladia (payant)</option>
           </select>
-
-          <!-- Volontairement absente de la liste des appels juste en dessous :
-               l'API de reconnaissance d'Android n'écoute que le micro, on ne
-               peut pas lui donner le son d'un appel, qui arrive par WebRTC. -->
-          <p class="hint">
-            La reconnaissance d'Android ne vaut que pour la pièce, et c'est elle
-            qui prend alors le micro. C'est donc elle qui déclenche le réveil de
-            l'écran, <strong>sur le même seuil que ci-dessus mais dans son
-            échelle à elle</strong> — des décibels, là où notre propre capture
-            mesure une valeur efficace. La position du curseur est transposée
-            d'une échelle à l'autre ; le nombre affiché dans le diagnostic
-            change donc de nature selon le moteur qui écoute, et c'est celui-là
-            qu'il faut lire pour régler.
-          </p>
-          <p class="hint">
-            La reconnaissance de la voix de Jean est en revanche impossible tant
-            que ce moteur écoute : il tient le micro et ne livre aucun son à
-            analyser.
-          </p>
-          <p class="hint">
-            ⚠️ <strong>Il lui faut le modèle français installé sur la
-            tablette</strong>, dans les paramètres de Google, reconnaissance
-            vocale hors connexion. Sans lui, le moteur démarre, émet ses sons,
-            et ne rend jamais aucun texte. Le diagnostic d'écoute ci-dessus le
-            nomme explicitement quand c'est le cas.
-          </p>
-          <p class="hint">
-            ⚠️ <strong>Ce moteur émet deux sons à chaque reprise d'écoute</strong>,
-            et ils ne se désactivent pas : ils appartiennent au service de
-            Google. Son interface ne sait écouter qu'un énoncé à la fois, donc
-            elle reprend après chaque phrase — et aussi après quelques secondes
-            de silence. Le volume des notifications est descendu à son plus bas
-            cran audible hors appel, ce qui les atténue sans les supprimer.
-          </p>
 
           <label for="callEngineSelect">Paroles pendant un appel distant</label>
           <select id="callEngineSelect">
@@ -615,79 +553,11 @@
                pièce, et c'est ici qu'ils manquaient. -->
           <p class="hint" id="transcriptionDiagnostic"></p>
 
-          <div class="caption-control">
-            <label>
-              <input type="checkbox" id="voiceGateToggle">
-              🗣️ N'ouvrir un service payant que sur de la voix
-            </label>
-          </div>
           <p class="hint">
-            Sans ce filtre, un aspirateur ou une porte suffisent à ouvrir une
-            connexion facturée. Avec lui, seule la parole compte — une
-            télévision reste de la parole, d'où le plafond ci-dessous. Ne
-            concerne ni le réveil de l'écran, ni les moteurs gratuits.
-          </p>
-
-          <div class="caption-control">
-            <label>
-              <input type="checkbox" id="dimJeanSpeechToggle">
-              🔉 Mettre en retrait les paroles de Jean
-            </label>
-          </div>
-          <p class="hint">
-            Jean sait ce qu'il vient de dire : ses propres phrases s'affichent
-            atténuées pour laisser la place à celles qu'il a besoin de lire.
-            Sans effet tant que sa voix n'a pas été apprise, ce qui se fait
-            depuis l'écran d'administration de la tablette — il faut être dans
-            la pièce avec lui. Impossible avec la reconnaissance Android, qui
-            garde le micro pour elle.
-          </p>
-
-          <label for="speakerEngineSelect">Comment reconnaître la voix de Jean</label>
-          <select id="speakerEngineSelect">
-            <option value="embedded">Intégré — timbre et hauteur (gratuit, sans clé)</option>
-            <option value="picovoice">Picovoice Eagle — sur l'appareil (clé requise)</option>
-          </select>
-          <p class="hint">
-            L'intégré compare une hauteur de voix et un timbre : très sûr face à
-            une voix de femme ou d'enfant, faible face à une voix masculine
-            proche — un fils, justement le visiteur le plus fréquent. Eagle est
-            un modèle entraîné, qui traite bien ce cas-là ; il tourne lui aussi
-            entièrement sur la tablette, aucun son ne sort. Il demande une clé
-            d'accès Picovoice, à saisir sur l'écran d'administration de la
-            tablette.
-          </p>
-          <p class="hint">
-            Les deux gardent leur propre apprentissage : changer de moteur ne
-            détruit pas celui de l'autre, et revenir en arrière ne demande pas
-            de refaire parler Jean. En revanche <strong>chaque moteur doit
-            apprendre sa voix séparément</strong> — une signature de l'un est
-            illisible par l'autre.
-          </p>
-
-          <div class="caption-control">
-            <label for="thresholdEmbeddedSlider">
-              Seuil du moteur intégré
-            </label>
-            <input type="range" id="thresholdEmbeddedSlider"
-                   min="10" max="95" step="1" value="72" data-unit=" %">
-          </div>
-          <div class="caption-control">
-            <label for="thresholdPicovoiceSlider">
-              Seuil de Picovoice Eagle
-            </label>
-            <input type="range" id="thresholdPicovoiceSlider"
-                   min="10" max="95" step="1" value="50" data-unit=" %">
-          </div>
-          <p class="hint">
-            Un seuil par moteur, et ce n'est pas de la prudence : les deux
-            rendent un nombre entre 0 et 1, mais l'un sort d'un réseau de
-            neurones et l'autre d'une moyenne pondérée. Le même nombre n'y veut
-            pas dire la même chose. Plus haut, moins de phrases sont attribuées
-            à Jean : on préfère afficher une de ses phrases en clair
-            qu'atténuer celle d'un proche. Le diagnostic ci-dessus publie la
-            ressemblance réellement mesurée — faites parler Jean, puis quelqu'un
-            d'autre, et placez la limite entre les deux nombres.
+            Le portier de voix, l'atténuation des paroles de Jean et la
+            reconnaissance de son timbre ont disparu de cette page : ils
+            n'avaient de sens que sur une écoute permanente de la pièce, qui
+            est retirée.
           </p>
 
           <h3>Trace de la reconnaissance vocale</h3>
@@ -752,45 +622,32 @@
           <p class="hint" id="callLogStatus"></p>
           <pre id="callLogText" class="call-log" hidden></pre>
 
-          <div class="caption-control">
-            <label>
-              <input type="checkbox" id="roomHandoffToggle">
-              🔀 Basculer vers Transcription instantanée quand une voix se fait entendre
-            </label>
-          </div>
+          <h3 class="admin-section">Sous-titres par l'application de Google</h3>
           <p class="hint">
-            L'écran de Jean passe automatiquement à l'application de Google, qui
-            transcrit <strong>en continu</strong> — ce qu'aucune application
-            tierce ne peut faire, l'interface publique d'Android ne transcrivant
-            qu'un énoncé à la fois avant de s'arrêter. C'est ce temps mort qui
-            coupe les phrases et mange les premiers mots.
+            Jean — ou qui se trouve dans la pièce — appuie sur le bouton
+            <strong>« Sous-titres »</strong>, en haut à gauche de son écran, et
+            la tablette passe à « Transcription instantanée » de Google, qui
+            écrit en continu ce qui se dit autour de lui.
           </p>
           <p class="hint">
-            Déclenché sur de la <em>parole</em>, jamais sur un bruit : un
-            aspirateur ne doit pas changer l'écran. Un appel entrant repasse
-            par-dessus. <strong>Aucun service payant n'est ouvert pour la pièce
-            dans ce mode</strong>, il devient inutile puisque c'est Google qui
-            transcrit.
+            <strong>Il n'y a plus de déclenchement automatique à la voix</strong> :
+            c'est un geste, et rien d'autre ne le provoque. Un appel entrant
+            ramène l'écran de Jean par-dessus.
           </p>
           <p class="hint">
-            Le déclencheur dépend du moteur choisi plus bas, et les deux n'ont
-            pas la même latence. Avec le <strong>moteur embarqué</strong>, c'est
-            un détecteur de voix qui décide, dès la première syllabe. Avec la
-            <strong>reconnaissance Android</strong>, qui tient le micro et ne
-            nous livre aucun son, c'est le premier <em>mot reconnu</em> : un peu
-            plus tard, mais plus sûr — un aspirateur ne produit pas de mots. Le
-            diagnostic d'écoute dit lequel des deux est armé.
+            Le retour se fait par le bandeau posé en bas de l'écran de Google,
+            par le bouton Accueil, ou à l'extinction de la dalle. Le bandeau
+            demande une autorisation à donner UNE FOIS depuis l'écran
+            d'administration de la tablette — sans elle, seul le bouton Accueil
+            ramène Jean, et il n'a aucune raison de le connaître.
           </p>
-          <p class="hint">
-            <strong>Le retour normal, c'est la mise en veille</strong> : elle
-            survient quand la pièce se vide, et le micro est repris dans la
-            foulée pour que la surveillance du bruit reparte. S'y ajoutent le
-            bandeau en bas de l'écran et le bouton Accueil. Il n'y a en revanche
-            <strong>pas</strong> de retour au silence : pendant la bascule
-            l'application de Google tient le micro, la tablette est sourde et ne
-            peut pas savoir que la pièce s'est vidée. Le bandeau demande une
-            autorisation à donner une fois depuis l'écran d'administration de la
-            tablette.
+
+          <!-- L'état de la tablette sur ce point, tel qu'elle le rapporte.
+               Il vivait sous « Réveil au son », qui n'existe plus ; il
+               décrit désormais la bascule, seule chose qu'il reste à
+               diagnostiquer de ce côté. -->
+          <p class="hint" id="roomListeningStatus">
+            En attente du premier signe de vie de la tablette…
           </p>
 
           <div class="caption-control">
@@ -801,16 +658,8 @@
           <p class="hint">
             Un filet, pas le chemin normal : il ne sert que si l'écran ne
             s'éteint jamais — Transcription instantanée est faite pour être lue
-            en continu et pourrait le maintenir allumé. Le diagnostic compte
-            désormais les retours par cause : si tous se font par « écran
-            éteint », ce curseur peut être mis à zéro ; si tous se font par
-            « durée écoulée », c'est que la veille ne vient pas.
-          </p>
-          <p class="hint">
-            Après un retour, deux minutes s'écoulent avant qu'une nouvelle
-            bascule soit possible — sans quoi un mot prononcé renverrait Jean
-            aussitôt sur l'autre écran, et il ne pourrait jamais récupérer le
-            sien.
+            en continu et pourrait le maintenir allumé. Zéro pour ne pas
+            l'utiliser.
           </p>
 
           <h3 class="admin-section">Plafond des services payants</h3>
