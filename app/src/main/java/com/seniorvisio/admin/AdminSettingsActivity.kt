@@ -32,10 +32,12 @@ import com.journeyapps.barcodescanner.ScanOptions
 import com.seniorvisio.BuildConfig
 import com.seniorvisio.R
 import com.seniorvisio.core.AdminConfig
+import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.HomeZone
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.WifiConfigurator
 import com.seniorvisio.service.RoomPresenceService
+import com.seniorvisio.ui.MainActivity
 import com.seniorvisio.ui.ReturnBannerOverlay
 import com.seniorvisio.ui.TranscriptionLabActivity
 
@@ -370,6 +372,7 @@ class AdminSettingsActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.buttonPickWifiNetwork).setOnClickListener { pickWifiNetwork() }
         findViewById<Button>(R.id.buttonOpenBrowser).setOnClickListener { openBrowserForNetworkLogin() }
+        findViewById<Button>(R.id.buttonFullDeviceAccess).setOnClickListener { confirmFullDeviceAccess() }
 
         // Case décochée par défaut à l'ouverture : Jean (ou un aidant) peut
         // avoir cet écran ouvert avec quelqu'un d'autre présent — les mots de
@@ -557,6 +560,49 @@ class AdminSettingsActivity : AppCompatActivity() {
     }
 
     private fun textBrowserAccessStatus() = findViewById<TextView>(R.id.textBrowserAccessStatus)
+
+    /**
+     * Le PIN redemandé ici, alors que celui déjà saisi pour entrer dans ce
+     * panneau serait déjà une barrière : celui-là protège l'écran, celui-ci
+     * protège le geste. Ce bouton retire toute la protection de Jean — mode
+     * kiosque et lanceur exclusif — et mérite sa propre confirmation, pas
+     * seulement celle qui a déjà servi à ouvrir ce panneau.
+     */
+    private fun confirmFullDeviceAccess() {
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        }
+        AlertDialog.Builder(this)
+            .setTitle("PIN admin")
+            .setMessage(
+                "Ceci retire ENTIÈREMENT la protection de la tablette pendant une heure : " +
+                    "mode kiosque levé, réglages Android et Play Store accessibles normalement. " +
+                    "Confirmez avec le PIN."
+            )
+            .setView(input)
+            .setPositiveButton("Confirmer") { _, _ ->
+                if (input.text.toString() == adminConfig.adminPin) {
+                    grantFullDeviceAccess()
+                } else {
+                    Toast.makeText(this, "PIN incorrect", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    private fun grantFullDeviceAccess() {
+        KioskManager.grantTemporaryFullAccess(this, MainActivity::class.java)
+        CallTrace.record("ADMIN accès complet", "demandé depuis le panneau, PIN vérifié")
+        findViewById<TextView>(R.id.textFullDeviceAccessStatus).text =
+            "Accès complet accordé pour 1 heure — revenez sur Senior Visio (son icône, dans le " +
+                "tiroir d'applications) une fois la maintenance terminée, sinon le reverrouillage " +
+                "se fait tout seul au bout de l'heure."
+        // Ce panneau lui-même vit derrière le mode kiosque qu'on vient de
+        // lever : le fermer maintenant évite de laisser un écran de Senior
+        // Visio ouvert par-dessus le lanceur qu'on vient de rendre joignable.
+        finish()
+    }
 
     companion object {
         private const val STATUS_REFRESH_MS = 500L

@@ -212,6 +212,37 @@
         android:textSize="14sp"
         android:text="" />
 
+    <!-- ═══ RENDRE LA TABLETTE À ELLE-MÊME, LE TEMPS D'UNE MAINTENANCE ═══
+
+         Contrairement au navigateur ci-dessus (qui reste confiné au mode
+         kiosque), celui-ci retire ENTIÈREMENT la protection : mode kiosque
+         levé, Senior Visio retiré comme lanceur exclusif — le bouton Accueil
+         rouvre le lanceur d'origine, les réglages Android et le Play Store
+         redeviennent joignables normalement (voir KioskManager.
+         grantTemporaryFullAccess).
+
+         Redemande le PIN juste avant d'agir, en plus de celui déjà saisi
+         pour entrer dans ce panneau : ce geste retire toute la protection de
+         Jean, et mérite sa propre confirmation.
+
+         Se referme tout seul après une heure si personne n'a repensé à
+         revenir sur Senior Visio — jamais un accès permanent. -->
+    <Button
+        android:id="@+id/buttonFullDeviceAccess"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="🔓 Accès complet à la tablette (réglages, Play Store…)"
+        android:backgroundTint="#C0392B" />
+
+    <TextView
+        android:id="@+id/textFullDeviceAccessStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="14sp"
+        android:text="" />
+
     <!-- Utilisée uniquement par le labo de comparaison de transcription
          (voir TranscriptionLabActivity.kt), jamais par les sous-titres en
          usage normal. -->

@@ -241,6 +241,101 @@ object KioskManager {
         browserAccessTimeout = null
     }
 
+    private var fullAccessTimeout: Runnable? = null
+
+    /**
+     * Retire ENTIÈREMENT la protection de la tablette, pour un intervenant sur
+     * place qui a besoin d'installer une application ou de changer un réglage
+     * Android que Senior Visio n'expose pas — l'accès navigateur temporaire
+     * n'ouvre qu'un navigateur ; celui-ci rend la tablette à elle-même.
+     *
+     * ═══ DEUX CHOSES À DÉFAIRE, PAS UNE ═══
+     *
+     * Sortir du mode kiosque (stopLockTask) ne suffit pas : Senior Visio reste
+     * déclaré lanceur exclusif de l'appareil (addPersistentPreferredActivity,
+     * voir registerAsHomeApp), donc le bouton Accueil rouvrirait Senior Visio
+     * au lieu du vrai lanceur. Les deux protections doivent tomber ensemble
+     * pour que la tablette redevienne un appareil Android ordinaire.
+     *
+     * ═══ TOUJOURS TEMPORAIRE, ET REVENANT TOUT SEUL ═══
+     *
+     * Un accès complet permanent n'aurait plus aucun sens : Jean se
+     * retrouverait un jour sur un écran de réglages qu'il n'a pas demandé, ou
+     * sur le lanceur d'origine, sans le moindre moyen de revenir seul à sa
+     * tablette. Deux chemins de retour :
+     *
+     *  - l'intervenant relance Senior Visio lui-même (son icône reste dans le
+     *    tiroir d'applications) — startIfDeviceOwner s'exécute à son
+     *    ouverture normale (onCreate/onResume) et reverrouille tout ;
+     *  - à défaut, [timeoutMs] plus tard, CETTE fonction ramène Senior Visio
+     *    au premier plan de force (voir revokeTemporaryFullAccess) — un
+     *    Device Owner reste autorisé à démarrer une activité depuis
+     *    l'arrière-plan, exactement comme un appel entrant le fait déjà
+     *    (voir IncomingCallService.launchAlertScreen).
+     *
+     * @param homeActivity la même classe que celle enregistrée comme accueil
+     *   (voir startIfDeviceOwner) : c'est elle qui sera rappelée au premier
+     *   plan pour reverrouiller, qu'on soit revenu seul ou non.
+     */
+    fun grantTemporaryFullAccess(
+        activity: Activity,
+        homeActivity: Class<out Activity>,
+        timeoutMs: Long = FULL_ACCESS_TIMEOUT_MS,
+    ) {
+        val dpm = activity.getSystemService(Activity.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+            ?: return
+        if (!dpm.isDeviceOwnerApp(activity.packageName)) return
+        val admin = ComponentName(activity, SeniorVisioDeviceAdminReceiver::class.java)
+
+        // Le navigateur temporaire n'a plus d'objet dès lors que tout est
+        // ouvert — et le laisser actif compliquerait le retour (il faudrait
+        // se rappeler de fermer les deux fenêtres séparément).
+        cancelBrowserAccessTimeout()
+
+        dpm.clearPackagePersistentPreferredActivities(admin, activity.packageName)
+        try {
+            activity.stopLockTask()
+        } catch (_: IllegalStateException) {
+            // Pas verrouillée pour commencer (déjà en accès complet, ou
+            // variante de validation) : rien à défaire.
+        }
+
+        Log.i(TAG, "Accès complet accordé pour ${timeoutMs}ms")
+        CallTrace.record("ADMIN accès complet", "accordé pour ${timeoutMs / 60_000} min")
+
+        val appContext = activity.applicationContext
+        cancelFullAccessTimeout()
+        val timeout = Runnable {
+            Log.i(TAG, "Fenêtre d'accès complet expirée, reverrouillage forcé")
+            CallTrace.record("ADMIN accès complet", "délai écoulé — reverrouillage forcé")
+            revokeTemporaryFullAccess(appContext, homeActivity)
+        }
+        fullAccessTimeout = timeout
+        handler.postDelayed(timeout, timeoutMs)
+    }
+
+    /**
+     * Ramène Senior Visio au premier plan pour qu'il reverrouille la
+     * tablette (voir startIfDeviceOwner, appelé par [homeActivity] à sa
+     * reprise). Appelée à l'expiration du délai, mais aussi si l'intervenant
+     * relance l'application par un autre chemin que son icône — un appel
+     * qu'on ne s'attend pas à voir échouer peut toujours l'être sans risque.
+     */
+    fun revokeTemporaryFullAccess(context: Context, homeActivity: Class<out Activity>) {
+        cancelFullAccessTimeout()
+        context.startActivity(
+            Intent(context, homeActivity).addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            )
+        )
+    }
+
+    private fun cancelFullAccessTimeout() {
+        fullAccessTimeout?.let { handler.removeCallbacks(it) }
+        fullAccessTimeout = null
+    }
+
     private const val TAG = "KioskManager"
     private const val BROWSER_ACCESS_TIMEOUT_MS = 10 * 60 * 1000L
+    private const val FULL_ACCESS_TIMEOUT_MS = 60 * 60 * 1000L
 }
