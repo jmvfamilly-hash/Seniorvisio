@@ -30,7 +30,6 @@ import com.seniorvisio.core.SpeakerEngineChoice
 import com.seniorvisio.core.SpeakerRecogniser
 import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.core.VoiceSignature
-import com.seniorvisio.core.VoskModelProvider
 import com.seniorvisio.ui.MainActivity
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -211,7 +210,6 @@ class RoomPresenceService : Service() {
         val wakeRequests: Int,
         val transcribing: Boolean,
         val captureError: String?,
-        val voskModel: String,
         /** Lequel des deux mécanismes tient le micro (voir startListening). */
         val listeningMode: String,
 
@@ -287,7 +285,6 @@ class RoomPresenceService : Service() {
         wakeRequests = wakeRequests,
         transcribing = transcription?.activeSource() != null,
         captureError = lastCaptureError,
-        voskModel = VoskModelProvider.describeState(),
         listeningMode = if (androidSpeech?.isRunning() == true) "reconnaissance Android"
         else if (isCapturing) "capture interne"
         else "aucune écoute",
@@ -363,11 +360,6 @@ class RoomPresenceService : Service() {
         running = this
         adminConfig = AdminConfig(this)
         startForeground(FOREGROUND_ID, buildForegroundNotification())
-        // Le modèle de reconnaissance embarqué se télécharge une seule fois
-        // (~45 Mo) : lancé ici, au démarrage du service permanent, pour qu'il
-        // soit prêt bien avant qu'on en ait besoin. Sans effet s'il est déjà
-        // en place (voir VoskModelProvider.prepare).
-        VoskModelProvider.prepare(this, adminConfig.voskModelSize)
     }
 
     /**
@@ -543,16 +535,6 @@ class RoomPresenceService : Service() {
     private fun stopAndroidSpeech() {
         androidSpeech?.stop()
         androidSpeech = null
-    }
-
-    /**
-     * Le moteur de la pièce vient de changer à distance (voir
-     * DeviceStatusReporter) : on bascule de mécanisme sans attendre le
-     * prochain redémarrage, sinon le réglage ne prendrait effet que des heures
-     * plus tard, et personne ne comprendrait pourquoi.
-     */
-    fun onRoomEngineChanged() {
-        startListening()
     }
 
     private fun startCapture() {

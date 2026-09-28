@@ -594,39 +594,28 @@
 
           <h3 class="admin-section">Moteur de transcription</h3>
           <p class="hint">
-            Une solution par source. Tout passe par défaut par le moteur
-            embarqué de la tablette : gratuit, hors-ligne, et il écoute la pièce
-            des heures par jour sans que ça coûte quoi que ce soit. AssemblyAI
-            est plus juste mais facturé à la durée — le mettre sur les appels
-            distants seuls reste raisonnable, sur la pièce beaucoup moins.
+            Une solution par source, et elles ne se règlent plus de la même
+            façon. La pièce n'a plus de choix : c'est toujours la reconnaissance
+            vocale d'Android, gratuite et déjà installée — rien à télécharger,
+            rien à charger en mémoire. Un modèle hors-ligne embarqué (Vosk) a
+            longtemps tenu cette place ; retiré du projet après avoir mis une
+            tablette à genoux (mémoire saturée, un appel coupé en plein
+            milieu) pour un gain que ce moteur-ci rendait inutile.
           </p>
 
-          <label for="roomEngineSelect">Paroles dans la pièce</label>
-          <select id="roomEngineSelect">
-            <option value="auto">Automatique — moteur embarqué</option>
-            <option value="vosk">Forcer le moteur embarqué Vosk (gratuit)</option>
-            <option value="android">Reconnaissance Android (gratuite, déjà installée)</option>
-            <option value="assemblyai">Forcer AssemblyAI (payant)</option>
-            <option value="gladia">Forcer Gladia (payant)</option>
-          </select>
-
-          <!-- Volontairement absente de la liste des appels juste en dessous :
-               l'API de reconnaissance d'Android n'écoute que le micro, on ne
-               peut pas lui donner le son d'un appel, qui arrive par WebRTC. -->
           <p class="hint">
-            La reconnaissance d'Android ne vaut que pour la pièce, et c'est elle
-            qui prend alors le micro. C'est donc elle qui déclenche le réveil de
-            l'écran, <strong>sur le même seuil que ci-dessus mais dans son
-            échelle à elle</strong> — des décibels, là où notre propre capture
-            mesure une valeur efficace. La position du curseur est transposée
-            d'une échelle à l'autre ; le nombre affiché dans le diagnostic
-            change donc de nature selon le moteur qui écoute, et c'est celui-là
-            qu'il faut lire pour régler.
+            Paroles dans la pièce : reconnaissance Android, sans réglage
+            possible. C'est elle qui tient le micro en permanence, donc c'est
+            elle qui déclenche le réveil de l'écran, <strong>sur le même seuil
+            que ci-dessus mais dans son échelle à elle</strong> — des décibels,
+            là où notre propre capture mesure une valeur efficace. La position
+            du curseur est transposée d'une échelle à l'autre ; le nombre
+            affiché dans le diagnostic change donc de nature selon ce qui
+            écoute, et c'est celui-là qu'il faut lire pour régler.
           </p>
           <p class="hint">
-            La reconnaissance de la voix de Jean est en revanche impossible tant
-            que ce moteur écoute : il tient le micro et ne livre aucun son à
-            analyser.
+            La reconnaissance de la voix de Jean est en revanche impossible :
+            ce moteur tient le micro et ne livre aucun son à analyser.
           </p>
           <p class="hint">
             ⚠️ <strong>Il lui faut le modèle français installé sur la
@@ -646,26 +635,21 @@
 
           <label for="callEngineSelect">Paroles pendant un appel distant</label>
           <select id="callEngineSelect">
-            <option value="auto">Automatique — moteur embarqué</option>
+            <option value="auto">Automatique — AssemblyAI</option>
             <option value="assemblyai">Forcer AssemblyAI (payant)</option>
             <option value="gladia">Forcer Gladia (payant)</option>
-            <option value="vosk">Forcer le moteur embarqué (gratuit)</option>
           </select>
-
-          <label for="voskModelSelect">Modèle embarqué</label>
-          <select id="voskModelSelect">
-            <option value="large">Grand — 1,4 Go, nettement plus juste</option>
-            <option value="small">Petit — 45 Mo, approximatif</option>
-          </select>
-
           <p class="hint">
-            Le changement de modèle déclenche un téléchargement sur la tablette,
-            une seule fois par modèle : une fois les deux téléchargés, passer de
-            l'un à l'autre est immédiat.
+            La reconnaissance d'Android ne figure pas dans cette liste : son
+            API n'écoute que le micro, on ne peut pas lui donner le son d'un
+            appel, qui arrive par WebRTC. Les appels n'ont donc plus de moteur
+            gratuit — Vosk le permettait, mais au prix constaté ci-dessus.
           </p>
-          <p class="hint" id="engineStatus">
-            En attente du premier signe de vie de la tablette…
-          </p>
+          <!-- Vide par défaut : ne sert plus qu'à signaler un réglage non
+               transmis (voir app.js, writeDeviceSetting). Il n'y a plus de
+               modèle à télécharger dont rendre compte ici depuis le retrait
+               de Vosk. -->
+          <p class="hint" id="engineStatus"></p>
 
           <!-- Les mêmes messages que ceux affichés pendant un appel, mais
                lisibles hors appel : c'est ici qu'on règle le moteur de la

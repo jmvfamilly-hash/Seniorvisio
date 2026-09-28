@@ -22,13 +22,17 @@ enum class TranscriptionEngineChoice(
     val billedByDuration: Boolean = false,
 ) {
     /**
-     * Tout sur le moteur embarqué : gratuit, hors-ligne, et indépendant d'un
-     * service en ligne qui pourrait tomber au mauvais moment. C'est le défaut ;
-     * l'administrateur reste libre de mettre AssemblyAI sur une source
-     * précise, ce qui se défend sur les appels distants — ponctuels — et
-     * beaucoup moins sur la pièce, écoutée des heures par jour.
+     * Pour les appels : AssemblyAI. C'est le défaut, et depuis le retrait de
+     * Vosk (voir plus bas) c'est aussi la seule chose qu'« automatique »
+     * signifie encore — il n'y a plus de second moteur vers lequel arbitrer.
+     * L'administrateur reste libre de mettre Gladia à la place.
+     *
+     * Sans objet pour la pièce, qui n'écoute plus qu'avec la reconnaissance
+     * d'Android (voir ANDROID, AdminConfig.roomEngine) : un service facturé à
+     * la durée n'a rien à faire sur un flux permanent, écouté des heures par
+     * jour.
      */
-    AUTO("auto", "Automatique (tout sur le moteur embarqué)"),
+    AUTO("auto", "Automatique (AssemblyAI)"),
 
     ASSEMBLYAI("assemblyai", "AssemblyAI (en ligne, payant à la durée)", billedByDuration = true),
 
@@ -43,53 +47,25 @@ enum class TranscriptionEngineChoice(
      */
     GLADIA("gladia", "Gladia (en ligne, payant à la durée)", billedByDuration = true),
 
-    VOSK("vosk", "Vosk (embarqué, gratuit, hors-ligne)"),
-
     /**
      * La reconnaissance vocale d'Android lui-même (voir AndroidSpeechSession).
-     * Gratuite et déjà installée, mais avec une contrainte qui n'est pas la
-     * nôtre : son API n'écoute que le micro, on ne peut pas lui donner un flux
-     * audio. Elle ne vaut donc que pour la pièce — un appel arrive par WebRTC,
-     * jamais par le micro. Choisie pour les appels, le moteur le signale et
-     * retombe sur un autre (voir TranscriptionEngine.createRecognizerFor).
+     * Gratuite, déjà installée, sans rien à télécharger ni à charger en
+     * mémoire — c'est ce qui en fait le seul moteur retenu pour la pièce
+     * (voir AdminConfig.roomEngine), depuis le retrait de Vosk : un modèle
+     * hors-ligne de 1,4 Go a fini par mettre une tablette à genoux (mémoire
+     * saturée, appel coupé en plein milieu) sur un usage qui n'a jamais eu
+     * besoin d'un modèle aussi lourd.
+     *
+     * Contrainte qui n'est pas la nôtre : son API n'écoute que le micro, on ne
+     * peut pas lui donner un flux audio. Elle ne vaut donc QUE pour la pièce —
+     * un appel arrive par WebRTC, jamais par le micro. Choisie pour un appel,
+     * le moteur le signale et retombe sur AssemblyAI (voir
+     * TranscriptionEngine.createRecognizerFor).
      */
     ANDROID("android", "Reconnaissance Android (pièce seulement)");
 
     companion object {
         fun fromRemoteValue(value: String?): TranscriptionEngineChoice? =
-            entries.firstOrNull { it.remoteValue == value }
-    }
-}
-
-/**
- * Taille du modèle français embarqué. Le petit tient en 45 Mo et suffit à de
- * la commande vocale ; le grand est nettement plus juste sur une conversation
- * captée à distance par le micro d'une tablette, mais pèse 1,4 Go.
- *
- * Les deux coexistent sur la tablette une fois téléchargés : basculer de l'un
- * à l'autre pour comparer ne re-télécharge rien.
- */
-enum class VoskModelSize(
-    val remoteValue: String,
-    val adminLabel: String,
-    val directoryName: String,
-    val url: String,
-) {
-    SMALL(
-        remoteValue = "small",
-        adminLabel = "Petit (45 Mo, rapide, approximatif)",
-        directoryName = "vosk-model-fr-small",
-        url = "https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip",
-    ),
-    LARGE(
-        remoteValue = "large",
-        adminLabel = "Grand (1,4 Go, nettement plus juste)",
-        directoryName = "vosk-model-fr-large",
-        url = "https://alphacephei.com/vosk/models/vosk-model-fr-0.22.zip",
-    );
-
-    companion object {
-        fun fromRemoteValue(value: String?): VoskModelSize? =
             entries.firstOrNull { it.remoteValue == value }
     }
 }

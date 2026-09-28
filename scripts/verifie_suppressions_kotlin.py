@@ -68,6 +68,10 @@ TROP_COMMUNS = {
     "it", "e", "i", "n", "x", "y", "f", "r", "v", "id", "to", "of", "on",
     "get", "set", "run", "map", "key", "tag", "TAG", "value", "values",
     "name", "type", "state", "index", "size", "text", "data", "result",
+    # Paramètre nommé très répandu dans les bibliothèques Compose/Coil (ex.
+    # ZoomableAsyncImage(model = …)) : signalé après le retrait de Vosk, dont
+    # le champ « model » n'avait aucun rapport avec ces appels-là.
+    "model",
     "start", "stop", "close", "clear", "release", "invoke", "toString",
     "equals", "hashCode", "compareTo", "iterator", "next", "hasNext",
     # Des méthodes du socle Android et Kotlin, qu'une recherche textuelle ne

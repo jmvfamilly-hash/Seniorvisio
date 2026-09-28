@@ -20,11 +20,11 @@ import java.text.Normalizer
  * et Jean n'aurait aucun moyen de savoir qu'il lui manque un mot. Une
  * hallucination en trop se remarque et s'ignore ; une parole effacée, non.
  *
- * Câblé sur Gladia seulement (voir GladiaStreamingTranscriber). Les trois
+ * Câblé sur Gladia seulement (voir GladiaStreamingTranscriber). Les deux
  * autres moteurs ne sont pas concernés : AssemblyAI en v3 n'est pas un modèle
- * Whisper, Vosk et la reconnaissance d'Android ne fabriquent pas de texte sur
- * du silence — ils se taisent. Appliquer le filtre à tout le monde reviendrait
- * à faire courir le risque d'effacer un « merci » là où il n'y a rien à gagner.
+ * Whisper, et la reconnaissance d'Android ne fabrique pas de texte sur du
+ * silence — elle se tait. Appliquer le filtre à tout le monde reviendrait à
+ * faire courir le risque d'effacer un « merci » là où il n'y a rien à gagner.
  */
 object SpeechHallucinations {
 

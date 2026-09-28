@@ -217,43 +217,29 @@ class AdminConfig(context: Context) {
 
     // --- Moteur de reconnaissance vocale, réglable séparément par source et
     // modifiable à distance en cours de route (voir DeviceStatusReporter).
-    // Une solution par source, l'une et l'autre choisies par l'administrateur
-    // depuis le PWA — personne d'autre n'en décide. AUTO met tout sur le moteur
-    // embarqué : gratuit, hors-ligne, et sans service en ligne qui puisse
-    // tomber au mauvais moment. Mettre AssemblyAI sur les seuls appels
-    // distants reste raisonnable, sur la pièce beaucoup moins : elle est
-    // écoutée des heures par jour, et la facture suit la durée. ---
     /**
-     * ═══ LA PIÈCE PART SUR LE MOTEUR D'ANDROID, PAS SUR AUTO ═══
+     * ═══ LA PIÈCE N'A PLUS QUE LE MOTEUR D'ANDROID, ET CE N'EST PLUS UN RÉGLAGE ═══
      *
-     * Demandé explicitement : « le moteur installé par Android ». AUTO mène au
-     * moteur embarqué, donc laisser AUTO par défaut aurait rendu la consigne
-     * sans effet sur toute tablette dont le réglage n'a jamais été touché.
+     * Demandé explicitement : « ne garder pour la pièce que la reconnaissance
+     * Android déjà installée ». Ce n'était encore qu'un défaut modifiable ;
+     * c'est désormais fixe, pour la même raison qui a fait retirer Vosk du
+     * projet entier (voir TranscriptionEngineChoice.ANDROID) : un modèle
+     * hors-ligne téléchargé (Vosk), ou un service facturé à la durée
+     * (AssemblyAI, Gladia) écouté des heures par jour, n'ont plus leur place
+     * sur ce qui reste un simple niveau sonore. Gratuite, déjà installée, rien
+     * à télécharger ni à charger en mémoire — Android est la seule option qui
+     * convient à un flux permanent.
      *
-     * Les APPELS gardent AUTO : ce moteur n'écoute que le micro, et le son
-     * d'un appel arrive par WebRTC. Il ne peut pas les transcrire.
-     *
-     * Ce défaut fait aussi revenir les deux sons de reprise d'écoute, qui
-     * n'ont pas de réglage (voir RoomPresenceService.startListening). C'est un
-     * choix assumé de l'administrateur, pas un oubli.
+     * Les APPELS restent réglables : leur son arrive par WebRTC, jamais par le
+     * micro, et Android ne peut donc pas les transcrire de toute façon (voir
+     * TranscriptionEngine.createRecognizerFor).
      */
-    var roomEngine: TranscriptionEngineChoice
-        get() = TranscriptionEngineChoice.fromRemoteValue(prefs.getString(KEY_ROOM_ENGINE, null))
-            ?: TranscriptionEngineChoice.ANDROID
-        set(value) = prefs.edit().putString(KEY_ROOM_ENGINE, value.remoteValue).apply()
+    val roomEngine: TranscriptionEngineChoice get() = TranscriptionEngineChoice.ANDROID
 
     var callEngine: TranscriptionEngineChoice
         get() = TranscriptionEngineChoice.fromRemoteValue(prefs.getString(KEY_CALL_ENGINE, null))
             ?: TranscriptionEngineChoice.AUTO
         set(value) = prefs.edit().putString(KEY_CALL_ENGINE, value.remoteValue).apply()
-
-    // --- Taille du modèle embarqué (voir VoskModelSize). Le grand par défaut :
-    // le petit s'est révélé conçu pour de la commande vocale plus que pour une
-    // conversation captée à deux mètres, ce qui est précisément l'usage ici. ---
-    var voskModelSize: VoskModelSize
-        get() = VoskModelSize.fromRemoteValue(prefs.getString(KEY_VOSK_MODEL_SIZE, null))
-            ?: VoskModelSize.LARGE
-        set(value) = prefs.edit().putString(KEY_VOSK_MODEL_SIZE, value.remoteValue).apply()
 
     // --- Ergonomie des deux zones de texte (voir RollingCaptionZone). Réglages
     // d'appareil et non d'appel : ils décrivent la façon dont Jean lit, qui ne
@@ -573,9 +559,7 @@ class AdminConfig(context: Context) {
         /** Palier gratuit courant de ces services. Voir monthlyQuotaHours. */
         const val DEFAULT_QUOTA_HOURS = 10
         private const val KEY_ZONE_ORDER = "zone_order"
-        private const val KEY_ROOM_ENGINE = "room_engine"
         private const val KEY_CALL_ENGINE = "call_engine"
-        private const val KEY_VOSK_MODEL_SIZE = "vosk_model_size"
         private const val KEY_CAPTION_VISIBLE_LINES = "caption_visible_lines"
         private const val KEY_CAPTION_SCROLL_SPEED_DP = "caption_scroll_speed_dp"
         private const val KEY_CAPTION_CLEAR_DELAY_SECONDS = "caption_clear_delay_seconds"

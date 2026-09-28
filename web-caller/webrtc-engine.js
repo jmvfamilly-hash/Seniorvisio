@@ -1023,15 +1023,15 @@ class RealCallEngine extends CallEngine {
 
   /**
    * Réglages de transcription de la tablette, portés par le document
-   * d'appareil et non par celui d'un appel : le moteur de la pièce doit
+   * d'appareil et non par celui d'un appel : le moteur des appels doit
    * pouvoir changer alors que personne n'appelle, et la bascule doit survivre
    * au raccroché (voir DeviceStatusReporter.applyTranscriptionSettings côté
-   * Android).
+   * Android). La pièce n'en fait plus partie : elle n'a plus qu'un moteur
+   * possible, la reconnaissance Android, fixée dans le code (voir
+   * AdminConfig.roomEngine) plutôt que réglée ici.
    *
-   * callback({ roomTranscriptionEngine, callTranscriptionEngine,
-   * voskModelSize, voskModelState }) — rappelé à chaque écriture sur le
-   * document, donc aussi à chaque signe de vie de la tablette : c'est ce qui
-   * fait avancer tout seul l'affichage du téléchargement du modèle.
+   * callback({ callTranscriptionEngine, ... }) — rappelé à chaque écriture
+   * sur le document, donc aussi à chaque signe de vie de la tablette.
    */
   watchDeviceSettings(deviceId, callback) {
     if (!this._available) return () => {};

@@ -5,11 +5,11 @@ import java.nio.ByteOrder
 
 /**
  * Mise au format attendu par les moteurs de reconnaissance vocale : mono,
- * 16 bits, 16 kHz. Les deux moteurs en ont besoin — AssemblyAI parce que c'est
- * ce que déclare l'URL de sa session, Vosk parce que ses modèles sont entraînés
- * à cette fréquence — et les sources ne la fournissent pas : le micro de la
- * pièce capture déjà en 16 kHz mono, mais une piste audio WebRTC arrive en
- * 48 kHz, parfois sur deux canaux.
+ * 16 bits, 16 kHz. Les moteurs nourris d'un flux PCM en ont besoin —
+ * AssemblyAI et Gladia parce que c'est ce que déclare l'URL de leur session —
+ * et les sources ne la fournissent pas : le micro de la pièce capture déjà en
+ * 16 kHz mono, mais une piste audio WebRTC arrive en 48 kHz, parfois sur deux
+ * canaux.
  *
  * Le rééchantillonnage moyenne les échantillons de la fenêtre source au lieu
  * d'en prélever un seul. Prélever un point sur trois — ce que faisait la

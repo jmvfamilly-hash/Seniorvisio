@@ -595,9 +595,7 @@ const els = {
   recueilEnvoyer: el("recueilEnvoyer"),
   recueilStatut: el("recueilStatut"),
   recueilListe: el("recueilListe"),
-  roomEngineSelect: el("roomEngineSelect"),
   callEngineSelect: el("callEngineSelect"),
-  voskModelSelect: el("voskModelSelect"),
   engineStatus: el("engineStatus"),
   interligneSlider: el("interligneSlider"),
   roomWakeEnabledToggle: el("roomWakeEnabledToggle"),
@@ -1712,7 +1710,7 @@ function renderUsageSummary(days) {
   const lines = [
     `<strong>Aujourd'hui</strong> — éveil ${formatDuration(today.awakeSeconds)}, sommeil ${formatDuration(today.asleepSeconds)}`,
     `<strong>Moyenne par jour sur ${week.length} jour${week.length > 1 ? "s" : ""}</strong> — éveil ${formatDuration(sum("awakeSeconds") / week.length)}`,
-    `<strong>Transcription (${week.length} j)</strong> — embarqué ${formatDuration(engineSum("vosk"))}, Android ${formatDuration(engineSum("android"))}, AssemblyAI ${formatDuration(actuallyPaid)}`,
+    `<strong>Transcription (${week.length} j)</strong> — Android ${formatDuration(engineSum("android"))}, AssemblyAI ${formatDuration(actuallyPaid)}`,
     `<strong>Facturé par AssemblyAI</strong> — ${formatDuration(actuallyPaid)}`,
     `<strong>Ce qu'il aurait facturé pour tout</strong> — ${formatDuration(billableEquivalent)}`,
     `<span class="usage-saving">Économisé — ${formatDuration(billableEquivalent - actuallyPaid)}</span>`,
@@ -1804,9 +1802,7 @@ const ENGINE_SELECT_FIELDS = [
   // Un second mécanisme pour un seul réglage n'aurait rien apporté, sinon une
   // deuxième façon de tomber en panne.
   ["policeSelect", "policeSenior"],
-  ["roomEngineSelect", "roomTranscriptionEngine"],
   ["callEngineSelect", "callTranscriptionEngine"],
-  ["voskModelSelect", "voskModelSize"],
   ["speakerEngineSelect", "speakerEngine"],
 ];
 
@@ -1925,7 +1921,6 @@ function applyDeviceSettings(data) {
       select.dataset.appliedValue = value;
     }
   }
-  renderEngineStatus(data);
   // EN DERNIER, ET PROTÉGÉ. Ce bloc était appelé en tête et sans garde : la
   // moindre erreur dedans — un élément absent parce que le navigateur a gardé
   // l'ancien index.html en cache tout en chargeant le nouveau app.js — coupait
@@ -1998,7 +1993,6 @@ function renderDeviceHealth(data) {
     ["Batterie", typeof data.batteryPercent === "number" && data.batteryPercent >= 0
       ? `${data.batteryPercent} %` : "—"],
     ["Écoute de la pièce", data.roomListening || "—"],
-    ["Modèle embarqué", data.voskModelState || "—"],
     ["Applications tierces", compagnes],
     // Zéro est la valeur saine. Un nombre qui grimpe dit que la tablette se
     // rétablit toute seule, mais que quelque chose coupe son écoute des
@@ -2023,22 +2017,6 @@ setInterval(() => {
     }
   });
 }, 30000);
-
-function renderEngineStatus(data) {
-  const modelState = data.voskModelState;
-  const heartbeat = data.lastHeartbeatAt;
-  if (!modelState) {
-    els.engineStatus.textContent = heartbeat
-      ? "La tablette n'a pas encore signalé l'état de son modèle embarqué."
-      : "En attente du premier signe de vie de la tablette…";
-    return;
-  }
-  // Le téléchargement du grand modèle (1,4 Go) peut durer une heure : sans ce
-  // retour, la personne qui vient de le demander, souvent à l'autre bout du
-  // pays, n'aurait aucun moyen de distinguer un transfert qui avance d'un
-  // échec silencieux.
-  els.engineStatus.textContent = `Modèle embarqué : ${modelState}`;
-}
 
 async function writeDeviceSetting(field, value, select) {
   const previous = select.dataset.appliedValue;

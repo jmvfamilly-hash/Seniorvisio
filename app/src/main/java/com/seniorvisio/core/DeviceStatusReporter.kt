@@ -154,10 +154,6 @@ class DeviceStatusReporter(private val context: Context) {
                 FIELD_BATTERY_PERCENT to batteryPercent,
                 FIELD_COMPANION_APPS to companionAppVersions(),
                 FIELD_LAST_HEARTBEAT_AT to FieldValue.serverTimestamp(),
-                // Renvoyé au PWA pour que la bascule de moteur à distance ne
-                // soit pas aveugle : c'est le seul retour dont dispose le
-                // proche qui vient de demander le grand modèle.
-                FIELD_VOSK_MODEL_STATE to VoskModelProvider.describeState(),
                 FIELD_ADMIN_PIN_FINGERPRINT to adminPinFingerprint(),
                 FIELD_ACCESS_FINGERPRINT to accessFingerprint(),
                 FIELD_LISTENER_RESTARTS to échecsDÉcoute,
@@ -582,18 +578,9 @@ class DeviceStatusReporter(private val context: Context) {
             }
         }
 
-        TranscriptionEngineChoice.fromRemoteValue(snapshot.getString(FIELD_ROOM_ENGINE))?.let {
-            if (adminConfig.roomEngine != it) {
-                adminConfig.roomEngine = it
-                Log.i(TAG, "Moteur de la pièce réglé à distance : ${it.remoteValue}")
-                // Contrairement aux deux autres moteurs, celui d'Android change
-                // le mécanisme qui tient le micro (voir
-                // RoomPresenceService.startListening) : il faut donc basculer
-                // tout de suite, sans quoi le réglage n'aurait d'effet qu'au
-                // prochain redémarrage, des heures plus tard.
-                RoomPresenceService.running?.onRoomEngineChanged()
-            }
-        }
+        // Plus de moteur réglable pour la pièce (voir AdminConfig.roomEngine) :
+        // un ancien document Firestore peut encore porter roomTranscriptionEngine,
+        // et c'est très bien ainsi — il n'est simplement plus lu.
         TranscriptionEngineChoice.fromRemoteValue(snapshot.getString(FIELD_CALL_ENGINE))?.let {
             if (adminConfig.callEngine != it) {
                 adminConfig.callEngine = it
@@ -667,17 +654,6 @@ class DeviceStatusReporter(private val context: Context) {
         }
         snapshot.getLong(FIELD_CAPTION_CLEAR_DELAY)?.let {
             adminConfig.captionClearDelaySeconds = it.toInt()
-        }
-
-        VoskModelSize.fromRemoteValue(snapshot.getString(FIELD_VOSK_MODEL_SIZE))?.let {
-            if (adminConfig.voskModelSize != it) {
-                adminConfig.voskModelSize = it
-                Log.i(TAG, "Taille du modèle embarqué réglée à distance : ${it.remoteValue}")
-            }
-            // Appelé même quand la valeur n'a pas changé : c'est ce qui relance
-            // un téléchargement précédemment échoué, sans rien demander à
-            // personne (voir VoskModelProvider.prepare, sans effet si prêt).
-            VoskModelProvider.prepare(context, it)
         }
     }
 
@@ -927,7 +903,6 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_LAST_UPDATE_SUCCEEDED = "lastUpdateSucceeded"
         private const val FIELD_LAST_UPDATE_MESSAGE = "lastUpdateMessage"
         private const val FIELD_LAST_UPDATE_AT = "lastUpdateAt"
-        private const val FIELD_ROOM_ENGINE = "roomTranscriptionEngine"
         private const val FIELD_POLICE_SENIOR = "policeSenior"
 
         /** L'identifiant de la galerie photo préférée, ou vide pour le fond uni. */
@@ -938,8 +913,6 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_COMMANDES_VOCALES = "commandesVocales"
         private const val FIELD_CAPTION_INTERLIGNE = "captionInterligne"
         private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"
-        private const val FIELD_VOSK_MODEL_SIZE = "voskModelSize"
-        private const val FIELD_VOSK_MODEL_STATE = "voskModelState"
         private const val FIELD_CAPTION_VISIBLE_LINES = "captionVisibleLines"
         private const val FIELD_CAPTION_SCROLL_SPEED = "captionScrollSpeedDp"
         private const val FIELD_CAPTION_CLEAR_DELAY = "captionClearDelaySeconds"

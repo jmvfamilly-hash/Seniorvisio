@@ -35,8 +35,6 @@ object UsageStats {
 
     /** Un moteur, tel qu'il apparaît dans les compteurs. */
     const val ENGINE_ASSEMBLYAI = "assemblyai"
-    const val ENGINE_VOSK = "vosk"
-
     const val ENGINE_ANDROID = "android"
     const val ENGINE_GLADIA = "gladia"
 
@@ -44,18 +42,16 @@ object UsageStats {
      * Le nom de compteur d'un moteur donné.
      *
      * Existe pour qu'un moteur ajouté plus tard ne se retrouve pas compté sous
-     * le nom d'un autre : la correspondance se faisait par un « si Vosk, sinon
-     * AssemblyAI », qui range silencieusement tout nouveau venu du côté
-     * facturé. AUTO ne parvient jamais jusqu'ici — il est résolu en un moteur
-     * réel avant toute ouverture de session (voir TranscriptionEngine) — mais
-     * le cas est traité plutôt que laissé au hasard d'une exception.
+     * le nom d'un autre. AUTO ne parvient jamais jusqu'ici — il est résolu en
+     * un moteur réel avant toute ouverture de session (voir
+     * TranscriptionEngine) — mais le cas est traité plutôt que laissé au
+     * hasard d'une exception ; il vaut AssemblyAI, ce que AUTO signifie depuis
+     * le retrait de Vosk.
      */
     fun engineFor(choice: TranscriptionEngineChoice): String = when (choice) {
-        TranscriptionEngineChoice.ASSEMBLYAI -> ENGINE_ASSEMBLYAI
-        TranscriptionEngineChoice.VOSK -> ENGINE_VOSK
         TranscriptionEngineChoice.GLADIA -> ENGINE_GLADIA
         TranscriptionEngineChoice.ANDROID -> ENGINE_ANDROID
-        TranscriptionEngineChoice.AUTO -> ENGINE_VOSK
+        TranscriptionEngineChoice.ASSEMBLYAI, TranscriptionEngineChoice.AUTO -> ENGINE_ASSEMBLYAI
     }
 
     private lateinit var prefs: SharedPreferences

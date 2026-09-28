@@ -461,7 +461,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
      * de défaut, celle qui a l'air de marcher.
      *
      * La fréquence et le nombre de canaux voyagent donc AVEC le son, et non à
-     * côté. Vosk applique telle quelle la fréquence qu'on lui annonce :
+     * côté. Un moteur applique telle quelle la fréquence qu'on lui annonce :
      * déclarer 16 kHz à du 48 kHz lui fait analyser une bande trois fois trop
      * large, et là encore le texte sort — faux.
      */

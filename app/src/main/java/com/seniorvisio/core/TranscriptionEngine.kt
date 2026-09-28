@@ -255,36 +255,19 @@ class TranscriptionEngine(
      * rester muette sans explication. Quelques minutes facturées une seule
      * fois valent mieux qu'une fonction qui semble cassée.
      */
+    /**
+     * ═══ LA PIÈCE N'EST PLUS UN CHOIX, LES APPELS LE RESTENT ═══
+     *
+     * AdminConfig.roomEngine est fixe (toujours Android) depuis le retrait de
+     * Vosk : plus rien à arbitrer ni à écarter pour elle ici. Seuls les
+     * appels passent encore par un réglage — AUTO, qui signifie AssemblyAI
+     * depuis que Vosk n'existe plus (voir TranscriptionEngineChoice.AUTO).
+     */
     private fun resolveEngine(source: TranscriptionSource): TranscriptionEngineChoice {
-        val adminConfig = AdminConfig(context)
-        val choice = when (source) {
-            TranscriptionSource.ROOM -> adminConfig.roomEngine
-            TranscriptionSource.CALL -> adminConfig.callEngine
-        }
-        // Mode « bascule vers Transcription instantanée » : jamais de service
-        // facturé pour la pièce. Ce mode existe précisément pour confier la
-        // transcription à une application gratuite ; ouvrir une session payante
-        // dans les quelques secondes qui précèdent la bascule ferait payer un
-        // texte que personne ne lira, puisque l'écran va changer.
-        //
-        // Celui d'ANDROID est écarté pour une raison plus forte que l'argent :
-        // il tient le micro lui-même, donc il empêche le détecteur de voix de
-        // tourner, donc la bascule ne peut jamais partir (voir
-        // RoomPresenceService.écouteParLeMoteurAndroid). Le service d'écoute
-        // l'écarte déjà en amont ; on l'écarte ici aussi, sans quoi cette
-        // chaîne réclamerait un moteur qui n'écoute pas et poserait un
-        // diagnostic de repli à chaque session.
-        if (source == TranscriptionSource.ROOM &&
-            adminConfig.roomHandoffEnabled &&
-            (choice.billedByDuration || choice == TranscriptionEngineChoice.ANDROID)
-        ) {
-            diagnose("bascule active : ${choice.adminLabel} écarté pour la pièce, moteur embarqué à la place")
-            return TranscriptionEngineChoice.VOSK
-        }
+        if (source == TranscriptionSource.ROOM) return TranscriptionEngineChoice.ANDROID
+        val choice = AdminConfig(context).callEngine
         if (choice != TranscriptionEngineChoice.AUTO) return choice
-        // Tout sur le moteur embarqué : gratuit, hors-ligne, et il ne dépend
-        // d'aucun service qui pourrait tomber au mauvais moment.
-        return TranscriptionEngineChoice.VOSK
+        return TranscriptionEngineChoice.ASSEMBLYAI
     }
 
     /**
@@ -338,7 +321,6 @@ class TranscriptionEngine(
     }
 
     private fun isConfigured(wanted: TranscriptionEngineChoice): Boolean = when (wanted) {
-        TranscriptionEngineChoice.VOSK -> VoskModelProvider.getModel() != null
         TranscriptionEngineChoice.GLADIA -> AdminConfig(context).gladiaApiKey.isNotBlank()
         // Jamais ici : ce moteur écoute le micro lui-même et ne passe pas par
         // cette chaîne (voir AndroidSpeechSession, RoomPresenceService).
@@ -355,28 +337,32 @@ class TranscriptionEngine(
      * téléchargement terminé (voir feed).
      */
     private fun createRecognizerFor(wanted: TranscriptionEngineChoice): SpeechRecognizer? {
-        // Plafond atteint : repli sur le moteur embarqué plutôt que silence.
-        // Une tablette qui cesse d'afficher du texte sans rien expliquer est
-        // indiscernable d'une tablette en panne — et c'est Jean qui en paierait
-        // le prix, pas la facture.
-        var wanted = wanted
+        // ═══ PLAFOND ATTEINT : SILENCE DIAGNOSTIQUÉ, PAS UNE SECONDE FACTURATION ═══
+        //
+        // Avant, le relais se faisait vers Vosk — un moteur gratuit, donc sans
+        // risque à y basculer sans le dire à personne. Depuis son retrait, la
+        // seule chose vers laquelle basculer automatiquement serait un AUTRE
+        // service facturé à la durée : Gladia à la place d'AssemblyAI, par
+        // exemple. Ce n'est pas un relais, c'est ouvrir une seconde facture
+        // sans consentement — précisément ce que le plafond existe pour
+        // empêcher. Mieux vaut un texte qui s'arrête, avec une ligne qui
+        // explique pourquoi, qu'une tablette qui continue de parler sur un
+        // compte que personne n'a choisi d'utiliser.
         if (quotaExhausted(wanted)) {
             val used = UsageStats.monthlySecondsFor(UsageStats.engineFor(wanted)) / 3600
-            diagnose("plafond mensuel ${wanted.adminLabel} atteint (${used}h) : moteur embarqué en relais")
-            wanted = TranscriptionEngineChoice.VOSK
+            diagnose("plafond mensuel ${wanted.adminLabel} atteint (${used}h) : transcription arrêtée jusqu'au mois prochain, ou changez le plafond")
+            return null
         }
+        var wanted = wanted
         // La reconnaissance d'Android n'écoute que le micro : on ne peut pas
         // lui donner le son d'un appel, qui arrive par WebRTC. Le dire plutôt
         // que de rester muet — un réglage qui ne s'applique pas sans
-        // explication, c'est une heure perdue à chercher pourquoi.
+        // explication, c'est une heure perdue à chercher pourquoi. Vosk a
+        // longtemps servi de relais gratuit ici ; retiré du projet, il ne
+        // reste qu'AssemblyAI.
         if (wanted == TranscriptionEngineChoice.ANDROID) {
-            diagnose("la reconnaissance Android n'écoute que le micro : impossible sur un appel")
-            wanted = if (VoskModelProvider.getModel() != null) TranscriptionEngineChoice.VOSK
-            else TranscriptionEngineChoice.ASSEMBLYAI
-        }
-        if (wanted == TranscriptionEngineChoice.VOSK) {
-            if (VoskModelProvider.getModel() != null) return buffered(VoskSpeechRecognizer())
-            diagnose("modèle embarqué indisponible (${VoskModelProvider.describeState()}), AssemblyAI en attendant")
+            diagnose("la reconnaissance Android n'écoute que le micro : impossible sur un appel, AssemblyAI à la place")
+            wanted = TranscriptionEngineChoice.ASSEMBLYAI
         }
 
         if (wanted == TranscriptionEngineChoice.GLADIA) {
