@@ -45,13 +45,13 @@ object UsageStats {
      * le nom d'un autre. AUTO ne parvient jamais jusqu'ici — il est résolu en
      * un moteur réel avant toute ouverture de session (voir
      * TranscriptionEngine) — mais le cas est traité plutôt que laissé au
-     * hasard d'une exception ; il vaut AssemblyAI, ce que AUTO signifie depuis
-     * le retrait de Vosk.
+     * hasard d'une exception ; il vaut Gladia, ce que AUTO signifie pour le
+     * moment (secours AssemblyAI, voir TranscriptionEngineChoice.AUTO).
      */
     fun engineFor(choice: TranscriptionEngineChoice): String = when (choice) {
-        TranscriptionEngineChoice.GLADIA -> ENGINE_GLADIA
+        TranscriptionEngineChoice.GLADIA, TranscriptionEngineChoice.AUTO -> ENGINE_GLADIA
         TranscriptionEngineChoice.ANDROID -> ENGINE_ANDROID
-        TranscriptionEngineChoice.ASSEMBLYAI, TranscriptionEngineChoice.AUTO -> ENGINE_ASSEMBLYAI
+        TranscriptionEngineChoice.ASSEMBLYAI -> ENGINE_ASSEMBLYAI
     }
 
     private lateinit var prefs: SharedPreferences

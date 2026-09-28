@@ -260,14 +260,15 @@ class TranscriptionEngine(
      *
      * AdminConfig.roomEngine est fixe (toujours Android) depuis le retrait de
      * Vosk : plus rien à arbitrer ni à écarter pour elle ici. Seuls les
-     * appels passent encore par un réglage — AUTO, qui signifie AssemblyAI
-     * depuis que Vosk n'existe plus (voir TranscriptionEngineChoice.AUTO).
+     * appels passent encore par un réglage — AUTO, qui signifie Gladia pour
+     * le moment, secours AssemblyAI (voir TranscriptionEngineChoice.AUTO et
+     * createRecognizerFor pour le repli).
      */
     private fun resolveEngine(source: TranscriptionSource): TranscriptionEngineChoice {
         if (source == TranscriptionSource.ROOM) return TranscriptionEngineChoice.ANDROID
         val choice = AdminConfig(context).callEngine
         if (choice != TranscriptionEngineChoice.AUTO) return choice
-        return TranscriptionEngineChoice.ASSEMBLYAI
+        return TranscriptionEngineChoice.GLADIA
     }
 
     /**
@@ -329,51 +330,51 @@ class TranscriptionEngine(
     }
 
     /**
-     * Tant que le modèle embarqué n'est pas prêt — il se télécharge une fois —
-     * on retombe sur AssemblyAI plutôt que de rester muet sans explication.
-     * Quelques minutes facturées valent mieux qu'une fonction qui semble
-     * cassée, et le repli se voit dans le diagnostic. La bascule vers le
-     * modèle embarqué se fera d'elle-même à la session suivante, une fois le
-     * téléchargement terminé (voir feed).
+     * ═══ GLADIA PAR DÉFAUT, ASSEMBLYAI EN SECOURS — POUR LE MOMENT ═══
+     *
+     * Demandé explicitement, pendant que les deux services se comparent.
+     * Le secours ne joue que dans CE sens : Gladia absent, indisponible ou à
+     * plafond retombe sur AssemblyAI. L'inverse n'existe pas — AssemblyAI
+     * choisi directement, ou atteint après ce repli, qui épuise à son tour
+     * son plafond s'arrête net, sans chercher un troisième compte. Cascader
+     * plus loin ouvrirait une facture sur un service que personne n'a
+     * explicitement choisi d'utiliser à cet instant — précisément ce que les
+     * plafonds existent pour empêcher (voir quotaExhausted).
      */
     private fun createRecognizerFor(wanted: TranscriptionEngineChoice): SpeechRecognizer? {
-        // ═══ PLAFOND ATTEINT : SILENCE DIAGNOSTIQUÉ, PAS UNE SECONDE FACTURATION ═══
-        //
-        // Avant, le relais se faisait vers Vosk — un moteur gratuit, donc sans
-        // risque à y basculer sans le dire à personne. Depuis son retrait, la
-        // seule chose vers laquelle basculer automatiquement serait un AUTRE
-        // service facturé à la durée : Gladia à la place d'AssemblyAI, par
-        // exemple. Ce n'est pas un relais, c'est ouvrir une seconde facture
-        // sans consentement — précisément ce que le plafond existe pour
-        // empêcher. Mieux vaut un texte qui s'arrête, avec une ligne qui
-        // explique pourquoi, qu'une tablette qui continue de parler sur un
-        // compte que personne n'a choisi d'utiliser.
-        if (quotaExhausted(wanted)) {
-            val used = UsageStats.monthlySecondsFor(UsageStats.engineFor(wanted)) / 3600
-            diagnose("plafond mensuel ${wanted.adminLabel} atteint (${used}h) : transcription arrêtée jusqu'au mois prochain, ou changez le plafond")
-            return null
-        }
         var wanted = wanted
         // La reconnaissance d'Android n'écoute que le micro : on ne peut pas
         // lui donner le son d'un appel, qui arrive par WebRTC. Le dire plutôt
         // que de rester muet — un réglage qui ne s'applique pas sans
-        // explication, c'est une heure perdue à chercher pourquoi. Vosk a
-        // longtemps servi de relais gratuit ici ; retiré du projet, il ne
-        // reste qu'AssemblyAI.
+        // explication, c'est une heure perdue à chercher pourquoi.
         if (wanted == TranscriptionEngineChoice.ANDROID) {
-            diagnose("la reconnaissance Android n'écoute que le micro : impossible sur un appel, AssemblyAI à la place")
-            wanted = TranscriptionEngineChoice.ASSEMBLYAI
+            diagnose("la reconnaissance Android n'écoute que le micro : impossible sur un appel, Gladia à la place")
+            wanted = TranscriptionEngineChoice.GLADIA
         }
 
         if (wanted == TranscriptionEngineChoice.GLADIA) {
             val gladiaKey = AdminConfig(context).gladiaApiKey
-            if (gladiaKey.isBlank()) {
-                diagnose("clé API Gladia absente")
-                return null
+            val exhausted = quotaExhausted(TranscriptionEngineChoice.GLADIA)
+            if (!exhausted && gladiaKey.isNotBlank()) {
+                return buffered(GladiaStreamingTranscriber(gladiaKey))
             }
-            return buffered(GladiaStreamingTranscriber(gladiaKey))
+            val raison = if (exhausted) {
+                val used = UsageStats.monthlySecondsFor(UsageStats.engineFor(TranscriptionEngineChoice.GLADIA)) / 3600
+                "plafond mensuel atteint (${used}h)"
+            } else {
+                "clé API absente"
+            }
+            diagnose("Gladia indisponible ($raison) : AssemblyAI en secours")
+            wanted = TranscriptionEngineChoice.ASSEMBLYAI
         }
 
+        // wanted vaut ASSEMBLYAI ici, qu'il ait été choisi directement ou
+        // atteint par le secours ci-dessus — un seul chemin pour les deux.
+        if (quotaExhausted(wanted)) {
+            val used = UsageStats.monthlySecondsFor(UsageStats.engineFor(wanted)) / 3600
+            diagnose("plafond mensuel AssemblyAI atteint (${used}h) : transcription arrêtée jusqu'au mois prochain, ou changez le plafond")
+            return null
+        }
         val apiKey = AdminConfig(context).assemblyAiApiKey
         if (apiKey.isBlank()) {
             diagnose("clé API AssemblyAI absente")

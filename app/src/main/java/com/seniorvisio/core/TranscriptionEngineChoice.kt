@@ -22,17 +22,19 @@ enum class TranscriptionEngineChoice(
     val billedByDuration: Boolean = false,
 ) {
     /**
-     * Pour les appels : AssemblyAI. C'est le défaut, et depuis le retrait de
-     * Vosk (voir plus bas) c'est aussi la seule chose qu'« automatique »
-     * signifie encore — il n'y a plus de second moteur vers lequel arbitrer.
-     * L'administrateur reste libre de mettre Gladia à la place.
+     * Pour les appels : Gladia d'abord, secours AssemblyAI si Gladia est
+     * indisponible ou à plafond (voir TranscriptionEngine.createRecognizerFor)
+     * — pour le moment, le temps de comparer les deux services. L'ordre
+     * n'est pas gravé : il se change ici, à un seul endroit, quand la
+     * comparaison sera tranchée. L'administrateur reste libre de forcer
+     * l'un ou l'autre sans passer par ce défaut.
      *
      * Sans objet pour la pièce, qui n'écoute plus qu'avec la reconnaissance
      * d'Android (voir ANDROID, AdminConfig.roomEngine) : un service facturé à
      * la durée n'a rien à faire sur un flux permanent, écouté des heures par
      * jour.
      */
-    AUTO("auto", "Automatique (AssemblyAI)"),
+    AUTO("auto", "Automatique (Gladia, secours AssemblyAI)"),
 
     ASSEMBLYAI("assemblyai", "AssemblyAI (en ligne, payant à la durée)", billedByDuration = true),
 
@@ -59,7 +61,7 @@ enum class TranscriptionEngineChoice(
      * Contrainte qui n'est pas la nôtre : son API n'écoute que le micro, on ne
      * peut pas lui donner un flux audio. Elle ne vaut donc QUE pour la pièce —
      * un appel arrive par WebRTC, jamais par le micro. Choisie pour un appel,
-     * le moteur le signale et retombe sur AssemblyAI (voir
+     * le moteur le signale et retombe sur Gladia (voir
      * TranscriptionEngine.createRecognizerFor).
      */
     ANDROID("android", "Reconnaissance Android (pièce seulement)");

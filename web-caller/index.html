@@ -635,15 +635,17 @@
 
           <label for="callEngineSelect">Paroles pendant un appel distant</label>
           <select id="callEngineSelect">
-            <option value="auto">Automatique — AssemblyAI</option>
-            <option value="assemblyai">Forcer AssemblyAI (payant)</option>
+            <option value="auto">Automatique — Gladia, secours AssemblyAI</option>
             <option value="gladia">Forcer Gladia (payant)</option>
+            <option value="assemblyai">Forcer AssemblyAI (payant)</option>
           </select>
           <p class="hint">
             La reconnaissance d'Android ne figure pas dans cette liste : son
             API n'écoute que le micro, on ne peut pas lui donner le son d'un
-            appel, qui arrive par WebRTC. Les appels n'ont donc plus de moteur
-            gratuit — Vosk le permettait, mais au prix constaté ci-dessus.
+            appel, qui arrive par WebRTC. En automatique, Gladia est utilisé
+            en premier ; si sa clé manque ou que son plafond mensuel est
+            atteint, AssemblyAI prend le relais — pour le moment, le temps de
+            comparer les deux services. Aucun des deux n'est gratuit.
           </p>
           <!-- Vide par défaut : ne sert plus qu'à signaler un réglage non
                transmis (voir app.js, writeDeviceSetting). Il n'y a plus de
