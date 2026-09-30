@@ -23,6 +23,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -95,9 +98,19 @@ private fun ZoomSurface(
     val scope = rememberCoroutineScope() // Main : convient au TileManager (état mono-thread)
     val controller = remember(info) { ViewportController(info.width, info.height, scope) }
     val manager = remember(info) {
-        TileManager(info, sources, scope, controller.viewport, controller.screenSize, Dispatchers.Default)
+        TileManager(
+            info, sources, scope, controller.viewport, controller.screenSize, Dispatchers.Default,
+            zoomAnchor = { controller.zoomAnchor },
+        )
     }
     DisposableEffect(manager) { onDispose { manager.close() } }
+    // Application en arrière-plan : on rend la mémoire des tuiles qui ne servent pas tout de suite.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(manager, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) manager.trimMemory() }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // Ces State ne sont LUS que dans le bloc de dessin : un pan/zoom n'invalide que la phase draw,
     // aucune recomposition.

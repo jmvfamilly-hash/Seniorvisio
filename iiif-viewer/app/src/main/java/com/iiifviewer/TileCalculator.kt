@@ -51,32 +51,36 @@ object TileCalculator {
         screenHeight: Int,
         scaleFactor: Int,
     ): List<Tile> {
-        if (screenWidth <= 0 || screenHeight <= 0 || viewport.scale <= 0f) return emptyList()
+        if (screenWidth <= 0 || screenHeight <= 0) return emptyList()
+        return calculateTilesInRect(viewport, info, 0f, 0f, screenWidth.toFloat(), screenHeight.toFloat(), scaleFactor)
+    }
+
+    /**
+     * Tuiles du niveau [scaleFactor] qui intersectent le rectangle écran [left, top]–[right, bottom]
+     * (pixels écran ; il peut dépasser l'écran : marges de préchargement, zone de zoom...).
+     */
+    fun calculateTilesInRect(
+        viewport: ViewportState,
+        info: IiifImageInfo,
+        screenLeft: Float,
+        screenTop: Float,
+        screenRight: Float,
+        screenBottom: Float,
+        scaleFactor: Int,
+    ): List<Tile> {
+        if (viewport.scale <= 0f) return emptyList()
 
         // ── Projection écran → image ──────────────────────────────────────────────
         // Modèle direct (image → écran) :     s = p * scale + t
         // Modèle inverse (écran → image) :    p = (s - t) / scale
-        // Sans rotation, l'image d'un rectangle écran est un rectangle image ; on projette
-        // néanmoins les 4 coins pour que le code reste valable si une rotation s'ajoute :
-        // la bounding box est alors le min/max des 4 coins projetés.
-        val xs = FloatArray(4)
-        val ys = FloatArray(4)
-        val corners = arrayOf(
-            0f to 0f,
-            screenWidth.toFloat() to 0f,
-            screenWidth.toFloat() to screenHeight.toFloat(),
-            0f to screenHeight.toFloat(),
-        )
-        corners.forEachIndexed { i, (sx, sy) ->
-            xs[i] = (sx - viewport.translationX) / viewport.scale
-            ys[i] = (sy - viewport.translationY) / viewport.scale
-        }
+        // Sans rotation, l'image d'un rectangle écran est un rectangle image : deux coins
+        // opposés suffisent (avec une rotation, il faudrait le min/max des 4 coins projetés).
         // Bounding box dans l'espace image, bornée à l'image (on ne charge rien hors image).
-        val left = max(xs.min(), 0f)
-        val top = max(ys.min(), 0f)
-        val right = min(xs.max(), info.width.toFloat())
-        val bottom = min(ys.max(), info.height.toFloat())
-        if (right <= left || bottom <= top) return emptyList() // image entièrement hors écran
+        val left = max((screenLeft - viewport.translationX) / viewport.scale, 0f)
+        val top = max((screenTop - viewport.translationY) / viewport.scale, 0f)
+        val right = min((screenRight - viewport.translationX) / viewport.scale, info.width.toFloat())
+        val bottom = min((screenBottom - viewport.translationY) / viewport.scale, info.height.toFloat())
+        if (right <= left || bottom <= top) return emptyList() // rectangle entièrement hors image
 
         // ── Intersection avec la grille ───────────────────────────────────────────
         // À l'échelle f, une tuile couvre span = tileSize * f pixels image :

@@ -39,6 +39,10 @@ class ViewportController(
     private val _screenSize = MutableStateFlow(ScreenSize(0, 0))
     val screenSize: StateFlow<ScreenSize> = _screenSize.asStateFlow()
 
+    /** Dernier point de zoom (écran) : le [TileManager] y prépare le niveau plus fin avant qu'on y arrive. */
+    var zoomAnchor: Offset = Offset.Unspecified
+        private set
+
     private var minScale = 0f
     private var maxScale = 0f
     private var initialised = false
@@ -84,6 +88,7 @@ class ViewportController(
     fun transformBy(centroid: Offset, pan: Offset, zoom: Float) {
         val (w, h) = _screenSize.value
         if (w <= 0) return
+        if (zoom != 1f) zoomAnchor = centroid
         _viewport.update { vp ->
             clamp(anchoredTransform(vp, centroid, pan, (vp.scale * zoom).coerceIn(minScale, maxScale)), w, h)
         }
@@ -137,6 +142,7 @@ class ViewportController(
         val start = _viewport.value
         val (w, h) = _screenSize.value
         if (w <= 0) return
+        zoomAnchor = focus
         val target = if (start.scale > minScale * 1.5f) minScale else (minScale * 4f).coerceAtMost(maxScale)
         animation = scope.launch {
             animate(0f, 1f, animationSpec = tween(300, easing = FastOutSlowInEasing)) { f, _ ->
