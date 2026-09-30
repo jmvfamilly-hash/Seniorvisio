@@ -91,6 +91,20 @@ object TileCalculator {
         val rowMin = floor(top / span).toInt().coerceIn(0, rows - 1)
         val rowMax = (ceil(bottom / span).toInt() - 1).coerceIn(0, rows - 1)
 
+        return buildTiles(info, scaleFactor, colMin, colMax, rowMin, rowMax)
+    }
+
+    /** Toutes les tuiles d'un niveau (ex. niveau le plus grossier, gardé en permanence comme filet de sécurité). */
+    fun allTiles(info: IiifImageInfo, scaleFactor: Int): List<Tile> {
+        val span = info.tileSize * scaleFactor
+        return buildTiles(info, scaleFactor, 0, ceilDiv(info.width, span) - 1, 0, ceilDiv(info.height, span) - 1)
+    }
+
+    private fun buildTiles(
+        info: IiifImageInfo, scaleFactor: Int,
+        colMin: Int, colMax: Int, rowMin: Int, rowMax: Int,
+    ): List<Tile> {
+        val span = info.tileSize * scaleFactor
         val tiles = ArrayList<Tile>((colMax - colMin + 1) * (rowMax - rowMin + 1))
         for (row in rowMin..rowMax) {
             for (col in colMin..colMax) {
