@@ -1,0 +1,24 @@
+{
+  "hosting": {
+    "//": "Troisième site de l'hébergement Firebase, distinct de la production (GitHub Pages) et du banc d'essai (seniorvisio-test). Ce fichier est propre à iiif-viewer-web/ : firebase.json à la racine n'est pas touché, donc aucun autre déploiement (fonctions, règles, banc d'essai) ne se déclenche.",
+    "site": "seniorvisio-iiif",
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "README.md",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "//": "La page est un fichier unique : jamais de cache, pour qu'une mise à jour arrive dès le prochain chargement (Firebase compare au chemin demandé, donc « / » ET « .html »).",
+        "source": "/",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "**/*.html",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      }
+    ]
+  }
+}

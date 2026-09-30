@@ -1,0 +1,81 @@
+name: Deploy IIIF Viewer web (Firebase Hosting)
+
+# Visionneuse IIIF en une page web (iiif-viewer-web/), pour l'iPad.
+#
+# UN SITE À PART, ET UNE CONFIGURATION À PART :
+#   - troisième site de l'hébergement Firebase, seniorvisio-iiif.web.app ; la
+#     production reste sur GitHub Pages (un seul site Pages par dépôt : la
+#     remplacer casserait web-caller/), le banc d'essai sur seniorvisio-test ;
+#   - iiif-viewer-web/firebase.json est propre à ce dossier. Le firebase.json
+#     de la racine n'est pas modifié : les workflows qui le surveillent
+#     (fonctions, banc d'essai) ne se déclenchent donc pas ;
+#   - aucun secret de plus : le compte de service des autres déploiements.
+on:
+  push:
+    paths:
+      - 'iiif-viewer-web/**'
+      - '.github/workflows/deploy-iiif-viewer-web.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Avant de publier : le script de la page doit au moins s'analyser.
+      # Une erreur de syntaxe laisse une page vide, sans message.
+      - name: Vérifie la syntaxe du script de la page
+        run: |
+          node -e "
+            const s = require('fs').readFileSync('iiif-viewer-web/index.html', 'utf8');
+            const m = s.match(/<script>([\s\S]*)<\/script>/);
+            if (!m) { console.error('Aucun <script> dans index.html'); process.exit(1); }
+            new Function(m[1]);
+            console.log('Syntaxe du script : OK');
+          "
+
+      # Le site doit exister avant le premier déploiement. La commande échoue
+      # sans gravité s'il existe déjà ; si l'identifiant est pris par un autre
+      # projet, c'est le déploiement qui le dira.
+      - name: Crée le site d'hébergement s'il n'existe pas
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
+          npx firebase-tools hosting:sites:create seniorvisio-iiif \
+            --project seniorvisio --non-interactive \
+            || echo "Création ignorée (site déjà existant, ou droit manquant) : le déploiement tranchera."
+
+      - name: Déploie sur Firebase Hosting
+        working-directory: iiif-viewer-web
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+        run: |
+          npx firebase-tools deploy --only hosting \
+            --project seniorvisio --non-interactive --force
+
+      - name: Vérifie que la page est en ligne et sans cache
+        run: |
+          sleep 10
+          url="https://seniorvisio-iiif.web.app"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "$url/" || true)
+          cache=$(curl -sS -D - -o /dev/null "$url/" | grep -i '^cache-control:' | tr -d '\r' || true)
+          echo "$url/ → HTTP $code, ${cache:-aucun Cache-Control}"
+          if [ "$code" != "200" ]; then echo "::error::La page n'est pas servie (HTTP $code)."; exit 1; fi
+          if ! printf '%s' "$cache" | grep -iq 'no-cache'; then
+            echo "::error::La page n'est pas servie en no-cache : les navigateurs garderaient l'ancienne version."; exit 1
+          fi
+          {
+            echo "### IIIF Viewer web déployé"
+            echo
+            echo "<$url>"
+            echo
+            echo "Branche \`${{ github.ref_name }}\`, commit \`${{ github.sha }}\`."
+          } >> "$GITHUB_STEP_SUMMARY"
