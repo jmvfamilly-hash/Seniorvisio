@@ -34,13 +34,14 @@ suspend fun PointerInputScope.detectViewportGestures(
         var panAcc = Offset.Zero
         var pastSlop = false
         var maxPointers = 1
+        var cancelled = false // hors de la boucle : relu après elle
 
         awaitFirstDown(requireUnconsumed = false)
         onStart()
 
         do {
             val event = awaitPointerEvent()
-            val cancelled = event.changes.any { it.isConsumed }
+            cancelled = event.changes.any { it.isConsumed }
             if (!cancelled) {
                 maxPointers = max(maxPointers, event.changes.count { it.pressed })
                 val zoomChange = event.calculateZoom()
