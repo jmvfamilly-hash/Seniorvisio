@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0d10">
+<title>IIIF Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&display=swap">
+<style>
+/* Plein écran : un Canvas, deux surfaces flottantes (dialogue, bandeau), un relevé discret.
+   Volontairement sombre : le visualiseur est une visionneuse, l'interface s'efface devant l'image. */
+:root {
+  --bg: #0b0d10;          /* fond, légèrement bleuté */
+  --panel: #151a20;       /* dialogue */
+  --line: #2a323c;        /* filets, bordures de champ */
+  --fg: #e7ebf0;
+  --muted: #8b96a3;
+  --accent: #46d3b4;      /* seule couleur d'accent */
+  --on-accent: #06221b;
+  --danger: #ff8a80;
+  --danger-bg: rgba(120, 28, 28, .92);
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }   /* #dlg fixe display:flex : sans ceci, hidden ne cacherait rien */
+html, body { height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; }
+body {
+  background: var(--bg); color: var(--fg); font: 16px/1.4 var(--font-ui);
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#stage { position: fixed; inset: 0; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+#hud {
+  position: fixed; left: 12px; bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  font: 12px/1 var(--font-data); color: var(--muted); letter-spacing: .02em;
+  font-variant-numeric: tabular-nums; pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0,0,0,.8);
+}
+#hint {
+  position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%);
+  padding: 8px 14px; border-radius: 999px; background: rgba(21,26,32,.88); color: var(--muted);
+  font-size: 14px; pointer-events: none; transition: opacity .6s; white-space: nowrap;
+}
+#hint.off { opacity: 0; }
+#err {
+  position: fixed; left: 16px; right: 16px; bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+  max-width: 640px; margin-inline: auto; padding: 12px 14px; border-radius: 10px;
+  background: var(--danger-bg); color: #fff; font-size: 15px; pointer-events: none;
+}
+#dlg {
+  position: fixed; inset: 0; display: flex; align-items: flex-start; justify-content: center;
+  padding: calc(56px + env(safe-area-inset-top, 0px)) 16px 16px; background: rgba(0,0,0,.55);
+  -webkit-user-select: text; user-select: text;
+}
+#dlg form {
+  width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 12px;
+  padding: 18px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line);
+}
+#dlg h2 { margin: 0; font-size: 18px; font-weight: 500; }
+#dlg p { margin: 0; color: var(--muted); font-size: 14px; }
+#dlg input {
+  width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--fg); font: 16px var(--font-data); /* 16 px : Safari ne zoome pas la page */
+}
+#dlg input.bad { border-color: var(--danger); }
+#dlg input:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#msg { min-height: 1.2em; color: var(--danger); font-size: 14px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.row .grow { margin-right: auto; }
+.btn {
+  padding: 11px 16px; border-radius: 8px; border: 1px solid var(--line); background: transparent;
+  color: var(--fg); font: 500 15px var(--font-ui); cursor: pointer;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn:disabled { opacity: .45; cursor: default; }
+@media (prefers-reduced-motion: reduce) { #hint { transition: none; } }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv" aria-label="Image IIIF, zoom et déplacement au doigt"></canvas></div>
+<div id="hud"></div>
+<div id="hint">Appui long : ouvrir un lien IIIF</div>
+<div id="err" hidden></div>
+<div id="dlg" hidden>
+  <form id="dlgForm" autocomplete="off">
+    <h2>Ouvrir une image IIIF</h2>
+    <p>Colle le lien de l'info.json, ou l'adresse de base de l'image.</p>
+    <input id="url" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://serveur/iiif/image/info.json">
+    <div id="msg" role="status"></div>
+    <div class="row">
+      <button type="button" class="btn grow" id="demoBtn">Démo locale</button>
+      <button type="button" class="btn" id="pasteBtn">Coller</button>
+      <button type="button" class="btn" id="cancelBtn">Annuler</button>
+      <button type="submit" class="btn primary" id="openBtn">Ouvrir</button>
+    </div>
+  </form>
+</div>
+
+<script>
+'use strict';
+/* ═══ Couche 1 — modèle ═════════════════════════════════════════════════════
+   Même modèle que la version Android : viewport = { scale, tx, ty } avec
+   écran = image · scale + t, en pixels CSS. */
+const DEMO_URL = 'demo:mandelbrot';
+
+/* ═══ Couche 2 — calcul de tuiles (port de TileCalculator.kt) ═══════════════ */
+function idealScaleFactor(scale, info) {
+  // Plus grand facteur IIIF f <= 1/scale : tuile nette, le moins de tuiles possible.
+  const target = 1 / scale;
+  let best = info.scaleFactors[0];
+  for (const f of info.scaleFactors) if (f <= target) best = f;
+  return best;
+}
+
+function buildTiles(info, f, colMin, colMax, rowMin, rowMax) {
+  const span = info.tileSize * f, out = [];
+  for (let row = rowMin; row <= rowMax; row++) {
+    for (let col = colMin; col <= colMax; col++) {
+      const x = col * span, y = row * span;
+      const w = Math.min(span, info.width - x), h = Math.min(span, info.height - y); // tuiles de bord tronquées
+      out.push({ f, col, row, x, y, w, h, id: f + '/' + col + '/' + row });
+    }
+  }
+  return out;
+}
+
+function tilesAtLevel(vp, info, sw, sh, f) {
+  if (sw <= 0 || sh <= 0 || vp.scale <= 0) return [];
+  // Projection écran → image :  p = (s − t) / scale, sur les coins de l'écran (0,0) et (sw,sh).
+  const left = Math.max(-vp.tx / vp.scale, 0), top = Math.max(-vp.ty / vp.scale, 0);
+  const right = Math.min((sw - vp.tx) / vp.scale, info.width), bottom = Math.min((sh - vp.ty) / vp.scale, info.height);
+  if (right <= left || bottom <= top) return [];
+  // À l'échelle f une tuile couvre span px image ; colonnes touchées : floor(left/span) … ceil(right/span) − 1
+  const span = info.tileSize * f;
+  const cols = Math.ceil(info.width / span), rows = Math.ceil(info.height / span);
+  const cl = (v, hi) => Math.min(Math.max(v, 0), hi);
+  return buildTiles(info, f,
+    cl(Math.floor(left / span), cols - 1), cl(Math.ceil(right / span) - 1, cols - 1),
+    cl(Math.floor(top / span), rows - 1), cl(Math.ceil(bottom / span) - 1, rows - 1));
+}
+
+function allTiles(info, f) {
+  const span = info.tileSize * f;
+  return buildTiles(info, f, 0, Math.ceil(info.width / span) - 1, 0, Math.ceil(info.height / span) - 1);
+}
+
+function tileUrl(info, t) { // {baseUri}/{region}/{size}/0/default.jpg
+  return info.baseUri + '/' + t.x + ',' + t.y + ',' + t.w + ',' + t.h + '/' + Math.ceil(t.w / t.f) + ',/0/default.jpg';
+}
+
+function normalizeInfoUrl(raw) {
+  const text = String(raw).trim();
+  if (!/^https?:\/\/[^\s/]+\S*$/i.test(text)) return null;
+  if (text.includes('?') || /\.json$/i.test(text)) return text;
+  return text.replace(/\/+$/, '') + '/info.json';
+}
+
+/* ═══ Couche 3 — cache et pipeline (port de LruCache.kt / TileManager.kt) ═══ */
+class LruCache {
+  constructor(max) { this.max = max; this.map = new Map(); }
+  get(k) { const v = this.map.get(k); if (v === undefined) return undefined; this.map.delete(k); this.map.set(k, v); return v; }
+  peek(k) { return this.map.get(k); }
+  put(k, v) {
+    this.map.delete(k); this.map.set(k, v);
+    while (this.map.size > this.max) this.map.delete(this.map.keys().next().value);
+  }
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+class TileManager {
+  constructor(info, source, onUpdate) {
+    this.info = info; this.source = source; this.onUpdate = onUpdate;
+    this.cache = new LruCache(256);          // iPad Retina : ~100 tuiles visibles + parents, ~65 Mo au plus
+    this.pinned = new Map();                 // niveau le plus grossier : jamais évincé ni annulé
+    this.baseFactor = info.scaleFactors[info.scaleFactors.length - 1];
+    this.inFlight = new Map();               // id -> job
+    this.queue = []; this.running = 0; this.maxParallel = 6;
+    this.failed = new Set();
+    this.closed = false;
+    allTiles(info, this.baseFactor).forEach((t) => this.request(t)); // filet anti-écran-noir
+  }
+
+  isLoaded(id) { return this.pinned.has(id) || this.cache.peek(id) !== undefined; }
+  image(id) { return this.pinned.get(id) || this.cache.get(id); }
+
+  request(tile) {
+    if (this.closed || this.inFlight.has(tile.id) || this.failed.has(tile.id) || this.isLoaded(tile.id)) return;
+    const job = { tile, cancelled: false, abort: null, attempt: 0 };
+    this.inFlight.set(tile.id, job);
+    this.queue.push(job);
+    this.pump();
+  }
+
+  pump() {
+    while (this.running < this.maxParallel && this.queue.length) {
+      const job = this.queue.shift();
+      if (!job.cancelled) this.run(job);
+    }
+  }
+
+  async run(job) {
+    const { tile } = job;
+    this.running++;
+    try {
+      for (;;) {
+        const h = this.source.load(this.info, tile);
+        job.abort = h.abort;
+        try {
+          const img = await h.promise;
+          if (job.cancelled) return;
+          if (tile.f === this.baseFactor) this.pinned.set(tile.id, img); else this.cache.put(tile.id, img);
+          this.onUpdate();
+          return;
+        } catch (e) {
+          if (job.cancelled) return;
+          if (++job.attempt >= 3) { this.failed.add(tile.id); return; }
+          await sleep(500 * job.attempt);
+          if (job.cancelled) return;
+        }
+      }
+    } finally {
+      this.running--;
+      if (this.inFlight.get(tile.id) === job) this.inFlight.delete(tile.id);
+      this.pump();
+    }
+  }
+
+  cancel(job) {
+    job.cancelled = true;
+    if (job.abort) job.abort();               // coupe la requête HTTP
+    this.inFlight.delete(job.tile.id);
+    const i = this.queue.indexOf(job);
+    if (i >= 0) this.queue.splice(i, 1);
+  }
+
+  /** À appeler à chaque changement de viewport : annule les tuiles sorties de l'écran, demande les nouvelles. */
+  update(vp, sw, sh, dpr) {
+    if (this.closed || sw <= 0 || sh <= 0) return;
+    const info = this.info;
+    const ideal = idealScaleFactor(vp.scale * dpr, info);
+    const parent = info.scaleFactors.find((f) => f > ideal);      // niveau N-1, plus grossier
+    const idealTiles = tilesAtLevel(vp, info, sw, sh, ideal);
+    const parentTiles = parent ? tilesAtLevel(vp, info, sw, sh, parent) : [];
+    const wanted = new Set();
+    idealTiles.forEach((t) => wanted.add(t.id)); parentTiles.forEach((t) => wanted.add(t.id));
+    this.cache.max = Math.max(256, wanted.size * 2);                // jamais moins que l'écran entier, sinon les tuiles visibles s'évincent entre elles
+
+    for (const job of [...this.inFlight.values()]) {
+      if (job.tile.f !== this.baseFactor && !wanted.has(job.tile.id)) this.cancel(job);
+    }
+    for (const id of [...this.failed]) if (!wanted.has(id)) this.failed.delete(id);
+
+    parentTiles.forEach((t) => this.request(t));                   // flou rapide d'abord
+    const cx = (sw / 2 - vp.tx) / vp.scale, cy = (sh / 2 - vp.ty) / vp.scale;
+    idealTiles
+      .map((t) => [(t.x + t.w / 2 - cx) ** 2 + (t.y + t.h / 2 - cy) ** 2, t])
+      .sort((a, b) => a[0] - b[0])                                 // du centre vers les bords
+      .forEach(([, t]) => this.request(t));
+  }
+
+  /** Liste de peinture, du plus grossier au plus fin : le flou déjà en cache reste sous la tuile nette. */
+  paintList(vp, sw, sh, dpr) {
+    const info = this.info, ideal = idealScaleFactor(vp.scale * dpr, info), out = [];
+    for (let i = info.scaleFactors.length - 1; i >= 0; i--) {
+      const f = info.scaleFactors[i];
+      if (f < ideal) continue;
+      for (const t of tilesAtLevel(vp, info, sw, sh, f)) {
+        const img = this.image(t.id);
+        if (img) out.push({ t, img });
+      }
+    }
+    return { list: out, ideal };
+  }
+
+  close() {
+    this.closed = true;
+    for (const job of [...this.inFlight.values()]) this.cancel(job);
+    this.cache = new LruCache(1); this.pinned.clear();
+  }
+}
+
+/* ═══ Sources de tuiles ═════════════════════════════════════════════════════ */
+const HttpSource = {
+  async loadInfo(infoUrl) {
+    const res = await fetch(infoUrl);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    const tiles = j.tiles && j.tiles[0];
+    const tileSize = (tiles && tiles.width) || 256;
+    let factors = tiles && tiles.scaleFactors;
+    if (!factors || !factors.length) { factors = [1]; while (j.width / (factors[factors.length - 1] * 2) >= tileSize) factors.push(factors[factors.length - 1] * 2); }
+    const base = String(j.id || j['@id'] || infoUrl.replace(/\/info\.json$/, '')).replace(/\/+$/, '');
+    return { baseUri: base, width: j.width, height: j.height, tileSize, scaleFactors: [...factors].sort((a, b) => a - b) };
+  },
+  /** Un <img> suffit pour dessiner sur un canvas (pas de CORS requis) ; src = '' annule le téléchargement. */
+  load(info, tile) {
+    const img = new Image();
+    img.decoding = 'async';
+    const promise = new Promise((res, rej) => { img.onload = () => res(img); img.onerror = () => rej(new Error('tuile')); });
+    img.src = tileUrl(info, tile);
+    return { promise, abort() { img.onload = img.onerror = null; img.src = ''; } };
+  },
+};
+
+/* Image de démonstration qui marche partout, même sans réseau : l'ensemble de Mandelbrot
+   calculé tuile par tuile, avec exactement le même découpage qu'un serveur IIIF. */
+const DemoSource = {
+  async loadInfo() {
+    const width = 32768, height = 24576;
+    const re = -0.743643887037151, im = 0.131825904205330; // vallée des hippocampes
+    return {
+      baseUri: DEMO_URL, width, height, tileSize: 256, scaleFactors: [1, 2, 4, 8, 16, 32, 64, 128],
+      focus: { x: (re + 2.2) / 3.2 * width, y: (im + 1.2) / 2.4 * height },
+    };
+  },
+  load(info, tile) {
+    let cancelled = false, timer = 0;
+    const dx = 3.2 / info.width, w = Math.ceil(tile.w / tile.f), h = Math.ceil(tile.h / tile.f);
+    const maxIter = Math.round(90 + 55 * Math.log2(info.width / (info.tileSize * tile.f)) );
+    const promise = new Promise((res, rej) => {
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d'), data = ctx.createImageData(w, h), px = data.data;
+      let j = 0;
+      // Calcul par tranches de ~8 ms : le fil principal reste libre pour les gestes et le rendu.
+      const slice = () => {
+        if (cancelled) return rej(new Error('annulée'));
+        const until = performance.now() + 8;
+        while (j < h && performance.now() < until) {
+          const ci = -1.2 + (tile.y + (j + 0.5) * tile.f) * dx;
+          for (let i = 0; i < w; i++) {
+            const cr = -2.2 + (tile.x + (i + 0.5) * tile.f) * dx;
+            let zr = 0, zi = 0, n = 0, m = 0;
+            while (n < maxIter && (m = zr * zr + zi * zi) <= 256) { const t = zr * zr - zi * zi + cr; zi = 2 * zr * zi + ci; zr = t; n++; }
+            const o = (j * w + i) * 4;
+            if (n >= maxIter) { px[o] = 8; px[o + 1] = 10; px[o + 2] = 16; }
+            else {
+              const s = n + 1 - Math.log2(Math.log2(m)), a = 0.11 * s;       // teinte continue
+              px[o] = 128 + 127 * Math.sin(a + 4.2); px[o + 1] = 128 + 127 * Math.sin(a + 2.4); px[o + 2] = 128 + 127 * Math.sin(a + 0.6);
+            }
+            px[o + 3] = 255;
+          }
+          j++;
+        }
+        if (j < h) { timer = setTimeout(slice, 0); return; }
+        ctx.putImageData(data, 0, 0);
+        res(cv);
+      };
+      timer = setTimeout(slice, 0);
+    });
+    return { promise, abort() { cancelled = true; clearTimeout(timer); } };
+  },
+};
+
+/* ═══ Couche 4 — viewport, gestes, rendu ════════════════════════════════════ */
+class Viewport {
+  constructor(info) {
+    this.info = info; this.vp = { scale: 1, tx: 0, ty: 0 };
+    this.w = 0; this.h = 0; this.min = 0; this.max = 0; this.inited = false;
+    this.anim = null; this.onChange = () => {};
+  }
+
+  setScreen(w, h, focus, zoom) {
+    if (w <= 0 || h <= 0) return;
+    const { width, height } = this.info;
+    this.w = w; this.h = h;
+    const fit = Math.min(w / width, h / height);
+    this.min = fit; this.max = Math.max(2, fit * 8);            // jamais sous 200 % natif
+    if (!this.inited) {
+      this.inited = true;
+      const f = focus || { x: width / 2, y: height / 2 };
+      const s = Math.min(Math.max(fit * zoom, this.min), this.max);
+      this.vp = this.clamp({ scale: s, tx: w / 2 - f.x * s, ty: h / 2 - f.y * s });
+    } else {
+      this.vp = this.clamp({ ...this.vp, scale: Math.min(Math.max(this.vp.scale, this.min), this.max) });
+    }
+    this.onChange();
+  }
+
+  /* Le point image sous le centroïde doit rester sous les doigts :
+       p = (c − t)/s ;  s' = s·zoom ;  t' = c + pan − p·s'  */
+  anchored(vp, cx, cy, px, py, s2) {
+    const r = s2 / vp.scale;
+    return { scale: s2, tx: cx + px - (cx - vp.tx) * r, ty: cy + py - (cy - vp.ty) * r };
+  }
+
+  transformBy(cx, cy, px, py, zoom) {
+    if (this.w <= 0) return;
+    const s2 = Math.min(Math.max(this.vp.scale * zoom, this.min), this.max);
+    this.vp = this.clamp(this.anchored(this.vp, cx, cy, px, py, s2));
+    this.onChange();
+  }
+
+  /* Bords collants : image plus grande que l'écran → t ∈ [écran − W·s, 0] ; plus petite → centrée. */
+  clamp(vp) {
+    const axis = (t, shown, screen) => shown <= screen ? (screen - shown) / 2 : Math.min(Math.max(t, screen - shown), 0);
+    return { scale: vp.scale, tx: axis(vp.tx, this.info.width * vp.scale, this.w), ty: axis(vp.ty, this.info.height * vp.scale, this.h) };
+  }
+
+  stop() { if (this.anim) { cancelAnimationFrame(this.anim); this.anim = null; } }
+
+  /** Inertie : décroissance exponentielle (même constante que exponentialDecay de Compose). */
+  fling(vx, vy) {
+    this.stop();
+    if (Math.hypot(vx, vy) < 20) return;
+    let last = performance.now();
+    const step = (now) => {
+      const dt = Math.min((now - last) / 1000, 0.05); last = now;
+      const k = Math.exp(-4.2 * dt);
+      vx *= k; vy *= k;
+      this.transformBy(0, 0, vx * dt, vy * dt, 1);
+      this.anim = Math.hypot(vx, vy) > 20 ? requestAnimationFrame(step) : null;
+    };
+    this.anim = requestAnimationFrame(step);
+  }
+
+  /** Double-tap : image entière ⇄ ×4, point tapé fixe, interpolation géométrique du zoom. */
+  doubleTap(x, y) {
+    this.stop();
+    const start = this.vp;
+    const target = start.scale > this.min * 1.5 ? this.min : Math.min(this.min * 4, this.max);
+    const t0 = performance.now(), D = 300;
+    const step = (now) => {
+      const f = Math.min((now - t0) / D, 1);
+      const e = f < .5 ? 4 * f * f * f : 1 - Math.pow(-2 * f + 2, 3) / 2;
+      const s = start.scale * Math.pow(target / start.scale, e);
+      this.vp = this.clamp(this.anchored(start, x, y, 0, 0, s));  // toujours ancré sur le départ : pas de dérive
+      this.onChange();
+      this.anim = f < 1 ? requestAnimationFrame(step) : null;
+    };
+    this.anim = requestAnimationFrame(step);
+  }
+}
+
+/* ─── Application ─── */
+const $ = (id) => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d', { alpha: false });
+let dpr = 1, cssW = 0, cssH = 0;
+let view = null, manager = null, dirty = true, hudText = '', session = 0;
+
+function storageGet() { try { return localStorage.getItem('iiif-last-url'); } catch (e) { return null; } }
+function storageSet(v) { try { localStorage.setItem('iiif-last-url', v); } catch (e) {} }
+
+function showError(msg) { const e = $('err'); e.textContent = msg + ' Appui long pour coller un autre lien.'; e.hidden = false; }
+function clearError() { $('err').hidden = true; }
+
+function requestDraw() { if (!dirty) { dirty = true; } }
+
+function onViewportChanged() {
+  dirty = true;
+  if (manager && view) manager.update(view.vp, cssW, cssH, dpr);
+}
+
+async function openSource(url) {
+  const mine = ++session;
+  if (manager) { manager.close(); manager = null; }
+  if (view) { view.stop(); view = null; }
+  clearError(); hudText = 'chargement…'; dirty = true;
+  try {
+    const source = url === DEMO_URL ? DemoSource : HttpSource;
+    const info = await source.loadInfo(url);
+    if (mine !== session) return;
+    view = new Viewport(info);
+    manager = new TileManager(info, source, () => { dirty = true; });
+    view.onChange = onViewportChanged;
+    view.setScreen(cssW, cssH, info.focus, 4);   // départ en zoom ×4 : on découvre l'image en dézoomant
+    storageSet(url);
+  } catch (e) {
+    if (mine !== session) return;
+    hudText = '';
+    showError("Impossible d'ouvrir cette image : " + (e && e.message ? e.message : e) + '.');
+  }
+  dirty = true;
+}
+
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const r = cv.getBoundingClientRect();
+  cssW = Math.round(r.width); cssH = Math.round(r.height);
+  cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
+  if (view) view.setScreen(cssW, cssH, null, 4);
+  dirty = true;
+}
+new ResizeObserver(resize).observe(cv);
+window.addEventListener('orientationchange', () => setTimeout(resize, 200));
+
+/* Boucle de rendu : ne dessine que quand quelque chose a changé. */
+function frame() {
+  if (dirty) {
+    dirty = false;
+    ctx.fillStyle = '#0b0d10'; ctx.fillRect(0, 0, cv.width, cv.height);
+    if (view && manager) {
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'low';
+      const vp = view.vp, { list, ideal } = manager.paintList(vp, cssW, cssH, dpr);
+      for (let i = 0; i < list.length; i++) {
+        const t = list[i].t;
+        // Les deux bords sont arrondis séparément : deux tuiles voisines partagent exactement le même bord (pas de liseré).
+        const l = Math.round((t.x * vp.scale + vp.tx) * dpr), tp = Math.round((t.y * vp.scale + vp.ty) * dpr);
+        const r = Math.round(((t.x + t.w) * vp.scale + vp.tx) * dpr), b = Math.round(((t.y + t.h) * vp.scale + vp.ty) * dpr);
+        if (r <= 0 || b <= 0 || l >= cv.width || tp >= cv.height) continue;
+        ctx.drawImage(list[i].img, l, tp, r - l, b - tp);
+      }
+      const text = '×' + (vp.scale * dpr).toFixed(vp.scale * dpr < 0.1 ? 3 : 2) + ' · niveau 1/' + ideal + ' · ' +
+        view.info.width + '×' + view.info.height + ' px';
+      if (text !== hudText) { hudText = text; $('hud').textContent = text; }
+    } else if (hudText !== $('hud').textContent) { $('hud').textContent = hudText; }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ─── Gestes (Pointer Events) : pan, pinch, inertie, double-tap, appui long, molette ─── */
+const SLOP = 8, LONG_MS = 500, DOUBLE_MS = 300;
+const pts = new Map();
+let g = null, lastTap = { t: 0, x: 0, y: 0 }, longTimer = 0;
+
+function measure() {
+  const a = [...pts.values()];
+  let cx = 0, cy = 0; a.forEach((p) => { cx += p.x; cy += p.y; }); cx /= a.length; cy /= a.length;
+  const dist = a.length >= 2 ? Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) : 0;
+  return { cx, cy, dist };
+}
+function rel(x, y) { const r = cv.getBoundingClientRect(); return [x - r.left, y - r.top]; }
+function cancelLong() { clearTimeout(longTimer); longTimer = 0; }
+
+cv.addEventListener('pointerdown', (e) => {
+  if (!$('dlg').hidden) return;
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (view) view.stop();                                    // un doigt posé arrête l'inertie
+  const m = measure();
+  if (pts.size === 1) {
+    g = { startCx: m.cx, startCy: m.cy, startDist: 0, cx: m.cx, cy: m.cy, dist: 0, pastSlop: false, maxPointers: 1, long: false, samples: [] };
+    cancelLong();
+    longTimer = setTimeout(() => {
+      if (g && pts.size === 1 && !g.pastSlop) { g.long = true; if (navigator.vibrate) navigator.vibrate(15); openDialog(); }
+    }, LONG_MS);
+  } else if (g) {
+    cancelLong();
+    g.maxPointers = Math.max(g.maxPointers, pts.size);
+    g.startCx = m.cx; g.startCy = m.cy; g.startDist = m.dist; g.cx = m.cx; g.cy = m.cy; g.dist = m.dist; g.samples = [];
+  }
+});
+
+cv.addEventListener('pointermove', (e) => {
+  const p = pts.get(e.pointerId); if (!p || !g || !view) return;
+  p.x = e.clientX; p.y = e.clientY;
+  const m = measure();
+  if (!g.pastSlop) {
+    if (Math.hypot(m.cx - g.startCx, m.cy - g.startCy) > SLOP || (g.startDist && Math.abs(m.dist - g.startDist) > SLOP)) {
+      g.pastSlop = true; cancelLong();
+    } else return;
+  }
+  const zoom = g.dist && m.dist ? m.dist / g.dist : 1;
+  const [cx, cy] = rel(g.cx, g.cy);                       // centroïde d'AVANT le geste
+  view.transformBy(cx, cy, m.cx - g.cx, m.cy - g.cy, zoom);
+  g.cx = m.cx; g.cy = m.cy; g.dist = m.dist;
+  g.samples.push({ t: e.timeStamp, x: m.cx, y: m.cy });
+  if (g.samples.length > 8) g.samples.shift();
+  e.preventDefault();
+});
+
+function endPointer(e) {
+  if (!pts.has(e.pointerId)) return;
+  pts.delete(e.pointerId);
+  if (!g) return;
+  if (pts.size > 0) {                                        // un doigt reste : repartir de sa position sans saut
+    const m = measure();
+    g.cx = m.cx; g.cy = m.cy; g.dist = 0; g.startDist = 0; g.samples = [];
+    return;
+  }
+  cancelLong();
+  const up = e.type === 'pointerup';
+  if (g.pastSlop && g.maxPointers === 1 && up && view) {
+    const s = g.samples, last = s[s.length - 1];
+    let first = last;
+    for (let i = s.length - 1; i >= 0 && last.t - s[i].t <= 100; i--) first = s[i];
+    if (first === last && s.length > 1) first = s[s.length - 2];    // échantillons espacés (fil principal chargé)
+    const dt = (last.t - first.t) / 1000;
+    if (last && dt > 0 && e.timeStamp - last.t < 80) view.fling((last.x - first.x) / dt, (last.y - first.y) / dt);
+  } else if (!g.pastSlop && !g.long && up && g.maxPointers === 1 && view) {
+    const now = e.timeStamp;
+    if (now - lastTap.t < DOUBLE_MS && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) {
+      const [x, y] = rel(e.clientX, e.clientY); view.doubleTap(x, y); lastTap.t = 0;
+    } else lastTap = { t: now, x: e.clientX, y: e.clientY };
+  }
+  g = null;
+}
+cv.addEventListener('pointerup', endPointer);
+cv.addEventListener('pointercancel', endPointer);
+cv.addEventListener('contextmenu', (e) => e.preventDefault());
+
+cv.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (!view) return;
+  view.stop();
+  const [x, y] = rel(e.clientX, e.clientY);
+  view.transformBy(x, y, 0, 0, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)));
+}, { passive: false });
+
+/* ─── Dialogue « ouvrir un lien » ─── */
+const dlg = $('dlg'), urlInput = $('url'), msg = $('msg');
+let hintTimer = 0;
+
+function validate() {
+  const ok = normalizeInfoUrl(urlInput.value) !== null;
+  const bad = urlInput.value.trim() !== '' && !ok;
+  urlInput.classList.toggle('bad', bad);
+  msg.textContent = bad ? "Ce n'est pas une adresse http(s) valide." : '';
+  $('openBtn').disabled = !ok;
+}
+async function readClipboard() {
+  try {
+    const t = (await navigator.clipboard.readText()).trim();
+    return /^https?:/i.test(t) ? t : '';
+  } catch (e) { return ''; }
+}
+async function openDialog() {
+  $('hint').classList.add('off');
+  dlg.hidden = false;
+  const cur = storageGet();
+  urlInput.value = (await readClipboard()) || (cur && cur !== DEMO_URL ? cur : '');
+  validate();
+  urlInput.focus();
+}
+function closeDialog() { dlg.hidden = true; urlInput.blur(); }
+
+urlInput.addEventListener('input', validate);
+$('dlgForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const u = normalizeInfoUrl(urlInput.value);
+  if (u) { closeDialog(); openSource(u); }
+});
+$('cancelBtn').addEventListener('click', closeDialog);
+$('demoBtn').addEventListener('click', () => { closeDialog(); openSource(DEMO_URL); });
+$('pasteBtn').addEventListener('click', async () => {
+  const t = await readClipboard();
+  if (t) { urlInput.value = t; validate(); }
+  else msg.textContent = 'Presse-papiers inaccessible : touche le champ, puis Coller.';
+});
+dlg.addEventListener('pointerdown', (e) => { if (e.target === dlg) closeDialog(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !dlg.hidden) closeDialog(); });
+
+/* ─── Démarrage : ?url=… (hors artifact), dernier lien ouvert, sinon la démo locale ─── */
+(function start() {
+  resize();
+  let initial = null;
+  try { const q = new URLSearchParams(location.search).get('url'); if (q) initial = normalizeInfoUrl(q); } catch (e) {}
+  initial = initial || storageGet() || DEMO_URL;
+  openSource(initial);
+  hintTimer = setTimeout(() => $('hint').classList.add('off'), 6000);
+})();
+</script>
+</body>
+</html>

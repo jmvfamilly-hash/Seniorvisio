@@ -197,6 +197,7 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
 - `papyrus/` — banc d'essai de l'écoute continue.
 - `hello-test/` — application minimale de test.
 - `iiif-viewer/` — visualiseur d'images IIIF Deep Zoom natif (voir `iiif-viewer/README.md`).
+- `iiif-viewer-web/` — le même visualiseur en une page web, pour iPad (voir `iiif-viewer-web/README.md`).
 
 Chacun a son workflow `build-*-apk.yml` et ne partage rien avec l'application de Jean.
 
