@@ -23,6 +23,8 @@ on:
     paths-ignore:
       - 'papyrus/**'
       - 'web-caller/**'
+      - 'vangogh-timeline/**'
+      - '.github/workflows/build-vangogh-timeline-apk.yml'
       - 'iiif-viewer/**'
       - 'iiif-viewer-web/**'
       - '.github/workflows/build-iiif-viewer-apk.yml'
