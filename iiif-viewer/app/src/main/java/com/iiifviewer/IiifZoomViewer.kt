@@ -1,4 +1,4 @@
-package com.seniorvisio.iiif
+package com.iiifviewer
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background

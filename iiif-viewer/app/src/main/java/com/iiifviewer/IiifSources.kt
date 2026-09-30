@@ -1,4 +1,4 @@
-package com.seniorvisio.iiif
+package com.iiifviewer
 
 import androidx.compose.ui.graphics.ImageBitmap
 

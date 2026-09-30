@@ -1,4 +1,4 @@
-package com.seniorvisio.iiif
+package com.iiifviewer
 
 /*
  * Couche 1 — Modèle du domaine.

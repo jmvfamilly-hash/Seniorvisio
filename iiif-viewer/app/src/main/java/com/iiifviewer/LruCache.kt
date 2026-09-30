@@ -1,4 +1,4 @@
-package com.seniorvisio.iiif
+package com.iiifviewer
 
 /**
  * Cache LRU minimal en Kotlin commun (`android.util.LruCache` n'existe pas en KMP).

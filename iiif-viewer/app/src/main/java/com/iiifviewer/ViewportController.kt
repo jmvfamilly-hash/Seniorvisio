@@ -1,4 +1,4 @@
-package com.seniorvisio.iiif
+package com.iiifviewer
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -46,7 +46,7 @@ class ViewportController(
     /**
      * À appeler à chaque mesure. Au premier appel, place la caméra sur [initialFocus] (pixels image)
      * avec un zoom de [initialZoom] × le zoom « image entière visible » : l'utilisateur démarre sur
-     * un détail et découvre l'image en dézoomant.
+     * un détail et découvre l'image en dézoomant. [Offset.Unspecified] = centre de l'image.
      */
     fun onScreenSized(width: Int, height: Int, initialFocus: Offset, initialZoom: Float) {
         if (width <= 0 || height <= 0) return
@@ -59,9 +59,10 @@ class ViewportController(
         if (!initialised) {
             initialised = true
             val scale = (fit * initialZoom).coerceIn(minScale, maxScale)
+            val focus = if (initialFocus == Offset.Unspecified) Offset(imageWidth / 2f, imageHeight / 2f) else initialFocus
             // On veut  screen(focus) = centre écran  ⇒  t = centre - focus * scale
             _viewport.value = clamp(
-                ViewportState(scale, width / 2f - initialFocus.x * scale, height / 2f - initialFocus.y * scale),
+                ViewportState(scale, width / 2f - focus.x * scale, height / 2f - focus.y * scale),
                 width, height,
             )
         } else {

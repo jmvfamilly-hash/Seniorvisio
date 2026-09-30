@@ -192,6 +192,14 @@ manifest.json → permet "Ajouter à l'écran d'accueil"
   pendant que le micro écoute, un indicateur discret ("Aucun son détecté") prévient le proche que rien
   n'est transmis (micro coupé, téléphone trop loin, etc.)
 
+## Autres projets du dépôt (Gradle autonomes)
+
+- `papyrus/` — banc d'essai de l'écoute continue.
+- `hello-test/` — application minimale de test.
+- `iiif-viewer/` — visualiseur d'images IIIF Deep Zoom natif (voir `iiif-viewer/README.md`).
+
+Chacun a son workflow `build-*-apk.yml` et ne partage rien avec l'application de Jean.
+
 ## Configuration Firebase (obligatoire pour que les appels fonctionnent)
 Le signaling (échange de l'offre/réponse SDP et des candidats ICE entre la
 tablette et le PWA appelant) passe par **Firestore**, gratuit sur le plan

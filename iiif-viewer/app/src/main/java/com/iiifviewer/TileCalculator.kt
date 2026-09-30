@@ -1,4 +1,4 @@
-package com.seniorvisio.iiif
+package com.iiifviewer
 
 import kotlin.math.ceil
 import kotlin.math.floor
