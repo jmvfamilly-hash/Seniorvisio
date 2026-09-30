@@ -131,11 +131,12 @@ function buildTiles(info, f, colMin, colMax, rowMin, rowMax) {
   return out;
 }
 
-function tilesAtLevel(vp, info, sw, sh, f) {
-  if (sw <= 0 || sh <= 0 || vp.scale <= 0) return [];
-  // Projection écran → image :  p = (s − t) / scale, sur les coins de l'écran (0,0) et (sw,sh).
-  const left = Math.max(-vp.tx / vp.scale, 0), top = Math.max(-vp.ty / vp.scale, 0);
-  const right = Math.min((sw - vp.tx) / vp.scale, info.width), bottom = Math.min((sh - vp.ty) / vp.scale, info.height);
+/** Tuiles du niveau f qui touchent le rectangle écran [l,t]–[r,b] (pixels CSS, peut dépasser l'écran). */
+function tilesInRect(vp, info, l, t, r, b, f) {
+  if (vp.scale <= 0) return [];
+  // Projection écran → image :  p = (s − t) / scale, sur les coins du rectangle.
+  const left = Math.max((l - vp.tx) / vp.scale, 0), top = Math.max((t - vp.ty) / vp.scale, 0);
+  const right = Math.min((r - vp.tx) / vp.scale, info.width), bottom = Math.min((b - vp.ty) / vp.scale, info.height);
   if (right <= left || bottom <= top) return [];
   // À l'échelle f une tuile couvre span px image ; colonnes touchées : floor(left/span) … ceil(right/span) − 1
   const span = info.tileSize * f;
@@ -144,6 +145,10 @@ function tilesAtLevel(vp, info, sw, sh, f) {
   return buildTiles(info, f,
     cl(Math.floor(left / span), cols - 1), cl(Math.ceil(right / span) - 1, cols - 1),
     cl(Math.floor(top / span), rows - 1), cl(Math.ceil(bottom / span) - 1, rows - 1));
+}
+
+function tilesAtLevel(vp, info, sw, sh, f) {
+  return (sw <= 0 || sh <= 0) ? [] : tilesInRect(vp, info, 0, 0, sw, sh, f);
 }
 
 function allTiles(info, f) {
@@ -162,61 +167,160 @@ function normalizeInfoUrl(raw) {
   return text.replace(/\/+$/, '') + '/info.json';
 }
 
-/* ═══ Couche 3 — cache et pipeline (port de LruCache.kt / TileManager.kt) ═══ */
-class LruCache {
-  constructor(max) { this.max = max; this.map = new Map(); }
-  get(k) { const v = this.map.get(k); if (v === undefined) return undefined; this.map.delete(k); this.map.set(k, v); return v; }
-  peek(k) { return this.map.get(k); }
-  put(k, v) {
-    this.map.delete(k); this.map.set(k, v);
-    while (this.map.size > this.max) this.map.delete(this.map.keys().next().value);
+/* ═══ Couche 3 — navigation prédictive, cache et pipeline ═══════════════════
+
+   Priorités des tuiles demandées (plus petit = plus urgent) :
+     0  niveau idéal, écran visible              — sans elles l'image est floue
+     1  niveau parent (N-1), écran visible       — flou immédiat en attendant
+     2  niveau idéal, marge autour de l'écran    — PAN : la zone qui va apparaître, élargie dans le sens du mouvement
+     3  niveau plus fin, autour du point de zoom  — ZOOM : l'image nette avant d'y arriver
+     4  niveaux plus grossiers, zone élargie      — DÉZOOM : le champ s'agrandit, le flou est déjà là            */
+const PREFETCH = { margin: 0.35, lookaheadS: 0.6, maxExt: 1.0, zoomRate: 0.3, idleSpeed: 0.05 };
+
+/** Plan de chargement : pur, sans réseau ni DOM (testé sous node).
+    m = { vx, vy (px écran/s), vz (d ln(zoom)/s), ax, ay (point de zoom, écran) }. */
+function planPrefetch(vp, info, sw, sh, dpr, m) {
+  const F = info.scaleFactors, ideal = idealScaleFactor(vp.scale * dpr, info), i = F.indexOf(ideal);
+  const finer = i > 0 ? F[i - 1] : null, parent = F[i + 1] || null, grand = F[i + 2] || null;
+  const speed = Math.hypot(m.vx, m.vy) / Math.max(sw, sh);            // écrans par seconde
+  const zin = m.vz > PREFETCH.zoomRate, zout = m.vz < -PREFETCH.zoomRate;
+  const idle = speed < PREFETCH.idleSpeed && !zin && !zout;
+  const cxs = sw / 2, cys = sh / 2;
+  const cxI = (cxs - vp.tx) / vp.scale, cyI = (cys - vp.ty) / vp.scale;  // centre de la vue, en pixels image
+  const plan = new Map();
+  const add = (tiles, prio) => {
+    for (const t of tiles) {
+      const d = (t.x + t.w / 2 - cxI) ** 2 + (t.y + t.h / 2 - cyI) ** 2;
+      const old = plan.get(t.id);
+      if (!old || prio < old.prio) plan.set(t.id, { tile: t, prio, dist: d });
+    }
+  };
+
+  add(tilesInRect(vp, info, 0, 0, sw, sh, ideal), 0);
+  if (parent) add(tilesInRect(vp, info, 0, 0, sw, sh, parent), 1);
+
+  // PAN : marge fixe + prolongement dans le sens du déplacement (le contenu va vers −v : on regarde vers −v).
+  const ext = (v, size) => Math.max(-PREFETCH.maxExt * size, Math.min(PREFETCH.maxExt * size, -v * PREFETCH.lookaheadS));
+  let l = -PREFETCH.margin * sw, r = sw * (1 + PREFETCH.margin), t = -PREFETCH.margin * sh, b = sh * (1 + PREFETCH.margin);
+  const dx = ext(m.vx, sw), dy = ext(m.vy, sh);
+  if (dx > 0) r += dx; else l += dx;
+  if (dy > 0) b += dy; else t += dy;
+  add(tilesInRect(vp, info, l, t, r, b, ideal), 2);
+
+  // ZOOM AVANT (ou repos) : le niveau plus fin autour du point de zoom.
+  if (finer && (zin || idle)) {
+    const ax = Number.isFinite(m.ax) ? m.ax : cxs, ay = Number.isFinite(m.ay) ? m.ay : cys;
+    const h = (zin ? 0.5 : 0.3) * Math.min(sw, sh);
+    add(tilesInRect(vp, info, ax - h, ay - h, ax + h, ay + h, finer), 3);
   }
+  // ZOOM ARRIÈRE (ou repos) : niveaux grossiers sur un champ ×1,6 plus large.
+  if (parent && (zout || idle)) {
+    const ex = 0.3 * sw, ey = 0.3 * sh;
+    add(tilesInRect(vp, info, -ex, -ey, sw + ex, sh + ey, parent), 4);
+    if (grand) add(tilesInRect(vp, info, -ex, -ey, sw + ex, sh + ey, grand), 4);
+  }
+  return [...plan.values()];
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const idleRun = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 400 }) : setTimeout(fn, 30));
+
+/** Libère vraiment la mémoire d'une tuile : un canvas se vide en le ramenant à 0×0, une image en lui ôtant sa source. */
+function disposeImage(img) {
+  try {
+    if (img instanceof HTMLCanvasElement) { img.width = 0; img.height = 0; }
+    else if (img && img.close) img.close();
+    else if (img) img.src = '';
+  } catch (e) { /* rien à libérer */ }
+}
+const bytesOf = (img) => ((img.naturalWidth || img.width || 256) * (img.naturalHeight || img.height || 256)) * 4;
 
 class TileManager {
-  constructor(info, source, onUpdate) {
+  constructor(info, source, onUpdate, opts = {}) {
     this.info = info; this.source = source; this.onUpdate = onUpdate;
-    this.cache = new LruCache(256);          // iPad Retina : ~100 tuiles visibles + parents, ~65 Mo au plus
+    this.budget = opts.budgetBytes || 96 * 1024 * 1024;    // plafond mémoire des tuiles hors niveau de secours
+    this.prefetch = opts.prefetch !== false;
+    this.store = new Map();                  // id -> { img, bytes, tile, used } ; l'ordre d'insertion = ancienneté
+    this.bytes = 0;
     this.pinned = new Map();                 // niveau le plus grossier : jamais évincé ni annulé
     this.baseFactor = info.scaleFactors[info.scaleFactors.length - 1];
     this.inFlight = new Map();               // id -> job
-    this.queue = []; this.running = 0; this.maxParallel = 6;
-    this.failed = new Set();
-    this.closed = false;
-    allTiles(info, this.baseFactor).forEach((t) => this.request(t)); // filet anti-écran-noir
+    this.queue = []; this.running = 0; this.runningPf = 0; this.maxParallel = 6;
+    this.failed = new Set(); this.wanted = new Set();
+    this.ctx = null; this.sweepTimer = 0; this.closed = false;
+    this.stats = { hits: 0, evicted: 0 };
+    allTiles(info, this.baseFactor).forEach((t) => this.request(t, 0, 0)); // filet anti-écran-noir
   }
 
-  isLoaded(id) { return this.pinned.has(id) || this.cache.peek(id) !== undefined; }
-  image(id) { return this.pinned.get(id) || this.cache.get(id); }
+  isLoaded(id) { return this.pinned.has(id) || this.store.has(id); }
+  image(id, now) {
+    const p = this.pinned.get(id); if (p) return p;
+    const e = this.store.get(id); if (!e) return undefined;
+    this.store.delete(id); this.store.set(id, e); e.used = now || performance.now();   // récemment utilisé = en fin de liste
+    return e.img;
+  }
 
-  request(tile) {
-    if (this.closed || this.inFlight.has(tile.id) || this.failed.has(tile.id) || this.isLoaded(tile.id)) return;
-    const job = { tile, cancelled: false, abort: null, attempt: 0 };
+  put(tile, img) {
+    if (tile.f === this.baseFactor) { this.pinned.set(tile.id, img); return; }
+    const old = this.store.get(tile.id); if (old) { this.bytes -= old.bytes; }
+    const bytes = bytesOf(img);
+    this.store.set(tile.id, { img, bytes, tile, used: performance.now() });
+    this.bytes += bytes;
+    if (this.bytes > this.budget) this.enforceBudget();
+  }
+
+  evict(id) {
+    const e = this.store.get(id); if (!e) return;
+    this.store.delete(id); this.bytes -= e.bytes; this.stats.evicted++;
+    disposeImage(e.img);
+  }
+
+  request(tile, prio, dist) {
+    if (this.closed || this.failed.has(tile.id) || this.isLoaded(tile.id)) return;
+    const cur = this.inFlight.get(tile.id);
+    if (cur) {                                   // déjà demandée : on la remonte si elle devient plus urgente
+      if (prio < cur.prio) cur.prio = prio;
+      cur.dist = dist; return;
+    }
+    const job = { tile, prio, dist, cancelled: false, abort: null, attempt: 0, state: 'queued', pf: false };
     this.inFlight.set(tile.id, job);
     this.queue.push(job);
     this.pump();
   }
 
+  /** Le plus urgent d'abord. Le préchargement ne prend que 2 voies tant qu'une tuile visible attend. */
   pump() {
-    while (this.running < this.maxParallel && this.queue.length) {
-      const job = this.queue.shift();
-      if (!job.cancelled) this.run(job);
+    for (;;) {
+      if (this.running >= this.maxParallel) return;
+      const urgent = this.queue.some((j) => j.prio < 2) || this.runningUrgent() > 0;
+      const slots = urgent ? 2 : this.maxParallel;
+      let best = -1;
+      for (let i = 0; i < this.queue.length; i++) {
+        const j = this.queue[i];
+        if (j.prio >= 2 && this.runningPf >= slots) continue;
+        const b = best < 0 ? null : this.queue[best];
+        if (!b || j.prio < b.prio || (j.prio === b.prio && j.dist < b.dist)) best = i;
+      }
+      if (best < 0) return;
+      const job = this.queue.splice(best, 1)[0];
+      job.state = 'started'; job.pf = job.prio >= 2;
+      this.running++; if (job.pf) this.runningPf++;
+      if (job.pf) idleRun(() => this.run(job)); else this.run(job);   // le préchargement attend un moment calme
     }
   }
+  runningUrgent() { return this.running - this.runningPf; }
 
   async run(job) {
     const { tile } = job;
-    this.running++;
     try {
+      if (job.cancelled) return;
       for (;;) {
         const h = this.source.load(this.info, tile);
         job.abort = h.abort;
         try {
           const img = await h.promise;
-          if (job.cancelled) return;
-          if (tile.f === this.baseFactor) this.pinned.set(tile.id, img); else this.cache.put(tile.id, img);
+          if (job.cancelled) { disposeImage(img); return; }
+          this.put(tile, img);
           this.onUpdate();
           return;
         } catch (e) {
@@ -227,7 +331,7 @@ class TileManager {
         }
       }
     } finally {
-      this.running--;
+      this.running--; if (job.pf) this.runningPf--;
       if (this.inFlight.get(tile.id) === job) this.inFlight.delete(tile.id);
       this.pump();
     }
@@ -236,54 +340,105 @@ class TileManager {
   cancel(job) {
     job.cancelled = true;
     if (job.abort) job.abort();               // coupe la requête HTTP
-    this.inFlight.delete(job.tile.id);
+    if (this.inFlight.get(job.tile.id) === job) this.inFlight.delete(job.tile.id);
     const i = this.queue.indexOf(job);
-    if (i >= 0) this.queue.splice(i, 1);
+    if (i >= 0) this.queue.splice(i, 1);      // pas encore démarrée : rien à décompter
   }
 
-  /** À appeler à chaque changement de viewport : annule les tuiles sorties de l'écran, demande les nouvelles. */
-  update(vp, sw, sh, dpr) {
+  /** À appeler à chaque changement de viewport (et au repos, avec un mouvement nul). */
+  update(vp, sw, sh, dpr, motion) {
     if (this.closed || sw <= 0 || sh <= 0) return;
-    const info = this.info;
-    const ideal = idealScaleFactor(vp.scale * dpr, info);
-    const parent = info.scaleFactors.find((f) => f > ideal);      // niveau N-1, plus grossier
-    const idealTiles = tilesAtLevel(vp, info, sw, sh, ideal);
-    const parentTiles = parent ? tilesAtLevel(vp, info, sw, sh, parent) : [];
-    const wanted = new Set();
-    idealTiles.forEach((t) => wanted.add(t.id)); parentTiles.forEach((t) => wanted.add(t.id));
-    this.cache.max = Math.max(256, wanted.size * 2);                // jamais moins que l'écran entier, sinon les tuiles visibles s'évincent entre elles
+    this.ctx = { vp, sw, sh, dpr };
+    const m = motion || { vx: 0, vy: 0, vz: 0, ax: NaN, ay: NaN };
+    let plan = planPrefetch(vp, this.info, sw, sh, dpr, m);
+    if (!this.prefetch) plan = plan.filter((p) => p.prio < 2);
+    this.wanted = new Set(plan.map((p) => p.tile.id));
 
-    for (const job of [...this.inFlight.values()]) {
-      if (job.tile.f !== this.baseFactor && !wanted.has(job.tile.id)) this.cancel(job);
+    for (const job of [...this.inFlight.values()]) {          // annulation agressive : tout ce qui n'est plus utile
+      if (job.tile.f !== this.baseFactor && !this.wanted.has(job.tile.id)) this.cancel(job);
     }
-    for (const id of [...this.failed]) if (!wanted.has(id)) this.failed.delete(id);
+    for (const id of [...this.failed]) if (!this.wanted.has(id)) this.failed.delete(id);
 
-    parentTiles.forEach((t) => this.request(t));                   // flou rapide d'abord
-    const cx = (sw / 2 - vp.tx) / vp.scale, cy = (sh / 2 - vp.ty) / vp.scale;
-    idealTiles
-      .map((t) => [(t.x + t.w / 2 - cx) ** 2 + (t.y + t.h / 2 - cy) ** 2, t])
-      .sort((a, b) => a[0] - b[0])                                 // du centre vers les bords
-      .forEach(([, t]) => this.request(t));
+    plan.sort((a, b) => a.prio - b.prio || a.dist - b.dist);
+    // Le préchargement ne dépasse jamais 90 % du budget mémoire : charger pour évincer aussitôt ne ferait que gaspiller le réseau.
+    const tileBytes = this.info.tileSize * this.info.tileSize * 4;
+    let room = Math.floor((this.budget * 0.9 - this.bytes) / tileBytes) - [...this.inFlight.values()].filter((j) => j.prio >= 2).length;
+    for (const p of plan) {
+      if (p.prio >= 2 && !this.isLoaded(p.tile.id) && !this.inFlight.has(p.tile.id)) { if (room <= 0) continue; room--; }
+      this.request(p.tile, p.prio, p.dist);
+    }
+    this.scheduleSweep();
   }
 
   /** Liste de peinture, du plus grossier au plus fin : le flou déjà en cache reste sous la tuile nette. */
-  paintList(vp, sw, sh, dpr) {
+  paintList(vp, sw, sh, dpr, now) {
     const info = this.info, ideal = idealScaleFactor(vp.scale * dpr, info), out = [];
     for (let i = info.scaleFactors.length - 1; i >= 0; i--) {
       const f = info.scaleFactors[i];
       if (f < ideal) continue;
       for (const t of tilesAtLevel(vp, info, sw, sh, f)) {
-        const img = this.image(t.id);
+        const img = this.image(t.id, now);
         if (img) out.push({ t, img });
       }
     }
     return { list: out, ideal };
   }
 
+  /* ─── Libération de la mémoire ───────────────────────────────────────────── */
+  scheduleSweep() { clearTimeout(this.sweepTimer); this.sweepTimer = setTimeout(() => this.sweep(), 400); }
+
+  /** Distance d'une tuile au centre de l'écran, en nombres d'écrans. */
+  tileDistance(t, c) {
+    const s = c.vp.scale, x = (t.x + t.w / 2) * s + c.vp.tx, y = (t.y + t.h / 2) * s + c.vp.ty;
+    return Math.hypot(x - c.sw / 2, y - c.sh / 2) / Math.max(c.sw, c.sh);
+  }
+
+  /** Après un moment calme : relâche les tuiles éloignées du point de vue, ou devenues inutiles. */
+  sweep(aggressive) {
+    const c = this.ctx; if (!c || this.closed) return;
+    const F = this.info.scaleFactors, ideal = idealScaleFactor(c.vp.scale * c.dpr, this.info);
+    const now = performance.now();
+    // Zone de rétention : l'écran élargi de 0,8 écran de chaque côté, juste au-delà de la marge de préchargement :
+    // on garde de quoi revenir en arrière d'un geste, pas plus.
+    const l = -0.8 * c.sw, t = -0.8 * c.sh, r = 1.8 * c.sw, b = 1.8 * c.sh;
+    const s = c.vp.scale, L = (l - c.vp.tx) / s, T = (t - c.vp.ty) / s, R = (r - c.vp.tx) / s, B = (b - c.vp.ty) / s;
+    for (const [id, e] of [...this.store]) {
+      if (this.wanted.has(id)) continue;
+      const tl = e.tile, inZone = tl.x < R && tl.x + tl.w > L && tl.y < B && tl.y + tl.h > T;
+      const tooFine = tl.f < ideal;                          // plus net que nécessaire, hors zone de zoom préparée
+      const recent = now - e.used < 2000;
+      if (aggressive || !inZone || (tooFine && !recent)) this.evict(id);
+    }
+    if (this.bytes > this.budget) this.enforceBudget();
+  }
+
+  /** Sous pression : évince d'abord ce qui est loin et mal adapté au zoom, jamais ce qui est voulu tout de suite. */
+  enforceBudget() {
+    const c = this.ctx;
+    while (this.bytes > this.budget && this.store.size) {
+      let victim = null, worst = -1;
+      if (c) {
+        const ideal = idealScaleFactor(c.vp.scale * c.dpr, this.info);
+        for (const [id, e] of this.store) {
+          if (this.wanted.has(id)) continue;
+          const score = this.tileDistance(e.tile, c) + 2 * Math.abs(Math.log2(e.tile.f / ideal));
+          if (score > worst) { worst = score; victim = id; }
+        }
+      }
+      if (victim === null) victim = this.store.keys().next().value;   // tout est voulu : la plus ancienne
+      this.evict(victim);
+    }
+  }
+
+  trim() { this.sweep(true); }       // app en arrière-plan : on ne garde que ce qui est voulu
+
+  summary() { return { tiles: this.store.size + this.pinned.size, mb: this.bytes / 1048576, inflight: this.inFlight.size }; }
+
   close() {
-    this.closed = true;
+    this.closed = true; clearTimeout(this.sweepTimer);
     for (const job of [...this.inFlight.values()]) this.cancel(job);
-    this.cache = new LruCache(1); this.pinned.clear();
+    for (const id of [...this.store.keys()]) this.evict(id);
+    this.pinned.clear();
   }
 }
 
@@ -304,9 +459,11 @@ const HttpSource = {
   load(info, tile) {
     const img = new Image();
     img.decoding = 'async';
-    const promise = new Promise((res, rej) => { img.onload = () => res(img); img.onerror = () => rej(new Error('tuile')); });
+    let fail;
+    const promise = new Promise((res, rej) => { fail = rej; img.onload = () => res(img); img.onerror = () => rej(new Error('tuile')); });
     img.src = tileUrl(info, tile);
-    return { promise, abort() { img.onload = img.onerror = null; img.src = ''; } };
+    // abort() doit RÉSOUDRE la promesse (par un rejet) : sinon run() attend pour toujours et sa voie n'est jamais rendue.
+    return { promise, abort() { img.onload = img.onerror = null; img.src = ''; fail(new Error('annulée')); } };
   },
 };
 
@@ -325,7 +482,9 @@ const DemoSource = {
     let cancelled = false, timer = 0;
     const dx = 3.2 / info.width, w = Math.ceil(tile.w / tile.f), h = Math.ceil(tile.h / tile.f);
     const maxIter = Math.round(90 + 55 * Math.log2(info.width / (info.tileSize * tile.f)) );
+    let fail;
     const promise = new Promise((res, rej) => {
+      fail = rej;
       const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
       const ctx = cv.getContext('2d'), data = ctx.createImageData(w, h), px = data.data;
       let j = 0;
@@ -355,7 +514,7 @@ const DemoSource = {
       };
       timer = setTimeout(slice, 0);
     });
-    return { promise, abort() { cancelled = true; clearTimeout(timer); } };
+    return { promise, abort() { cancelled = true; clearTimeout(timer); fail(new Error('annulée')); } };
   },
 };
 
@@ -363,7 +522,7 @@ const DemoSource = {
 class Viewport {
   constructor(info) {
     this.info = info; this.vp = { scale: 1, tx: 0, ty: 0 };
-    this.w = 0; this.h = 0; this.min = 0; this.max = 0; this.inited = false;
+    this.w = 0; this.h = 0; this.min = 0; this.max = 0; this.inited = false; this.anchor = null;
     this.anim = null; this.onChange = () => {};
   }
 
@@ -394,6 +553,7 @@ class Viewport {
   transformBy(cx, cy, px, py, zoom) {
     if (this.w <= 0) return;
     const s2 = Math.min(Math.max(this.vp.scale * zoom, this.min), this.max);
+    if (zoom !== 1) this.anchor = { x: cx, y: cy };             // point de zoom : c'est là que le niveau plus fin sera utile
     this.vp = this.clamp(this.anchored(this.vp, cx, cy, px, py, s2));
     this.onChange();
   }
@@ -424,6 +584,7 @@ class Viewport {
   /** Double-tap : image entière ⇄ ×4, point tapé fixe, interpolation géométrique du zoom. */
   doubleTap(x, y) {
     this.stop();
+    this.anchor = { x, y };
     const start = this.vp;
     const target = start.scale > this.min * 1.5 ? this.min : Math.min(this.min * 4, this.max);
     const t0 = performance.now(), D = 300;
@@ -453,15 +614,44 @@ function clearError() { $('err').hidden = true; }
 
 function requestDraw() { if (!dirty) { dirty = true; } }
 
+/* Mouvement lissé du point de vue : pan (px/s), zoom (d ln(échelle)/s) et point de zoom.
+   Il sert au TileManager à deviner où l'utilisateur va regarder dans les 600 ms qui viennent. */
+const motion = { vx: 0, vy: 0, vz: 0, ax: NaN, ay: NaN };
+let prevVp = null, idleTimer = 0;
+
+function trackMotion(vp, now) {
+  if (prevVp) {
+    const dt = (now - prevVp.t) / 1000;
+    if (dt > 0.001) {
+      const k = dt > 0.25 ? 1 : 0.35;                     // lissage exponentiel ; un long silence repart de zéro
+      motion.vx += k * ((vp.tx - prevVp.tx) / dt - motion.vx);
+      motion.vy += k * ((vp.ty - prevVp.ty) / dt - motion.vy);
+      motion.vz += k * (Math.log(vp.scale / prevVp.scale) / dt - motion.vz);
+    }
+  }
+  prevVp = { tx: vp.tx, ty: vp.ty, scale: vp.scale, t: now };
+  const a = view && view.anchor;
+  motion.ax = a ? a.x : NaN; motion.ay = a ? a.y : NaN;
+}
+
 function onViewportChanged() {
   dirty = true;
-  if (manager && view) manager.update(view.vp, cssW, cssH, dpr);
+  if (!manager || !view) return;
+  trackMotion(view.vp, performance.now());
+  manager.update(view.vp, cssW, cssH, dpr, motion);
+  // Au repos (250 ms sans mouvement) : préchargement « tranquille » autour du point de vue, puis relâche de la mémoire lointaine.
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    motion.vx = motion.vy = motion.vz = 0; prevVp = null;
+    if (manager && view) manager.update(view.vp, cssW, cssH, dpr, motion);
+  }, 250);
 }
 
 async function openSource(url) {
   const mine = ++session;
   if (manager) { manager.close(); manager = null; }
   if (view) { view.stop(); view = null; }
+  prevVp = null; clearTimeout(idleTimer);
   clearError(); hudText = 'chargement…'; dirty = true;
   try {
     const source = url === DEMO_URL ? DemoSource : HttpSource;
@@ -492,13 +682,13 @@ new ResizeObserver(resize).observe(cv);
 window.addEventListener('orientationchange', () => setTimeout(resize, 200));
 
 /* Boucle de rendu : ne dessine que quand quelque chose a changé. */
-function frame() {
+function frame(now) {
   if (dirty) {
     dirty = false;
     ctx.fillStyle = '#0b0d10'; ctx.fillRect(0, 0, cv.width, cv.height);
     if (view && manager) {
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'low';
-      const vp = view.vp, { list, ideal } = manager.paintList(vp, cssW, cssH, dpr);
+      const vp = view.vp, { list, ideal } = manager.paintList(vp, cssW, cssH, dpr, now);
       for (let i = 0; i < list.length; i++) {
         const t = list[i].t;
         // Les deux bords sont arrondis séparément : deux tuiles voisines partagent exactement le même bord (pas de liseré).
@@ -508,13 +698,16 @@ function frame() {
         ctx.drawImage(list[i].img, l, tp, r - l, b - tp);
       }
       const text = '×' + (vp.scale * dpr).toFixed(vp.scale * dpr < 0.1 ? 3 : 2) + ' · niveau 1/' + ideal + ' · ' +
-        view.info.width + '×' + view.info.height + ' px';
+        view.info.width + '×' + view.info.height + ' px · ' + manager.summary().tiles + ' tuiles · ' + manager.summary().mb.toFixed(0) + ' Mo';
       if (text !== hudText) { hudText = text; $('hud').textContent = text; }
     } else if (hudText !== $('hud').textContent) { $('hud').textContent = hudText; }
   }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+/* Onglet ou application passée en arrière-plan : iOS reprend la mémoire des onglets gourmands, on la rend d'abord. */
+document.addEventListener('visibilitychange', () => { if (document.hidden && manager) manager.trim(); });
 
 /* ─── Gestes (Pointer Events) : pan, pinch, inertie, double-tap, appui long, molette ─── */
 const SLOP = 8, LONG_MS = 500, DOUBLE_MS = 300;
