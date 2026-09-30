@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -19,7 +20,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -35,6 +38,8 @@ private val Backdrop = Color(0xFF101010)
  * @param manifestUrl URL de l'`info.json` IIIF Image API 3.0.
  * @param initialFocus point d'intérêt de départ, en PIXELS IMAGE (ex. le centre d'un œil).
  * @param initialZoom zoom de départ, en multiple du zoom « image entière visible » (4f = ×4).
+ * @param onLongPress appui long n'importe où (y compris pendant le chargement ou après une erreur,
+ *   pour toujours pouvoir changer d'image) ; un retour haptique est donné avant l'appel.
  */
 @Composable
 fun IiifZoomViewer(
@@ -44,7 +49,15 @@ fun IiifZoomViewer(
     modifier: Modifier = Modifier,
     sources: IiifSources = remember { defaultIiifSources() },
     onError: (Throwable) -> Unit = {},
+    onLongPress: () -> Unit = {},
 ) {
+    val haptic = LocalHapticFeedback.current
+    val currentOnLongPress by rememberUpdatedState(onLongPress)
+    val longPress: () -> Unit = {
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        currentOnLongPress()
+    }
+
     var info by remember(manifestUrl) { mutableStateOf<IiifImageInfo?>(null) }
     LaunchedEffect(manifestUrl) {
         try {
@@ -58,9 +71,15 @@ fun IiifZoomViewer(
 
     val loaded = info
     if (loaded == null) {
-        Box(modifier.fillMaxSize().background(Backdrop)) // en attente de l'info.json
+        // En attente de l'info.json (ou échec) : fond seul, mais l'appui long reste actif.
+        Box(
+            modifier
+                .fillMaxSize()
+                .background(Backdrop)
+                .pointerInput(Unit) { detectTapGestures(onLongPress = { longPress() }) },
+        )
     } else {
-        ZoomSurface(loaded, initialFocus, initialZoom, sources, modifier)
+        ZoomSurface(loaded, initialFocus, initialZoom, sources, modifier, longPress)
     }
 }
 
@@ -71,6 +90,7 @@ private fun ZoomSurface(
     initialZoom: Float,
     sources: IiifSources,
     modifier: Modifier,
+    onLongPress: () -> Unit,
 ) {
     val scope = rememberCoroutineScope() // Main : convient au TileManager (état mono-thread)
     val controller = remember(info) { ViewportController(info.width, info.height, scope) }
@@ -90,7 +110,10 @@ private fun ZoomSurface(
             .onSizeChanged { controller.onScreenSized(it.width, it.height, initialFocus, initialZoom) }
             // Clé = controller : si l'image change, les détecteurs sont relancés sur le bon contrôleur.
             .pointerInput(controller) {
-                detectTapGestures(onDoubleTap = { controller.doubleTapZoom(it) })
+                detectTapGestures(
+                    onDoubleTap = { controller.doubleTapZoom(it) },
+                    onLongPress = { onLongPress() }, // annulé si le doigt bouge au-delà du seuil : un pan n'ouvre rien
+                )
             }
             .pointerInput(controller) {
                 detectViewportGestures(

@@ -27,6 +27,11 @@ Tout le reste est du Kotlin commun, prêt pour Compose Multiplatform.
 
 ## Essayer une autre image
 
+**Appui long** n'importe où sur l'écran : une fenêtre propose de coller le lien de l'`info.json`
+(ou l'adresse de base de l'image). Si le presse-papiers contient une URL, elle est déjà remplie.
+
+Depuis un ordinateur :
+
 ```
 adb shell am start -n com.iiifviewer/.MainActivity -d "https://serveur/iiif/image/info.json"
 ```
