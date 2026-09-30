@@ -1,12 +1,24 @@
 package com.seniorvisio.iiif
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateDecay
+import androidx.compose.animation.core.exponentialDecay
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.Velocity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 
 data class ScreenSize(val width: Int, val height: Int)
 
@@ -14,7 +26,12 @@ data class ScreenSize(val width: Int, val height: Int)
  * Source de vérité du [ViewportState] : applique les gestes, borne le zoom et « colle » l'image aux bords.
  * Expose l'état en [StateFlow], consommé par le [TileManager] et par le Canvas.
  */
-class ViewportController(private val imageWidth: Int, private val imageHeight: Int) {
+class ViewportController(
+    private val imageWidth: Int,
+    private val imageHeight: Int,
+    /** Scope Main (horloge de frames requise) : porte les animations d'inertie et de double-tap. */
+    private val scope: CoroutineScope,
+) {
 
     private val _viewport = MutableStateFlow(ViewportState())
     val viewport: StateFlow<ViewportState> = _viewport.asStateFlow()
@@ -67,16 +84,65 @@ class ViewportController(private val imageWidth: Int, private val imageHeight: I
         val (w, h) = _screenSize.value
         if (w <= 0) return
         _viewport.update { vp ->
-            val newScale = (vp.scale * zoom).coerceIn(minScale, maxScale)
-            val ratio = newScale / vp.scale
-            clamp(
-                ViewportState(
-                    scale = newScale,
-                    translationX = centroid.x + pan.x - (centroid.x - vp.translationX) * ratio,
-                    translationY = centroid.y + pan.y - (centroid.y - vp.translationY) * ratio,
-                ),
-                w, h,
-            )
+            clamp(anchoredTransform(vp, centroid, pan, (vp.scale * zoom).coerceIn(minScale, maxScale)), w, h)
+        }
+    }
+
+    /** Formule ci-dessus, non bornée en translation. */
+    private fun anchoredTransform(vp: ViewportState, centroid: Offset, pan: Offset, newScale: Float): ViewportState {
+        val ratio = newScale / vp.scale
+        return ViewportState(
+            scale = newScale,
+            translationX = centroid.x + pan.x - (centroid.x - vp.translationX) * ratio,
+            translationY = centroid.y + pan.y - (centroid.y - vp.translationY) * ratio,
+        )
+    }
+
+    // ── Animations (une seule à la fois) ────────────────────────────────────────
+    private var animation: Job? = null
+
+    /** À appeler dès qu'un doigt touche l'écran : l'inertie en cours s'arrête net sous le doigt. */
+    fun stopAnimation() {
+        animation?.cancel()
+        animation = null
+    }
+
+    /**
+     * Inertie : à la levée du doigt, la caméra continue avec la vitesse [velocity] (px/s écran)
+     * et ralentit exponentiellement. Chaque pas repasse par [transformBy], donc les bords collants
+     * s'appliquent : l'image s'arrête contre le bord au lieu de le dépasser.
+     */
+    fun fling(velocity: Velocity) {
+        stopAnimation()
+        animation = scope.launch {
+            var last = Offset.Zero
+            Animatable(Offset.Zero, Offset.VectorConverter).animateDecay(
+                initialVelocity = Offset(velocity.x, velocity.y),
+                animationSpec = exponentialDecay(absVelocityThreshold = 20f),
+            ) {
+                transformBy(Offset.Zero, value - last, 1f) // deltas : le pas est un pan pur
+                last = value
+            }
+        }
+    }
+
+    /**
+     * Double-tap : bascule entre « image entière » et ×4, en gardant le point tapé fixe à l'écran.
+     * Le zoom est interpolé en géométrique (s = s0 · (s1/s0)^f) : la vitesse de zoom perçue reste
+     * constante, contrairement à une interpolation linéaire qui semble démarrer lentement puis s'emballer.
+     */
+    fun doubleTapZoom(focus: Offset) {
+        stopAnimation()
+        val start = _viewport.value
+        val (w, h) = _screenSize.value
+        if (w <= 0) return
+        val target = if (start.scale > minScale * 1.5f) minScale else (minScale * 4f).coerceAtMost(maxScale)
+        animation = scope.launch {
+            animate(0f, 1f, animationSpec = tween(300, easing = FastOutSlowInEasing)) { f, _ ->
+                val scale = start.scale * (target / start.scale).pow(f)
+                // Toujours ancré sur le viewport de DÉPART : pas de dérive cumulée image après image.
+                _viewport.value = clamp(anchoredTransform(start, focus, Offset.Zero, scale), w, h)
+            }
         }
     }
 

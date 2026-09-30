@@ -2,7 +2,7 @@ package com.seniorvisio.iiif
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -73,7 +73,7 @@ private fun ZoomSurface(
     modifier: Modifier,
 ) {
     val scope = rememberCoroutineScope() // Main : convient au TileManager (état mono-thread)
-    val controller = remember(info) { ViewportController(info.width, info.height) }
+    val controller = remember(info) { ViewportController(info.width, info.height, scope) }
     val manager = remember(info) {
         TileManager(info, sources, scope, controller.viewport, controller.screenSize, Dispatchers.Default)
     }
@@ -88,11 +88,16 @@ private fun ZoomSurface(
         modifier
             .fillMaxSize()
             .onSizeChanged { controller.onScreenSized(it.width, it.height, initialFocus, initialZoom) }
-            // Clé = controller : si l'image change, le détecteur est relancé sur le bon contrôleur.
+            // Clé = controller : si l'image change, les détecteurs sont relancés sur le bon contrôleur.
             .pointerInput(controller) {
-                detectTransformGestures { centroid, pan, zoom, _ -> // la rotation est ignorée
-                    controller.transformBy(centroid, pan, zoom)
-                }
+                detectTapGestures(onDoubleTap = { controller.doubleTapZoom(it) })
+            }
+            .pointerInput(controller) {
+                detectViewportGestures(
+                    onStart = controller::stopAnimation, // un doigt posé arrête l'inertie
+                    onGesture = controller::transformBy,  // la rotation est ignorée
+                    onFling = controller::fling,
+                )
             },
     ) {
         drawTiles(viewportState.value, tilesState.value)
