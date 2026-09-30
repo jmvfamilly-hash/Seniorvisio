@@ -14,6 +14,11 @@ import coil.memory.MemoryCache
  *   d'œuvre, elle, ne change pas, et sans cela Coil la retélécharge à chaque ouverture.
  */
 class TimelineApp : Application(), ImageLoaderFactory {
+    override fun onCreate() {
+        super.onCreate()
+        CrashReporter.install(this)
+    }
+
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
             .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.25).build() }

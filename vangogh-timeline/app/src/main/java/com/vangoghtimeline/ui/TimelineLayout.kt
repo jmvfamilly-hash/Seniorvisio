@@ -21,6 +21,9 @@ import com.vangoghtimeline.model.PlacedArtwork
 import com.vangoghtimeline.model.TimelinePlan
 import kotlin.math.roundToInt
 
+/** `roundToInt()` lève une exception sur NaN : on ne veut jamais qu'un calcul de placement fasse tomber l'appli. */
+private fun safeRound(v: Float): Int = if (v.isFinite()) v.roundToInt() else 0
+
 /** Donnée portée par chaque enfant : où le placer dans le contenu. */
 private data class PlacementElement(val placed: PlacedArtwork) : ParentDataModifier {
     override fun Density.modifyParentData(parentData: Any?): Any = placed
@@ -81,14 +84,14 @@ fun TimelineLayout(
         val height = constraints.maxHeight
         val placeables = measurables.map { m ->
             val p = m.parentData as PlacedArtwork
-            m.measure(Constraints.fixed(p.width.roundToInt(), p.height.roundToInt())) to p
+            m.measure(Constraints.fixed(safeRound(p.width).coerceAtLeast(0), safeRound(p.height).coerceAtLeast(0))) to p
         }
         layout(width, height) {
             // Seule lecture du défilement : uniquement en phase de placement.
-            val sx = state.scrollX
-            val sy = state.scrollY
+            val sx = state.scrollX.takeIf { it.isFinite() } ?: 0f
+            val sy = state.scrollY.takeIf { it.isFinite() } ?: 0f
             for ((placeable, p) in placeables) {
-                placeable.place((p.x - sx).roundToInt(), (p.y - sy).roundToInt())
+                placeable.place(safeRound(p.x - sx), safeRound(p.y - sy))
             }
         }
     }

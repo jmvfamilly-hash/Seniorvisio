@@ -14,6 +14,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -74,6 +80,8 @@ fun ArtworkCard(
             .clickable { onClick(artwork) }
             .semantics { contentDescription = description },
     ) {
+        // Le fond est toujours là : pendant le chargement, ou si le serveur IIIF ne répond pas, la carte n'est jamais « vide ».
+        PlaceholderArt(artwork)
         if (request != null) {
             AsyncImage(
                 model = request,
@@ -81,8 +89,6 @@ fun ArtworkCard(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
             )
-        } else {
-            PlaceholderArt(artwork)
         }
         Column(
             Modifier
@@ -107,14 +113,44 @@ fun ArtworkCard(
     }
 }
 
-/** Sans image (manifeste sans vignette, ou démo hors ligne) : un aplat dégradé aux couleurs du lieu. */
+/**
+ * Sans image (manifeste sans vignette, démo hors ligne, chargement en cours) : des coups de pinceau dessinés
+ * aux couleurs du lieu, propres à chaque œuvre (graine = identifiant). Dessin mis en cache : recalculé seulement
+ * si la taille de la carte change, jamais pendant le défilement.
+ */
 @Composable
 private fun PlaceholderArt(artwork: Artwork) {
     val base = placeColor(artwork.place)
     Box(
         Modifier
             .fillMaxSize()
-            .background(Brush.linearGradient(listOf(base, base.copy(alpha = 0.45f)))),
+            .drawWithCache {
+                val rnd = java.util.Random(artwork.id.hashCode().toLong())
+                val light = lerp(base, Color.White, 0.35f)
+                val dark = lerp(base, Color.Black, 0.45f)
+                val strokes = List(26) {
+                    val cx = rnd.nextFloat() * size.width
+                    val cy = rnd.nextFloat() * size.height
+                    val r = (0.08f + rnd.nextFloat() * 0.22f) * size.minDimension
+                    Triple(Offset(cx - r, cy - r), Size(2 * r, 2 * r), rnd.nextInt(3))
+                }
+                val sweeps = List(26) { 40f + rnd.nextFloat() * 200f to rnd.nextFloat() * 360f }
+                onDrawBehind {
+                    drawRect(Brush.linearGradient(listOf(dark, base)))
+                    strokes.forEachIndexed { i, (topLeft, arcSize, tone) ->
+                        drawArc(
+                            color = if (tone == 0) light else if (tone == 1) base else dark,
+                            startAngle = sweeps[i].second,
+                            sweepAngle = sweeps[i].first,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            alpha = 0.55f,
+                            style = Stroke(width = size.minDimension * 0.035f, cap = StrokeCap.Round),
+                        )
+                    }
+                }
+            },
     )
 }
 

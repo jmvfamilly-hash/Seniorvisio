@@ -59,14 +59,17 @@ class TimelineScrollState(private val scope: CoroutineScope) {
         clampNow()
     }
 
+    /** Ignore tout delta non fini : un NaN dans [scrollX] ferait échouer `roundToInt()` au placement (plantage). */
     fun scrollBy(dx: Float, dy: Float) {
+        if (!dx.isFinite() || !dy.isFinite()) return
         scrollX = (scrollX + dx).coerceIn(0f, maxScrollX)
         scrollY = (scrollY + dy).coerceIn(0f, maxScrollY)
     }
 
     /** Sans borne : pour recaler après un changement d'échelle, avant que la nouvelle largeur du contenu soit connue. */
     fun scrollToUnclamped(x: Float, y: Float) {
-        scrollX = x; scrollY = y
+        if (x.isFinite()) scrollX = x
+        if (y.isFinite()) scrollY = y
     }
 
     fun stopFling() {
@@ -77,16 +80,24 @@ class TimelineScrollState(private val scope: CoroutineScope) {
     /** Inertie : le défilement continue à la vitesse [vx],[vy] (px/s) et ralentit exponentiellement, bord à bord. */
     fun fling(vx: Float, vy: Float) {
         stopFling()
+        // `VelocityTracker` peut rendre NaN (échantillons de même horodatage) : pas d'inertie plutôt qu'un plantage.
+        if (!vx.isFinite() || !vy.isFinite()) return
+        val vxc = vx.coerceIn(-MAX_FLING_SPEED, MAX_FLING_SPEED)
+        val vyc = vy.coerceIn(-MAX_FLING_SPEED, MAX_FLING_SPEED)
         flingJob = scope.launch {
             var last = Offset.Zero
             Animatable(Offset.Zero, Offset.VectorConverter).animateDecay(
-                initialVelocity = Offset(vx, vy),
+                initialVelocity = Offset(vxc, vyc),
                 animationSpec = exponentialDecay(absVelocityThreshold = 20f),
             ) {
                 scrollBy(value.x - last.x, value.y - last.y)
                 last = value
             }
         }
+    }
+
+    private companion object {
+        const val MAX_FLING_SPEED = 12_000f // px/s
     }
 
     private fun clampNow() {
