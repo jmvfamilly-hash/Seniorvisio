@@ -51,6 +51,7 @@ private val Backdrop = Color(0xFF101010)
  *   s'affiche sans attente. Doit correspondre à [manifestUrl]. Elle reste à l'appelant (le visualiseur ne la ferme pas).
  * @param transparentUntilReady fond transparent jusqu'aux premières tuiles : ce qui est dessous (la vignette d'une transition)
  *   reste visible, les tuiles se posent par-dessus à mesure qu'elles arrivent.
+ * @param onLoadError chaque échec de chargement de tuile, même rattrapé par un nouvel essai (journal de diagnostic).
  * @param onUnzoomPastFit appelé quand l'utilisateur, déjà à l'image entière, pince encore vers le dézoom : « dézoomer encore » =
  *   quitter l'image (l'appelant ferme alors le visualiseur).
  * @param onLongPress appui long n'importe où (y compris pendant le chargement ou après une erreur,
@@ -70,6 +71,7 @@ fun IiifZoomViewer(
     prewarm: IiifPrewarm? = null,
     transparentUntilReady: Boolean = false,
     onUnzoomPastFit: () -> Unit = {},
+    onLoadError: LoadErrorListener? = null,
 ) {
     val haptic = LocalHapticFeedback.current
     val currentOnLongPress by rememberUpdatedState(onLongPress)
@@ -99,7 +101,7 @@ fun IiifZoomViewer(
                 .pointerInput(Unit) { detectTapGestures(onLongPress = { longPress() }) },
         )
     } else {
-        ZoomSurface(loaded, initialFocus, initialZoom, sources, modifier, longPress, onReady, controller, prewarm, transparentUntilReady, onUnzoomPastFit)
+        ZoomSurface(loaded, initialFocus, initialZoom, sources, modifier, longPress, onReady, controller, prewarm, transparentUntilReady, onUnzoomPastFit, onLoadError)
     }
 }
 
@@ -116,6 +118,7 @@ private fun ZoomSurface(
     prewarm: IiifPrewarm?,
     transparentUntilReady: Boolean,
     onUnzoomPastFit: () -> Unit,
+    onLoadError: LoadErrorListener?,
 ) {
     val scope = rememberCoroutineScope() // Main : convient au TileManager (état mono-thread)
     val controller = remember(info) { ViewportController(info.width, info.height, scope) }
@@ -133,6 +136,7 @@ private fun ZoomSurface(
             info, sources, scope, controller.viewport, controller.screenSize, Dispatchers.Default,
             zoomAnchor = { controller.zoomAnchor },
             warm = prewarm?.tiles,
+            onLoadError = onLoadError,
         )
     }
     DisposableEffect(manager) { onDispose { manager.close() } }

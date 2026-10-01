@@ -26,6 +26,15 @@ object MetParser {
 
     fun objectUrl(id: Int): String = "$BASE/objects/$id"
 
+    /**
+     * Adresses de recherche à essayer dans l'ordre : complète ; `q` seul (au cas où un des filtres serait refusé) ; peintures
+     * européennes (`departmentId=11`), la section où se trouvent Van Gogh, Sargent, Renoir…
+     */
+    fun searchVariants(query: ArtworkQuery): List<String> {
+        val q = java.net.URLEncoder.encode(query.artistName, "UTF-8")
+        return listOf(searchUrl(query), "$BASE/search?q=$q", "$BASE/search?departmentId=11&q=$q")
+    }
+
     /** Identifiants de la réponse de recherche (`objectIDs` peut être `null` quand il n'y a aucun résultat). */
     fun parseSearch(text: String): List<Int> = obj(text)?.arr("objectIDs").orEmpty().mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }
 

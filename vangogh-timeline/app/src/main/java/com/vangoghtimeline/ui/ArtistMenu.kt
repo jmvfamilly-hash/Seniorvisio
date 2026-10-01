@@ -81,8 +81,11 @@ fun ArtistMenuScreen(
     model: AppModel,
     onTap: (Artist) -> Unit,
     modifier: Modifier = Modifier,
+    /** Appui long dans la partie basse de la fiche : copie le rapport d'anomalies (tous artistes, tous services, navigation). */
+    onReportLongPress: () -> Unit = {},
 ) {
     val selected = artists.firstOrNull { it.id == selectedId }
+    val currentReport by rememberUpdatedState(onReportLongPress)
     Column(
         modifier
             .fillMaxSize()
@@ -117,6 +120,8 @@ fun ArtistMenuScreen(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                // appui long n'importe où dans la partie basse de la fiche ; un défilement annule l'appui long
+                .pointerInput(Unit) { detectTapGestures(onLongPress = { currentReport() }) }
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 18.dp, vertical = 12.dp),
         ) {
@@ -125,6 +130,11 @@ fun ArtistMenuScreen(
             } else {
                 ArtistInfo(selected, model)
             }
+            Spacer(Modifier.height(14.dp))
+            BasicText(
+                "Appui long dans cette zone : copier le rapport d'anomalies (tous les artistes, tous les services, navigation).",
+                style = TextStyle(color = Color(0xFF6B7480), fontSize = 10.sp, fontStyle = FontStyle.Italic),
+            )
         }
     }
 }

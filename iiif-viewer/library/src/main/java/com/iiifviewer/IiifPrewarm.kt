@@ -40,6 +40,8 @@ class IiifPrewarm(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val budgetBytes: Long = 16L * 1024 * 1024,
     private val parallel: Int = 4,
+    /** Chaque essai de tuile en échec, y compris ceux qu'un nouvel essai rattrape (voir [LoadErrorListener]). */
+    private val onLoadError: LoadErrorListener? = null,
 ) {
     private val ownScope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
     private val _info = MutableStateFlow<IiifImageInfo?>(null)
@@ -125,6 +127,7 @@ class IiifPrewarm(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                onLoadError?.onError(tileUrl, attempt + 1, e, attempt == 1)
                 if (attempt == 0) delay(400)
             }
         }

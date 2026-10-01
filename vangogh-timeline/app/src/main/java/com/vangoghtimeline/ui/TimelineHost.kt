@@ -44,6 +44,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import coil.imageLoader
 import com.iiifviewer.IiifPrewarm
 import com.iiifviewer.IiifZoomViewer
+import com.iiifviewer.LoadErrorListener
+import com.vangoghtimeline.iiif.Diag
 import com.iiifviewer.defaultIiifSources
 import com.iiifviewer.rememberIiifZoomController
 import com.vangoghtimeline.model.Artwork
@@ -187,7 +189,15 @@ fun TimelineHost(
                         controller = zoomController,
                         onReady = { viewerReady = true },
                         onUnzoomPastFit = { if (viewerTop && !closing) close() },   // dézoomer encore, déjà à l'image entière = revenir
-                        onError = { viewerError = it.message ?: it.javaClass.simpleName },
+                        onError = {
+                            val msg = it.message ?: it.javaClass.simpleName
+                            viewerError = msg
+                            Diag.error("visionneuse", "ouverture impossible de « ${req.artwork.title} » (${req.artwork.provider}) : $msg", req.artwork.iiif.viewerUrl)
+                        },
+                        onLoadError = LoadErrorListener { url, attempt, error, last ->
+                            val msg = error.message ?: error.javaClass.simpleName
+                            Diag.warn("tuile", "essai $attempt${if (last) " (abandon)" else ""} : $msg", url, key = "tuile|${Diag.hostOf(url)}|${msg.take(60)}")
+                        },
                     )
                     viewerError?.let { message ->
                         BasicText(

@@ -2,6 +2,7 @@ package com.vangoghtimeline
 
 import android.content.Intent
 import java.io.File
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vangoghtimeline.iiif.HttpImageReachability
+import com.vangoghtimeline.iiif.PLAIN_USER_AGENT
 import com.vangoghtimeline.iiif.SourceValidator
 import com.vangoghtimeline.iiif.UniverseLoader
 import com.vangoghtimeline.iiif.defaultMuseumSources
@@ -86,13 +88,16 @@ class MainActivity : ComponentActivity() {
             val loader = UniverseLoader(
                 defaultMuseumSources(http), SourceValidator(http, HttpImageReachability()),
                 File(filesDir, "universes").apply { mkdirs() },
+                // repli : mêmes sources avec un User-Agent sobre, si un serveur refuse celui d'un navigateur
+                fallbackSources = defaultMuseumSources(HttpManifestSource(PLAIN_USER_AGENT)),
             )
             AppModel(scope, loader, http, File(filesDir, "portraits.json"))
         }
         if (artists.isEmpty()) {
             Box(Modifier.fillMaxSize().background(Color(0xFF0F1114))) { Message("Catalogue des artistes illisible.") }
         } else {
-            AppRoot(artists, model)
+            val header = "Version ${BuildConfig.BUILD_REV}\nAppareil : ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+            AppRoot(artists, model, reportHeader = header, lastCrash = { CrashReporter.read(this) })
         }
     }
 

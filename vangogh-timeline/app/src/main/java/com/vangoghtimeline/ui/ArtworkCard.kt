@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.vangoghtimeline.iiif.Diag
 import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.formatFr
 
@@ -67,6 +68,12 @@ internal fun thumbRequest(
         .apply { if (placeholderKey != null) placeholderMemoryCacheKey(placeholderKey) }
         .allowRgb565(true)
         .crossfade(false)
+        // chaque vignette en échec est consignée (regroupée par serveur et message) : navigation et préchargement
+        .listener(onError = { request, result ->
+            val url = request.data.toString()
+            val msg = result.throwable.message ?: result.throwable.javaClass.simpleName
+            Diag.warn("vignette", msg, url, key = "vignette|${Diag.hostOf(url)}|$msg")
+        })
         .build()
 
 /**

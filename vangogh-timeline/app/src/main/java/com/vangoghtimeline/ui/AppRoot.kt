@@ -1,5 +1,6 @@
 package com.vangoghtimeline.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -17,10 +18,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.vangoghtimeline.iiif.SourceState
+import com.vangoghtimeline.iiif.Diag
 import com.vangoghtimeline.model.Artist
 
 /**
@@ -32,7 +38,16 @@ import com.vangoghtimeline.model.Artist
  * - **Retour système** depuis la frise : retour au menu (le retour d'une œuvre ouverte reste le dézoom, voir [TimelineHost]).
  */
 @Composable
-fun AppRoot(artists: List<Artist>, model: AppModel) {
+fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: String = "", lastCrash: () -> String? = { null }) {
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val copyReport: () -> Unit = {
+        val text = model.buildReport(artists, reportHeader, lastCrash())
+        clipboard.setText(AnnotatedString(text))
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        Toast.makeText(context, "Rapport d'anomalies copié (${Diag.snapshot().size} lignes)", Toast.LENGTH_SHORT).show()
+    }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var openedId by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -44,9 +59,11 @@ fun AppRoot(artists: List<Artist>, model: AppModel) {
             artists = artists,
             selectedId = selectedId,
             model = model,
+            onReportLongPress = copyReport,
             onTap = { artist ->
                 if (selectedId == artist.id && artist.hasUniverse) {
                     model.prepare(artist)
+                    Diag.context = artist.id     // les événements de navigation (vignettes, tuiles) sont attribués à cet artiste
                     openedId = artist.id
                 } else {
                     selectedId = artist.id
@@ -55,7 +72,7 @@ fun AppRoot(artists: List<Artist>, model: AppModel) {
             },
         )
     } else {
-        BackHandler { openedId = null }
+        BackHandler { openedId = null; Diag.context = null }
         val state = model.universes[opened.id]
         Box(Modifier.fillMaxSize().background(Color(0xFF0F1114))) {
             when {

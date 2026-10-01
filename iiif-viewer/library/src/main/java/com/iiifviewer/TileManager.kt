@@ -61,6 +61,8 @@ class TileManager(
     private val zoomAnchor: () -> Offset = { Offset.Unspecified },
     /** Tuiles déjà préchargées par ailleurs (voir [IiifPrewarm]) : reprises d'emblée, et au fil de leur arrivée. */
     private val warm: StateFlow<List<LoadedTile>>? = null,
+    /** Chaque essai de tuile en échec, y compris ceux qu'un nouvel essai rattrape (voir [LoadErrorListener]). */
+    private val onLoadError: LoadErrorListener? = null,
 ) {
     // Scope enfant : close() annule tout sans toucher au scope du parent.
     private val managerScope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
@@ -286,7 +288,9 @@ class TileManager(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (++attempt >= 3) throw e
+                attempt++
+                onLoadError?.onError(url, attempt, e, attempt >= 3)
+                if (attempt >= 3) throw e
                 delay(500L * attempt)
             }
         }

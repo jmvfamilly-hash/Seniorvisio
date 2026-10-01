@@ -40,6 +40,8 @@ class UniverseLoader(
     private val validator: SourceValidator,
     private val cacheDir: File,
     private val timeoutMs: Long = 45_000,
+    /** Mêmes sources avec un User-Agent sobre : retentées quand la requête normale échoue (voir [runSource]). */
+    private val fallbackSources: Map<String, MuseumSource> = emptyMap(),
 ) {
     private class Outcome(val report: SourceReport, val artworks: List<Artwork>)
 
@@ -80,32 +82,79 @@ class UniverseLoader(
 
     private suspend fun runSource(artist: Artist, spec: SourceSpec, query: ArtworkQuery): Outcome {
         val source = sources[spec.sourceId]
-            ?: return Outcome(SourceReport(spec.sourceId, spec.sourceId, SourceState.UNAVAILABLE, 0, "source non implémentée (clé d'API ou service à venir)"), emptyList())
+        if (source == null) {
+            Diag.warn("source", "source non implémentée (clé d'API ou service à venir)", sourceId = spec.sourceId, artistId = artist.id)
+            return Outcome(SourceReport(spec.sourceId, spec.sourceId, SourceState.UNAVAILABLE, 0, "source non implémentée (clé d'API ou service à venir)"), emptyList())
+        }
         val cache = File(cacheDir, "${artist.id}_${source.id}.json")
 
         val fetched = try {
-            withTimeoutOrNull(timeoutMs) { source.fetch(query, spec) } ?: throw IOException("délai dépassé (${timeoutMs / 1000} s)")
+            fetchWithFallback(artist, source, spec, query)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            return fromCache(source, cache, e)
+            return fromCache(artist, source, cache, e)
         }
-        if (fetched.isEmpty()) return Outcome(SourceReport(source.id, source.name, SourceState.EMPTY, 0, "aucune œuvre exploitable pour cet artiste"), emptyList())
+        if (fetched.isEmpty()) {
+            Diag.warn("source", "aucune œuvre exploitable pour cet artiste", sourceId = source.id, artistId = artist.id)
+            return Outcome(SourceReport(source.id, source.name, SourceState.EMPTY, 0, "aucune œuvre exploitable pour cet artiste"), emptyList())
+        }
 
         val (ok, probes) = validator.validate(fetched)
+        // chaque échantillon en échec est consigné, MÊME si la source est finalement connectée
+        for (p in probes.filter { !it.ok }) {
+            Diag.warn("validation", "échantillon « ${p.artworkTitle} » : ${p.detail}", p.url, source.id, artist.id)
+        }
         if (!ok) {
             val why = probes.firstOrNull { !it.ok }?.detail ?: "accès impossible"
+            Diag.error("validation", "source REFUSÉE (${probes.count { !it.ok }}/${probes.size} échantillons en échec) : $why", sourceId = source.id, artistId = artist.id)
             return Outcome(SourceReport(source.id, source.name, SourceState.REJECTED, fetched.size, "accès aux images refusé : $why", probes), emptyList())
         }
         runCatching { cache.writeText(ArtworkJson.encode(fetched)) }
         val detail = "${fetched.size} œuvres · accès vérifié (${probes.count { it.ok }}/${probes.size})"
+        Diag.info("source", "connectée : $detail", sourceId = source.id, artistId = artist.id)
         return Outcome(SourceReport(source.id, source.name, SourceState.CONNECTED, fetched.size, detail, probes), fetched)
     }
 
-    private fun fromCache(source: MuseumSource, cache: File, error: Exception): Outcome {
+    private suspend fun fetchOnce(src: MuseumSource, spec: SourceSpec, query: ArtworkQuery): List<Artwork> =
+        withTimeoutOrNull(timeoutMs) { src.fetch(query, spec) } ?: throw IOException("délai dépassé (${timeoutMs / 1000} s)")
+
+    /**
+     * Requête normale ; si elle échoue, UNE nouvelle tentative avec le User-Agent sobre. Les deux échecs, et le succès du repli,
+     * sont consignés : un repli qui « sauve » la source reste visible dans le rapport.
+     */
+    private suspend fun fetchWithFallback(artist: Artist, source: MuseumSource, spec: SourceSpec, query: ArtworkQuery): List<Artwork> {
+        try {
+            return fetchOnce(source, spec, query)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val why = e.message ?: e.javaClass.simpleName
+            Diag.warn("source", "recherche en échec : $why", sourceId = source.id, artistId = artist.id)
+            val fallback = fallbackSources[source.id]
+            if (fallback == null || e is IllegalArgumentException) throw e
+            try {
+                val result = fetchOnce(fallback, spec, query)
+                Diag.warn("source", "repli (User-Agent sobre) RÉUSSI après l'échec de la requête normale : ${result.size} œuvres", sourceId = source.id, artistId = artist.id)
+                return result
+            } catch (e2: CancellationException) {
+                throw e2
+            } catch (e2: Exception) {
+                Diag.warn("source", "repli (User-Agent sobre) en échec aussi : ${e2.message ?: e2.javaClass.simpleName}", sourceId = source.id, artistId = artist.id)
+                throw e
+            }
+        }
+    }
+
+    private fun fromCache(artist: Artist, source: MuseumSource, cache: File, error: Exception): Outcome {
         val cached = runCatching { cache.takeIf { it.exists() }?.readText() }.getOrNull()?.let(ArtworkJson::decode).orEmpty()
         val why = error.message ?: error.javaClass.simpleName
-        return if (cached.isNotEmpty()) Outcome(SourceReport(source.id, source.name, SourceState.CACHED, cached.size, "copie hors ligne ($why)"), cached)
-        else Outcome(SourceReport(source.id, source.name, SourceState.UNREACHABLE, 0, why), emptyList())
+        return if (cached.isNotEmpty()) {
+            Diag.warn("source", "connexion impossible → copie hors ligne utilisée (${cached.size} œuvres) : $why", sourceId = source.id, artistId = artist.id)
+            Outcome(SourceReport(source.id, source.name, SourceState.CACHED, cached.size, "copie hors ligne ($why)"), cached)
+        } else {
+            Diag.error("source", "injoignable, aucune copie hors ligne : $why", sourceId = source.id, artistId = artist.id)
+            Outcome(SourceReport(source.id, source.name, SourceState.UNREACHABLE, 0, why), emptyList())
+        }
     }
 }

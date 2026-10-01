@@ -6,6 +6,8 @@ import coil.ImageLoader
 import coil.memory.MemoryCache
 import com.iiifviewer.IiifPrewarm
 import com.iiifviewer.IiifSources
+import com.iiifviewer.LoadErrorListener
+import com.vangoghtimeline.iiif.Diag
 import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.FocusCandidate
 import com.vangoghtimeline.model.PriorityPrefetcher
@@ -85,7 +87,11 @@ class TimelinePrefetcher(
     private fun prewarmFor(artwork: Artwork): IiifPrewarm? {
         prewarms[artwork.id]?.let { return it }
         val url = artwork.iiif.viewerUrl ?: return null
-        return IiifPrewarm(url, sources, scope).also { prewarms[artwork.id] = it }
+        val listener = LoadErrorListener { tileUrl, attempt, error, last ->
+            val msg = error.message ?: error.javaClass.simpleName
+            Diag.warn("préchauffage", "essai $attempt${if (last) " (abandon)" else ""} : $msg", tileUrl, key = "prewarm|${Diag.hostOf(tileUrl)}|${msg.take(60)}")
+        }
+        return IiifPrewarm(url, sources, scope, onLoadError = listener).also { prewarms[artwork.id] = it }
     }
 
     private fun release(id: String) {

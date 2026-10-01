@@ -57,7 +57,13 @@ class SmkSource(private val http: ManifestSource) : MuseumSource {
         SmkParser.parse(http.fetch(SmkParser.searchUrl(query)), query)
 }
 
-/** The Met : une recherche, puis une notice par œuvre (au plus [maxObjects], [parallelism] à la fois ; une notice en échec est ignorée). */
+/**
+ * The Met : une recherche, puis une notice par œuvre (au plus [maxObjects], [parallelism] à la fois).
+ *
+ * La recherche essaie des VARIANTES d'adresse dans l'ordre (complète, `q` seul, peintures européennes) : la première qui répond avec
+ * des résultats gagne. Chaque variante en échec est consignée dans [Diag] même si la suivante réussit. Une notice en échec est
+ * ignorée mais consignée (regroupée par message).
+ */
 class MetSource(
     private val http: ManifestSource,
     private val maxObjects: Int = 80,
@@ -68,15 +74,45 @@ class MetSource(
     override val europeanaKeyword = "metropolitan"
 
     override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> = coroutineScope {
-        val ids = MetParser.parseSearch(http.fetch(MetParser.searchUrl(query))).take(maxObjects)
+        val ids = searchIds(query).take(maxObjects)
         val gate = Semaphore(parallelism)
-        ids.map { id ->
+        ids.map { objectId ->
             async {
                 gate.withPermit {
-                    try { MetParser.parseObject(http.fetch(MetParser.objectUrl(id)), query) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+                    val url = MetParser.objectUrl(objectId)
+                    try {
+                        MetParser.parseObject(http.fetch(url), query)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // notice ignorée : consignée (regroupée), la source continue
+                        Diag.warn("source", "notice ignorée : ${e.message ?: e.javaClass.simpleName}", url, id, key = "met-object|${e.message?.take(40)}")
+                        null
+                    }
                 }
             }
         }.awaitAll().filterNotNull()
+    }
+
+    private suspend fun searchIds(query: ArtworkQuery): List<Int> {
+        val variants = MetParser.searchVariants(query)
+        var last: Exception? = null
+        for ((index, url) in variants.withIndex()) {
+            try {
+                val ids = MetParser.parseSearch(http.fetch(url))
+                if (ids.isNotEmpty()) {
+                    if (index > 0) Diag.warn("source", "recherche : variante ${index + 1}/${variants.size} utilisée après l'échec des précédentes", url, id)
+                    return ids
+                }
+                Diag.warn("source", "recherche : variante ${index + 1}/${variants.size} sans résultat", url, id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                last = e
+                Diag.warn("source", "recherche : variante ${index + 1}/${variants.size} en échec : ${e.message ?: e.javaClass.simpleName}", url, id)
+            }
+        }
+        throw last ?: IllegalStateException("recherche sans résultat (${variants.size} variantes essayées)")
     }
 }
 
@@ -105,7 +141,9 @@ class RijksSource(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (pages == 0) throw e else break
+                if (pages == 0) throw e
+                Diag.warn("source", "page ${pages + 1} de la recherche en échec (les œuvres déjà trouvées sont gardées) : ${e.message ?: e.javaClass.simpleName}", next, id)
+                break
             }
             ids += page.objectIds
             next = page.next
@@ -115,7 +153,14 @@ class RijksSource(
         ids.map { objectId ->
             async {
                 gate.withPermit {
-                    try { resolve(objectId) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+                    try {
+                        resolve(objectId)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Diag.warn("source", "objet ignoré : ${e.message ?: e.javaClass.simpleName}", objectId, id, key = "rijks-object|${e.message?.take(40)}")
+                        null
+                    }
                 }
             }
         }.awaitAll().filterNotNull().filter { it.date.year in query.years }

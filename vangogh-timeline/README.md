@@ -188,3 +188,16 @@ construites d'après les formats documentés. On avance donc par cycles courts, 
 
 Règles : une source est ajoutée par une ligne dans `ArtistExtras` + une classe `MuseumSource` ; elle ne devient visible que si `SourceValidator` la valide ;
 un échec est un rapport lisible, jamais un plantage ni une carte morte ; la copie hors ligne d'une connexion validée prend le relais sans réseau.
+
+## Journal et rapport d'anomalies
+
+- **Tout échec est consigné** (`Diag`), **même quand un repli le rattrape** : copie hors ligne utilisée, repli « User-Agent sobre » qui réussit,
+  variante de recherche du Met, nouvel essai d'une tuile, échantillon de validation en échec dans une source finalement connectée, notice ignorée…
+  Les événements identiques sont regroupés (« ×37 ») ; le journal garde les 600 derniers.
+- **Navigation comprise** : vignettes qui ne chargent pas (Coil), tuiles du visualiseur et du préchauffage (chaque essai), ouvertures d'œuvres en échec,
+  portraits manquants — attribués à l'artiste dont la frise est ouverte.
+- **Erreurs HTTP complètes** : code, URL, serveur, type, redirection et début du corps de la réponse (un « 410 » dit alors s'il vient du service ou d'un pare-feu).
+- **Repli sur requête** : si la recherche d'une source échoue, elle est retentée une fois avec un User-Agent sobre ; le Met essaie en plus trois variantes de
+  recherche (complète, `q` seul, peintures européennes). Les deux échecs et le succès éventuel du repli sont dans le journal.
+- **Copier le rapport** : appui long n'importe où dans la partie basse de la fiche (le panneau d'informations, pour n'importe quel artiste) → rapport texte dans le
+  presse-papiers : version et appareil, état des sources de TOUS les artistes (avec les échantillons vérifiés), journal complet, dernier plantage enregistré.

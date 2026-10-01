@@ -1,6 +1,8 @@
 package com.vangoghtimeline.ui
 
 import androidx.compose.runtime.mutableStateMapOf
+import com.vangoghtimeline.iiif.Diag
+import com.vangoghtimeline.iiif.DiagnosticsReport
 import com.vangoghtimeline.iiif.ManifestSource
 import com.vangoghtimeline.iiif.UniverseLoader
 import com.vangoghtimeline.iiif.UniverseState
@@ -63,20 +65,33 @@ class AppModel(
             scope.launch {
                 gate.withPermit {
                     try {
-                        val url = WikipediaSummaryParser.thumbnail(http.fetch(WikipediaSummaryParser.summaryUrl(title)))
+                        val summaryUrl = WikipediaSummaryParser.summaryUrl(title)
+                        val url = WikipediaSummaryParser.thumbnail(http.fetch(summaryUrl))
                         if (url != null) {
                             portraits[artist.id] = url
                             savePortraitFile()
+                        } else {
+                            Diag.warn("portrait", "l'article Wikipédia n'a pas d'image : portrait de secours (initiales)", summaryUrl, artistId = artist.id)
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        // pas de portrait : la carte garde ses initiales
+                        // pas de portrait : la carte garde ses initiales, et l'échec est consigné
+                        Diag.warn("portrait", "portrait de « ${artist.name} » indisponible : ${e.message ?: e.javaClass.simpleName}", artistId = artist.id)
                     }
                 }
             }
         }
     }
+
+    /** Rapport d'anomalies de TOUS les artistes et de TOUS les services, plus le journal de navigation (à copier dans le presse-papiers). */
+    fun buildReport(artists: List<Artist>, header: String, lastCrash: String?): String =
+        DiagnosticsReport.build(
+            header = header,
+            sections = artists.map { DiagnosticsReport.ArtistSection(it.id, it.name, it.sources.map { s -> s.sourceId }, universes[it.id]) },
+            events = Diag.snapshot(),
+            lastCrash = lastCrash,
+        )
 
     private fun readPortraitFile(): Map<String, String> = runCatching {
         val o = Json.parseToJsonElement(portraitFile.readText()) as JsonObject
