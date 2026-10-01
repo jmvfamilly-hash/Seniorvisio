@@ -120,7 +120,7 @@ fun TimelineScreen(
             BasicText(
                 text = "1 px = ${"%.1f".format(daysPerPixel)} j · ${artworks.size} œuvres · ${plan.laneCount} couloirs",
                 style = TextStyle(color = Color(0xFF8B96A3), fontSize = 11.sp),
-                modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
+                modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth(0.38f).padding(10.dp),
             )
         }
     }

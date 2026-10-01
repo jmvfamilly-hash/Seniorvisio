@@ -134,3 +134,10 @@ les œuvres de même titre et de même année sont dédoublonnées (`ArtworkMerg
 sont testés sur des réponses types construites d'après les formats documentés, pas sur des réponses réelles. Europeana utilise la
 clé publique de démonstration `api2demo` (volume limité) : en remplacer la valeur (`EuropeanaParser.DEMO_KEY`) par une clé gratuite
 personnelle. Les dates ne sont connues qu'à l'année (Europeana) ou à l'intervalle de production (Rijksmuseum) : jamais plus précises.
+
+## Images sans service IIIF
+
+Certains musées (via Europeana) ne publient qu'un fichier JPEG ordinaire dans leur manifeste, sans service d'image IIIF. Le visualiseur
+sait alors l'ouvrir quand même : l'image est téléchargée une fois, puis découpée en tuiles par `BitmapRegionDecoder` (`StaticImageUrl`),
+et le zoom profond fonctionne comme pour une vraie image IIIF. Le manifeste est lu dans cet ordre : service déclaré, URL d'image IIIF
+(dont on déduit le service), image ordinaire.

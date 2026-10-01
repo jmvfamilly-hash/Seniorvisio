@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -31,6 +32,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -153,8 +155,8 @@ fun TimelineHost(
         credit?.let {
             BasicText(
                 it,
-                Modifier.align(Alignment.BottomEnd).padding(10.dp),
-                style = TextStyle(color = Color(0xFF8B96A3), fontSize = 11.sp),
+                Modifier.align(Alignment.BottomEnd).fillMaxWidth(0.58f).padding(10.dp),
+                style = TextStyle(color = Color(0xFF8B96A3), fontSize = 11.sp, textAlign = TextAlign.End),
             )
         }
         hint?.let {

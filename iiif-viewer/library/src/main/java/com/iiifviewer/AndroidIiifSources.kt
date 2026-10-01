@@ -1,12 +1,17 @@
 package com.iiifviewer
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.BitmapRegionDecoder
+import android.graphics.Rect
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.IOException
@@ -18,7 +23,12 @@ import java.net.URL
  */
 class HttpIiifSources : IiifSources {
 
-    override suspend fun load(url: String): ImageBitmap = fetch(url) { stream ->
+    override suspend fun load(url: String): ImageBitmap {
+        StaticImageUrl.parse(url)?.let { return loadStaticTile(it) }
+        return loadRemote(url)
+    }
+
+    private suspend fun loadRemote(url: String): ImageBitmap = fetch(url) { stream ->
         val bitmap = BitmapFactory.decodeStream(stream) ?: throw IOException("Décodage impossible: $url")
         bitmap.asImageBitmap()
     }
@@ -28,12 +38,15 @@ class HttpIiifSources : IiifSources {
         // L'URL peut être celle d'un MANIFESTE (galerie, frise…) : on en tire le service d'image de la première page,
         // puis on lit son info.json.
         IiifManifestResolver.serviceIdOf(text)?.let { return loadInfo(IiifManifestResolver.infoUrlFor(it)) }
+        // Pas de service IIIF : une image ordinaire (JPEG/PNG). On la découpe nous-mêmes en tuiles.
+        IiifManifestResolver.staticImageOf(text)?.let { return staticInfo(it) }
         val json = JSONObject(text)
         val base = json.optString("id").ifEmpty { json.optString("@id") }
             .ifEmpty { infoUrl.removeSuffix("/info.json") }
             .trimEnd('/')
-        val width = json.getInt("width")
-        val height = json.getInt("height")
+        val width = json.optInt("width", 0)
+        val height = json.optInt("height", 0)
+        if (width <= 0 || height <= 0) throw IOException("Pas d'image IIIF exploitable : $infoUrl")
 
         val tiles = json.optJSONArray("tiles")?.optJSONObject(0)
         val tileSize = tiles?.optInt("width", 256) ?: 256
@@ -42,6 +55,49 @@ class HttpIiifSources : IiifSources {
             ?.sorted()
             ?: generateSequence(1) { it * 2 }.takeWhile { it == 1 || width / it >= tileSize }.toList()
         return IiifImageInfo(base, width, height, tileSize, factors)
+    }
+
+    // ── Images sans service IIIF ─────────────────────────────────────────────────
+    private class StaticImage(val decoder: BitmapRegionDecoder, val width: Int, val height: Int)
+
+    private val staticImages = LinkedHashMap<String, StaticImage>()
+    private val staticLock = Mutex()
+
+    /** Au plus 2 images ordinaires en mémoire (octets compressés + décodeur par région) ; téléchargées une seule fois. */
+    private suspend fun staticImage(url: String): StaticImage = staticLock.withLock {
+        staticImages[url]?.let { return@withLock it }
+        val bytes = fetch(url) { it.readBytes() }
+        val decoder = BitmapRegionDecoder.newInstance(bytes, 0, bytes.size, false)
+            ?: throw IOException("Décodage impossible: $url")
+        val image = StaticImage(decoder, decoder.width, decoder.height)
+        staticImages[url] = image
+        while (staticImages.size > 2) staticImages.remove(staticImages.keys.first())
+        image
+    }
+
+    private suspend fun staticInfo(image: IiifManifestResolver.StaticImage): IiifImageInfo {
+        val decoded = staticImage(image.url)
+        // les dimensions réelles du fichier font foi : une région hors fichier ferait échouer le décodage
+        val width = decoded.width
+        val height = decoded.height
+        val tileSize = 512
+        val factors = generateSequence(1) { it * 2 }.takeWhile { it == 1 || width / it >= tileSize }.toList()
+        return IiifImageInfo(StaticImageUrl.baseUriOf(image.url), width, height, tileSize, factors)
+    }
+
+    private suspend fun loadStaticTile(req: StaticImageUrl.Request): ImageBitmap {
+        val image = staticImage(req.imageUrl)
+        return withContext(Dispatchers.Default) {
+            val region = Rect(req.x, req.y, minOf(req.x + req.width, image.width), minOf(req.y + req.height, image.height))
+            if (region.width() <= 0 || region.height() <= 0) throw IOException("Région hors image")
+            val options = BitmapFactory.Options().apply { inSampleSize = StaticImageUrl.sampleSizeFor(region.width(), req.outputWidth) }
+            // BitmapRegionDecoder n'est pas thread-safe : un décodage à la fois par image
+            val bitmap = synchronized(image.decoder) { image.decoder.decodeRegion(region, options) }
+                ?: throw IOException("Décodage impossible: ${req.imageUrl}")
+            val outW = req.outputWidth.coerceAtLeast(1)
+            val outH = (bitmap.height.toLong() * outW / bitmap.width).toInt().coerceAtLeast(1)
+            (if (bitmap.width == outW) bitmap else Bitmap.createScaledBitmap(bitmap, outW, outH, true)).asImageBitmap()
+        }
     }
 
     /**
