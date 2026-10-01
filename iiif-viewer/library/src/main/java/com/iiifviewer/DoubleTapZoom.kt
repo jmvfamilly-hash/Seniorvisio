@@ -1,11 +1,15 @@
 package com.iiifviewer
 
 /**
- * Cible d'un double-tap, en trois temps : depuis l'image entière (ou tout zoom plus faible que la moitié du maximum) → **moitié du
- * zoom maximum** ; de là (ou de tout zoom entre la moitié et le maximum) → **zoom maximum** ; depuis le maximum → **image entière**.
+ * Cible d'un double-tap, en trois temps : depuis l'image entière (ou tout zoom plus faible que l'étape intermédiaire) → **milieu
+ * perceptif** entre l'image entière et le zoom maximum ; de là (ou de tout zoom entre les deux) → **zoom maximum** ; depuis le maximum →
+ * **image entière**.
  *
- * Si la moitié du maximum n'est pas nettement au-dessus de l'image entière (petite image : le maximum est proche du minimum), l'étape
- * intermédiaire n'a pas de sens et est sautée. Pur Kotlin : testé sur la JVM.
+ * « Perceptif » : l'œil juge un zoom par son RAPPORT, pas par sa différence. Le milieu est donc la moyenne géométrique `√(min × max)` :
+ * même facteur de grossissement de l'image entière à l'étape, et de l'étape au maximum (min ×1 → ×2,8 → ×8 pour un maximum à ×8).
+ *
+ * Si l'étape n'est pas nettement au-dessus de l'image entière (petite image : le maximum est proche du minimum), elle n'a pas de sens
+ * et est sautée. Pur Kotlin : testé sur la JVM.
  */
 object DoubleTapZoom {
     /** « Atteint » : à 2 % près, pour qu'un zoom arrêté un peu avant (pincement, arrondi) compte comme atteint. */
@@ -15,7 +19,7 @@ object DoubleTapZoom {
     private const val MIN_STEP_GAIN = 1.25f
 
     fun targetScale(current: Float, minScale: Float, maxScale: Float): Float {
-        val half = maxScale / 2f
+        val half = kotlin.math.sqrt(minScale * maxScale)
         return when {
             current >= maxScale * REACHED -> minScale
             half >= minScale * MIN_STEP_GAIN && current < half * REACHED -> half

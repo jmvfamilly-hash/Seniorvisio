@@ -1,18 +1,25 @@
 package com.iiifviewer
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.sqrt
 
 class DoubleTapZoomTest {
     private val min = 0.25f
-    private val max = 2f      // moitié du maximum = 1,0
+    private val max = 2f
+    private val mid = sqrt(min * max)      // ≈ 0,707 : milieu perceptif (×2,83 de l'image entière, ×2,83 jusqu'au maximum)
 
-    @Test fun firstDoubleTapGoesToHalfOfMax() = assertEquals(1f, DoubleTapZoom.targetScale(min, min, max))
+    @Test fun stepIsTheGeometricMeanSoBothJumpsHaveTheSameFactor() {
+        val step = DoubleTapZoom.targetScale(min, min, max)
+        assertEquals(mid, step, 1e-6f)
+        assertEquals(step / min, max / step, 1e-4f)
+    }
 
-    @Test fun anyZoomBelowHalfGoesToHalf() = assertEquals(1f, DoubleTapZoom.targetScale(0.6f, min, max))
+    @Test fun anyZoomBelowTheStepGoesToTheStep() = assertEquals(mid, DoubleTapZoom.targetScale(0.5f, min, max), 1e-6f)
 
-    @Test fun fromHalfOrBetweenGoesToMax() {
-        assertEquals(max, DoubleTapZoom.targetScale(1f, min, max))
+    @Test fun fromTheStepOrBetweenGoesToMax() {
+        assertEquals(max, DoubleTapZoom.targetScale(mid, min, max))
         assertEquals(max, DoubleTapZoom.targetScale(1.6f, min, max))
     }
 
@@ -21,17 +28,22 @@ class DoubleTapZoomTest {
         assertEquals(min, DoubleTapZoom.targetScale(max * 0.99f, min, max))
     }
 
-    @Test fun fullCycleIsFitHalfMaxFit() {
+    @Test fun fullCycleIsFitStepMaxFit() {
         var s = min
-        s = DoubleTapZoom.targetScale(s, min, max); assertEquals(1f, s)
+        s = DoubleTapZoom.targetScale(s, min, max); assertEquals(mid, s, 1e-6f)
         s = DoubleTapZoom.targetScale(s, min, max); assertEquals(max, s)
         s = DoubleTapZoom.targetScale(s, min, max); assertEquals(min, s)
-        s = DoubleTapZoom.targetScale(s, min, max); assertEquals(1f, s)
+        s = DoubleTapZoom.targetScale(s, min, max); assertEquals(mid, s, 1e-6f)
+    }
+
+    @Test fun eightTimesRangeGivesTwoPointEightTimes() {
+        val step = DoubleTapZoom.targetScale(1f, 1f, 8f)
+        assertEquals(2.828f, step, 1e-3f)
     }
 
     @Test fun smallImageSkipsTheIntermediateStep() {
-        // min 0,9 et max 2 : la moitié (1,0) n'est qu'à +11 % de l'image entière → directement le maximum
-        assertEquals(2f, DoubleTapZoom.targetScale(0.9f, 0.9f, 2f))
-        assertEquals(0.9f, DoubleTapZoom.targetScale(2f, 0.9f, 2f))
+        // min 0,9 et max 1,1 : l'étape (≈ 0,995) n'est qu'à +10 % de l'image entière → directement le maximum
+        assertEquals(1.1f, DoubleTapZoom.targetScale(0.9f, 0.9f, 1.1f))
+        assertTrue(DoubleTapZoom.targetScale(1.1f, 0.9f, 1.1f) == 0.9f)
     }
 }

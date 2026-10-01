@@ -144,6 +144,7 @@ et le zoom profond fonctionne comme pour une vraie image IIIF. Le manifeste est 
 
 ## Double-tap dans la visionneuse
 
-Trois temps (`DoubleTapZoom`), le point tapé restant fixe à l'écran : image entière → **moitié du zoom maximum** → **zoom maximum** →
-image entière. Depuis un zoom quelconque, on va à la prochaine étape au-dessus. Pour une petite image dont la moitié du maximum est
-presque l'image entière, l'étape intermédiaire est sautée. Le pincement vers l'intérieur depuis l'image entière referme toujours l'œuvre.
+Trois temps (`DoubleTapZoom`), le point tapé restant fixe à l'écran : image entière → **milieu perceptif** → **zoom maximum** → image
+entière. Le milieu perceptif est la moyenne géométrique `√(min × max)` : même facteur de grossissement de l'image entière à l'étape que de
+l'étape au maximum (pour un maximum à ×8 : ×1 → ×2,8 → ×8). Depuis un zoom quelconque, on va à la prochaine étape au-dessus. Pour une petite
+image dont l'étape serait presque l'image entière, elle est sautée. Le pincement vers l'intérieur depuis l'image entière referme l'œuvre.
