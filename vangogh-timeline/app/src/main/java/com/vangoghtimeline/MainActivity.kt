@@ -1,7 +1,6 @@
 package com.vangoghtimeline
 
 import android.content.Intent
-import java.io.File
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,8 +32,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.vangoghtimeline.iiif.ArticRepository
-import com.vangoghtimeline.iiif.ArtworkSource
+import com.vangoghtimeline.iiif.CollectionLoader
 import com.vangoghtimeline.iiif.HttpManifestSource
 import com.vangoghtimeline.iiif.ManifestRepository
 import com.vangoghtimeline.model.Artwork
@@ -72,13 +70,11 @@ class MainActivity : ComponentActivity() {
     private fun Timeline(collectionUrl: String?) {
         val state by produceState<Load>(Load.Busy, collectionUrl) {
             value = if (collectionUrl == null) {
-                // Par défaut : les œuvres de Van Gogh de l'Art Institute of Chicago (images IIIF réelles), avec copie hors ligne.
-                val repo = ArticRepository(HttpManifestSource(), File(filesDir, "artic_vangogh.json"))
-                when (val loaded = repo.load()) {
-                    is ArtworkSource.Online -> Load.Done(loaded.artworks, "Art Institute of Chicago · API publique")
-                    is ArtworkSource.Cached -> Load.Done(loaded.artworks, "Art Institute of Chicago · copie hors ligne")
-                    null -> Load.Done(SampleArtworks.all, "Hors ligne : œuvres de démonstration, sans images")
-                }
+                // Par défaut : les œuvres de Van Gogh de trois musées (Art Institute of Chicago, Rijksmuseum, Europeana), chargées en
+                // parallèle : la frise s'affiche dès la première réponse, les autres musées s'y ajoutent.
+                val result = CollectionLoader(HttpManifestSource(), filesDir).load { value = Load.Done(it.artworks, it.credit) }
+                if (result != null) Load.Done(result.artworks, result.credit)
+                else Load.Done(SampleArtworks.all, "Hors ligne : œuvres de démonstration, sans images")
             } else try {
                 val arts = ManifestRepository(HttpManifestSource()).loadCollection(collectionUrl)
                 if (arts.isEmpty()) Load.Failed("Aucune œuvre datée dans cette collection.") else Load.Done(arts, collectionUrl)

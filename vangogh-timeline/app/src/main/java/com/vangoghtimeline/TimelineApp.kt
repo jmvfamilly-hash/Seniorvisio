@@ -34,13 +34,13 @@ class TimelineApp : Application(), ImageLoaderFactory {
             .okHttpClient {
                 // User-Agent explicite : sans lui, le serveur IIIF d'AIC (Cloudflare) répond 403 aux vignettes
                 OkHttpClient.Builder().addInterceptor { chain ->
-                    chain.proceed(
-                        chain.request().newBuilder()
-                            .header("User-Agent", USER_AGENT)
-                            .header("AIC-User-Agent", AIC_USER_AGENT)
-                            .header("Referer", "https://www.artic.edu/")
-                            .build(),
-                    )
+                    val request = chain.request()
+                    val builder = request.newBuilder()
+                        .header("User-Agent", USER_AGENT)
+                        .header("AIC-User-Agent", AIC_USER_AGENT)
+                    // le Referer n'est utile qu'au serveur d'images de l'AIC : pas d'indication envoyée aux autres musées
+                    if (request.url.host.endsWith("artic.edu")) builder.header("Referer", "https://www.artic.edu/")
+                    chain.proceed(builder.build())
                 }.build()
             }
             .respectCacheHeaders(false)

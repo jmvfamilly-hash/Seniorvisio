@@ -114,3 +114,23 @@ Le modèle, l'échelle, les couloirs et le parseur n'importent rien d'Android : 
 - **Revenir** : pas de bouton. Dans la visionneuse, **dézoomer encore** une fois l'image entière à l'écran (pincement vers l'intérieur
   d'environ 20 % de plus, geste commencé à l'image entière) ferme l'œuvre par la transition inverse ; le geste système retour aussi.
   Zoomé, le même pincement ramène d'abord à l'image entière, sans fermer.
+
+## Sources : trois musées
+
+La frise charge **en parallèle** les œuvres de Van Gogh (1870–1890) de trois sources et les fusionne au fil de leur arrivée
+(`CollectionLoader`) : elle s'affiche dès la première réponse, les autres s'y ajoutent ; une source en échec ne retire rien aux autres,
+et chaque source garde une copie locale pour le hors ligne. Le crédit en bas à droite indique le nombre d'œuvres par musée.
+
+| Source | Service | Comment on arrive à l'image IIIF |
+|---|---|---|
+| Art Institute of Chicago | API `artworks/search` | `image_id` → service `https://www.artic.edu/iiif/2/{image_id}` ; manifeste `…/artworks/{id}/manifest.json` |
+| Rijksmuseum | Data Services (Linked Art, sans clé) | recherche → objet → VisualItem → DigitalObject → URL d'image IIIF → on retire `/{region}/{taille}/0/default.jpg` pour obtenir le service (`IiifImageUrl`) |
+| Europeana | Search API `record/v2/search.json` | `id` `/{jeu}/{notice}` → manifeste `https://iiif.europeana.eu/presentation/{jeu}/{notice}/manifest`, lu par le visualiseur ; vignette = `edmPreview` |
+
+Doublons : Europeana agrège aussi le Rijksmuseum ; quand le Rijksmuseum répond directement, ses notices Europeana sont écartées, puis
+les œuvres de même titre et de même année sont dédoublonnées (`ArtworkMerge`).
+
+**Limites connues** : ces deux services n'ont pas pu être appelés depuis l'environnement de développement (réseau bloqué) ; les parseurs
+sont testés sur des réponses types construites d'après les formats documentés, pas sur des réponses réelles. Europeana utilise la
+clé publique de démonstration `api2demo` (volume limité) : en remplacer la valeur (`EuropeanaParser.DEMO_KEY`) par une clé gratuite
+personnelle. Les dates ne sont connues qu'à l'année (Europeana) ou à l'intervalle de production (Rijksmuseum) : jamais plus précises.
