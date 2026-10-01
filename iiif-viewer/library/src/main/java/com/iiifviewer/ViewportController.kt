@@ -184,7 +184,8 @@ class ViewportController(
     }
 
     /**
-     * Double-tap : bascule entre « image entière » et ×4, en gardant le point tapé fixe à l'écran.
+     * Double-tap : va au ZOOM MAXIMUM en gardant le point tapé fixe à l'écran ; depuis le zoom maximum, revient à l'image entière
+     * (voir [DoubleTapZoom]).
      * Le zoom est interpolé en géométrique (s = s0 · (s1/s0)^f) : la vitesse de zoom perçue reste
      * constante, contrairement à une interpolation linéaire qui semble démarrer lentement puis s'emballer.
      */
@@ -194,7 +195,7 @@ class ViewportController(
         val (w, h) = _screenSize.value
         if (w <= 0) return
         zoomAnchor = focus
-        val target = if (start.scale > minScale * 1.5f) minScale else (minScale * 4f).coerceAtMost(maxScale)
+        val target = DoubleTapZoom.targetScale(start.scale, minScale, maxScale)
         animation = scope.launch {
             animate(0f, 1f, animationSpec = tween(300, easing = FastOutSlowInEasing)) { f, _ ->
                 val scale = start.scale * (target / start.scale).pow(f)

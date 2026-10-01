@@ -141,3 +141,8 @@ Certains musées (via Europeana) ne publient qu'un fichier JPEG ordinaire dans l
 sait alors l'ouvrir quand même : l'image est téléchargée une fois, puis découpée en tuiles par `BitmapRegionDecoder` (`StaticImageUrl`),
 et le zoom profond fonctionne comme pour une vraie image IIIF. Le manifeste est lu dans cet ordre : service déclaré, URL d'image IIIF
 (dont on déduit le service), image ordinaire.
+
+## Double-tap dans la visionneuse
+
+Un double-tap va au **zoom maximum** (sur le point tapé), de n'importe quel zoom de départ ; un double-tap depuis le zoom maximum ramène à
+**l'image entière** (`DoubleTapZoom`). Le pincement vers l'intérieur depuis l'image entière referme toujours l'œuvre.
