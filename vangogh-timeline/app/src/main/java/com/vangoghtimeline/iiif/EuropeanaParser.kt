@@ -35,33 +35,42 @@ object EuropeanaParser {
      * Recherches à essayer dans l'ordre : le nom exact ; le nom sans accents (les notices portent souvent « Joaquin Sorolla ») ;
      * le nom de famille seul (« Sorolla y Bastida, Joaquín »). Les doublons d'adresse sont retirés.
      */
-    fun searchVariants(query: ArtworkQuery, key: String = DEMO_KEY): List<String> {
+    fun searchVariants(query: ArtworkQuery, key: String = DEMO_KEY): List<String> = variants(query, key).map { it.first }
+
+    /** Même liste, avec pour chaque adresse : vrai si c'est la recherche par nom de famille seul (analyse stricte du créateur). */
+    fun variants(query: ArtworkQuery, key: String = DEMO_KEY): List<Pair<String, Boolean>> {
         fun url(who: String) = "https://api.europeana.eu/record/v2/search.json?wskey=$key&query=who%3A%28" + who + "%29" +
             "&qf=TYPE%3AIMAGE&media=true&thumbnail=true&reusability=open&rows=100&profile=standard"
         fun quoted(name: String) = "%22" + java.net.URLEncoder.encode(name, "UTF-8") + "%22"
         return listOf(
-            searchUrl(query, key),
-            url(quoted(query.asciiName())),
-            url(java.net.URLEncoder.encode(query.match, "UTF-8")),
-        ).distinct()
+            searchUrl(query, key) to false,
+            url(quoted(query.asciiName())) to false,
+            url(java.net.URLEncoder.encode(query.match, "UTF-8")) to true,
+        ).distinctBy { it.first }
     }
 
     fun manifestUrlOf(recordId: String): String = "https://iiif.europeana.eu/presentation/" + recordId.trim('/') + "/manifest"
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun parse(text: String, query: ArtworkQuery = ArtworkQuery.VAN_GOGH): List<Artwork> {
-        val root = try { json.parseToJsonElement(text) as? JsonObject } catch (e: Exception) { null } ?: return emptyList()
-        val items = root["items"] as? JsonArray ?: return emptyList()
-        return items.mapNotNull { el ->
+    /**
+     * @param strictCreator exige un créateur déclaré (`dcCreator`) qui désigne l'artiste : pour la recherche par nom de famille seul,
+     *   qui ramène aussi des homonymes (botanistes…) et des notices sans créateur.
+     */
+    fun parse(text: String, query: ArtworkQuery = ArtworkQuery.VAN_GOGH, tally: Tally? = null, strictCreator: Boolean = false): List<Artwork> {
+        val root = try { json.parseToJsonElement(text) as? JsonObject } catch (e: Exception) { null }
+        val items = root?.get("items") as? JsonArray ?: run { tally?.shape = JsonReading.describeShape(text); return emptyList() }
+        tally?.let { it.raw += items.size }
+        val artworks = items.mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null
             val id = o.str("id")?.takeIf { it.count { c -> c == '/' } >= 2 } ?: return@mapNotNull null
             val creators = strings(o["dcCreator"])
-            if (creators.isNotEmpty() && creators.none(query::matchesCreator)) return@mapNotNull null
+            if (creators.isEmpty() && strictCreator) { tally?.drop("sans créateur déclaré"); return@mapNotNull null }
+            if (creators.isNotEmpty() && creators.none(query::matchesCreator)) { tally?.drop("d'un autre créateur"); return@mapNotNull null }
             val title = strings(o["title"]).firstOrNull { it.isNotBlank() } ?: return@mapNotNull null
             val year = strings(o["year"]).firstNotNullOfOrNull { Regex("""\b(\d{4})\b""").find(it)?.groupValues?.get(1)?.toInt() }
-                ?: return@mapNotNull null
-            if (year !in query.years) return@mapNotNull null
+                ?: run { tally?.drop("sans année"); return@mapNotNull null }
+            if (year !in query.years) { tally?.drop("hors des dates plausibles"); return@mapNotNull null }
             val preview = strings(o["edmPreview"]).firstOrNull()
             val museum = strings(o["dataProvider"]).firstOrNull().orEmpty()
             Artwork(
@@ -72,6 +81,8 @@ object EuropeanaParser {
                 provider = if (museum.isEmpty()) "Europeana" else "Europeana · $museum",
             )
         }
+        if (tally != null) { tally.kept += artworks.size; if (artworks.isEmpty()) tally.shape = JsonReading.describeShape(text) }
+        return artworks
     }
 
     private fun strings(e: JsonElement?): List<String> = when (e) {

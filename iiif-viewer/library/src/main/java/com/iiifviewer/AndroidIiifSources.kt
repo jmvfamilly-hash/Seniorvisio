@@ -56,7 +56,7 @@ class HttpIiifSources : IiifSources {
             ?.let { arr -> List(arr.length()) { arr.getInt(it) } }
             ?.sorted()
             ?: generateSequence(1) { it * 2 }.takeWhile { it == 1 || width / it >= tileSize }.toList()
-        return IiifImageInfo(base, width, height, tileSize, factors)
+        return IiifImageInfo(HttpUpgrade.secure(base), width, height, tileSize, factors)
     }
 
     // ── Images sans service IIIF ─────────────────────────────────────────────────
@@ -109,7 +109,7 @@ class HttpIiifSources : IiifSources {
      */
     private suspend fun <T> fetch(url: String, read: (java.io.InputStream) -> T): T =
         withContext(Dispatchers.IO) {
-            val conn = URL(url).openConnection() as HttpURLConnection
+            val conn = URL(HttpUpgrade.secure(url)).openConnection() as HttpURLConnection   // Android refuse le HTTP non chiffré
             conn.connectTimeout = 10_000
             conn.readTimeout = 15_000
             // certains serveurs (AIC derrière Cloudflare) refusent en 403 les requêtes sans User-Agent identifiable

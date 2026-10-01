@@ -44,20 +44,21 @@ object ArticParser {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Les œuvres de Van Gogh ayant une image, par date croissante. Une réponse illisible rend une liste vide. */
-    fun parse(text: String, query: ArtworkQuery = ArtworkQuery.VAN_GOGH): List<Artwork> {
+    fun parse(text: String, query: ArtworkQuery = ArtworkQuery.VAN_GOGH, tally: Tally? = null): List<Artwork> {
         val root = try { json.parseToJsonElement(text) as? JsonObject } catch (e: Exception) { null } ?: return emptyList()
         val iiif = (root["config"] as? JsonObject)?.str("iiif_url")?.trimEnd('/') ?: DEFAULT_IIIF
-        val data = root["data"] as? JsonArray ?: return emptyList()
+        val data = root["data"] as? JsonArray ?: run { tally?.shape = JsonReading.describeShape(text); return emptyList() }
+        tally?.let { it.raw += data.size }
 
-        return data.mapNotNull { el ->
+        val artworks = data.mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null
             // la recherche est plein texte : on ne garde que les œuvres DE l'artiste, pas celles qui le citent
-            if (o.str("artist_title")?.let(query::matchesCreator) != true) return@mapNotNull null
-            val imageId = o.str("image_id") ?: return@mapNotNull null
+            if (o.str("artist_title")?.let(query::matchesCreator) != true) { tally?.drop("d'un autre artiste"); return@mapNotNull null }
+            val imageId = o.str("image_id") ?: run { tally?.drop("sans image"); return@mapNotNull null }
             val id = o.int("id") ?: return@mapNotNull null
             val title = o.str("title") ?: return@mapNotNull null
-            val year = o.int("date_start") ?: o.int("date_end") ?: return@mapNotNull null
-            if (year !in query.years) return@mapNotNull null
+            val year = o.int("date_start") ?: o.int("date_end") ?: run { tally?.drop("sans date"); return@mapNotNull null }
+            if (year !in query.years) { tally?.drop("hors des dates plausibles"); return@mapNotNull null }
             val thumb = o["thumbnail"] as? JsonObject
             Artwork(
                 id = "artic-$id",
@@ -74,6 +75,8 @@ object ArticParser {
                 provider = "Art Institute of Chicago",
             )
         }.sortedWith(compareBy({ it.date.positionEpochDay }, { it.id }))
+        if (tally != null) { tally.kept += artworks.size; if (artworks.isEmpty()) tally.shape = JsonReading.describeShape(text) }
+        return artworks
     }
 
     private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull

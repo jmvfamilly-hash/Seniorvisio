@@ -9,6 +9,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.IOException
@@ -50,6 +51,8 @@ class UniverseLoader(
     private val timeoutMs: Long = 45_000,
     /** Mêmes sources avec un User-Agent sobre : retentées quand la requête normale échoue (voir [runSource]). */
     private val fallbackSources: Map<String, MuseumSource> = emptyMap(),
+    /** Délai avant le nouvel essai automatique des sources bloquées temporairement ([SourceState.LIMITED]) ; négatif = jamais. */
+    private val limitedRetryDelayMs: Long = 60_000,
 ) {
     private class Outcome(val report: SourceReport, val artworks: List<Artwork>)
 
@@ -77,15 +80,24 @@ class UniverseLoader(
             return UniverseState(merged, reports.values.toList(), done, credit)
         }
 
-        artist.sources.map { spec ->
-            async {
-                val outcome = runSource(artist, spec, query)
-                reports[spec.sourceId] = outcome.report
-                if (outcome.report.state.connected) connected[spec.sourceId] = outcome.artworks
-                onUpdate(snapshot(false))
-            }
-        }.awaitAll()
-        snapshot(true).also(onUpdate)
+        suspend fun runAndStore(spec: SourceSpec, done: Boolean) {
+            val outcome = runSource(artist, spec, query)
+            reports[spec.sourceId] = outcome.report
+            if (outcome.report.state.connected) connected[spec.sourceId] = outcome.artworks
+            onUpdate(snapshot(done))
+        }
+
+        artist.sources.map { spec -> async { runAndStore(spec, false) } }.awaitAll()
+        onUpdate(snapshot(true))
+
+        // sources bloquées temporairement : UN nouvel essai automatique après une pause, sans gêner l'affichage (déjà publié ci-dessus)
+        val limited = artist.sources.filter { reports[it.sourceId]?.state == SourceState.LIMITED }
+        if (limited.isNotEmpty() && limitedRetryDelayMs >= 0) {
+            Diag.info("source", "nouvel essai automatique dans ${limitedRetryDelayMs / 1000} s des sources bloquées temporairement : ${limited.joinToString { it.sourceId }}", artistId = artist.id)
+            delay(limitedRetryDelayMs)
+            limited.map { spec -> async { runAndStore(spec, true) } }.awaitAll()
+        }
+        snapshot(true)
     }
 
     private suspend fun runSource(artist: Artist, spec: SourceSpec, query: ArtworkQuery): Outcome {
@@ -103,6 +115,7 @@ class UniverseLoader(
         } catch (e: ApiRetiredException) {
             return retired(artist, source, cache, e)
         } catch (e: Exception) {
+            if (TemporaryBlock.matches(e.message)) return limited(artist, source, cache, e)
             return fromCache(artist, source, cache, e)
         }
         if (fetched.isEmpty()) {
@@ -166,6 +179,19 @@ class UniverseLoader(
             Outcome(SourceReport(source.id, source.name, SourceState.CACHED, cached.size, "API retirée : copie hors ligne d'une connexion passée (${error.message?.take(160)})"), cached)
         } else {
             Outcome(SourceReport(source.id, source.name, SourceState.UNAVAILABLE, 0, "API retirée par le service : ${error.message}"), emptyList())
+        }
+    }
+
+    /** Blocage temporaire : la copie d'une connexion passée si elle existe, sinon la source est LIMITÉE (réessayée plus tard). */
+    private fun limited(artist: Artist, source: MuseumSource, cache: File, error: Exception): Outcome {
+        val why = error.message ?: error.javaClass.simpleName
+        val cached = runCatching { cache.takeIf { it.exists() }?.readText() }.getOrNull()?.let(ArtworkJson::decode).orEmpty()
+        return if (cached.isNotEmpty()) {
+            Diag.warn("source", "bloquée temporairement → copie hors ligne utilisée (${cached.size} œuvres) : $why", sourceId = source.id, artistId = artist.id)
+            Outcome(SourceReport(source.id, source.name, SourceState.CACHED, cached.size, "bloquée temporairement : copie hors ligne ($why)"), cached)
+        } else {
+            Diag.error("source", "BLOQUÉE TEMPORAIREMENT (pare-feu anti-robot ou limite de débit), aucune copie : $why", sourceId = source.id, artistId = artist.id)
+            Outcome(SourceReport(source.id, source.name, SourceState.LIMITED, 0, "bloquée temporairement, nouvel essai automatique : $why"), emptyList())
         }
     }
 

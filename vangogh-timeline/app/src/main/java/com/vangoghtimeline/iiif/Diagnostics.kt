@@ -83,6 +83,30 @@ object Diag {
     fun hostOf(url: String): String = url.substringAfter("://", url).substringBefore('/').substringBefore('?')
 }
 
+/**
+ * Bilan d'une analyse de réponse : combien d'éléments reçus, combien retenus, et POURQUOI les autres ont été écartés. C'est ce qui
+ * permet de distinguer « le service ne renvoie rien » de « mon filtre écarte tout » (source vide).
+ */
+class Tally {
+    var raw = 0
+    var kept = 0
+    private val reasons = LinkedHashMap<String, Int>()
+
+    /** Forme de la réponse, renseignée quand rien n'est retenu (clés du premier niveau et du premier élément). */
+    var shape: String? = null
+
+    fun drop(reason: String, n: Int = 1) { if (n > 0) reasons[reason] = (reasons[reason] ?: 0) + n }
+
+    fun summary(): String =
+        "$raw reçues, $kept retenues" + if (reasons.isEmpty()) "" else " — écartées : " + reasons.entries.joinToString(", ") { "${it.value} ${it.key}" }
+
+    /** Consigne le bilan : alerte si rien n'est retenu (avec la forme de la réponse), info sinon. */
+    fun log(sourceId: String, artistId: String?, label: String? = null) {
+        val text = "analyse${label?.let { " ($it)" } ?: ""} : ${summary()}" + if (kept == 0 && shape != null) " — forme de la réponse : $shape" else ""
+        Diag.log(if (kept == 0) DiagLevel.WARN else DiagLevel.INFO, "source", text, sourceId = sourceId, artistId = artistId, key = "tally|$sourceId|$artistId|$text")
+    }
+}
+
 /** Mise en forme du rapport d'anomalies copié dans le presse-papiers. Pur Kotlin. */
 object DiagnosticsReport {
     private const val MAX_CHARS = 250_000

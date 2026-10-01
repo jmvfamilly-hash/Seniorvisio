@@ -1,5 +1,6 @@
 package com.vangoghtimeline.iiif
 
+import com.iiifviewer.HttpUpgrade
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -9,6 +10,16 @@ import java.net.URL
 const val USER_AGENT =
     "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36 VanGoghTimeline/1.0"
 const val AIC_USER_AGENT = "VanGoghTimeline/1.0 (Android)"
+
+/**
+ * Android interdit le HTTP non chiffré : une adresse `http://` est réécrite en `https://` (voir [HttpUpgrade]), et la réécriture est
+ * consignée une fois par serveur (un serveur qui n'accepterait pas le HTTPS verrait alors son échec expliqué dans le journal).
+ */
+internal fun secured(url: String): String {
+    val secure = HttpUpgrade.secure(url)
+    if (secure != url) Diag.info("réseau", "adresse http:// réécrite en https:// pour ${Diag.hostOf(url)} (HTTP non chiffré interdit sur Android)", url, key = "https-upgrade|${Diag.hostOf(url)}")
+    return secure
+}
 
 /** User-Agent sobre : variante de repli quand un serveur refuse celui d'un navigateur (voir [UniverseLoader]). */
 const val PLAIN_USER_AGENT = "VanGoghTimeline/1.0"
@@ -21,7 +32,7 @@ const val PLAIN_USER_AGENT = "VanGoghTimeline/1.0"
  */
 class HttpManifestSource(private val userAgent: String = USER_AGENT) : ManifestSource {
     override suspend fun fetch(url: String): String = withContext(Dispatchers.IO) {
-        val conn = URL(url).openConnection() as HttpURLConnection
+        val conn = URL(secured(url)).openConnection() as HttpURLConnection
         try {
             conn.connectTimeout = 10_000
             conn.readTimeout = 15_000
@@ -56,7 +67,7 @@ class HttpManifestSource(private val userAgent: String = USER_AGENT) : ManifestS
 /** Accès « léger » à une image : requête `Range: bytes=0-0`, on ne lit que le code et le type de contenu. */
 class HttpImageReachability : ImageReachability {
     override suspend fun check(url: String): Reach = withContext(Dispatchers.IO) {
-        val conn = URL(url).openConnection() as HttpURLConnection
+        val conn = URL(secured(url)).openConnection() as HttpURLConnection
         try {
             conn.connectTimeout = 10_000
             conn.readTimeout = 15_000

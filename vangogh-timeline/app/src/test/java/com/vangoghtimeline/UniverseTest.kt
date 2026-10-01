@@ -83,7 +83,8 @@ class UniverseTest {
     @Test fun queryMatchesCreatorsWithoutAccentsOrCase() {
         val q = ArtworkQuery.of(catalog().first { it.id == "joaquin-sorolla" })
         assertTrue(q.matchesCreator("Joaquín Sorolla y Bastida"))
-        assertTrue(q.matchesCreator("SOROLLA"))
+        assertFalse(q.matchesCreator("SOROLLA"))                     // le nom de famille seul ne suffit plus : il faut un prénom ou une initiale
+        assertTrue(q.matchesCreator("Sorolla y Bastida, Joaquín"))
         assertFalse(q.matchesCreator("John Singer Sargent"))
         assertTrue(1900 in q.years && 1850 !in q.years)
     }

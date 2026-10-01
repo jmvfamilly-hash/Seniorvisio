@@ -3,6 +3,7 @@ package com.vangoghtimeline.iiif
 import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.ArtworkQuery
 import com.vangoghtimeline.model.SourceSpec
+import com.vangoghtimeline.model.slugOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -25,12 +26,16 @@ interface MuseumSource {
     suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork>
 }
 
+private fun artistIdOf(query: ArtworkQuery) = slugOf(query.artistName)
+
 class AicSource(private val http: ManifestSource) : MuseumSource {
     override val id = "aic"
     override val name = "Art Institute of Chicago"
     override val europeanaKeyword = "art institute"
-    override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> =
-        ArticParser.parse(http.fetch(ArticParser.searchUrl(query)), query)
+    override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> {
+        val tally = Tally()
+        return ArticParser.parse(http.fetch(ArticParser.searchUrl(query)), query, tally).also { tally.log(id, artistIdOf(query)) }
+    }
 }
 
 class EuropeanaSource(private val http: ManifestSource, private val key: String = EuropeanaParser.DEMO_KEY) : MuseumSource {
@@ -40,12 +45,15 @@ class EuropeanaSource(private val http: ManifestSource, private val key: String 
 
     /** Variantes de nom essayées dans l'ordre (exact, sans accents, nom de famille) ; chacune est consignée avec son résultat. */
     override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> {
-        val variants = EuropeanaParser.searchVariants(query, key)
+        val variants = EuropeanaParser.variants(query, key)
         var firstError: Exception? = null
         var answered = false
-        for ((index, url) in variants.withIndex()) {
+        for ((index, variant) in variants.withIndex()) {
+            val (url, surnameOnly) = variant
             try {
-                val arts = EuropeanaParser.parse(http.fetch(url), query)
+                val tally = Tally()
+                val arts = EuropeanaParser.parse(http.fetch(url), query, tally, strictCreator = surnameOnly)
+                tally.log(id, artistIdOf(query), "variante ${index + 1}/${variants.size}${if (surnameOnly) ", nom de famille seul : créateur exigé" else ""}")
                 answered = true
                 if (arts.isNotEmpty()) {
                     if (index > 0) Diag.warn("source", "recherche : variante ${index + 1}/${variants.size} utilisée (les précédentes n'ont rien donné)", url, id)
@@ -68,16 +76,20 @@ class ClevelandSource(private val http: ManifestSource) : MuseumSource {
     override val id = "cleveland"
     override val name = "Cleveland Museum of Art"
     override val europeanaKeyword = "cleveland"
-    override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> =
-        ClevelandParser.parse(http.fetch(ClevelandParser.searchUrl(query)), query)
+    override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> {
+        val tally = Tally()
+        return ClevelandParser.parse(http.fetch(ClevelandParser.searchUrl(query)), query, tally).also { tally.log(id, artistIdOf(query)) }
+    }
 }
 
 class SmkSource(private val http: ManifestSource) : MuseumSource {
     override val id = "smk"
     override val name = "Statens Museum for Kunst"
     override val europeanaKeyword = "statens museum"
-    override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> =
-        SmkParser.parse(http.fetch(SmkParser.searchUrl(query)), query)
+    override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> {
+        val tally = Tally()
+        return SmkParser.parse(http.fetch(SmkParser.searchUrl(query)), query, tally).also { tally.log(id, artistIdOf(query)) }
+    }
 }
 
 /**
@@ -91,6 +103,8 @@ class MetSource(
     private val http: ManifestSource,
     private val maxObjects: Int = 120,
     private val parallelism: Int = 6,
+    /** Notices déjà lues (une par fichier) : elles ne changent pas, on ne les redemande pas (et le Met n'est pas sollicité deux fois). */
+    private val noticeCache: java.io.File? = null,
 ) : MuseumSource {
     override val id = "met"
     override val name = "The Metropolitan Museum of Art"
@@ -99,22 +113,36 @@ class MetSource(
     override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> = coroutineScope {
         val ids = searchIds(query).take(maxObjects)
         val gate = Semaphore(parallelism)
-        ids.map { objectId ->
+        val tally = Tally()
+        val artworks = ids.map { objectId ->
             async {
                 gate.withPermit {
                     val url = MetParser.objectUrl(objectId)
                     try {
-                        MetParser.parseObject(http.fetch(url), query)
+                        val cached = readNotice(objectId)
+                        val text = cached ?: http.fetch(url).also { writeNotice(objectId, it) }
+                        MetParser.parseObject(text, query, tally)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         // notice ignorée : consignée (regroupée), la source continue
+                        tally.raw++
+                        tally.drop(if (e.message?.contains("HTTP 404") == true) "n'existent plus (404)" else "non lues (erreur réseau)")
                         Diag.warn("source", "notice ignorée : ${e.message ?: e.javaClass.simpleName}", url, id, key = "met-object|${e.message?.take(40)}")
                         null
                     }
                 }
             }
         }.awaitAll().filterNotNull()
+        tally.log(id, artistIdOf(query))
+        artworks
+    }
+
+    private fun readNotice(objectId: Int): String? =
+        noticeCache?.let { dir -> runCatching { java.io.File(dir, "$objectId.json").takeIf { it.exists() }?.readText() }.getOrNull() }
+
+    private fun writeNotice(objectId: Int, text: String) {
+        noticeCache?.let { dir -> runCatching { dir.mkdirs(); java.io.File(dir, "$objectId.json").writeText(text) } }
     }
 
     private suspend fun searchIds(query: ArtworkQuery): List<Int> {
@@ -190,7 +218,8 @@ class RijksSource(
             pages++
         }
         val gate = Semaphore(parallelism)
-        ids.map { objectId ->
+        val tally = Tally().also { it.raw = ids.size }
+        val resolved = ids.map { objectId ->
             async {
                 gate.withPermit {
                     try {
@@ -203,7 +232,13 @@ class RijksSource(
                     }
                 }
             }
-        }.awaitAll().filterNotNull().filter { it.date.year in query.years }
+        }.awaitAll().filterNotNull()
+        val kept = resolved.filter { it.date.year in query.years }
+        tally.drop("sans image ou étape en échec", ids.size - resolved.size)
+        tally.drop("hors des dates plausibles", resolved.size - kept.size)
+        tally.kept = kept.size
+        tally.log(id, artistIdOf(query))
+        kept
     }
 
     private suspend fun resolve(objectId: String): Artwork? {
@@ -217,6 +252,11 @@ class RijksSource(
 }
 
 /** Les sources implémentées, par identifiant (celui des [SourceSpec]). */
-fun defaultMuseumSources(http: ManifestSource): Map<String, MuseumSource> =
-    listOf(AicSource(http), RijksSource(http), EuropeanaSource(http), MetSource(http), ClevelandSource(http), SmkSource(http))
+fun defaultMuseumSources(
+    http: ManifestSource,
+    /** Accès au Met : cadencé et retenté en cas de blocage temporaire (voir [RetryingSource]) ; par défaut, le même que les autres. */
+    metHttp: ManifestSource = http,
+    metNoticeCache: java.io.File? = null,
+): Map<String, MuseumSource> =
+    listOf(AicSource(http), RijksSource(http), EuropeanaSource(http), MetSource(metHttp, noticeCache = metNoticeCache), ClevelandSource(http), SmkSource(http))
         .associateBy { it.id }

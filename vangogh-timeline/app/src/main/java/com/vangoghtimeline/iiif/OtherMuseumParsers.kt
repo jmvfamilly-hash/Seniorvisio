@@ -84,15 +84,17 @@ object MetParser {
         else -> "non JSON"
     }
 
-    fun parseObject(text: String, query: ArtworkQuery): Artwork? {
-        val o = obj(text) ?: return null
-        val id = o.int("objectID") ?: return null
-        if (o.bool("isPublicDomain") != true) return null
-        val image = o.str("primaryImage")?.takeIf { it.startsWith("http") } ?: return null
-        if (o.str("artistDisplayName")?.let(query::matchesCreator) != true) return null
-        val title = o.str("title")?.takeIf { it.isNotBlank() } ?: return null
-        val year = yearOf(o.int("objectBeginDate"), o.int("objectEndDate")) ?: return null
-        if (year !in query.years) return null
+    fun parseObject(text: String, query: ArtworkQuery, tally: Tally? = null): Artwork? {
+        tally?.let { it.raw++ }
+        val o = obj(text) ?: run { tally?.drop("illisibles"); return null }
+        val id = o.int("objectID") ?: run { tally?.drop("sans identifiant"); return null }
+        if (o.bool("isPublicDomain") != true) { tally?.drop("hors domaine public"); return null }
+        val image = o.str("primaryImage")?.takeIf { it.startsWith("http") } ?: run { tally?.drop("sans image"); return null }
+        if (o.str("artistDisplayName")?.let(query::matchesCreator) != true) { tally?.drop("d'un autre artiste"); return null }
+        val title = o.str("title")?.takeIf { it.isNotBlank() } ?: run { tally?.drop("sans titre"); return null }
+        val year = yearOf(o.int("objectBeginDate"), o.int("objectEndDate")) ?: run { tally?.drop("sans date"); return null }
+        if (year !in query.years) { tally?.drop("hors des dates plausibles"); return null }
+        tally?.let { it.kept++ }
         return Artwork(
             id = "met-$id", title = title.trim(), date = ArtworkDate.year(year), medium = o.str("medium")?.takeIf { it.isNotBlank() },
             iiif = IiifRef(manifestUrl = "met:$id", thumbnailUrl = o.str("primaryImageSmall")?.takeIf { it.startsWith("http") }, imageUrl = image),
@@ -118,21 +120,24 @@ object ClevelandParser {
         "https://openaccess-api.clevelandart.org/api/artworks/?cc0=1&has_image=1&limit=100&artists=" +
             java.net.URLEncoder.encode(query.artistName, "UTF-8")
 
-    fun parse(text: String, query: ArtworkQuery): List<Artwork> =
-        obj(text)?.arr("data").orEmpty().mapNotNull { el ->
+    fun parse(text: String, query: ArtworkQuery, tally: Tally? = null): List<Artwork> {
+        val data = obj(text)?.arr("data")
+        if (data == null) { tally?.shape = JsonReading.describeShape(text); return emptyList() }
+        tally?.let { it.raw += data.size }
+        val artworks = data.mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null
             val id = o.int("id") ?: return@mapNotNull null
             val title = o.str("title")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val creators = o.arr("creators").mapNotNull { (it as? JsonObject)?.str("description") }
-            if (creators.none(query::matchesCreator)) return@mapNotNull null
+            if (creators.none(query::matchesCreator)) { tally?.drop("d'un autre créateur"); return@mapNotNull null }
             val images = o.objOf("images")
             val print = images?.objOf("print")?.str("url")?.takeIf { it.startsWith("http") }
             val web = images?.objOf("web")?.str("url")?.takeIf { it.startsWith("http") }
-            val image = print ?: web ?: return@mapNotNull null
+            val image = print ?: web ?: run { tally?.drop("sans image"); return@mapNotNull null }
             val year = MetParser.yearOf(o.int("creation_date_earliest"), o.int("creation_date_latest"))
                 ?: o.str("creation_date")?.let { Regex("""\b(1[5-9]\d{2})\b""").find(it)?.groupValues?.get(1)?.toInt() }
-                ?: return@mapNotNull null
-            if (year !in query.years) return@mapNotNull null
+                ?: run { tally?.drop("sans date"); return@mapNotNull null }
+            if (year !in query.years) { tally?.drop("hors des dates plausibles"); return@mapNotNull null }
             Artwork(
                 id = "cleveland-$id", title = title.trim(), date = ArtworkDate.year(year), medium = o.str("technique")?.takeIf { it.isNotBlank() },
                 iiif = IiifRef(
@@ -143,6 +148,9 @@ object ClevelandParser {
                 provider = "Cleveland Museum of Art",
             )
         }
+        if (tally != null) { tally.kept += artworks.size; if (artworks.isEmpty()) tally.shape = JsonReading.describeShape(text) }
+        return artworks
+    }
 }
 
 /**
@@ -155,26 +163,32 @@ object SmkParser {
             java.net.URLEncoder.encode("[has_image:true],[public_domain:true]", "UTF-8") +
             "&keys=" + java.net.URLEncoder.encode(query.artistName, "UTF-8")
 
-    fun parse(text: String, query: ArtworkQuery): List<Artwork> =
-        obj(text)?.arr("items").orEmpty().mapNotNull { el ->
+    fun parse(text: String, query: ArtworkQuery, tally: Tally? = null): List<Artwork> {
+        val items = obj(text)?.arr("items")
+        if (items == null) { tally?.shape = JsonReading.describeShape(text); return emptyList() }
+        tally?.let { it.raw += items.size }
+        val artworks = items.mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null
             val number = o.str("object_number") ?: o.str("id") ?: return@mapNotNull null
-            if (o.strings("artist").none(query::matchesCreator)) return@mapNotNull null
+            if (o.strings("artist").none(query::matchesCreator)) { tally?.drop("d'un autre artiste (ou champ « artist » inattendu)"); return@mapNotNull null }
             val title = o.arr("titles").firstNotNullOfOrNull { (it as? JsonObject)?.str("title")?.takeIf { t -> t.isNotBlank() } }
-                ?: return@mapNotNull null
+                ?: run { tally?.drop("sans titre"); return@mapNotNull null }
             val service = o.str("image_iiif_id")?.takeIf { it.startsWith("http") }?.trimEnd('/')
                 ?: o.str("image_iiif_info")?.takeIf { it.startsWith("http") }?.removeSuffix("/info.json")?.trimEnd('/')
-                ?: return@mapNotNull null
+                ?: run { tally?.drop("sans service IIIF"); return@mapNotNull null }
             val dated = o.arr("production_date").firstNotNullOfOrNull { it as? JsonObject }
             val year = MetParser.yearOf(dated?.str("start")?.take(4)?.toIntOrNull(), dated?.str("end")?.take(4)?.toIntOrNull())
-                ?: return@mapNotNull null
-            if (year !in query.years) return@mapNotNull null
+                ?: run { tally?.drop("sans date"); return@mapNotNull null }
+            if (year !in query.years) { tally?.drop("hors des dates plausibles"); return@mapNotNull null }
             Artwork(
                 id = "smk-" + slug(number), title = title.trim(), date = ArtworkDate.year(year),
                 iiif = IiifRef(manifestUrl = "smk:$number", imageServiceId = service, canvasWidth = o.int("image_width"), canvasHeight = o.int("image_height")),
                 provider = "Statens Museum for Kunst",
             )
         }
+        if (tally != null) { tally.kept += artworks.size; if (artworks.isEmpty()) tally.shape = JsonReading.describeShape(text) }
+        return artworks
+    }
 
     private fun slug(s: String) = s.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
 }

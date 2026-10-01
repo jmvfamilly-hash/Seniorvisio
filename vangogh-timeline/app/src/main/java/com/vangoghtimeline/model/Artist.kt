@@ -69,10 +69,28 @@ data class ArtworkQuery(val artistName: String, val match: String, val years: In
     /** Le nom sans accents (« Joaquín Sorolla » → « Joaquin Sorolla »). */
     fun asciiName(): String = Normalizer.normalize(artistName, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
 
-    /** Vrai si [creator] (libellé du créateur chez le musée) désigne cet artiste : comparaison sans accents ni casse. */
-    fun matchesCreator(creator: String): Boolean = slugOf(creator).contains(slugOf(match))
+    /** Prénoms (sans les particules « van », « de »…) : « Vincent van Gogh » → [vincent]. */
+    private val given: List<String> by lazy {
+        val tokens = slugOf(artistName).split('-').filter { it.isNotEmpty() }.dropLast(1)
+        tokens.filter { it !in PARTICLES }
+    }
+
+    /**
+     * Vrai si [creator] (libellé du créateur chez le musée) désigne cet artiste : sans accents ni casse, il faut le **nom de famille**
+     * ET un **prénom** (ou son initiale). « Sargent, John Singer » et « J. S. Sargent » passent ; « E. Sargent » (un botaniste),
+     * « Theo van Gogh » ou « Jean Renoir » ne passent pas.
+     */
+    fun matchesCreator(creator: String): Boolean {
+        val c = slugOf(creator)
+        if (!c.contains(slugOf(match))) return false
+        if (given.isEmpty()) return true
+        val tokens = c.split('-').filter { it.isNotEmpty() }
+        return given.any { g -> c.contains(g) || tokens.any { it.length == 1 && it[0] == g[0] } }
+    }
 
     companion object {
+        private val PARTICLES = setOf("van", "von", "de", "der", "den", "du", "da", "di", "del", "della", "le", "la", "y", "ten", "ter")
+
         val VAN_GOGH = ArtworkQuery("Vincent van Gogh", "gogh", 1870..1890)
 
         fun of(artist: Artist): ArtworkQuery {

@@ -17,6 +17,15 @@ internal object JsonReading {
 
     fun obj(text: String): JsonObject? = try { json.parseToJsonElement(text) as? JsonObject } catch (e: Exception) { null }
 
+    /** « clés [total, objectIDs] ; premier élément de « items » : [id, title…] » : de quoi reconnaître la forme d'une réponse inattendue. */
+    fun describeShape(text: String): String {
+        val root = root(text) ?: return "non JSON (${text.take(80).replace('\n', ' ')})"
+        val keys = (root as? JsonObject)?.keys?.joinToString() ?: "tableau de ${(root as? JsonArray)?.size ?: 0}"
+        val firstList = (root as? JsonObject)?.entries?.firstOrNull { (it.value as? JsonArray)?.isNotEmpty() == true }
+        val firstItem = ((firstList?.value ?: root) as? JsonArray)?.firstOrNull() as? JsonObject
+        return "clés [$keys]" + if (firstItem != null) " ; premier élément de « ${firstList?.key ?: "racine"} » : [${firstItem.keys.joinToString()}]" else ""
+    }
+
     fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
     fun JsonObject.int(key: String): Int? = (this[key] as? JsonPrimitive)?.let { it.intOrNull ?: it.contentOrNull?.toIntOrNull() }
     fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull()

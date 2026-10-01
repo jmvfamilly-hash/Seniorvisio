@@ -215,3 +215,16 @@ et renvoyait vers `/public/collection/v1.1/search` (Elastic, paginée par `offse
   une copie d'une connexion passée reste utilisée si elle existe ;
 - extrait du corps d'erreur porté à 800 caractères pour le JSON ;
 - **Europeana** : trois variantes de nom (exact, sans accents, nom de famille) ; chacune est consignée avec son résultat.
+
+## Corrections après le rapport du 2026-10-01 (rev19)
+
+- **Le Met bloquait l'appli par intermittence** (403 avec page HTML « Incapsula » : pare-feu anti-robot / limite de débit). Tout le trafic vers le Met passe
+  maintenant par une file commune à tous les artistes (`RateLimiter` : 2 requêtes à la fois, 150 ms d'écart) ; un blocage temporaire (429, 503, 403 avec page HTML)
+  est retenté après 2 s puis 5 s (`RetryingSource`, chaque attente consignée) ; les notices lues sont gardées sur disque (`met_notices/`). Si le blocage persiste, la source
+  est **LIMITÉE** (point orange, « nouvel essai automatique ») et retentée une fois après 60 s sans gêner l'affichage.
+- **HTTP non chiffré interdit par Android** (« Cleartext HTTP traffic … not permitted ») : toute adresse `http://` (manifestes, `info.json`, tuiles, vignettes, images) est
+  réécrite en `https://` (`HttpUpgrade`), sauf adresses locales ; la réécriture est consignée une fois par serveur.
+- **Homonymes** (botanistes « E. Sargent » dans Europeana…) : un créateur doit désormais porter le nom de famille ET un prénom ou son initiale (`ArtworkQuery.matchesCreator`) ;
+  la recherche Europeana par nom de famille seul exige en plus un créateur déclaré.
+- **Sources vides expliquées** : chaque analyse consigne « N reçues, K retenues — écartées : … » avec les raisons (hors domaine public, sans image, autre artiste, hors dates…) et, si
+  rien n'est retenu, la forme de la réponse (clés, premier élément) — pour distinguer « le service ne renvoie rien » de « le filtre écarte tout » (Met et Europeana pour Sorolla, SMK pour Renoir).

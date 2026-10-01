@@ -5,6 +5,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.iiifviewer.HttpUpgrade
 import com.vangoghtimeline.iiif.AIC_USER_AGENT
 import com.vangoghtimeline.iiif.USER_AGENT
 import okhttp3.OkHttpClient
@@ -34,7 +35,10 @@ class TimelineApp : Application(), ImageLoaderFactory {
             .okHttpClient {
                 // User-Agent explicite : sans lui, le serveur IIIF d'AIC (Cloudflare) répond 403 aux vignettes
                 OkHttpClient.Builder().addInterceptor { chain ->
-                    val request = chain.request()
+                    val original = chain.request()
+                    // Android refuse le HTTP non chiffré : une vignette en http:// est demandée en https://
+                    val request = if (original.url.scheme == "http" && HttpUpgrade.needsUpgrade(original.url.toString()))
+                        original.newBuilder().url(original.url.newBuilder().scheme("https").build()).build() else original
                     val builder = request.newBuilder()
                         .header("User-Agent", USER_AGENT)
                         .header("AIC-User-Agent", AIC_USER_AGENT)

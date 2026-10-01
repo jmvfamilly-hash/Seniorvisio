@@ -302,6 +302,7 @@ private fun SourceLine(r: SourceReport) {
         SourceState.CONNECTED, SourceState.CACHED -> Color(0xFF4CC38A)
         SourceState.REJECTED, SourceState.UNREACHABLE -> Color(0xFFE5645A)
         SourceState.PENDING -> Color(0xFFE3B65A)
+        SourceState.LIMITED -> Color(0xFFE59A3B)
         SourceState.EMPTY, SourceState.UNAVAILABLE -> Color(0xFF7A828E)
     }
     Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.Top) {

@@ -32,6 +32,8 @@ enum class SourceState(val connected: Boolean) {
     EMPTY(false),
     /** Source configurée mais non implémentée (ex. clé d'API requise). */
     UNAVAILABLE(false),
+    /** Bloquée temporairement (pare-feu anti-robot, limite de débit) : nouvel essai automatique plus tard. */
+    LIMITED(false),
     /** En cours. */
     PENDING(false),
 }

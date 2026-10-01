@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vangoghtimeline.iiif.HttpImageReachability
 import com.vangoghtimeline.iiif.PLAIN_USER_AGENT
+import com.vangoghtimeline.iiif.RateLimiter
+import com.vangoghtimeline.iiif.RetryingSource
 import com.vangoghtimeline.iiif.SourceValidator
 import com.vangoghtimeline.iiif.UniverseLoader
 import com.vangoghtimeline.iiif.defaultMuseumSources
@@ -85,11 +87,17 @@ class MainActivity : ComponentActivity() {
         }
         val model = remember {
             val http = HttpManifestSource()
+            val plainHttp = HttpManifestSource(PLAIN_USER_AGENT)
+            // Tout le trafic vers le Met passe par UNE file commune (2 requêtes à la fois, 150 ms d'écart) et est retenté après un blocage
+            // temporaire : plusieurs artistes chargés ensemble ne déclenchent plus le pare-feu anti-robot du Met.
+            val metLimiter = RateLimiter(parallel = 2, minGapMs = 150)
+            val notices = File(filesDir, "met_notices")
             val loader = UniverseLoader(
-                defaultMuseumSources(http), SourceValidator(http, HttpImageReachability()),
+                defaultMuseumSources(http, RetryingSource(http, metLimiter, "metmuseum.org"), notices),
+                SourceValidator(http, HttpImageReachability()),
                 File(filesDir, "universes").apply { mkdirs() },
                 // repli : mêmes sources avec un User-Agent sobre, si un serveur refuse celui d'un navigateur
-                fallbackSources = defaultMuseumSources(HttpManifestSource(PLAIN_USER_AGENT)),
+                fallbackSources = defaultMuseumSources(plainHttp, RetryingSource(plainHttp, metLimiter, "metmuseum.org"), notices),
             )
             AppModel(scope, loader, http, File(filesDir, "portraits.json"))
         }
