@@ -59,8 +59,19 @@ version (`placeholderMemoryCacheKey`) : pas de saut.
 `SharedTransitionLayout` n'existe qu'à partir de Compose 1.7 ; le projet est sur 1.6 (Kotlin 1.9). Même principe (transformation de
 conteneur), écrit à la main, sans API expérimentale.
 
-**Démo hors ligne** : les œuvres de démonstration pointent vers `demo:vangogh/<id>`, servies par `demo/DemoIiifSources` (un ensemble de Mandelbrot
-par œuvre, découpé en tuiles IIIF, avec une palette propre à chacune) : le zoom profond marche sans serveur. Toute autre URL part sur le réseau.
+**Retour** : le visualiseur DÉZOOME d'abord jusqu'à l'image entière (`IiifZoomController.animateToFit`, 280 ms, pendant lequel les doigts sont
+absorbés), puis l'habillage — identique à cette vue — prend sa place et se rétrécit jusqu'à la carte. La transition de sortie part donc toujours
+d'une vue au zoom minimal, jamais d'un détail zoomé.
+
+### D'où viennent les œuvres (`iiif/ArticParser.kt`, `ArticRepository.kt`)
+
+Par défaut, les **œuvres de Van Gogh de l'Art Institute of Chicago**, lues dans leur API publique (`api.artic.edu`) : chaque œuvre a un
+`image_id`, c'est-à-dire un **service d'image IIIF** (`https://www.artic.edu/iiif/2/{image_id}`). La frise en tire des vignettes à la taille
+voulue (`…/full/{w},/0/default.jpg`) et le visualiseur s'en sert pour le zoom profond. La réponse est enregistrée : hors ligne, la frise se
+rouvre avec la copie locale. Sans réseau ni copie, 40 œuvres de démonstration SANS image s'affichent (elles ne s'ouvrent pas dans le visualiseur).
+
+Limite : l'API ne donne que l'**année**. Ces œuvres sont donc datées à l'année près (précision `YEAR`) et placées au milieu de l'année.
+Pour des dates au jour près, une collection IIIF avec `navDate` (voir ci-dessus) : `adb shell am start … -d "<url de la collection>"`.
 
 ### Pourquoi ça reste fluide avec des dizaines de vignettes
 
@@ -75,8 +86,7 @@ par œuvre, découpé en tuiles IIIF, avec une palette propre à chacune) : le z
 
 ## Essayer
 
-- Sans argument : 40 œuvres de démonstration, hors ligne (aplats aux couleurs du lieu).
-  **Leurs dates sont au mois près et écrites de mémoire d'après les chronologies usuelles : à remplacer par les données d'un musée.**
+- Sans argument : les œuvres de Van Gogh de l'Art Institute of Chicago (réseau requis la première fois). En secours hors ligne : 40 œuvres de démonstration sans image, dont les dates sont au mois près et écrites de mémoire d'après les chronologies usuelles — à ne pas citer comme source.
 - Avec une collection IIIF réelle :
   `adb shell am start -n com.vangoghtimeline/.MainActivity -d "https://serveur/iiif/collection/vangogh.json"`
 

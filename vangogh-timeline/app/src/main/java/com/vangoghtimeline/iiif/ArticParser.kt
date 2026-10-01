@@ -1,0 +1,66 @@
+package com.vangoghtimeline.iiif
+
+import com.vangoghtimeline.model.Artwork
+import com.vangoghtimeline.model.ArtworkDate
+import com.vangoghtimeline.model.IiifRef
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+
+/**
+ * Œuvres de Van Gogh de l'**Art Institute of Chicago**, lues dans la réponse de leur API publique
+ * (`https://api.artic.edu/api/v1/artworks/search`). Chaque œuvre a un `image_id` qui désigne un service d'image **IIIF**
+ * (`{config.iiif_url}/{image_id}`) : vignettes à la taille voulue, et zoom profond dans le visualiseur.
+ *
+ * Limite : l'API ne donne que l'ANNÉE (`date_start`/`date_end`). Les œuvres sont donc datées à l'année près
+ * ([com.vangoghtimeline.model.DatePrecision.YEAR]) et placées au milieu de l'année : la frise ne prétend pas connaître le jour.
+ * Pour des dates plus fines, un manifeste IIIF avec `navDate` (voir [IiifManifestParser]) les remplace.
+ *
+ * Pur Kotlin : testé sur la JVM avec une réponse type.
+ */
+object ArticParser {
+    const val SEARCH_URL =
+        "https://api.artic.edu/api/v1/artworks/search?q=Vincent%20van%20Gogh&limit=100" +
+            "&fields=id,title,artist_title,date_start,date_end,place_of_origin,medium_display,image_id,thumbnail"
+
+    private const val DEFAULT_IIIF = "https://www.artic.edu/iiif/2"
+    private val json = Json { ignoreUnknownKeys = true }
+
+    /** Les œuvres de Van Gogh ayant une image, par date croissante. Une réponse illisible rend une liste vide. */
+    fun parse(text: String): List<Artwork> {
+        val root = try { json.parseToJsonElement(text) as? JsonObject } catch (e: Exception) { null } ?: return emptyList()
+        val iiif = (root["config"] as? JsonObject)?.str("iiif_url")?.trimEnd('/') ?: DEFAULT_IIIF
+        val data = root["data"] as? JsonArray ?: return emptyList()
+
+        return data.mapNotNull { el ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            // la recherche est plein texte : on ne garde que les œuvres DE Van Gogh, pas celles qui le citent
+            if (o.str("artist_title")?.contains("gogh", ignoreCase = true) != true) return@mapNotNull null
+            val imageId = o.str("image_id") ?: return@mapNotNull null
+            val id = o.int("id") ?: return@mapNotNull null
+            val title = o.str("title") ?: return@mapNotNull null
+            val year = o.int("date_start") ?: o.int("date_end") ?: return@mapNotNull null
+            if (year !in 1870..1890) return@mapNotNull null
+            val thumb = o["thumbnail"] as? JsonObject
+            Artwork(
+                id = "artic-$id",
+                title = title,
+                date = ArtworkDate.year(year),
+                place = o.str("place_of_origin")?.substringBefore(',')?.trim()?.ifEmpty { null },
+                medium = o.str("medium_display"),
+                iiif = IiifRef(
+                    manifestUrl = "https://api.artic.edu/api/v1/artworks/$id",
+                    imageServiceId = "$iiif/$imageId",
+                    canvasWidth = thumb?.int("width"),
+                    canvasHeight = thumb?.int("height"),
+                ),
+            )
+        }.sortedWith(compareBy({ it.date.positionEpochDay }, { it.id }))
+    }
+
+    private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+    private fun JsonObject.int(key: String): Int? = (this[key] as? JsonPrimitive)?.intOrNull
+}

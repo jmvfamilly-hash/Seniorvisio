@@ -44,7 +44,7 @@ class IiifManifestParserTest {
         assertEquals("https://example.org/iiif/F612/info.json", a.iiif.infoJsonUrl)
         assertEquals(3000, a.iiif.canvasWidth)
         assertEquals(1.25f, a.iiif.aspectRatio, 1e-6f)
-        assertEquals("https://example.org/iiif/F612/full/!320,288/0/default.jpg", a.iiif.thumbnailUrlFor(320, 288))
+        assertEquals("https://example.org/iiif/F612/full/320,/0/default.jpg", a.iiif.thumbnailUrlFor(320, 288))
     }
 
     @Test fun languagePreferenceAndFallback() {

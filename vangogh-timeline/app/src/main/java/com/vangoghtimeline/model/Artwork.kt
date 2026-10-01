@@ -90,11 +90,19 @@ data class IiifRef(
     val infoJsonUrl: String? get() = imageServiceId?.trimEnd('/')?.plus("/info.json")
 
     /**
-     * `{service}/full/!{w},{h}/0/default.jpg` : « tient dans w×h » (IIIF `!w,h`). Le serveur redimensionne, on ne
-     * télécharge que les pixels utiles, quel que soit le format portrait ou paysage de l'œuvre.
+     * `{service}/full/{w},/0/default.jpg` : largeur imposée, hauteur déduite (forme du niveau 1 de l'Image API, acceptée par tous
+     * les serveurs). Le serveur redimensionne : on ne télécharge que les pixels utiles. [maxHeightPx] est gardé pour la
+     * signature et pour borner la largeur d'une œuvre très haute (portrait) : sa vignette tient alors dans la hauteur demandée.
      */
-    fun thumbnailUrlFor(maxWidthPx: Int, maxHeightPx: Int): String? =
-        imageServiceId?.let { "${it.trimEnd('/')}/full/!$maxWidthPx,$maxHeightPx/0/default.jpg" } ?: thumbnailUrl
+    fun thumbnailUrlFor(maxWidthPx: Int, maxHeightPx: Int): String? {
+        val service = imageServiceId ?: return thumbnailUrl
+        val byHeight = (maxHeightPx * aspectRatio).toInt().coerceAtLeast(1)
+        val width = minOf(maxWidthPx, byHeight)
+        return "${service.trimEnd('/')}/full/$width,/0/default.jpg"
+    }
+
+    /** Vrai si le visualiseur peut ouvrir cette œuvre : un service d'image, ou un manifeste réel (http). */
+    val canOpenViewer: Boolean get() = imageServiceId != null || manifestUrl.startsWith("http")
 }
 
 /** Une œuvre et ses métadonnées, telles que lues dans son manifeste IIIF. */

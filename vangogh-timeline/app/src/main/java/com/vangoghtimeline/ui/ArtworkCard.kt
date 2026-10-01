@@ -198,11 +198,14 @@ internal fun PlaceholderArt(artwork: Artwork) {
 }
 
 /** Une couleur par lieu de vie : la frise se lit aussi comme une carte des périodes. */
-fun placeColor(place: String?): Color = when (place) {
-    "Nuenen", "Etten", "La Haye", "Drenthe" -> Color(0xFF7A6A4F)
-    "Anvers", "Paris" -> Color(0xFF5E6E8C)
-    "Arles" -> Color(0xFFD9A521)
-    "Saint-Rémy-de-Provence" -> Color(0xFF2F5D9E)
-    "Auvers-sur-Oise" -> Color(0xFF5E8C5A)
-    else -> Color(0xFF6B6B6B)
+fun placeColor(place: String?): Color {
+    val p = place?.lowercase() ?: return Color(0xFF6B6B6B)
+    return when {
+        listOf("nuenen", "etten", "haye", "hague", "drenthe").any { it in p } -> Color(0xFF7A6A4F)
+        listOf("anvers", "antwerp", "paris").any { it in p } -> Color(0xFF5E6E8C)
+        "arles" in p -> Color(0xFFD9A521)
+        "saint-r" in p || "saint r" in p -> Color(0xFF2F5D9E)
+        "auvers" in p -> Color(0xFF5E8C5A)
+        else -> Color(0xFF6B6B6B)
+    }
 }

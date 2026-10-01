@@ -5,7 +5,9 @@ import com.vangoghtimeline.model.ArtworkDate
 import com.vangoghtimeline.model.IiifRef
 
 /**
- * Jeu de démonstration, utilisable hors ligne (aucune vignette : la frise affiche des aplats aux couleurs du lieu).
+ * Jeu de SECOURS, utilisé seulement quand la collection en ligne (voir [com.vangoghtimeline.iiif.ArticRepository]) est
+ * inaccessible et qu'aucune copie locale n'existe. Aucune image : la frise affiche des aplats aux couleurs du lieu et ces œuvres
+ * ne s'ouvrent pas dans le visualiseur.
  *
  * ATTENTION : les dates sont celles des chronologies usuelles, **au mois près** (précision `MONTH`), écrites de mémoire
  * pour la démonstration. Elles ne remplacent pas les données d'un musée : en production, la date vient de `navDate`
@@ -15,7 +17,7 @@ object SampleArtworks {
     private fun w(id: String, title: String, y: Int, m: Int, place: String, medium: String = "Huile sur toile") =
         Artwork(
             id = id, title = title, date = ArtworkDate.month(y, m), place = place, medium = medium,
-            iiif = IiifRef(manifestUrl = "demo:vangogh/$id"), // manifeste hors ligne : voir demo/DemoIiifSources
+            iiif = IiifRef(manifestUrl = "sample:$id"), // aucune image : ni service IIIF, ni vignette
         )
 
     val all: List<Artwork> = listOf(

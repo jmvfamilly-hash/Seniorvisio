@@ -46,6 +46,7 @@ private val Backdrop = Color(0xFF101010)
  *   dans ce cas on ouvre l'image du premier canevas (voir [IiifManifestResolver]).
  * @param onReady appelé une fois, quand les premières tuiles sont à l'écran : un appelant qui anime une transition
  *   vers le visualiseur peut alors retirer son habillage.
+ * @param controller poignée pour piloter le zoom de l'extérieur (voir [IiifZoomController]).
  * @param onLongPress appui long n'importe où (y compris pendant le chargement ou après une erreur,
  *   pour toujours pouvoir changer d'image) ; un retour haptique est donné avant l'appel.
  */
@@ -59,6 +60,7 @@ fun IiifZoomViewer(
     onError: (Throwable) -> Unit = {},
     onLongPress: () -> Unit = {},
     onReady: () -> Unit = {},
+    controller: IiifZoomController? = null,
 ) {
     val haptic = LocalHapticFeedback.current
     val currentOnLongPress by rememberUpdatedState(onLongPress)
@@ -88,7 +90,7 @@ fun IiifZoomViewer(
                 .pointerInput(Unit) { detectTapGestures(onLongPress = { longPress() }) },
         )
     } else {
-        ZoomSurface(loaded, initialFocus, initialZoom, sources, modifier, longPress, onReady)
+        ZoomSurface(loaded, initialFocus, initialZoom, sources, modifier, longPress, onReady, controller)
     }
 }
 
@@ -101,9 +103,14 @@ private fun ZoomSurface(
     modifier: Modifier,
     onLongPress: () -> Unit,
     onReady: () -> Unit,
+    zoomController: IiifZoomController?,
 ) {
     val scope = rememberCoroutineScope() // Main : convient au TileManager (état mono-thread)
     val controller = remember(info) { ViewportController(info.width, info.height, scope) }
+    DisposableEffect(zoomController, controller) {
+        zoomController?.viewport = controller
+        onDispose { zoomController?.let { if (it.viewport === controller) it.viewport = null } }
+    }
     val manager = remember(info) {
         TileManager(
             info, sources, scope, controller.viewport, controller.screenSize, Dispatchers.Default,

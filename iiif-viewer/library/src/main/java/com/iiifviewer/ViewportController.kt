@@ -132,6 +132,27 @@ class ViewportController(
         }
     }
 
+    /** Vrai tant que l'image est entière à l'écran (zoom minimal). */
+    fun isFit(): Boolean = minScale > 0f && _viewport.value.scale <= minScale * 1.02f
+
+    /**
+     * Revient au zoom minimal (image entière, centrée) en s'animant ; rend la main à la fin. Exécutée dans la coroutine de
+     * l'APPELANT : il peut enchaîner une autre animation derrière (ex. une transition de sortie) sans minuterie.
+     * Le zoom est interpolé en géométrique et ancré au centre de l'écran, comme un dézoom naturel.
+     */
+    suspend fun animateToFit() {
+        stopAnimation()
+        val start = _viewport.value
+        val (w, h) = _screenSize.value
+        if (w <= 0 || minScale <= 0f || start.scale <= minScale * 1.001f) return
+        val center = Offset(w / 2f, h / 2f)
+        animate(0f, 1f, animationSpec = tween(280, easing = FastOutSlowInEasing)) { f, _ ->
+            val scale = start.scale * (minScale / start.scale).pow(f)
+            _viewport.value = clamp(anchoredTransform(start, center, Offset.Zero, scale), w, h)
+        }
+        _viewport.value = clamp(ViewportState(minScale, 0f, 0f), w, h) // état final exact : les bords collants centrent l'image
+    }
+
     /**
      * Double-tap : bascule entre « image entière » et ×4, en gardant le point tapé fixe à l'écran.
      * Le zoom est interpolé en géométrique (s = s0 · (s1/s0)^f) : la vitesse de zoom perçue reste

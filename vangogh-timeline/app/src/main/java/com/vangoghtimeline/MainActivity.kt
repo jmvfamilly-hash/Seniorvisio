@@ -1,6 +1,7 @@
 package com.vangoghtimeline
 
 import android.content.Intent
+import java.io.File
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -32,6 +33,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.vangoghtimeline.iiif.ArticRepository
+import com.vangoghtimeline.iiif.ArtworkSource
 import com.vangoghtimeline.iiif.HttpManifestSource
 import com.vangoghtimeline.iiif.ManifestRepository
 import com.vangoghtimeline.model.Artwork
@@ -68,9 +71,17 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun Timeline(collectionUrl: String?) {
         val state by produceState<Load>(Load.Busy, collectionUrl) {
-            value = if (collectionUrl == null) Load.Done(SampleArtworks.all) else try {
+            value = if (collectionUrl == null) {
+                // Par défaut : les œuvres de Van Gogh de l'Art Institute of Chicago (images IIIF réelles), avec copie hors ligne.
+                val repo = ArticRepository(HttpManifestSource(), File(filesDir, "artic_vangogh.json"))
+                when (val loaded = repo.load()) {
+                    is ArtworkSource.Online -> Load.Done(loaded.artworks, "Art Institute of Chicago · API publique")
+                    is ArtworkSource.Cached -> Load.Done(loaded.artworks, "Art Institute of Chicago · copie hors ligne")
+                    null -> Load.Done(SampleArtworks.all, "Hors ligne : œuvres de démonstration, sans images")
+                }
+            } else try {
                 val arts = ManifestRepository(HttpManifestSource()).loadCollection(collectionUrl)
-                if (arts.isEmpty()) Load.Failed("Aucune œuvre datée dans cette collection.") else Load.Done(arts)
+                if (arts.isEmpty()) Load.Failed("Aucune œuvre datée dans cette collection.") else Load.Done(arts, collectionUrl)
             } catch (e: Exception) {
                 Load.Failed("Impossible de lire la collection : ${e.message ?: e.javaClass.simpleName}")
             }
@@ -79,7 +90,7 @@ class MainActivity : ComponentActivity() {
             when (val s = state) {
                 Load.Busy -> Message("Chargement des manifestes…")
                 is Load.Failed -> Message(s.reason)
-                is Load.Done -> TimelineHost(s.artworks)
+                is Load.Done -> TimelineHost(s.artworks, credit = s.credit)
             }
         }
     }
@@ -96,7 +107,7 @@ class MainActivity : ComponentActivity() {
     private sealed interface Load {
         data object Busy : Load
         data class Failed(val reason: String) : Load
-        data class Done(val artworks: List<Artwork>) : Load
+        data class Done(val artworks: List<Artwork>, val credit: String) : Load
     }
 }
 

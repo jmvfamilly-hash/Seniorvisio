@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,11 +37,11 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.iiifviewer.IiifSources
 import com.iiifviewer.IiifZoomViewer
-import com.vangoghtimeline.demo.DemoIiifSources
+import com.iiifviewer.rememberIiifZoomController
 import com.vangoghtimeline.model.Artwork
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -60,7 +61,8 @@ private const val VIEWER_READY_TIMEOUT_MS = 3000L
  * 3. **Fin de l'animation** : [IiifZoomViewer] est monté dessous avec l'URL de l'œuvre (`infoJsonUrl` si le manifeste l'a donnée,
  *    sinon l'URL du manifeste, que le visualiseur sait lire). Il démarre à « image entière » = ce que montre l'habillage.
  * 4. **Dès les premières tuiles** (ou après 3 s), l'habillage s'efface : on passe sans coupure de la vignette à l'image zoomable.
- * 5. **Retour** (bouton ou geste système) : le visualiseur est retiré et l'habillage se rétrécit jusqu'à la carte.
+ * 5. **Retour** (bouton ou geste système) : le visualiseur DÉZOOME d'abord jusqu'à l'image entière (`animateToFit`), puis est retiré
+ *    et l'habillage — identique à cette vue — se rétrécit jusqu'à la carte.
  *
  * Pourquoi pas `SharedTransitionLayout` : il n'existe qu'à partir de Compose 1.7 ; ce projet est sur 1.6 (Kotlin 1.9). Le principe
  * est le même (transformation de conteneur) mais écrit à la main, sans API expérimentale.
@@ -69,7 +71,7 @@ private const val VIEWER_READY_TIMEOUT_MS = 3000L
 fun TimelineHost(
     artworks: List<Artwork>,
     modifier: Modifier = Modifier,
-    sources: IiifSources = remember { DemoIiifSources() },
+    credit: String? = null,
 ) {
     val scope = rememberCoroutineScope()
     var request by remember { mutableStateOf<OpenRequest?>(null) }
@@ -80,9 +82,19 @@ fun TimelineHost(
     val expand = remember { Animatable(0f) }         // 0 = à la taille de la carte, 1 = plein écran
     val overlayAlpha = remember { Animatable(1f) }
     var running by remember { mutableStateOf<Job?>(null) }
+    var closing by remember { mutableStateOf(false) }
+    var hint by remember { mutableStateOf<String?>(null) }
+    val zoomController = rememberIiifZoomController()
+
+    // Un message bref (ex. œuvre sans image) : il s'efface seul.
+    LaunchedEffect(hint) { if (hint != null) { delay(2200); hint = null } }
 
     fun open(req: OpenRequest) {
         if (request != null) return
+        if (!req.artwork.iiif.canOpenViewer) {
+            hint = "Pas d'image IIIF pour cette œuvre"
+            return
+        }
         request = req
         viewerShown = false; viewerReady = false; viewerError = null
         running = scope.launch {
@@ -96,19 +108,43 @@ fun TimelineHost(
     }
 
     fun close() {
+        if (closing) return
         running?.cancel()
         running = scope.launch {
+            closing = true
+            if (viewerShown) {
+                // Le retour part TOUJOURS d'une vue au zoom minimal : on dézoome d'abord, sans quoi l'image qui rétrécit vers la
+                // carte ne ressemblerait pas à ce qu'on vient de quitter (vue zoomée sur un détail).
+                zoomController.animateToFit()
+            }
+            overlayAlpha.snapTo(1f)                   // l'habillage reprend la place du visualiseur, à l'identique (image entière)
             viewerShown = false
-            overlayAlpha.snapTo(1f)
             expand.animateTo(0f, tween(CLOSE_MS, easing = FastOutSlowInEasing))
             request = null
+            closing = false
         }
     }
 
-    BackHandler(enabled = request != null) { close() }
+    BackHandler(enabled = request != null && !closing) { close() }
 
     Box(modifier.fillMaxSize().onSizeChanged { rootSize = it }) {
         TimelineScreen(artworks, onArtworkDoubleTap = ::open)
+
+        credit?.let {
+            BasicText(
+                it,
+                Modifier.align(Alignment.BottomEnd).padding(10.dp),
+                style = TextStyle(color = Color(0xFF8B96A3), fontSize = 11.sp),
+            )
+        }
+        hint?.let {
+            BasicText(
+                it,
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp)
+                    .background(Color(0xCC1E2228), RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 8.dp),
+                style = TextStyle(color = Color.White, fontSize = 13.sp),
+            )
+        }
 
         val req = request
         if (req != null) {
@@ -118,7 +154,7 @@ fun TimelineHost(
                         manifestUrl = req.artwork.iiif.infoJsonUrl ?: req.artwork.iiif.manifestUrl,
                         initialFocus = Offset.Unspecified,
                         initialZoom = 1f,                 // image entière : prolonge la vignette qui vient de remplir l'écran
-                        sources = sources,
+                        controller = zoomController,
                         onReady = { viewerReady = true },
                         onError = { viewerError = it.message ?: it.javaClass.simpleName },
                     )
@@ -129,7 +165,11 @@ fun TimelineHost(
                             style = TextStyle(color = Color(0xFFE6B8B0), fontSize = 14.sp),
                         )
                     }
-                    BackPill(onClick = ::close, Modifier.align(Alignment.TopStart).padding(12.dp))
+                    if (!closing) BackPill(onClick = ::close, Modifier.align(Alignment.TopStart).padding(12.dp))
+                    // pendant le dézoom de sortie, les doigts sont absorbés : on ne relance pas un zoom en plein retour
+                    if (closing) Box(Modifier.fillMaxSize().pointerInput(Unit) {
+                        awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
+                    })
                 }
             }
             // L'habillage reste tant qu'il est visible : pendant l'ouverture, la fermeture, et jusqu'aux premières tuiles.
