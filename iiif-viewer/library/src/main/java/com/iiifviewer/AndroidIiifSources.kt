@@ -55,7 +55,9 @@ class HttpIiifSources : IiifSources {
             conn.connectTimeout = 10_000
             conn.readTimeout = 15_000
             // certains serveurs (AIC derrière Cloudflare) refusent en 403 les requêtes sans User-Agent identifiable
-            conn.setRequestProperty("User-Agent", "IiifViewer/1.0 (Android)")
+            conn.setRequestProperty("User-Agent", BROWSER_USER_AGENT)
+            conn.setRequestProperty("AIC-User-Agent", "IiifViewer/1.0 (Android)")
+            conn.setRequestProperty("Referer", "https://${URL(url).host}/")
             conn.setRequestProperty("Accept", "application/json, image/*, */*")
             coroutineScope {
                 val watchdog = launch {
@@ -70,5 +72,9 @@ class HttpIiifSources : IiifSources {
             }
         }
 }
+
+/** UA de navigateur : le serveur IIIF d'AIC (Cloudflare) refuse en 403 les clients HTTP génériques. */
+const val BROWSER_USER_AGENT =
+    "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36 IiifViewer/1.0"
 
 fun defaultIiifSources(): IiifSources = HttpIiifSources()

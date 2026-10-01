@@ -5,6 +5,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.vangoghtimeline.iiif.AIC_USER_AGENT
 import com.vangoghtimeline.iiif.USER_AGENT
 import okhttp3.OkHttpClient
 
@@ -33,7 +34,13 @@ class TimelineApp : Application(), ImageLoaderFactory {
             .okHttpClient {
                 // User-Agent explicite : sans lui, le serveur IIIF d'AIC (Cloudflare) répond 403 aux vignettes
                 OkHttpClient.Builder().addInterceptor { chain ->
-                    chain.proceed(chain.request().newBuilder().header("User-Agent", USER_AGENT).build())
+                    chain.proceed(
+                        chain.request().newBuilder()
+                            .header("User-Agent", USER_AGENT)
+                            .header("AIC-User-Agent", AIC_USER_AGENT)
+                            .header("Referer", "https://www.artic.edu/")
+                            .build(),
+                    )
                 }.build()
             }
             .respectCacheHeaders(false)
