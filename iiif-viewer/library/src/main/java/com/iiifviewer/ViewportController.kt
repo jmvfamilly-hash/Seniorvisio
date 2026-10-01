@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -89,8 +90,37 @@ class ViewportController(
         val (w, h) = _screenSize.value
         if (w <= 0) return
         if (zoom != 1f) zoomAnchor = centroid
+        trackZoomOutPastFit(zoom)
         _viewport.update { vp ->
             clamp(anchoredTransform(vp, centroid, pan, (vp.scale * zoom).coerceIn(minScale, maxScale)), w, h)
+        }
+    }
+
+    /**
+     * Appelé UNE fois quand l'utilisateur, déjà à l'image entière au début de son geste, continue à pincer vers le dézoom d'environ
+     * 20 % de plus : « dézoomer encore » = vouloir quitter l'image. Un appelant s'en sert pour fermer le visualiseur.
+     */
+    var onZoomOutPastFit: (() -> Unit)? = null
+
+    private var gestureStartedAtFit = false
+    private var pastFitAmount = 0f      // ln du dézoom demandé au-delà du minimum, dans le geste en cours
+    private var pastFitFired = false
+
+    /** Un doigt vient de toucher l'écran : stoppe l'inertie et ouvre un nouveau geste. */
+    fun onGestureStart() {
+        stopAnimation()
+        gestureStartedAtFit = isFit()
+        pastFitAmount = 0f
+        pastFitFired = false
+    }
+
+    private fun trackZoomOutPastFit(zoom: Float) {
+        if (!gestureStartedAtFit || pastFitFired || zoom == 1f || zoom <= 0f) return
+        if (!isFit()) { pastFitAmount = 0f; return }            // il a zoomé dans ce même geste : pas un « dézoom au-delà »
+        pastFitAmount = max(0f, pastFitAmount - ln(zoom))
+        if (pastFitAmount > PAST_FIT_TRIGGER) {
+            pastFitFired = true
+            onZoomOutPastFit?.invoke()
         }
     }
 
@@ -186,5 +216,10 @@ class ViewportController(
             translationX = axis(vp.translationX, imageWidth * vp.scale, screenW),
             translationY = axis(vp.translationY, imageHeight * vp.scale, screenH),
         )
+    }
+
+    private companion object {
+        /** ln(1,25) ≈ 0,22 : il faut pincer d'environ 20 % de plus que le minimum pour que ce soit voulu, pas un frôlement. */
+        const val PAST_FIT_TRIGGER = 0.22f
     }
 }

@@ -41,19 +41,19 @@ Désactivable : `TimelineScreen(roller = false)`.
 
 Le pincement (zoom/dézoom du temps) marche même si les doigts partent d'une vignette : `scroll2D` observe les doigts en passe
 **Initial** (avant les vignettes), et les cartes n'ont plus de `clickable` — hors thème Material, il appliquait un voile de débogage au toucher
-et se disputait les doigts. Un double-tap sur une carte est prévu : `ArtworkCard(onDoubleTap = …)` attache un détecteur sans retour visuel
-(`TimelineScreen(onArtworkDoubleTap = …)`).
+et se disputait les doigts. Un toucher simple sur une carte ouvre l'œuvre : `ArtworkCard(onTap = …)` attache un détecteur sans retour visuel
+(`TimelineScreen(onArtworkTap = …)`).
 
 ### Ouvrir une œuvre : transition vers le visualiseur IIIF (`ui/TimelineHost.kt`)
 
-**Double-tap** sur une carte → la vignette **devient la page** : un habillage (la même image que la carte) part du rectangle de la carte et grandit
+**Toucher simple** sur une carte → la vignette **devient la page** : un habillage (la même image que la carte) part du rectangle de la carte et grandit
 jusqu'à remplir l'écran (coins arrondis → droits, fond qui s'assombrit), puis `IiifZoomViewer` (bibliothèque `../iiif-viewer/library`, incluse
 par `settings.gradle`) est monté dessous avec l'URL de l'œuvre — `infoJsonUrl` si le manifeste l'a donnée, sinon l'URL du manifeste, que le
 visualiseur sait lire. Il démarre sur « image entière » (`initialZoom = 1`), exactement ce que montre l'habillage ; dès les premières tuiles
 (`onReady`) l'habillage s'efface. Retour (bouton ou geste système) : le visualiseur est retiré et l'habillage se rétrécit jusqu'à la carte.
 
 Tout est animé dans les phases de mise en page et de dessin (`Modifier.layout`, `graphicsLayer`, `drawBehind`) : aucune recomposition.
-La position de la carte est relevée au double-tap (`boundsInRoot`, rouleau compris) ; sa vignette déjà chargée sert de `placeholder` à la grande
+La position de la carte est relevée au toucher (`boundsInRoot`, rouleau compris) ; sa vignette déjà chargée sert de `placeholder` à la grande
 version (`placeholderMemoryCacheKey`) : pas de saut.
 
 `SharedTransitionLayout` n'existe qu'à partir de Compose 1.7 ; le projet est sur 1.6 (Kotlin 1.9). Même principe (transformation de
@@ -102,8 +102,15 @@ Le modèle, l'échelle, les couloirs et le parseur n'importent rien d'Android : 
 - **Sommet du rouleau** : une carte qui arrive au centre de l'écran (face à l'utilisateur) voit les tuiles de sa *vue d'arrivée*
   (image entière : niveau le plus grossier puis niveau net, plafonné à 16 Mo) chargées en asynchrone (`IiifPrewarm`). Elles sont
   libérées dès que la carte quitte le sommet (hystérésis 0,5 → 0,9 largeur de carte, 3 images chaudes au plus : `RollerTopPolicy`).
-- **Double-tap** : le visualiseur est monté tout de suite sous la vignette avec cette instance ; à la fin de la transition il passe
+- **Toucher** : le visualiseur est monté tout de suite sous la vignette avec cette instance ; à la fin de la transition il passe
   au-dessus, fond transparent, et les tuiles se posent sur la vignette. Aucun fractal, aucun écran noir.
 - **Prochain défilement** : les vignettes de ce qui apparaîtra si l'on continue (zone large dans le sens du mouvement) sont chargées
   d'avance dans le cache Coil, celles qui font face à l'utilisateur d'abord, de haut en bas (`NextScrollOrder`, `PriorityPrefetcher`,
   3 chargements en parallèle, annulés dès qu'ils ne sont plus utiles).
+
+## Ouverture et retour
+
+- **Ouvrir** : un toucher simple sur une carte (un toucher qui ne fait qu'arrêter l'inertie de la frise n'ouvre rien).
+- **Revenir** : pas de bouton. Dans la visionneuse, **dézoomer encore** une fois l'image entière à l'écran (pincement vers l'intérieur
+  d'environ 20 % de plus, geste commencé à l'image entière) ferme l'œuvre par la transition inverse ; le geste système retour aussi.
+  Zoomé, le même pincement ramène d'abord à l'image entière, sans fermer.

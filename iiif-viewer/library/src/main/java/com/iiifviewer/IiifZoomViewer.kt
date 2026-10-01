@@ -51,6 +51,8 @@ private val Backdrop = Color(0xFF101010)
  *   s'affiche sans attente. Doit correspondre à [manifestUrl]. Elle reste à l'appelant (le visualiseur ne la ferme pas).
  * @param transparentUntilReady fond transparent jusqu'aux premières tuiles : ce qui est dessous (la vignette d'une transition)
  *   reste visible, les tuiles se posent par-dessus à mesure qu'elles arrivent.
+ * @param onUnzoomPastFit appelé quand l'utilisateur, déjà à l'image entière, pince encore vers le dézoom : « dézoomer encore » =
+ *   quitter l'image (l'appelant ferme alors le visualiseur).
  * @param onLongPress appui long n'importe où (y compris pendant le chargement ou après une erreur,
  *   pour toujours pouvoir changer d'image) ; un retour haptique est donné avant l'appel.
  */
@@ -67,6 +69,7 @@ fun IiifZoomViewer(
     controller: IiifZoomController? = null,
     prewarm: IiifPrewarm? = null,
     transparentUntilReady: Boolean = false,
+    onUnzoomPastFit: () -> Unit = {},
 ) {
     val haptic = LocalHapticFeedback.current
     val currentOnLongPress by rememberUpdatedState(onLongPress)
@@ -96,7 +99,7 @@ fun IiifZoomViewer(
                 .pointerInput(Unit) { detectTapGestures(onLongPress = { longPress() }) },
         )
     } else {
-        ZoomSurface(loaded, initialFocus, initialZoom, sources, modifier, longPress, onReady, controller, prewarm, transparentUntilReady)
+        ZoomSurface(loaded, initialFocus, initialZoom, sources, modifier, longPress, onReady, controller, prewarm, transparentUntilReady, onUnzoomPastFit)
     }
 }
 
@@ -112,12 +115,18 @@ private fun ZoomSurface(
     zoomController: IiifZoomController?,
     prewarm: IiifPrewarm?,
     transparentUntilReady: Boolean,
+    onUnzoomPastFit: () -> Unit,
 ) {
     val scope = rememberCoroutineScope() // Main : convient au TileManager (état mono-thread)
     val controller = remember(info) { ViewportController(info.width, info.height, scope) }
     DisposableEffect(zoomController, controller) {
         zoomController?.viewport = controller
         onDispose { zoomController?.let { if (it.viewport === controller) it.viewport = null } }
+    }
+    val currentUnzoom by rememberUpdatedState(onUnzoomPastFit)
+    DisposableEffect(controller) {
+        controller.onZoomOutPastFit = { currentUnzoom() }
+        onDispose { controller.onZoomOutPastFit = null }
     }
     val manager = remember(info) {
         TileManager(
@@ -160,7 +169,7 @@ private fun ZoomSurface(
             }
             .pointerInput(controller) {
                 detectViewportGestures(
-                    onStart = controller::stopAnimation, // un doigt posé arrête l'inertie
+                    onStart = controller::onGestureStart, // un doigt posé arrête l'inertie et ouvre un geste
                     onGesture = controller::transformBy,  // la rotation est ignorée
                     onFling = controller::fling,
                 )

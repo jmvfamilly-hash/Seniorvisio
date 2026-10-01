@@ -42,7 +42,7 @@ import coil.request.ImageRequest
 import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.formatFr
 
-/** Ce que la frise sait au moment d'un double-tap : l'œuvre, et où est sa carte à l'écran (pour animer à partir d'elle). */
+/** Ce que la frise sait au moment d'un toucher : l'œuvre, et où est sa carte à l'écran (pour animer à partir d'elle). */
 data class OpenRequest(val artwork: Artwork, val bounds: Rect, val cardWidthPx: Int, val cardHeightPx: Int)
 
 /** Clé du cache mémoire Coil d'une vignette : stable (œuvre + taille), partagée entre la carte et l'habillage de la transition. */
@@ -105,7 +105,7 @@ internal fun ArtworkImage(
 /**
  * Carte d'une œuvre : vignette IIIF + titre + date (au niveau de précision réellement connu).
  *
- * [onDoubleTap] : double-tap sur la carte, sans AUCUN retour visuel ni consommation des doigts tant qu'aucun geste de défilement
+ * [onTap] : toucher simple sur la carte, sans AUCUN retour visuel ni consommation des doigts tant qu'aucun geste de défilement
  * ou de pincement n'est reconnu (la frise observe les doigts avant les cartes). `null` = la carte ne réagit à rien.
  *
  * Les paramètres sont l'[Artwork] et la taille en pixels, PAS la position : quand la carte se déplace (zoom du temps,
@@ -121,13 +121,13 @@ fun ArtworkCard(
     widthPx: Int,
     heightPx: Int,
     modifier: Modifier = Modifier,
-    onDoubleTap: ((OpenRequest) -> Unit)? = null,
+    onTap: ((OpenRequest) -> Unit)? = null,
 ) {
     val description = remember(artwork) { "${artwork.title}, ${artwork.date.formatFr()}" }
     // Poignée sur la position à l'écran, lue seulement au double-tap : une référence ordinaire, pas un état (sinon la carte se
     // recomposerait à chaque image de défilement).
     val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
-    val currentDoubleTap by rememberUpdatedState(onDoubleTap)
+    val currentTap by rememberUpdatedState(onTap)
 
     Box(
         modifier
@@ -135,11 +135,11 @@ fun ArtworkCard(
             .clip(RoundedCornerShape(8.dp))
             .onGloballyPositioned { coordinates[0] = it }
             .semantics { contentDescription = description }
-            .pointerInput(artwork, widthPx, heightPx, onDoubleTap != null) {
-                if (onDoubleTap != null) {
-                    detectTapGestures(onDoubleTap = {
+            .pointerInput(artwork, widthPx, heightPx, onTap != null) {
+                if (onTap != null) {
+                    detectTapGestures(onTap = {
                         val bounds = coordinates[0]?.takeIf { it.isAttached }?.boundsInRoot()
-                        if (bounds != null) currentDoubleTap?.invoke(OpenRequest(artwork, bounds, widthPx, heightPx))
+                        if (bounds != null) currentTap?.invoke(OpenRequest(artwork, bounds, widthPx, heightPx))
                     })
                 }
             },

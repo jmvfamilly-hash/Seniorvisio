@@ -46,7 +46,7 @@ fun TimelineScreen(
     artworks: List<Artwork>,
     modifier: Modifier = Modifier,
     initialDaysPerPixel: Float = 1.6f,
-    onArtworkDoubleTap: ((OpenRequest) -> Unit)? = null,
+    onArtworkTap: ((OpenRequest) -> Unit)? = null,
     roller: Boolean = true,
     prefetcher: TimelinePrefetcher? = null,
 ) {
@@ -114,7 +114,7 @@ fun TimelineScreen(
                     artwork = placed.artwork,
                     widthPx = placed.width.roundToInt(),
                     heightPx = placed.height.roundToInt(),
-                    onDoubleTap = onArtworkDoubleTap,
+                    onTap = onArtworkTap?.let { open -> { request: OpenRequest -> if (!state.tapSuppressed) open(request) } },
                 )
             }
             BasicText(

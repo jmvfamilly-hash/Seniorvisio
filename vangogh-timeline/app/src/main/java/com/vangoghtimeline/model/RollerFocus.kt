@@ -8,7 +8,7 @@ data class FocusCandidate(val id: String, val offsetX: Float, val y: Float)
 
 /**
  * Quelles cartes sont au **sommet du rouleau** : celles qui font face à l'utilisateur, au centre de l'écran. Ce sont elles dont
- * on préchauffe l'image entière : l'utilisateur est sur le point de s'y arrêter, et un double-tap est probable.
+ * on préchauffe l'image entière : l'utilisateur est sur le point de s'y arrêter, et un toucher est probable.
  *
  * Hystérésis : une carte ENTRE quand son centre est à moins de [enterFraction] largeur de carte du centre, et ne SORT que
  * au-delà de [leaveFraction] : pendant un défilement lent, une carte à la limite ne charge/libère pas en boucle. Au plus

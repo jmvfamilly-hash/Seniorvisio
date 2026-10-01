@@ -73,6 +73,11 @@ class TimelineScrollState(private val scope: CoroutineScope) {
         if (y.isFinite()) scrollY = y
     }
 
+    /** Vrai si le doigt qui vient de se poser a interrompu une inertie : ce toucher sert à ARRÊTER la frise, pas à ouvrir une carte. */
+    var tapSuppressed = false
+
+    val isFlinging: Boolean get() = flingJob?.isActive == true
+
     fun stopFling() {
         flingJob?.cancel()
         flingJob = null
@@ -140,6 +145,7 @@ fun Modifier.scroll2D(
             // « mangé » par elle ; et dès que le geste est reconnu on consomme les mouvements, ce qui fait annuler (et non
             // déclencher) un éventuel toucher de la carte.
             awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            state.tapSuppressed = state.isFlinging
             state.stopFling() // un doigt posé arrête l'inertie
 
             do {

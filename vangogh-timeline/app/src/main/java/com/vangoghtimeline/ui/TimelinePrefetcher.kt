@@ -22,7 +22,7 @@ internal class ThumbTarget(val artwork: Artwork, val url: String, val widthPx: I
  *
  * 1. **Sommet du rouleau → image entière.** Une carte qui arrive au centre de l'écran (face à l'utilisateur) voit les tuiles de sa
  *    vue d'arrivée chargées en asynchrone ([IiifPrewarm]) ; elles sont libérées dès qu'elle n'est plus au sommet
- *    ([RollerTopPolicy]). Un double-tap ouvre alors l'image sans attente : tuiles, `info.json` et connexion sont déjà là.
+ *    ([RollerTopPolicy]). Un toucher ouvre alors l'image sans attente : tuiles, `info.json` et connexion sont déjà là.
  * 2. **Prochain défilement → vignettes.** Les vignettes de ce qui apparaîtra si l'utilisateur continue (large dans le sens du
  *    mouvement) sont chargées d'avance dans le cache Coil, celles qui font face à l'utilisateur d'abord, de haut en bas
  *    ([PriorityPrefetcher]).

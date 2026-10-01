@@ -5,8 +5,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -62,15 +60,15 @@ private const val VIEWER_READY_TIMEOUT_MS = 3000L
 /**
  * La frise + l'ouverture d'une œuvre dans le visualiseur IIIF, par une transition « la vignette devient la page » :
  *
- * 1. **Double-tap** sur une carte : on relève où elle est à l'écran ([OpenRequest.bounds]).
+ * 1. **Toucher simple** sur une carte : on relève où elle est à l'écran ([OpenRequest.bounds]).
  * 2. **Ouverture** : un habillage (la même image que la carte) part de ce rectangle et grandit jusqu'à remplir l'écran, coins
  *    arrondis → droits, fond qui s'assombrit. Tout est animé dans les phases de mise en page et de dessin : aucune recomposition.
- * 3. **Dès le double-tap** : [IiifZoomViewer] est monté, invisible, sous la vignette, avec l'instance de préchauffage de l'œuvre
+ * 3. **Dès le toucher** : [IiifZoomViewer] est monté, invisible, sous la vignette, avec l'instance de préchauffage de l'œuvre
  *    ([TimelinePrefetcher.acquire]) : si la carte était au sommet du rouleau, `info.json` et tuiles de la vue d'arrivée sont déjà là ;
  *    sinon ils se chargent pendant l'animation. Le visualiseur démarre à « image entière » = ce que montre l'habillage.
  * 4. **Fin de l'animation** : le visualiseur passe AU-DESSUS de la vignette, à fond transparent : les tuiles se posent sur l'image
  *    d'arrivée à mesure qu'elles arrivent, sans trou ni coupure ; dès les premières, la vignette s'efface dessous.
- * 5. **Retour** (bouton ou geste système) : le visualiseur DÉZOOME d'abord jusqu'à l'image entière (`animateToFit`), puis est retiré
+ * 5. **Retour** (dézoomer encore une fois à l'image entière, ou geste système ; pas de bouton) : le visualiseur DÉZOOME d'abord jusqu'à l'image entière (`animateToFit`), puis est retiré
  *    et l'habillage — identique à cette vue — se rétrécit jusqu'à la carte.
  *
  * Pourquoi pas `SharedTransitionLayout` : il n'existe qu'à partir de Compose 1.7 ; ce projet est sur 1.6 (Kotlin 1.9). Le principe
@@ -84,7 +82,7 @@ fun TimelineHost(
 ) {
     val scope = rememberCoroutineScope()
     var request by remember { mutableStateOf<OpenRequest?>(null) }
-    var viewerShown by remember { mutableStateOf(false) }   // le visualiseur est monté (et charge) dès le double-tap…
+    var viewerShown by remember { mutableStateOf(false) }   // le visualiseur est monté (et charge) dès le toucher…
     var viewerTop by remember { mutableStateOf(false) }     // …mais ne passe au-dessus de la vignette qu'à la fin de l'animation
     var prewarm by remember { mutableStateOf<IiifPrewarm?>(null) }
     var viewerReady by remember { mutableStateOf(false) }
@@ -150,7 +148,7 @@ fun TimelineHost(
     BackHandler(enabled = request != null && !closing) { close() }
 
     Box(modifier.fillMaxSize().onSizeChanged { rootSize = it }) {
-        TimelineScreen(artworks, onArtworkDoubleTap = ::open, prefetcher = prefetcher)
+        TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher)
 
         credit?.let {
             BasicText(
@@ -186,6 +184,7 @@ fun TimelineHost(
                         initialZoom = 1f,                 // image entière : prolonge la vignette qui vient de remplir l'écran
                         controller = zoomController,
                         onReady = { viewerReady = true },
+                        onUnzoomPastFit = { if (viewerTop && !closing) close() },   // dézoomer encore, déjà à l'image entière = revenir
                         onError = { viewerError = it.message ?: it.javaClass.simpleName },
                     )
                     viewerError?.let { message ->
@@ -195,7 +194,6 @@ fun TimelineHost(
                             style = TextStyle(color = Color(0xFFE6B8B0), fontSize = 14.sp),
                         )
                     }
-                    if (!closing) BackPill(onClick = ::close, Modifier.align(Alignment.TopStart).padding(12.dp))
                     // pendant le dézoom de sortie, les doigts sont absorbés : on ne relance pas un zoom en plein retour
                     if (closing) Box(Modifier.fillMaxSize().pointerInput(Unit) {
                         awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
@@ -253,17 +251,4 @@ private fun ExpandingCard(
             )
         }
     }
-}
-
-@Composable
-private fun BackPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    BasicText(
-        "‹  Retour",
-        style = TextStyle(color = Color.White, fontSize = 15.sp),
-        modifier = modifier
-            .background(Color(0x99000000), RoundedCornerShape(20.dp))
-            // sans indication : hors thème Material, l'indication par défaut est un voile de débogage
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    )
 }
