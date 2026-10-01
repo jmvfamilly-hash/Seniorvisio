@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.vangoghtimeline.iiif.SourceReport
 import com.vangoghtimeline.iiif.SourceState
+import com.vangoghtimeline.model.AgeFormat
 import com.vangoghtimeline.model.Artist
 import com.vangoghtimeline.model.Movement
 
@@ -83,6 +84,8 @@ fun ArtistMenuScreen(
     modifier: Modifier = Modifier,
     /** Appui long dans la partie basse de la fiche : copie le rapport d'anomalies (tous artistes, tous services, navigation). */
     onReportLongPress: () -> Unit = {},
+    /** « Actualiser » : recherche et revalide toutes les sources de l'artiste sélectionné. */
+    onRefresh: (Artist) -> Unit = {},
 ) {
     val selected = artists.firstOrNull { it.id == selectedId }
     val currentReport by rememberUpdatedState(onReportLongPress)
@@ -128,7 +131,7 @@ fun ArtistMenuScreen(
             if (selected == null) {
                 BasicText("Touchez un portrait pour voir son artiste.", style = TextStyle(color = Muted, fontSize = 14.sp))
             } else {
-                ArtistInfo(selected, model)
+                ArtistInfo(selected, model, onRefresh)
             }
             Spacer(Modifier.height(14.dp))
             BasicText(
@@ -259,7 +262,7 @@ private fun PeriodsBar(artists: List<Artist>, selected: Artist?) {
 }
 
 @Composable
-private fun ArtistInfo(artist: Artist, model: AppModel) {
+private fun ArtistInfo(artist: Artist, model: AppModel, onRefresh: (Artist) -> Unit) {
     BasicText(artist.name, style = TextStyle(color = Color.White, fontSize = 20.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold))
     BasicText(
         listOfNotNull(artist.lifespan, artist.origin, artist.mainStyle).filter { it.isNotBlank() }.joinToString("  ·  "),
@@ -285,6 +288,24 @@ private fun ArtistInfo(artist: Artist, model: AppModel) {
         state == null -> Body("Vérification de l'accès aux œuvres…")
         else -> {
             for (r in state.reports) SourceLine(r)
+            Spacer(Modifier.height(6.dp))
+            // fraîcheur des données (magasin local, rafraîchi après 7 jours) et bouton « Actualiser »
+            val age = if (state.updatedAtMs > 0) AgeFormat.fr(System.currentTimeMillis() - state.updatedAtMs) else null
+            BasicText(
+                (if (age != null) "Données mises à jour $age (actualisation automatique après 7 jours)." else "Données en cours d'obtention.") +
+                    if (!state.done) "  Mise à jour en cours…" else "",
+                style = TextStyle(color = Muted, fontSize = 11.sp),
+            )
+            val currentRefresh by rememberUpdatedState(onRefresh)
+            BasicText(
+                "Actualiser maintenant",
+                style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .background(Color(0xFF2A3340), RoundedCornerShape(14.dp))
+                    .pointerInput(artist.id) { detectTapGestures(onTap = { currentRefresh(artist) }) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
             Spacer(Modifier.height(8.dp))
             val msg = when {
                 state.artworks.isNotEmpty() -> "Touchez à nouveau le portrait pour ouvrir son univers (${state.artworks.size} œuvres${if (state.done) "" else ", d'autres arrivent"})."

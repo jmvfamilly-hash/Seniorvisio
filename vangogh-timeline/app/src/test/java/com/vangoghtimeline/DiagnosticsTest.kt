@@ -130,7 +130,7 @@ class DiagnosticsTest {
         UniverseLoader(defaultMuseumSources(pages), SourceValidator(pages, reachOk), dir).load(artist) { }
         Diag.clear()
         val offline = FakeHttp(emptyMap())
-        val state = UniverseLoader(defaultMuseumSources(offline), SourceValidator(offline, reachOk), dir).load(artist) { }
+        val state = UniverseLoader(defaultMuseumSources(offline), SourceValidator(offline, reachOk), dir, clock = { System.currentTimeMillis() + 8L * 86_400_000 }).load(artist) { }
         assertEquals(SourceState.CACHED, state.reports.single().state)
         assertTrue(Diag.snapshot().any { it.level == DiagLevel.WARN && it.message.contains("copie hors ligne utilisée") })
     }
@@ -242,7 +242,7 @@ class DiagnosticsTest {
             override val id = "aic"; override val name = "AIC"; override val europeanaKeyword = "art institute"
             override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> = throw IOException("HTTP 410 sur https://x")
         }
-        val state = UniverseLoader(mapOf("aic" to gone), SourceValidator(pages, reachOk), dir).load(artist) { }
+        val state = UniverseLoader(mapOf("aic" to gone), SourceValidator(pages, reachOk), dir, clock = { System.currentTimeMillis() + 8L * 86_400_000 }).load(artist) { }
         assertEquals(SourceState.CACHED, state.reports.single().state)
         assertEquals(1, state.artworks.size)
     }

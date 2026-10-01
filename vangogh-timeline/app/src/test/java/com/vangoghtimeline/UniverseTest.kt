@@ -261,7 +261,8 @@ class UniverseTest {
         val http = FakeHttp(pages())
         UniverseLoader(defaultMuseumSources(http), SourceValidator(http, reachOk), dir).load(vanGogh()) { }
         val offline = FakeHttp(emptyMap())
-        val state = UniverseLoader(defaultMuseumSources(offline), SourceValidator(offline, reachOk), dir).load(vanGogh()) { }
+        // 8 jours plus tard : les données enregistrées sont périmées, la mise à jour échoue (hors ligne) → on garde la copie
+        val state = UniverseLoader(defaultMuseumSources(offline), SourceValidator(offline, reachOk), dir, clock = { System.currentTimeMillis() + 8L * 86_400_000 }).load(vanGogh()) { }
         assertEquals(setOf("The Bedroom", "Irises"), state.artworks.map { it.title }.toSet())
         assertEquals(SourceState.CACHED, state.reports.first { it.sourceId == "aic" }.state)
         assertTrue(state.credit.contains("hors ligne"))

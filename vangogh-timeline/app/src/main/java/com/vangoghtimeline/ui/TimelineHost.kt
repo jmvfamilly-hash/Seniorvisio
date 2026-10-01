@@ -46,7 +46,8 @@ import com.iiifviewer.IiifPrewarm
 import com.iiifviewer.IiifZoomViewer
 import com.iiifviewer.LoadErrorListener
 import com.vangoghtimeline.iiif.Diag
-import com.iiifviewer.defaultIiifSources
+import com.iiifviewer.HttpIiifSources
+import com.vangoghtimeline.TimelineApp
 import com.iiifviewer.rememberIiifZoomController
 import com.vangoghtimeline.model.Artwork
 import kotlinx.coroutines.Job
@@ -100,7 +101,7 @@ fun TimelineHost(
     val zoomController = rememberIiifZoomController()
 
     val context = LocalContext.current
-    val sources = remember { defaultIiifSources() }
+    val sources = remember { HttpIiifSources((context.applicationContext as? TimelineApp)?.tileCache) }
     val currentRoot by rememberUpdatedState(rootSize)
     val prefetcher = remember { TimelinePrefetcher(context, context.imageLoader, sources, scope) { currentRoot } }
     DisposableEffect(prefetcher) { onDispose { prefetcher.close() } }

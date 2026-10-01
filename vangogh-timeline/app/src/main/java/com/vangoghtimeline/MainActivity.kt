@@ -95,7 +95,7 @@ class MainActivity : ComponentActivity() {
             val loader = UniverseLoader(
                 defaultMuseumSources(http, RetryingSource(http, metLimiter, "metmuseum.org"), notices),
                 SourceValidator(http, HttpImageReachability()),
-                File(filesDir, "universes").apply { mkdirs() },
+                File(filesDir, "universe_store").apply { mkdirs() },     // magasin JSON local : un fichier par artiste
                 // repli : mêmes sources avec un User-Agent sobre, si un serveur refuse celui d'un navigateur
                 fallbackSources = defaultMuseumSources(plainHttp, RetryingSource(plainHttp, metLimiter, "metmuseum.org"), notices),
             )
@@ -104,7 +104,10 @@ class MainActivity : ComponentActivity() {
         if (artists.isEmpty()) {
             Box(Modifier.fillMaxSize().background(Color(0xFF0F1114))) { Message("Catalogue des artistes illisible.") }
         } else {
-            val header = "Version ${BuildConfig.BUILD_REV}\nAppareil : ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+            val header = {
+                "Version ${BuildConfig.BUILD_REV}\nAppareil : ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})" +
+                    "\nCache de tuiles : ${(application as TimelineApp).tileCache.stats()}"
+            }
             AppRoot(artists, model, reportHeader = header, lastCrash = { CrashReporter.read(this) })
         }
     }

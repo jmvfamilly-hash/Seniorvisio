@@ -41,16 +41,31 @@ class AppModel(
 
     private val started = HashSet<String>()
 
-    /** Lance (une seule fois) la connexion des sources de cet artiste, avec validation de leur accès IIIF. */
+    /**
+     * Prépare l'univers de cet artiste (une seule fois par lancement) : il s'affiche tout de suite depuis le magasin local, puis les
+     * sources périmées (plus de 7 jours) ou en échec depuis plus d'une heure sont recherchées et validées en arrière-plan.
+     */
     fun prepare(artist: Artist) {
         if (!artist.hasUniverse || !started.add(artist.id)) return
+        launchLoad(artist, force = false)
+    }
+
+    /** « Actualiser » : tout est recherché et revalidé maintenant ; l'ancien univers reste affiché pendant ce temps. */
+    fun refresh(artist: Artist) {
+        if (!artist.hasUniverse) return
+        started.add(artist.id)
+        launchLoad(artist, force = true)
+    }
+
+    private fun launchLoad(artist: Artist, force: Boolean) {
         scope.launch {
             try {
-                loader.load(artist) { universes[artist.id] = it }
+                loader.load(artist, force) { universes[artist.id] = it }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 started.remove(artist.id)   // une prochaine sélection réessaie
+                Diag.error("magasin", "chargement de l'univers en échec : ${e.message ?: e.javaClass.simpleName}", artistId = artist.id)
             }
         }
     }

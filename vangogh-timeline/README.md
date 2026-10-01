@@ -228,3 +228,22 @@ et renvoyait vers `/public/collection/v1.1/search` (Elastic, paginée par `offse
   la recherche Europeana par nom de famille seul exige en plus un créateur déclaré.
 - **Sources vides expliquées** : chaque analyse consigne « N reçues, K retenues — écartées : … » avec les raisons (hors domaine public, sans image, autre artiste, hors dates…) et, si
   rien n'est retenu, la forme de la réponse (clés, premier élément) — pour distinguer « le service ne renvoie rien » de « le filtre écarte tout » (Met et Europeana pour Sorolla, SMK pour Renoir).
+
+## Magasin JSON local et cache de tuiles (l'appli ne recharge plus tout à chaque ouverture)
+
+**Magasin d'univers** (`filesDir/universe_store/{artiste}.json`, `UniverseStore`) : pour chaque artiste et chaque source, l'état de la dernière tentative, les œuvres, le rapport
+de validation, la date d'obtention et la date de dernière tentative. À la sélection d'un artiste :
+
+1. l'univers enregistré s'affiche **tout de suite, sans réseau** ;
+2. chaque source est décidée par `StorePolicy` : connectée depuis **moins de 7 jours** → utilisée telle quelle ; **plus de 7 jours** → utilisée ET rafraîchie en arrière-plan ;
+   copie hors ligne ou échec (refusée, injoignable, vide, limitée…) **depuis plus d'une heure** → retentée ; jamais obtenue → cherchée ;
+3. si la mise à jour échoue (hors ligne), l'ancienne copie reste affichée avec **sa vraie date** ;
+4. le panneau de l'artiste montre « Données mises à jour il y a N jours (actualisation automatique après 7 jours) » et un bouton **Actualiser maintenant** (recherche et
+   revalide tout, en gardant l'ancien univers affiché pendant ce temps).
+
+`UniverseStore.PARSER_VERSION` est à incrémenter chaque fois que les règles de lecture/filtrage changent : les fichiers d'une autre version sont ignorés, sans quoi des œuvres mal
+filtrées resteraient 7 jours. Écriture atomique (fichier temporaire puis renommage).
+
+**Cache de tuiles** (`cacheDir/iiif_tiles`, `DiskTileCache`, 256 Mo) : les tuiles, images ordinaires (Met, Cleveland) et `info.json`/manifestes déjà vus sont gardés sur disque ; au-delà du
+plafond, les moins récemment utilisées sont supprimées en premier (la date du fichier est rafraîchie à chaque lecture). Les textes expirent après 30 jours. Une œuvre déjà ouverte se
+rouvre sans retélécharger, même hors ligne. Les vignettes ont leur propre cache disque (Coil, 100 Mo). Les statistiques du cache (fichiers, Mo, taux de réussite) figurent dans le rapport d'anomalies.

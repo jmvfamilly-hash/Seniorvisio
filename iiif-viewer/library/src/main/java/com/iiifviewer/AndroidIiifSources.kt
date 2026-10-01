@@ -21,22 +21,39 @@ import java.net.URL
 /**
  * Seul fichier dépendant d'Android (implémentation `androidMain` de [IiifSources] en KMP).
  */
-class HttpIiifSources : IiifSources {
+class HttpIiifSources(
+    /** Cache disque des tuiles, images et `info.json` déjà vus ; `null` = pas de cache. */
+    private val cache: DiskTileCache? = null,
+) : IiifSources {
 
     override suspend fun load(url: String): ImageBitmap {
         StaticImageUrl.parse(url)?.let { return loadStaticTile(it) }
         return loadRemote(url)
     }
 
-    private suspend fun loadRemote(url: String): ImageBitmap = fetch(url) { stream ->
-        val bitmap = BitmapFactory.decodeStream(stream) ?: throw IOException("Décodage impossible: $url")
-        bitmap.asImageBitmap()
+    private suspend fun loadRemote(url: String): ImageBitmap {
+        cache?.get(url)?.let { bytes ->
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { return it.asImageBitmap() }
+            cache?.remove(url)   // entrée illisible : on la jette et on retélécharge
+        }
+        val bytes = fetch(url) { it.readBytes() }
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: throw IOException("Décodage impossible: $url")
+        cache?.put(url, bytes)
+        return bitmap.asImageBitmap()
+    }
+
+    /** Texte d'un manifeste ou d'un `info.json` : du cache s'il a moins de 30 jours, sinon du réseau (puis mis en cache). */
+    private suspend fun fetchText(url: String): String {
+        cache?.getText(url)?.let { return it }
+        val text = fetch(url) { it.readBytes().decodeToString() }
+        cache?.putText(url, text)
+        return text
     }
 
     override suspend fun loadInfo(infoUrl: String): IiifImageInfo {
         // `static:{url}` : une image ordinaire donnée directement (pas de manifeste à lire)
         StaticImageUrl.imageUrlOf(infoUrl)?.let { return staticInfo(IiifManifestResolver.StaticImage(it, null, null)) }
-        val text = fetch(infoUrl) { it.readBytes().decodeToString() }
+        val text = fetchText(infoUrl)
         // L'URL peut être celle d'un MANIFESTE (galerie, frise…) : on en tire le service d'image de la première page,
         // puis on lit son info.json.
         IiifManifestResolver.serviceIdOf(text)?.let { return loadInfo(IiifManifestResolver.infoUrlFor(it)) }
@@ -68,7 +85,7 @@ class HttpIiifSources : IiifSources {
     /** Au plus 2 images ordinaires en mémoire (octets compressés + décodeur par région) ; téléchargées une seule fois. */
     private suspend fun staticImage(url: String): StaticImage = staticLock.withLock {
         staticImages[url]?.let { return@withLock it }
-        val bytes = fetch(url) { it.readBytes() }
+        val bytes = cache?.get(url) ?: fetch(url) { it.readBytes() }.also { cache?.put(url, it) }
         val decoder = BitmapRegionDecoder.newInstance(bytes, 0, bytes.size, false)
             ?: throw IOException("Décodage impossible: $url")
         val image = StaticImage(decoder, decoder.width, decoder.height)

@@ -38,12 +38,12 @@ import com.vangoghtimeline.model.Artist
  * - **Retour système** depuis la frise : retour au menu (le retour d'une œuvre ouverte reste le dézoom, voir [TimelineHost]).
  */
 @Composable
-fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: String = "", lastCrash: () -> String? = { null }) {
+fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: () -> String = { "" }, lastCrash: () -> String? = { null }) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val copyReport: () -> Unit = {
-        val text = model.buildReport(artists, reportHeader, lastCrash())
+        val text = model.buildReport(artists, reportHeader(), lastCrash())
         clipboard.setText(AnnotatedString(text))
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         Toast.makeText(context, "Rapport d'anomalies copié (${Diag.snapshot().size} lignes)", Toast.LENGTH_SHORT).show()
@@ -60,6 +60,7 @@ fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: String = "", l
             selectedId = selectedId,
             model = model,
             onReportLongPress = copyReport,
+            onRefresh = { model.refresh(it) },
             onTap = { artist ->
                 if (selectedId == artist.id && artist.hasUniverse) {
                     model.prepare(artist)

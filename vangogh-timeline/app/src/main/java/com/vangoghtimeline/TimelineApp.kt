@@ -5,6 +5,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.iiifviewer.DiskTileCache
 import com.iiifviewer.HttpUpgrade
 import com.vangoghtimeline.iiif.AIC_USER_AGENT
 import com.vangoghtimeline.iiif.USER_AGENT
@@ -18,6 +19,12 @@ import okhttp3.OkHttpClient
  *   d'œuvre, elle, ne change pas, et sans cela Coil la retélécharge à chaque ouverture.
  */
 class TimelineApp : Application(), ImageLoaderFactory {
+    /**
+     * Cache disque des tuiles (les plus récemment utilisées d'abord, 256 Mo) : une œuvre déjà ouverte se rouvre sans retélécharger.
+     * Dans `cacheDir` : le système peut le vider si la place manque.
+     */
+    val tileCache: DiskTileCache by lazy { DiskTileCache(cacheDir.resolve("iiif_tiles"), 256L * 1024 * 1024) }
+
     override fun onCreate() {
         super.onCreate()
         CrashReporter.install(this)
