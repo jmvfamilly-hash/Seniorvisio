@@ -23,7 +23,7 @@ import kotlinx.serialization.json.intOrNull
  */
 object ArticParser {
     const val SEARCH_URL =
-        "https://api.artic.edu/api/v1/artworks/search?q=Vincent%20van%20Gogh&limit=100" +
+        "https://api.artic.edu/api/v1/artworks/search?q=Vincent%20van%20Gogh&query%5Bterm%5D%5Bis_public_domain%5D=true&limit=100" +
             "&fields=id,title,artist_title,date_start,date_end,place_of_origin,medium_display,image_id,thumbnail"
 
     private const val DEFAULT_IIIF = "https://www.artic.edu/iiif/2"

@@ -54,6 +54,9 @@ class HttpIiifSources : IiifSources {
             val conn = URL(url).openConnection() as HttpURLConnection
             conn.connectTimeout = 10_000
             conn.readTimeout = 15_000
+            // certains serveurs (AIC derrière Cloudflare) refusent en 403 les requêtes sans User-Agent identifiable
+            conn.setRequestProperty("User-Agent", "IiifViewer/1.0 (Android)")
+            conn.setRequestProperty("Accept", "application/json, image/*, */*")
             coroutineScope {
                 val watchdog = launch {
                     try { awaitCancellation() } finally { conn.disconnect() }

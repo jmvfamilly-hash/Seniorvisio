@@ -151,7 +151,7 @@ fun TimelineHost(
             if (viewerShown) {
                 Box(Modifier.fillMaxSize().background(Color.Black)) {
                     IiifZoomViewer(
-                        manifestUrl = req.artwork.iiif.infoJsonUrl ?: req.artwork.iiif.manifestUrl,
+                        manifestUrl = req.artwork.iiif.manifestUrl.takeIf { it.startsWith("http") } ?: req.artwork.iiif.infoJsonUrl.orEmpty(),
                         initialFocus = Offset.Unspecified,
                         initialZoom = 1f,                 // image entière : prolonge la vignette qui vient de remplir l'écran
                         controller = zoomController,
