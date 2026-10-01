@@ -39,19 +39,27 @@ fun TimeAxis(plan: TimelinePlan, state: TimelineScrollState, modifier: Modifier 
         val lastYear = CivilCalendar.civil(lastDay).first
         val pxPerMonth = 30.4f * plan.scale.pixelsPerDay()
 
+        // `drawText` sans taille impose au texte la largeur restante `size.width − x` : pour une étiquette qui
+        // commence au-delà du bord droit, elle est NÉGATIVE et Compose lève « maxWidth(-4) must be >= minWidth(0) ».
+        // Ce plantage survenait au défilement, dès qu'une graduation passait juste hors de l'écran : on ne dessine
+        // une étiquette que si au moins 24 px de largeur lui restent. (Les traits, eux, se dessinent toujours.)
+        fun label(text: String, x: Float, y: Float, style: TextStyle) {
+            if (x < size.width - 24f) drawText(measurer, text, Offset(x, y), style)
+        }
+
         for (year in firstYear..lastYear) {
             if (pxPerMonth >= 36f) {
                 for (month in 2..12) {
                     val x = plan.contentXOf(CivilCalendar.epochDay(year, month, 1)) - sx
                     drawLine(Color(0xFF3A3D44), Offset(x, size.height - 10f), Offset(x, size.height), 1f)
                     if (pxPerMonth >= 64f) {
-                        drawText(measurer, monthNameFr(month, short = true), Offset(x + 3f, size.height - 26f), monthStyle)
+                        label(monthNameFr(month, short = true), x + 3f, size.height - 26f, monthStyle)
                     }
                 }
             }
             val x = plan.contentXOf(CivilCalendar.epochDay(year, 1, 1)) - sx
             drawLine(Color(0xFFB9A96A), Offset(x, 4f), Offset(x, size.height), 2f)
-            drawText(measurer, year.toString(), Offset(x + 5f, 3f), yearStyle)
+            label(year.toString(), x + 5f, 3f, yearStyle)
         }
     }
 }
