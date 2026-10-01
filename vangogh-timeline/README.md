@@ -144,5 +144,6 @@ et le zoom profond fonctionne comme pour une vraie image IIIF. Le manifeste est 
 
 ## Double-tap dans la visionneuse
 
-Un double-tap va au **zoom maximum** (sur le point tapé), de n'importe quel zoom de départ ; un double-tap depuis le zoom maximum ramène à
-**l'image entière** (`DoubleTapZoom`). Le pincement vers l'intérieur depuis l'image entière referme toujours l'œuvre.
+Trois temps (`DoubleTapZoom`), le point tapé restant fixe à l'écran : image entière → **moitié du zoom maximum** → **zoom maximum** →
+image entière. Depuis un zoom quelconque, on va à la prochaine étape au-dessus. Pour une petite image dont la moitié du maximum est
+presque l'image entière, l'étape intermédiaire est sautée. Le pincement vers l'intérieur depuis l'image entière referme toujours l'œuvre.
