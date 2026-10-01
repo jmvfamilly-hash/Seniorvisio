@@ -49,6 +49,27 @@ data class OpenRequest(val artwork: Artwork, val bounds: Rect, val cardWidthPx: 
 internal fun thumbKey(artwork: Artwork, widthPx: Int, heightPx: Int) = "${artwork.id}@${widthPx}x$heightPx"
 
 /**
+ * La requête Coil d'une vignette. UNE seule définition, partagée par la carte et par le préchargement ([TimelinePrefetcher]) :
+ * même clé mémoire, même taille de décodage, donc une vignette préchargée est trouvée telle quelle quand sa carte apparaît.
+ */
+internal fun thumbRequest(
+    context: android.content.Context,
+    artwork: Artwork,
+    url: String,
+    widthPx: Int,
+    heightPx: Int,
+    placeholderKey: String? = null,
+): ImageRequest =
+    ImageRequest.Builder(context)
+        .data(url)
+        .size(widthPx, heightPx)
+        .memoryCacheKey(thumbKey(artwork, widthPx, heightPx))
+        .apply { if (placeholderKey != null) placeholderMemoryCacheKey(placeholderKey) }
+        .allowRgb565(true)
+        .crossfade(false)
+        .build()
+
+/**
  * L'image d'une œuvre : un fond dessiné aux couleurs du lieu (jamais « vide »), puis la vignette IIIF par-dessus quand elle existe.
  *
  * @param placeholderKey clé mémoire d'une vignette DÉJÀ chargée à une autre taille, affichée en attendant : c'est ce qui rend la
@@ -65,16 +86,7 @@ internal fun ArtworkImage(
     val context = LocalContext.current
     val url = remember(artwork.id, widthPx, heightPx) { artwork.iiif.thumbnailUrlFor(widthPx, heightPx) }
     val request = remember(url, widthPx, heightPx, placeholderKey) {
-        url?.let {
-            ImageRequest.Builder(context)
-                .data(it)
-                .size(widthPx, heightPx)
-                .memoryCacheKey(thumbKey(artwork, widthPx, heightPx))
-                .apply { if (placeholderKey != null) placeholderMemoryCacheKey(placeholderKey) }
-                .allowRgb565(true)
-                .crossfade(false)
-                .build()
-        }
+        url?.let { thumbRequest(context, artwork, it, widthPx, heightPx, placeholderKey) }
     }
     Box(modifier.fillMaxSize()) {
         // Le fond est toujours là : pendant le chargement, ou si le serveur IIIF ne répond pas, la carte n'est jamais « vide ».

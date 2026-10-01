@@ -101,6 +101,9 @@ data class IiifRef(
         return "${service.trimEnd('/')}/full/$width,/0/default.jpg"
     }
 
+    /** Ce qu'on passe au visualiseur : le manifeste s'il est réel (http), sinon l'`info.json` du service d'image. */
+    val viewerUrl: String? get() = manifestUrl.takeIf { it.startsWith("http") } ?: infoJsonUrl
+
     /** Vrai si le visualiseur peut ouvrir cette œuvre : un service d'image, ou un manifeste réel (http). */
     val canOpenViewer: Boolean get() = imageServiceId != null || manifestUrl.startsWith("http")
 }

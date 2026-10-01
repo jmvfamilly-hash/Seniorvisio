@@ -59,6 +59,8 @@ class TileManager(
     private val maxCacheBytes: Long = 96L * 1024 * 1024,
     private val maxParallelDownloads: Int = 6,
     private val zoomAnchor: () -> Offset = { Offset.Unspecified },
+    /** Tuiles déjà préchargées par ailleurs (voir [IiifPrewarm]) : reprises d'emblée, et au fil de leur arrivée. */
+    private val warm: StateFlow<List<LoadedTile>>? = null,
 ) {
     // Scope enfant : close() annule tout sans toucher au scope du parent.
     private val managerScope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
@@ -102,8 +104,21 @@ class TileManager(
     private var prevMs = 0L
 
     init {
+        warm?.value?.forEach(::adopt) // reprises AVANT toute requête : elles évitent un téléchargement
         // Filet anti-écran-noir : le niveau le plus grossier (souvent 1 tuile) est chargé d'emblée.
         TileCalculator.allTiles(info, baseFactor).forEach { request(it, 0, 0f) }
+
+        warm?.let { feed ->
+            // Le préchauffage peut ne pas être fini à l'ouverture : ses tuiles suivantes sont adoptées à leur arrivée
+            // (et la requête que le gestionnaire avait lancée entre-temps pour la même tuile est abandonnée).
+            managerScope.launch {
+                feed.collect { list ->
+                    var added = false
+                    for (lt in list) if (!isLoaded(lt.tile.id)) { adopt(lt); added = true }
+                    if (added) publish()
+                }
+            }
+        }
 
         managerScope.launch {
             // StateFlow conflate ; collectLatest annule l'attente au moindre nouveau mouvement : les étapes « au repos » ne
@@ -184,6 +199,12 @@ class TileManager(
             request(p.tile, p.priority, p.distSq)
         }
         publish()
+    }
+
+    private fun adopt(lt: LoadedTile) {
+        jobs[lt.tile.id]?.let { cancel(it) }
+        failed -= lt.tile.id
+        put(lt.tile, lt.bitmap)
     }
 
     private fun isLoaded(id: String) = pinned.containsKey(id) || store.containsKey(id)

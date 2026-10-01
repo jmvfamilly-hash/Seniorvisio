@@ -37,7 +37,14 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.zIndex
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
+import coil.imageLoader
+import com.iiifviewer.IiifPrewarm
 import com.iiifviewer.IiifZoomViewer
+import com.iiifviewer.defaultIiifSources
 import com.iiifviewer.rememberIiifZoomController
 import com.vangoghtimeline.model.Artwork
 import kotlinx.coroutines.Job
@@ -58,9 +65,11 @@ private const val VIEWER_READY_TIMEOUT_MS = 3000L
  * 1. **Double-tap** sur une carte : on relève où elle est à l'écran ([OpenRequest.bounds]).
  * 2. **Ouverture** : un habillage (la même image que la carte) part de ce rectangle et grandit jusqu'à remplir l'écran, coins
  *    arrondis → droits, fond qui s'assombrit. Tout est animé dans les phases de mise en page et de dessin : aucune recomposition.
- * 3. **Fin de l'animation** : [IiifZoomViewer] est monté dessous avec l'URL de l'œuvre (`infoJsonUrl` si le manifeste l'a donnée,
- *    sinon l'URL du manifeste, que le visualiseur sait lire). Il démarre à « image entière » = ce que montre l'habillage.
- * 4. **Dès les premières tuiles** (ou après 3 s), l'habillage s'efface : on passe sans coupure de la vignette à l'image zoomable.
+ * 3. **Dès le double-tap** : [IiifZoomViewer] est monté, invisible, sous la vignette, avec l'instance de préchauffage de l'œuvre
+ *    ([TimelinePrefetcher.acquire]) : si la carte était au sommet du rouleau, `info.json` et tuiles de la vue d'arrivée sont déjà là ;
+ *    sinon ils se chargent pendant l'animation. Le visualiseur démarre à « image entière » = ce que montre l'habillage.
+ * 4. **Fin de l'animation** : le visualiseur passe AU-DESSUS de la vignette, à fond transparent : les tuiles se posent sur l'image
+ *    d'arrivée à mesure qu'elles arrivent, sans trou ni coupure ; dès les premières, la vignette s'efface dessous.
  * 5. **Retour** (bouton ou geste système) : le visualiseur DÉZOOME d'abord jusqu'à l'image entière (`animateToFit`), puis est retiré
  *    et l'habillage — identique à cette vue — se rétrécit jusqu'à la carte.
  *
@@ -75,7 +84,9 @@ fun TimelineHost(
 ) {
     val scope = rememberCoroutineScope()
     var request by remember { mutableStateOf<OpenRequest?>(null) }
-    var viewerShown by remember { mutableStateOf(false) }
+    var viewerShown by remember { mutableStateOf(false) }   // le visualiseur est monté (et charge) dès le double-tap…
+    var viewerTop by remember { mutableStateOf(false) }     // …mais ne passe au-dessus de la vignette qu'à la fin de l'animation
+    var prewarm by remember { mutableStateOf<IiifPrewarm?>(null) }
     var viewerReady by remember { mutableStateOf(false) }
     var viewerError by remember { mutableStateOf<String?>(null) }
     var rootSize by remember { mutableStateOf(IntSize.Zero) }
@@ -85,6 +96,12 @@ fun TimelineHost(
     var closing by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf<String?>(null) }
     val zoomController = rememberIiifZoomController()
+
+    val context = LocalContext.current
+    val sources = remember { defaultIiifSources() }
+    val currentRoot by rememberUpdatedState(rootSize)
+    val prefetcher = remember { TimelinePrefetcher(context, context.imageLoader, sources, scope) { currentRoot } }
+    DisposableEffect(prefetcher) { onDispose { prefetcher.close() } }
 
     // Un message bref (ex. œuvre sans image) : il s'efface seul.
     LaunchedEffect(hint) { if (hint != null) { delay(2200); hint = null } }
@@ -96,12 +113,14 @@ fun TimelineHost(
             return
         }
         request = req
-        viewerShown = false; viewerReady = false; viewerError = null
+        viewerReady = false; viewerError = null; viewerTop = false
+        prewarm = prefetcher.acquire(req.artwork)     // déjà chaud si la carte était au sommet du rouleau ; sinon chauffé maintenant
+        viewerShown = true                            // le visualiseur charge pendant l'animation, caché sous la vignette
         running = scope.launch {
             overlayAlpha.snapTo(1f)
             expand.snapTo(0f)
             expand.animateTo(1f, tween(OPEN_MS, easing = FastOutSlowInEasing))
-            viewerShown = true                        // fin de l'animation : on passe l'œuvre au visualiseur
+            viewerTop = true                          // fin de l'animation : les tuiles se posent PAR-DESSUS la vignette
             withTimeoutOrNull(VIEWER_READY_TIMEOUT_MS) { snapshotFlow { viewerReady || viewerError != null }.first { it } }
             overlayAlpha.animateTo(0f, tween(FADE_MS))
         }
@@ -118,8 +137,11 @@ fun TimelineHost(
                 zoomController.animateToFit()
             }
             overlayAlpha.snapTo(1f)                   // l'habillage reprend la place du visualiseur, à l'identique (image entière)
+            viewerTop = false
             viewerShown = false
             expand.animateTo(0f, tween(CLOSE_MS, easing = FastOutSlowInEasing))
+            request?.let { prefetcher.viewerClosed(it.artwork) }
+            prewarm = null
             request = null
             closing = false
         }
@@ -128,7 +150,7 @@ fun TimelineHost(
     BackHandler(enabled = request != null && !closing) { close() }
 
     Box(modifier.fillMaxSize().onSizeChanged { rootSize = it }) {
-        TimelineScreen(artworks, onArtworkDoubleTap = ::open)
+        TimelineScreen(artworks, onArtworkDoubleTap = ::open, prefetcher = prefetcher)
 
         credit?.let {
             BasicText(
@@ -149,9 +171,17 @@ fun TimelineHost(
         val req = request
         if (req != null) {
             if (viewerShown) {
-                Box(Modifier.fillMaxSize().background(Color.Black)) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .zIndex(if (viewerTop) 2f else 0f)                       // au-dessus de la vignette seulement à la fin de l'animation
+                        .graphicsLayer { alpha = if (viewerTop) 1f else 0f },   // avant : invisible (et sous l'habillage qui absorbe les doigts)
+                ) {
                     IiifZoomViewer(
-                        manifestUrl = req.artwork.iiif.manifestUrl.takeIf { it.startsWith("http") } ?: req.artwork.iiif.infoJsonUrl.orEmpty(),
+                        manifestUrl = req.artwork.iiif.viewerUrl.orEmpty(),
+                        sources = sources,
+                        prewarm = prewarm,
+                        transparentUntilReady = true,    // la vignette reste visible tant que les tuiles n'ont pas pris sa place
                         initialFocus = Offset.Unspecified,
                         initialZoom = 1f,                 // image entière : prolonge la vignette qui vient de remplir l'écran
                         controller = zoomController,
@@ -173,7 +203,7 @@ fun TimelineHost(
                 }
             }
             // L'habillage reste tant qu'il est visible : pendant l'ouverture, la fermeture, et jusqu'aux premières tuiles.
-            if (!viewerShown || overlayAlpha.value > 0.001f) {
+            if (!viewerTop || overlayAlpha.value > 0.001f) {
                 ExpandingCard(req, expand, overlayAlpha, rootSize)
             }
         }

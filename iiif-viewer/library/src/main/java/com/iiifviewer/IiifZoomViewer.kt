@@ -47,6 +47,10 @@ private val Backdrop = Color(0xFF101010)
  * @param onReady appelé une fois, quand les premières tuiles sont à l'écran : un appelant qui anime une transition
  *   vers le visualiseur peut alors retirer son habillage.
  * @param controller poignée pour piloter le zoom de l'extérieur (voir [IiifZoomController]).
+ * @param prewarm image préchauffée à l'avance (voir [IiifPrewarm]) : son `info.json` et ses tuiles sont repris tout de suite, l'image
+ *   s'affiche sans attente. Doit correspondre à [manifestUrl]. Elle reste à l'appelant (le visualiseur ne la ferme pas).
+ * @param transparentUntilReady fond transparent jusqu'aux premières tuiles : ce qui est dessous (la vignette d'une transition)
+ *   reste visible, les tuiles se posent par-dessus à mesure qu'elles arrivent.
  * @param onLongPress appui long n'importe où (y compris pendant le chargement ou après une erreur,
  *   pour toujours pouvoir changer d'image) ; un retour haptique est donné avant l'appel.
  */
@@ -61,6 +65,8 @@ fun IiifZoomViewer(
     onLongPress: () -> Unit = {},
     onReady: () -> Unit = {},
     controller: IiifZoomController? = null,
+    prewarm: IiifPrewarm? = null,
+    transparentUntilReady: Boolean = false,
 ) {
     val haptic = LocalHapticFeedback.current
     val currentOnLongPress by rememberUpdatedState(onLongPress)
@@ -70,9 +76,9 @@ fun IiifZoomViewer(
     }
 
     var info by remember(manifestUrl) { mutableStateOf<IiifImageInfo?>(null) }
-    LaunchedEffect(manifestUrl) {
+    LaunchedEffect(manifestUrl, prewarm) {
         try {
-            info = sources.loadInfo(manifestUrl)
+            info = prewarm?.awaitInfo() ?: sources.loadInfo(manifestUrl)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
@@ -90,7 +96,7 @@ fun IiifZoomViewer(
                 .pointerInput(Unit) { detectTapGestures(onLongPress = { longPress() }) },
         )
     } else {
-        ZoomSurface(loaded, initialFocus, initialZoom, sources, modifier, longPress, onReady, controller)
+        ZoomSurface(loaded, initialFocus, initialZoom, sources, modifier, longPress, onReady, controller, prewarm, transparentUntilReady)
     }
 }
 
@@ -104,6 +110,8 @@ private fun ZoomSurface(
     onLongPress: () -> Unit,
     onReady: () -> Unit,
     zoomController: IiifZoomController?,
+    prewarm: IiifPrewarm?,
+    transparentUntilReady: Boolean,
 ) {
     val scope = rememberCoroutineScope() // Main : convient au TileManager (état mono-thread)
     val controller = remember(info) { ViewportController(info.width, info.height, scope) }
@@ -115,12 +123,15 @@ private fun ZoomSurface(
         TileManager(
             info, sources, scope, controller.viewport, controller.screenSize, Dispatchers.Default,
             zoomAnchor = { controller.zoomAnchor },
+            warm = prewarm?.tiles,
         )
     }
     DisposableEffect(manager) { onDispose { manager.close() } }
     val currentOnReady by rememberUpdatedState(onReady)
+    var ready by remember(manager) { mutableStateOf(false) }
     LaunchedEffect(manager) {
         manager.loadedTiles.first { it.isNotEmpty() }
+        ready = true
         currentOnReady()
     }
     // Application en arrière-plan : on rend la mémoire des tuiles qui ne servent pas tout de suite.
@@ -155,7 +166,7 @@ private fun ZoomSurface(
                 )
             },
     ) {
-        drawTiles(viewportState.value, tilesState.value)
+        drawTiles(viewportState.value, tilesState.value, if (transparentUntilReady && !ready) Color.Transparent else Backdrop)
     }
 }
 
@@ -164,8 +175,8 @@ private fun ZoomSurface(
  * forment le fond, les tuiles nettes les recouvrent au fur et à mesure de leur arrivée.
  * Aucune allocation : boucle indexée, IntOffset/IntSize sont des value classes.
  */
-private fun DrawScope.drawTiles(vp: ViewportState, tiles: List<LoadedTile>) {
-    drawRect(Backdrop)
+private fun DrawScope.drawTiles(vp: ViewportState, tiles: List<LoadedTile>, backdrop: Color) {
+    if (backdrop.alpha > 0f) drawRect(backdrop)
     val screenW = size.width.toInt()
     val screenH = size.height.toInt()
     for (i in tiles.indices) {
