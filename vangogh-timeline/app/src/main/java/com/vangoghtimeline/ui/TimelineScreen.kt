@@ -38,7 +38,7 @@ fun TimelineScreen(
     artworks: List<Artwork>,
     modifier: Modifier = Modifier,
     initialDaysPerPixel: Float = 1.6f,
-    onArtworkDoubleTap: ((Artwork) -> Unit)? = null,
+    onArtworkDoubleTap: ((OpenRequest) -> Unit)? = null,
     roller: Boolean = true,
 ) {
     val density = LocalDensity.current

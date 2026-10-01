@@ -15,3 +15,7 @@ dependencyResolutionManagement {
 }
 rootProject.name = "VanGoghTimeline"
 include ':app'
+
+// Le visualiseur IIIF est une bibliothèque partagée (iiif-viewer/library) : la frise ouvre une œuvre dedans, sans copie de code.
+include ':iiif-viewer-lib'
+project(':iiif-viewer-lib').projectDir = new File(settingsDir, '../iiif-viewer/library')

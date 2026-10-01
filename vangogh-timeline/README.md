@@ -44,6 +44,24 @@ Le pincement (zoom/dézoom du temps) marche même si les doigts partent d'une vi
 et se disputait les doigts. Un double-tap sur une carte est prévu : `ArtworkCard(onDoubleTap = …)` attache un détecteur sans retour visuel
 (`TimelineScreen(onArtworkDoubleTap = …)`).
 
+### Ouvrir une œuvre : transition vers le visualiseur IIIF (`ui/TimelineHost.kt`)
+
+**Double-tap** sur une carte → la vignette **devient la page** : un habillage (la même image que la carte) part du rectangle de la carte et grandit
+jusqu'à remplir l'écran (coins arrondis → droits, fond qui s'assombrit), puis `IiifZoomViewer` (bibliothèque `../iiif-viewer/library`, incluse
+par `settings.gradle`) est monté dessous avec l'URL de l'œuvre — `infoJsonUrl` si le manifeste l'a donnée, sinon l'URL du manifeste, que le
+visualiseur sait lire. Il démarre sur « image entière » (`initialZoom = 1`), exactement ce que montre l'habillage ; dès les premières tuiles
+(`onReady`) l'habillage s'efface. Retour (bouton ou geste système) : le visualiseur est retiré et l'habillage se rétrécit jusqu'à la carte.
+
+Tout est animé dans les phases de mise en page et de dessin (`Modifier.layout`, `graphicsLayer`, `drawBehind`) : aucune recomposition.
+La position de la carte est relevée au double-tap (`boundsInRoot`, rouleau compris) ; sa vignette déjà chargée sert de `placeholder` à la grande
+version (`placeholderMemoryCacheKey`) : pas de saut.
+
+`SharedTransitionLayout` n'existe qu'à partir de Compose 1.7 ; le projet est sur 1.6 (Kotlin 1.9). Même principe (transformation de
+conteneur), écrit à la main, sans API expérimentale.
+
+**Démo hors ligne** : les œuvres de démonstration pointent vers `demo:vangogh/<id>`, servies par `demo/DemoIiifSources` (un ensemble de Mandelbrot
+par œuvre, découpé en tuiles IIIF, avec une palette propre à chacune) : le zoom profond marche sans serveur. Toute autre URL part sur le réseau.
+
 ### Pourquoi ça reste fluide avec des dizaines de vignettes
 
 1. Seules les œuvres proches de l'écran (+ 320 dp de marge) sont composées : recherche dichotomique, O(log n).

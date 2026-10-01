@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.vangoghtimeline.iiif.HttpManifestSource
 import com.vangoghtimeline.iiif.ManifestRepository
 import com.vangoghtimeline.model.Artwork
-import com.vangoghtimeline.ui.TimelineScreen
+import com.vangoghtimeline.ui.TimelineHost
 
 /**
  * Frise chronologique des œuvres de Van Gogh.
@@ -79,7 +79,7 @@ class MainActivity : ComponentActivity() {
             when (val s = state) {
                 Load.Busy -> Message("Chargement des manifestes…")
                 is Load.Failed -> Message(s.reason)
-                is Load.Done -> TimelineScreen(s.artworks)
+                is Load.Done -> TimelineHost(s.artworks)
             }
         }
     }

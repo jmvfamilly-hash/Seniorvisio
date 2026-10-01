@@ -15,7 +15,7 @@ object SampleArtworks {
     private fun w(id: String, title: String, y: Int, m: Int, place: String, medium: String = "Huile sur toile") =
         Artwork(
             id = id, title = title, date = ArtworkDate.month(y, m), place = place, medium = medium,
-            iiif = IiifRef(manifestUrl = "https://example.org/iiif/vangogh/$id/manifest.json"),
+            iiif = IiifRef(manifestUrl = "demo:vangogh/$id"), // manifeste hors ligne : voir demo/DemoIiifSources
         )
 
     val all: List<Artwork> = listOf(

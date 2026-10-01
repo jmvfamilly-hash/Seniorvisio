@@ -7,6 +7,7 @@ on:
   push:
     paths:
       - 'vangogh-timeline/**'
+      - 'iiif-viewer/library/**'   # la frise l'embarque
       - '.github/workflows/build-vangogh-timeline-apk.yml'
   workflow_dispatch:
 

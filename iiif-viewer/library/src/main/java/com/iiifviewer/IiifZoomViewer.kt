@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlin.math.roundToInt
 
 private val Backdrop = Color(0xFF101010)
@@ -41,6 +42,10 @@ private val Backdrop = Color(0xFF101010)
  * @param manifestUrl URL de l'`info.json` IIIF Image API 3.0.
  * @param initialFocus point d'intérêt de départ, en PIXELS IMAGE (ex. le centre d'un œil).
  * @param initialZoom zoom de départ, en multiple du zoom « image entière visible » (4f = ×4).
+ * @param manifestUrl peut être l'URL d'une `info.json` (Image API) OU celle d'un MANIFESTE (Presentation API 2/3) :
+ *   dans ce cas on ouvre l'image du premier canevas (voir [IiifManifestResolver]).
+ * @param onReady appelé une fois, quand les premières tuiles sont à l'écran : un appelant qui anime une transition
+ *   vers le visualiseur peut alors retirer son habillage.
  * @param onLongPress appui long n'importe où (y compris pendant le chargement ou après une erreur,
  *   pour toujours pouvoir changer d'image) ; un retour haptique est donné avant l'appel.
  */
@@ -53,6 +58,7 @@ fun IiifZoomViewer(
     sources: IiifSources = remember { defaultIiifSources() },
     onError: (Throwable) -> Unit = {},
     onLongPress: () -> Unit = {},
+    onReady: () -> Unit = {},
 ) {
     val haptic = LocalHapticFeedback.current
     val currentOnLongPress by rememberUpdatedState(onLongPress)
@@ -82,7 +88,7 @@ fun IiifZoomViewer(
                 .pointerInput(Unit) { detectTapGestures(onLongPress = { longPress() }) },
         )
     } else {
-        ZoomSurface(loaded, initialFocus, initialZoom, sources, modifier, longPress)
+        ZoomSurface(loaded, initialFocus, initialZoom, sources, modifier, longPress, onReady)
     }
 }
 
@@ -94,6 +100,7 @@ private fun ZoomSurface(
     sources: IiifSources,
     modifier: Modifier,
     onLongPress: () -> Unit,
+    onReady: () -> Unit,
 ) {
     val scope = rememberCoroutineScope() // Main : convient au TileManager (état mono-thread)
     val controller = remember(info) { ViewportController(info.width, info.height, scope) }
@@ -104,6 +111,11 @@ private fun ZoomSurface(
         )
     }
     DisposableEffect(manager) { onDispose { manager.close() } }
+    val currentOnReady by rememberUpdatedState(onReady)
+    LaunchedEffect(manager) {
+        manager.loadedTiles.first { it.isNotEmpty() }
+        currentOnReady()
+    }
     // Application en arrière-plan : on rend la mémoire des tuiles qui ne servent pas tout de suite.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(manager, lifecycleOwner) {

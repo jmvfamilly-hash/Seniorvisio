@@ -3,7 +3,16 @@
 Lecteur d'images pyramidales **IIIF Image API 3.0** (lit aussi la 2.x) en Jetpack Compose pur :
 pas de WebView, pas d'OpenSeadragon. Projet Gradle autonome, indépendant de Senior Visio.
 
-## Architecture (`app/src/main/java/com/iiifviewer/`)
+## Modules
+
+- `library/` : le visualiseur (tout le code ci-dessous), en bibliothèque Android réutilisable. Paquet Kotlin `com.iiifviewer`.
+- `app/` : application de démonstration (`MainActivity`).
+- La **frise Van Gogh** (`../vangogh-timeline/`) inclut `library/` depuis son propre `settings.gradle` : double-tap sur une œuvre → transition → `IiifZoomViewer`.
+
+`IiifZoomViewer(manifestUrl, …)` accepte l'URL d'une `info.json` (Image API) **ou d'un manifeste** (Presentation 2/3) : dans ce cas il ouvre
+l'image du premier canevas (`IiifManifestResolver`). `onReady` signale les premières tuiles à l'écran.
+
+## Architecture (`library/src/main/java/com/iiifviewer/`)
 
 | Couche | Fichiers | Rôle |
 |---|---|---|
@@ -11,7 +20,7 @@ pas de WebView, pas d'OpenSeadragon. Projet Gradle autonome, indépendant de Sen
 | 2. Calcul | `TileCalculator.kt` | Niveau de zoom idéal, projection écran → image, culling des tuiles |
 | 3. Pipeline | `TileManager.kt`, `PrefetchPlanner.kt`, `IiifSources.kt` | Navigation prédictive, file à priorités, téléchargements annulables, mémoire plafonnée, niveau grossier épinglé |
 | 4. UI | `IiifZoomViewer.kt`, `ViewportController.kt`, `ViewportGestures.kt` | Canvas, pinch/pan, inertie, double-tap, bords collants |
-| Plateforme | `AndroidIiifSources.kt` | Seul fichier dépendant d'Android (HTTP + décodage) |
+| Plateforme | `AndroidIiifSources.kt`, `IiifManifestResolver.kt` | Seul fichier réseau (HTTP + décodage) ; passage manifeste → image |
 
 Tout le reste est du Kotlin commun, prêt pour Compose Multiplatform.
 

@@ -24,7 +24,11 @@ class HttpIiifSources : IiifSources {
     }
 
     override suspend fun loadInfo(infoUrl: String): IiifImageInfo {
-        val json = JSONObject(fetch(infoUrl) { it.readBytes().decodeToString() })
+        val text = fetch(infoUrl) { it.readBytes().decodeToString() }
+        // L'URL peut être celle d'un MANIFESTE (galerie, frise…) : on en tire le service d'image de la première page,
+        // puis on lit son info.json.
+        IiifManifestResolver.serviceIdOf(text)?.let { return loadInfo(IiifManifestResolver.infoUrlFor(it)) }
+        val json = JSONObject(text)
         val base = json.optString("id").ifEmpty { json.optString("@id") }
             .ifEmpty { infoUrl.removeSuffix("/info.json") }
             .trimEnd('/')

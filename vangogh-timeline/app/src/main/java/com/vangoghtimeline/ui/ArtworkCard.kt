@@ -10,12 +10,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -24,6 +27,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -36,58 +42,41 @@ import coil.request.ImageRequest
 import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.formatFr
 
+/** Ce que la frise sait au moment d'un double-tap : l'œuvre, et où est sa carte à l'écran (pour animer à partir d'elle). */
+data class OpenRequest(val artwork: Artwork, val bounds: Rect, val cardWidthPx: Int, val cardHeightPx: Int)
+
+/** Clé du cache mémoire Coil d'une vignette : stable (œuvre + taille), partagée entre la carte et l'habillage de la transition. */
+internal fun thumbKey(artwork: Artwork, widthPx: Int, heightPx: Int) = "${artwork.id}@${widthPx}x$heightPx"
+
 /**
- * Carte d'une œuvre : vignette IIIF + titre + date (au niveau de précision réellement connu).
+ * L'image d'une œuvre : un fond dessiné aux couleurs du lieu (jamais « vide »), puis la vignette IIIF par-dessus quand elle existe.
  *
- * [onDoubleTap] : réservé à l'interaction à venir ; `null` = la carte ne réagit à rien, tous les gestes vont à la frise.
- *
- * Les paramètres sont l'[Artwork] et la taille en pixels, PAS la position : quand la carte se déplace (zoom du temps,
- * changement de couloir), ses paramètres ne changent pas et Compose saute sa recomposition.
- *
- * Coil, pour des dizaines de vignettes :
- * - `size(w, h)` exact : on ne décode que les pixels affichés ; l'URL IIIF `!w,h` fait redimensionner par le SERVEUR ;
- * - `allowRgb565(true)` : les vignettes opaques prennent deux fois moins de mémoire ;
- * - `memoryCacheKey` stable (œuvre + taille) : revenir sur une carte déjà vue est instantané ;
- * - pas de fondu (`crossfade(false)`) : un fondu par carte coûte une animation par carte pendant le défilement ;
- * - la carte n'est composée que tant qu'elle est proche de l'écran (voir [TimelineLayout]) : Coil annule tout
- *   téléchargement dont la carte quitte la composition.
+ * @param placeholderKey clé mémoire d'une vignette DÉJÀ chargée à une autre taille, affichée en attendant : c'est ce qui rend la
+ *   transition carte → plein écran continue (l'image de la carte reste visible pendant que la grande version arrive).
  */
 @Composable
-fun ArtworkCard(
+internal fun ArtworkImage(
     artwork: Artwork,
     widthPx: Int,
     heightPx: Int,
     modifier: Modifier = Modifier,
-    onDoubleTap: ((Artwork) -> Unit)? = null,
+    placeholderKey: String? = null,
 ) {
     val context = LocalContext.current
     val url = remember(artwork.id, widthPx, heightPx) { artwork.iiif.thumbnailUrlFor(widthPx, heightPx) }
-    val request = remember(url, widthPx, heightPx) {
+    val request = remember(url, widthPx, heightPx, placeholderKey) {
         url?.let {
             ImageRequest.Builder(context)
                 .data(it)
                 .size(widthPx, heightPx)
-                .memoryCacheKey("${artwork.id}@${widthPx}x$heightPx")
+                .memoryCacheKey(thumbKey(artwork, widthPx, heightPx))
+                .apply { if (placeholderKey != null) placeholderMemoryCacheKey(placeholderKey) }
                 .allowRgb565(true)
                 .crossfade(false)
                 .build()
         }
     }
-    val description = remember(artwork) { "${artwork.title}, ${artwork.date.formatFr()}" }
-
-    Box(
-        modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(8.dp))
-            .background(placeColor(artwork.place).copy(alpha = 0.35f))
-            // Aucune interaction par défaut : un `clickable` appliquerait, hors thème Material, un voile de débogage au
-            // toucher, et se disputerait les doigts avec le pincement. Le double-tap (prévu) est un détecteur sans retour visuel.
-            .then(
-                if (onDoubleTap != null) Modifier.pointerInput(artwork) { detectTapGestures(onDoubleTap = { onDoubleTap(artwork) }) }
-                else Modifier,
-            )
-            .semantics { contentDescription = description },
-    ) {
+    Box(modifier.fillMaxSize()) {
         // Le fond est toujours là : pendant le chargement, ou si le serveur IIIF ne répond pas, la carte n'est jamais « vide ».
         PlaceholderArt(artwork)
         if (request != null) {
@@ -98,6 +87,52 @@ fun ArtworkCard(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+    }
+}
+
+/**
+ * Carte d'une œuvre : vignette IIIF + titre + date (au niveau de précision réellement connu).
+ *
+ * [onDoubleTap] : double-tap sur la carte, sans AUCUN retour visuel ni consommation des doigts tant qu'aucun geste de défilement
+ * ou de pincement n'est reconnu (la frise observe les doigts avant les cartes). `null` = la carte ne réagit à rien.
+ *
+ * Les paramètres sont l'[Artwork] et la taille en pixels, PAS la position : quand la carte se déplace (zoom du temps,
+ * changement de couloir, rouleau), ses paramètres ne changent pas et Compose saute sa recomposition.
+ *
+ * Coil, pour des dizaines de vignettes (voir [ArtworkImage]) : taille de décodage exacte, vignette redimensionnée par le serveur
+ * IIIF (`!w,h`), RGB 565, clé de cache mémoire stable, pas de fondu ; la carte n'est composée que tant qu'elle est proche de
+ * l'écran (voir [TimelineLayout]) et Coil annule tout téléchargement dont la carte quitte la composition.
+ */
+@Composable
+fun ArtworkCard(
+    artwork: Artwork,
+    widthPx: Int,
+    heightPx: Int,
+    modifier: Modifier = Modifier,
+    onDoubleTap: ((OpenRequest) -> Unit)? = null,
+) {
+    val description = remember(artwork) { "${artwork.title}, ${artwork.date.formatFr()}" }
+    // Poignée sur la position à l'écran, lue seulement au double-tap : une référence ordinaire, pas un état (sinon la carte se
+    // recomposerait à chaque image de défilement).
+    val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val currentDoubleTap by rememberUpdatedState(onDoubleTap)
+
+    Box(
+        modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(8.dp))
+            .onGloballyPositioned { coordinates[0] = it }
+            .semantics { contentDescription = description }
+            .pointerInput(artwork, widthPx, heightPx, onDoubleTap != null) {
+                if (onDoubleTap != null) {
+                    detectTapGestures(onDoubleTap = {
+                        val bounds = coordinates[0]?.takeIf { it.isAttached }?.boundsInRoot()
+                        if (bounds != null) currentDoubleTap?.invoke(OpenRequest(artwork, bounds, widthPx, heightPx))
+                    })
+                }
+            },
+    ) {
+        ArtworkImage(artwork, widthPx, heightPx)
         Column(
             Modifier
                 .align(Alignment.BottomStart)
@@ -127,7 +162,7 @@ fun ArtworkCard(
  * si la taille de la carte change, jamais pendant le défilement.
  */
 @Composable
-private fun PlaceholderArt(artwork: Artwork) {
+internal fun PlaceholderArt(artwork: Artwork) {
     val base = placeColor(artwork.place)
     Box(
         Modifier

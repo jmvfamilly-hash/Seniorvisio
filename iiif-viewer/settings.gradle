@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "IiifViewer"
 include ':app'
+include ':library'
