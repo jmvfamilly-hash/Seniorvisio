@@ -37,6 +37,7 @@ class ArticParserTest {
         val bedroom = ArticParser.parse(response).first { it.title == "The Bedroom" }
         assertEquals("https://www.artic.edu/iiif/2/25c31d8d-21a4-9ea1-1d73-6a2eca4dda7e", bedroom.iiif.imageServiceId)
         assertEquals("https://www.artic.edu/iiif/2/25c31d8d-21a4-9ea1-1d73-6a2eca4dda7e/info.json", bedroom.iiif.infoJsonUrl)
+        assertEquals("https://api.artic.edu/api/v1/artworks/28560/manifest.json", bedroom.iiif.manifestUrl)
         assertTrue(bedroom.iiif.canOpenViewer)
         assertEquals(4032f / 3200f, bedroom.iiif.aspectRatio, 1e-4f)
     }

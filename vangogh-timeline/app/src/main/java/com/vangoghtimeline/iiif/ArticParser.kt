@@ -27,6 +27,14 @@ object ArticParser {
             "&fields=id,title,artist_title,date_start,date_end,place_of_origin,medium_display,image_id,thumbnail"
 
     private const val DEFAULT_IIIF = "https://www.artic.edu/iiif/2"
+
+    /**
+     * Règle AIC : l'`id` numérique d'une œuvre donne son manifeste IIIF
+     * `https://api.artic.edu/api/v1/artworks/{id}/manifest.json` (ex. La Chambre : 28560) ;
+     * son `image_id` donne le service d'image `https://www.artic.edu/iiif/2/{image_id}`
+     * (`/info.json`, `/full/{w},/0/default.jpg`, tuiles `/{region}/{w},/0/default.jpg`).
+     */
+    fun manifestUrl(artworkId: Int): String = "https://api.artic.edu/api/v1/artworks/$artworkId/manifest.json"
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Les œuvres de Van Gogh ayant une image, par date croissante. Une réponse illisible rend une liste vide. */
@@ -52,7 +60,7 @@ object ArticParser {
                 place = o.str("place_of_origin")?.substringBefore(',')?.trim()?.ifEmpty { null },
                 medium = o.str("medium_display"),
                 iiif = IiifRef(
-                    manifestUrl = "https://api.artic.edu/api/v1/artworks/$id",
+                    manifestUrl = manifestUrl(id),
                     imageServiceId = "$iiif/$imageId",
                     canvasWidth = thumb?.int("width"),
                     canvasHeight = thumb?.int("height"),
