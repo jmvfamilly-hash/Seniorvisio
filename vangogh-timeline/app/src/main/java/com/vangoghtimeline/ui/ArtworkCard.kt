@@ -1,7 +1,7 @@
 package com.vangoghtimeline.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -37,6 +38,8 @@ import com.vangoghtimeline.model.formatFr
 
 /**
  * Carte d'une œuvre : vignette IIIF + titre + date (au niveau de précision réellement connu).
+ *
+ * [onDoubleTap] : réservé à l'interaction à venir ; `null` = la carte ne réagit à rien, tous les gestes vont à la frise.
  *
  * Les paramètres sont l'[Artwork] et la taille en pixels, PAS la position : quand la carte se déplace (zoom du temps,
  * changement de couloir), ses paramètres ne changent pas et Compose saute sa recomposition.
@@ -54,8 +57,8 @@ fun ArtworkCard(
     artwork: Artwork,
     widthPx: Int,
     heightPx: Int,
-    onClick: (Artwork) -> Unit,
     modifier: Modifier = Modifier,
+    onDoubleTap: ((Artwork) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val url = remember(artwork.id, widthPx, heightPx) { artwork.iiif.thumbnailUrlFor(widthPx, heightPx) }
@@ -77,7 +80,12 @@ fun ArtworkCard(
             .fillMaxSize()
             .clip(RoundedCornerShape(8.dp))
             .background(placeColor(artwork.place).copy(alpha = 0.35f))
-            .clickable { onClick(artwork) }
+            // Aucune interaction par défaut : un `clickable` appliquerait, hors thème Material, un voile de débogage au
+            // toucher, et se disputerait les doigts avec le pincement. Le double-tap (prévu) est un détecteur sans retour visuel.
+            .then(
+                if (onDoubleTap != null) Modifier.pointerInput(artwork) { detectTapGestures(onDoubleTap = { onDoubleTap(artwork) }) }
+                else Modifier,
+            )
             .semantics { contentDescription = description },
     ) {
         // Le fond est toujours là : pendant le chargement, ou si le serveur IIIF ne répond pas, la carte n'est jamais « vide ».

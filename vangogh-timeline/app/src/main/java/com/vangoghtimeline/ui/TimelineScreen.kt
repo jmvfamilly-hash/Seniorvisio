@@ -38,7 +38,8 @@ fun TimelineScreen(
     artworks: List<Artwork>,
     modifier: Modifier = Modifier,
     initialDaysPerPixel: Float = 1.6f,
-    onArtworkClick: (Artwork) -> Unit = {},
+    onArtworkDoubleTap: ((Artwork) -> Unit)? = null,
+    roller: Boolean = true,
 ) {
     val density = LocalDensity.current
     val state = rememberTimelineScrollState()
@@ -52,12 +53,13 @@ fun TimelineScreen(
     val plan = remember(artworks, daysPerPixel, card, margin) { TimelineEngine.layout(artworks, daysPerPixel, card, margin) }
 
     Column(modifier.fillMaxSize().background(Background)) {
-        TimeAxis(plan, state)
+        TimeAxis(plan, state, roller = roller)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             TimelineLayout(
                 plan = plan,
                 state = state,
                 modifier = Modifier.fillMaxSize(),
+                roller = roller,
                 onZoomX = { centroidX, zoom ->
                     // La date sous les doigts reste sous les doigts : on la retrouve avant, on recale après.
                     val day = plan.scale.dayAt(state.scrollX + centroidX - plan.leftInset)
@@ -71,7 +73,7 @@ fun TimelineScreen(
                     artwork = placed.artwork,
                     widthPx = placed.width.roundToInt(),
                     heightPx = placed.height.roundToInt(),
-                    onClick = onArtworkClick,
+                    onDoubleTap = onArtworkDoubleTap,
                 )
             }
             BasicText(

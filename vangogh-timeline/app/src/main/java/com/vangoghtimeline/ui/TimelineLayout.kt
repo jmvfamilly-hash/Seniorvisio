@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.vangoghtimeline.model.CylinderProjection
 import com.vangoghtimeline.model.PlacedArtwork
 import com.vangoghtimeline.model.TimelinePlan
 import kotlin.math.roundToInt
@@ -50,6 +51,7 @@ fun TimelineLayout(
     modifier: Modifier = Modifier,
     overscan: Dp = 320.dp,
     onZoomX: (centroidX: Float, zoom: Float) -> Unit = { _, _ -> },
+    roller: Boolean = true,
     content: @Composable (PlacedArtwork) -> Unit,
 ) {
     val overscanPx = with(LocalDensity.current) { overscan.toPx() }
@@ -57,12 +59,15 @@ fun TimelineLayout(
     // Le contenu a changé (nouvelle échelle, nouvelles œuvres) : les bornes de défilement suivent.
     SideEffect { state.setContent(plan.contentWidth, plan.contentHeight) }
 
-    val visible by remember(plan, overscanPx) {
+    val visible by remember(plan, overscanPx, roller) {
         derivedStateOf {
+            // Avec le rouleau, des cartes situées bien au-delà du bord (à plat) apparaissent comprises DANS l'écran :
+            // la marge horizontale couvre au moins une demi-largeur d'écran.
+            val overscanX = if (roller) maxOf(overscanPx, 0.5f * state.viewportWidth) else overscanPx
             plan.visible(
-                left = state.scrollX - overscanPx,
+                left = state.scrollX - overscanX,
                 top = state.scrollY - overscanPx,
-                right = state.scrollX + state.viewportWidth + overscanPx,
+                right = state.scrollX + state.viewportWidth + overscanX,
                 bottom = state.scrollY + state.viewportHeight + overscanPx,
             )
         }
@@ -86,12 +91,33 @@ fun TimelineLayout(
             val p = m.parentData as PlacedArtwork
             m.measure(Constraints.fixed(safeRound(p.width).coerceAtLeast(0), safeRound(p.height).coerceAtLeast(0))) to p
         }
+        val projection = CylinderProjection(width.toFloat())
+        val cameraDistance = 12f * density
         layout(width, height) {
             // Seule lecture du défilement : uniquement en phase de placement.
             val sx = state.scrollX.takeIf { it.isFinite() } ?: 0f
             val sy = state.scrollY.takeIf { it.isFinite() } ?: 0f
             for ((placeable, p) in placeables) {
-                placeable.place(safeRound(p.x - sx), safeRound(p.y - sy))
+                val y = safeRound(p.y - sy)
+                if (!roller) {
+                    placeable.place(safeRound(p.x - sx), y)
+                    continue
+                }
+                // Décalage du centre de la carte par rapport au centre de l'écran, sur la frise « à plat ».
+                val offset = (p.x - sx + p.width / 2f) - width / 2f
+                val angle = projection.angle(offset)
+                val cos = kotlin.math.cos(angle)
+                val centerX = width / 2f + projection.project(offset)
+                val alpha = projection.alpha(angle)
+                val scaleX = projection.scaleX(angle)
+                val rotationY = projection.rotationYDegrees(angle)
+                // zIndex : la carte du centre passe devant celles qui se couchent sur les bords.
+                placeable.placeWithLayer(safeRound(centerX - p.width / 2f), y, zIndex = cos) {
+                    this.alpha = alpha
+                    this.scaleX = scaleX
+                    this.rotationY = rotationY
+                    this.cameraDistance = cameraDistance
+                }
             }
         }
     }

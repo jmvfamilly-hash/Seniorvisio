@@ -15,6 +15,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vangoghtimeline.model.CivilCalendar
+import com.vangoghtimeline.model.CylinderProjection
 import com.vangoghtimeline.model.TimelinePlan
 import com.vangoghtimeline.model.monthNameFr
 import kotlin.math.ceil
@@ -26,18 +27,22 @@ import kotlin.math.floor
  * donc la règle est toujours exacte au jour près.
  */
 @Composable
-fun TimeAxis(plan: TimelinePlan, state: TimelineScrollState, modifier: Modifier = Modifier) {
+fun TimeAxis(plan: TimelinePlan, state: TimelineScrollState, modifier: Modifier = Modifier, roller: Boolean = true) {
     val measurer = rememberTextMeasurer(cacheSize = 64)
     val yearStyle = remember { TextStyle(color = Color(0xFFE9E2D0), fontSize = 13.sp) }
     val monthStyle = remember { TextStyle(color = Color(0xFF9C978A), fontSize = 10.sp) }
 
     Canvas(modifier.fillMaxWidth().height(40.dp).background(Color(0xFF15171B))) {
         val sx = state.scrollX // lu ici : seul le dessin est invalidé par le défilement
-        val firstDay = floor(plan.scale.dayAt(sx - plan.leftInset)).toLong()
-        val lastDay = ceil(plan.scale.dayAt(sx + size.width - plan.leftInset)).toLong()
+        val reach = if (roller) 0.5f * size.width else 0f
+        val firstDay = floor(plan.scale.dayAt(sx - reach - plan.leftInset)).toLong()
+        val lastDay = ceil(plan.scale.dayAt(sx + size.width + reach - plan.leftInset)).toLong()
         val firstYear = CivilCalendar.civil(firstDay).first
         val lastYear = CivilCalendar.civil(lastDay).first
         val pxPerMonth = 30.4f * plan.scale.pixelsPerDay()
+        val projection = CylinderProjection(size.width)
+        // Abscisse apparente d'une abscisse « à plat » : la règle s'enroule comme les cartes.
+        fun apparentX(flatX: Float): Float = if (roller) size.width / 2f + projection.project(flatX - size.width / 2f) else flatX
 
         // `drawText` sans taille impose au texte la largeur restante `size.width − x` : pour une étiquette qui
         // commence au-delà du bord droit, elle est NÉGATIVE et Compose lève « maxWidth(-4) must be >= minWidth(0) ».
@@ -50,14 +55,14 @@ fun TimeAxis(plan: TimelinePlan, state: TimelineScrollState, modifier: Modifier 
         for (year in firstYear..lastYear) {
             if (pxPerMonth >= 36f) {
                 for (month in 2..12) {
-                    val x = plan.contentXOf(CivilCalendar.epochDay(year, month, 1)) - sx
+                    val x = apparentX(plan.contentXOf(CivilCalendar.epochDay(year, month, 1)) - sx)
                     drawLine(Color(0xFF3A3D44), Offset(x, size.height - 10f), Offset(x, size.height), 1f)
                     if (pxPerMonth >= 64f) {
                         label(monthNameFr(month, short = true), x + 3f, size.height - 26f, monthStyle)
                     }
                 }
             }
-            val x = plan.contentXOf(CivilCalendar.epochDay(year, 1, 1)) - sx
+            val x = apparentX(plan.contentXOf(CivilCalendar.epochDay(year, 1, 1)) - sx)
             drawLine(Color(0xFFB9A96A), Offset(x, 4f), Offset(x, size.height), 2f)
             label(year.toString(), x + 5f, 3f, yearStyle)
         }

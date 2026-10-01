@@ -20,6 +20,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -135,11 +136,14 @@ fun Modifier.scroll2D(
             var maxPointers = 1
             var cancelled = false
 
-            awaitFirstDown(requireUnconsumed = false)
+            // Passe INITIAL : on voit les doigts avant les vignettes. Un pincement qui démarre sur une carte n'est donc jamais
+            // « mangé » par elle ; et dès que le geste est reconnu on consomme les mouvements, ce qui fait annuler (et non
+            // déclencher) un éventuel toucher de la carte.
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             state.stopFling() // un doigt posé arrête l'inertie
 
             do {
-                val event = awaitPointerEvent()
+                val event = awaitPointerEvent(PointerEventPass.Initial)
                 cancelled = event.changes.any { it.isConsumed }
                 if (!cancelled) {
                     val pointers = event.changes.count { it.pressed }
