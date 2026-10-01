@@ -118,7 +118,7 @@ Le modèle, l'échelle, les couloirs et le parseur n'importent rien d'Android : 
 ## Sources : trois musées
 
 La frise charge **en parallèle** les œuvres de Van Gogh (1870–1890) de trois sources et les fusionne au fil de leur arrivée
-(`CollectionLoader`) : elle s'affiche dès la première réponse, les autres s'y ajoutent ; une source en échec ne retire rien aux autres,
+(`UniverseLoader`, une liste de sources par artiste) : elle s'affiche dès la première réponse, les autres s'y ajoutent ; une source en échec ne retire rien aux autres,
 et chaque source garde une copie locale pour le hors ligne. Le crédit en bas à droite indique le nombre d'œuvres par musée.
 
 | Source | Service | Comment on arrive à l'image IIIF |
@@ -148,3 +148,43 @@ Trois temps (`DoubleTapZoom`), le point tapé restant fixe à l'écran : image e
 entière. Le milieu perceptif est la moyenne géométrique `√(min × max)` : même facteur de grossissement de l'image entière à l'étape que de
 l'étape au maximum (pour un maximum à ×8 : ×1 → ×2,8 → ×8). Depuis un zoom quelconque, on va à la prochaine étape au-dessus. Pour une petite
 image dont l'étape serait presque l'image entière, elle est sautée. Le pincement vers l'intérieur depuis l'image entière referme l'œuvre.
+
+## Menu des artistes (maquette « Chronologie des Impressionnistes »)
+
+- Au lancement : un menu de portraits (catalogue `assets/artists_by_movement.json`, 20 artistes en trois familles). Chaque carte montre
+  le portrait (vignette de l'article Wikipédia : tableau ou photo ; initiales à défaut), les dates, la **période d'activité** (barre colorée
+  par famille) et l'œuvre emblématique. Un artiste **sans univers est grisé**.
+- **Un toucher** sélectionne : ses informations s'affichent dessous (origine, style, type d'œuvres, lieux de création, sources et leur état)
+  et la connexion de ses sources démarre en arrière-plan. **Un autre toucher** sur l'artiste sélectionné ouvre son univers dans la frise.
+  Retour système depuis la frise : retour au menu.
+- Univers ouverts pour l'instant : **Van Gogh** (AIC, Rijksmuseum, Cleveland, Met, Europeana), **Sargent** (AIC, Met, Cleveland, Europeana),
+  **Sorolla** (Met, AIC, Europeana), **Renoir** (AIC, Met, SMK, Cleveland, Europeana). Les autres sont grisés : `ArtistExtras` (une ligne par artiste)
+  est l'interrupteur.
+
+## Valider l'accès IIIF avant de connecter un musée
+
+Une source n'entre dans la frise qu'après validation (`SourceValidator`), à chaque connexion :
+
+1. **Chercher** les œuvres de l'artiste dans l'API du musée ;
+2. **Échantillonner** 3 œuvres (première, médiane, dernière) et vérifier ce que le visualiseur va demander : manifeste lisible → service d'image →
+   `info.json` avec largeur et hauteur ; ou service IIIF direct (`info.json`) ; ou image ordinaire joignable (`image/*`, code 2xx) ;
+3. **Connecter** si au moins la moitié de l'échantillon passe ; sinon la source est **REFUSÉE** et aucune de ses œuvres n'apparaît (pas de carte
+   qui ne s'ouvre pas). Le rapport dit pourquoi (code HTTP, URL, « type text/html au lieu d'une image », « largeur/hauteur absentes »…) et s'affiche
+   dans le panneau de l'artiste : point vert (connectée / copie hors ligne), rouge (refusée / injoignable), gris (vide / non implémentée), orange (en cours).
+
+## Approche itérative pour sécuriser l'implémentation
+
+Aucun des services ajoutés n'a pu être appelé depuis l'environnement de développement (réseau bloqué) : les parseurs sont testés sur des réponses types
+construites d'après les formats documentés. On avance donc par cycles courts, chacun vérifié sur l'appareil par le validateur :
+
+| Cycle | Contenu | Critère de sortie |
+|---|---|---|
+| 1 | Van Gogh : AIC + Rijksmuseum + Europeana (déjà vus fonctionner) | rapports verts sur l'appareil |
+| 2 | Van Gogh : + Cleveland, Met (images ordinaires, découpées localement) | rapport vert, ou cause lue dans le panneau |
+| 3 | Sargent : AIC, Met, Cleveland, Europeana | idem ; au moins une source verte |
+| 4 | Renoir : + SMK (service IIIF natif) ; Sorolla : Met, AIC, Europeana | idem |
+| 5 | Sources à clé ou à données externes : Harvard Art Museums (clé), MFA Boston (clé sur demande), SAAM (clé api.data.gov), NGA (IIIF natif mais les identifiants viennent de l'export open data), Getty, Prado, Barnes, Paris Musées, Hispanic Society | une clé/donnée fournie, puis même validation |
+| 6 | Dégriser d'autres artistes (Monet, Pissarro, Cassatt, Cézanne…) en y ajoutant des sources | rapport vert avant d'ouvrir |
+
+Règles : une source est ajoutée par une ligne dans `ArtistExtras` + une classe `MuseumSource` ; elle ne devient visible que si `SourceValidator` la valide ;
+un échec est un rapport lisible, jamais un plantage ni une carte morte ; la copie hors ligne d'une connexion validée prend le relais sans réseau.

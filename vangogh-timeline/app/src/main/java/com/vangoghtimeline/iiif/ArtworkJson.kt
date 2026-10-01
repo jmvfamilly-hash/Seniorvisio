@@ -25,6 +25,7 @@ object ArtworkJson {
             put("manifest", a.iiif.manifestUrl)
             a.iiif.imageServiceId?.let { put("service", it) }; a.iiif.thumbnailUrl?.let { put("thumb", it) }
             a.iiif.canvasWidth?.let { put("w", it) }; a.iiif.canvasHeight?.let { put("h", it) }
+            a.iiif.imageUrl?.let { put("image", it) }
         })
     }.toString()
 
@@ -39,7 +40,7 @@ object ArtworkJson {
                     id = s("id")!!, title = s("title")!!,
                     date = ArtworkDate(i("year")!!, i("month") ?: 1, i("day") ?: 1, DatePrecision.valueOf(s("precision")!!)),
                     place = s("place"), medium = s("medium"),
-                    iiif = IiifRef(s("manifest")!!, s("service"), s("thumb"), i("w"), i("h")),
+                    iiif = IiifRef(s("manifest")!!, s("service"), s("thumb"), i("w"), i("h"), s("image")),
                     provider = s("provider").orEmpty(),
                 )
             } catch (e: Exception) { null }

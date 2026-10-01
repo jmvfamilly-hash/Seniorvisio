@@ -1,6 +1,7 @@
 package com.vangoghtimeline
 
 import android.content.Intent
+import java.io.File
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -24,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,7 +34,13 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.vangoghtimeline.iiif.CollectionLoader
+import com.vangoghtimeline.iiif.HttpImageReachability
+import com.vangoghtimeline.iiif.SourceValidator
+import com.vangoghtimeline.iiif.UniverseLoader
+import com.vangoghtimeline.iiif.defaultMuseumSources
+import com.vangoghtimeline.model.ArtistCatalog
+import com.vangoghtimeline.ui.AppModel
+import com.vangoghtimeline.ui.AppRoot
 import com.vangoghtimeline.iiif.HttpManifestSource
 import com.vangoghtimeline.iiif.ManifestRepository
 import com.vangoghtimeline.model.Artwork
@@ -61,21 +69,37 @@ class MainActivity : ComponentActivity() {
                     onClose = { CrashReporter.clear(this); crash = null },
                 )
             } else {
-                Timeline(collectionUrl)
+                if (collectionUrl != null) Timeline(collectionUrl) else Root()
             }
         }
     }
 
+    /** Menu des artistes puis frise de l'artiste choisi (voir [AppRoot]). */
     @Composable
-    private fun Timeline(collectionUrl: String?) {
+    private fun Root() {
+        val scope = rememberCoroutineScope()
+        val artists = remember {
+            runCatching { ArtistCatalog.parse(assets.open("artists_by_movement.json").bufferedReader().use { it.readText() }) }.getOrDefault(emptyList())
+        }
+        val model = remember {
+            val http = HttpManifestSource()
+            val loader = UniverseLoader(
+                defaultMuseumSources(http), SourceValidator(http, HttpImageReachability()),
+                File(filesDir, "universes").apply { mkdirs() },
+            )
+            AppModel(scope, loader, http, File(filesDir, "portraits.json"))
+        }
+        if (artists.isEmpty()) {
+            Box(Modifier.fillMaxSize().background(Color(0xFF0F1114))) { Message("Catalogue des artistes illisible.") }
+        } else {
+            AppRoot(artists, model)
+        }
+    }
+
+    @Composable
+    private fun Timeline(collectionUrl: String) {
         val state by produceState<Load>(Load.Busy, collectionUrl) {
-            value = if (collectionUrl == null) {
-                // Par défaut : les œuvres de Van Gogh de trois musées (Art Institute of Chicago, Rijksmuseum, Europeana), chargées en
-                // parallèle : la frise s'affiche dès la première réponse, les autres musées s'y ajoutent.
-                val result = CollectionLoader(HttpManifestSource(), filesDir).load { value = Load.Done(it.artworks, it.credit) }
-                if (result != null) Load.Done(result.artworks, result.credit)
-                else Load.Done(SampleArtworks.all, "Hors ligne : œuvres de démonstration, sans images")
-            } else try {
+            value = try {
                 val arts = ManifestRepository(HttpManifestSource()).loadCollection(collectionUrl)
                 if (arts.isEmpty()) Load.Failed("Aucune œuvre datée dans cette collection.") else Load.Done(arts, collectionUrl)
             } catch (e: Exception) {

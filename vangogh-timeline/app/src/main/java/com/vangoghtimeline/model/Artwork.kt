@@ -74,6 +74,7 @@ data class ArtworkDate(
  * @property imageServiceId URL de base du service d'image (`…/iiif/2/F482`), sans `/info.json` : c'est elle qui permet
  *   de demander EXACTEMENT la taille de vignette voulue, et d'ouvrir l'œuvre en zoom profond (`infoJsonUrl`).
  * @property thumbnailUrl vignette fournie par le manifeste, utilisée faute de service d'image.
+ * @property imageUrl image ordinaire (sans service IIIF) : ouverte comme `static:{url}` ([com.iiifviewer.StaticImageUrl]).
  */
 data class IiifRef(
     val manifestUrl: String,
@@ -81,6 +82,8 @@ data class IiifRef(
     val thumbnailUrl: String? = null,
     val canvasWidth: Int? = null,
     val canvasHeight: Int? = null,
+    /** Image ordinaire (JPEG), pour un musée sans service IIIF : le visualiseur la découpe lui-même en tuiles. */
+    val imageUrl: String? = null,
 ) {
     /** Largeur / hauteur de l'œuvre, pour réserver la bonne place avant le chargement (1,25 par défaut). */
     val aspectRatio: Float
@@ -102,10 +105,10 @@ data class IiifRef(
     }
 
     /** Ce qu'on passe au visualiseur : le manifeste s'il est réel (http), sinon l'`info.json` du service d'image. */
-    val viewerUrl: String? get() = manifestUrl.takeIf { it.startsWith("http") } ?: infoJsonUrl
+    val viewerUrl: String? get() = manifestUrl.takeIf { it.startsWith("http") } ?: infoJsonUrl ?: imageUrl?.let { "static:$it" }
 
     /** Vrai si le visualiseur peut ouvrir cette œuvre : un service d'image, ou un manifeste réel (http). */
-    val canOpenViewer: Boolean get() = imageServiceId != null || manifestUrl.startsWith("http")
+    val canOpenViewer: Boolean get() = imageServiceId != null || imageUrl != null || manifestUrl.startsWith("http")
 }
 
 /** Une œuvre et ses métadonnées, telles que lues dans son manifeste IIIF. */

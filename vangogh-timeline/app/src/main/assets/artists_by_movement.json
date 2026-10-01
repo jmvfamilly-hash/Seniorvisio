@@ -1,0 +1,424 @@
+{
+  "artists_by_movement": {
+    "pre_impressionism": {
+      "variant_note": "Juste avant l'Impressionnisme, incluant le Réalisme, l'École de Barbizon, les Pré-Raphaélites et d'autres mouvements internationaux parallèles cherchant de nouvelles approches de la lumière et du sujet.",
+      "artists": [
+        {
+          "name": "Gustave Courbet",
+          "origin": "France",
+          "active_period": "1840-1877",
+          "main_style": "Réalisme",
+          "emblematic_work": "L'Origine du monde",
+          "work_type": "Peinture à l'huile (scènes de vie rurale et portraits)",
+          "key_locations": [
+            {
+              "location": "Ornans, France",
+              "work_type": "Paysages et scènes paysannes du Doubs",
+              "presence_period": "Présences fréquentes, production constante 1840s-1870s"
+            },
+            {
+              "location": "Paris, France",
+              "work_type": "Studio et expositions du Pavillon du Réalisme",
+              "presence_period": "Périodes de production intense 1840s-1870"
+            }
+          ]
+        },
+        {
+          "name": "Camille Corot",
+          "origin": "France",
+          "active_period": "1820-1875",
+          "main_style": "École de Barbizon / Pré-Impressionnisme de la lumière",
+          "emblematic_work": "Souvenir de Mortefontaine",
+          "work_type": "Peinture à l'huile (paysages atmosphériques en plein air)",
+          "key_locations": [
+            {
+              "location": "Barbizon, France",
+              "work_type": "Paysages de la forêt de Fontainebleau",
+              "presence_period": "Séjours fréquents de production, 1830s-1875"
+            },
+            {
+              "location": "Italie (Rome, Venise)",
+              "work_type": "Études de la lumière méditerranéenne",
+              "presence_period": "Voyages d'études et de production, 1825-1828, 1834, 1843"
+            }
+          ]
+        },
+        {
+          "name": "J.M.W. Turner",
+          "origin": "Royaume-Uni",
+          "active_period": "1790-1851",
+          "main_style": "Romantisme / Pré-Impressionnisme de la lumière et de l'atmosphère",
+          "emblematic_work": "The Fighting Temeraire",
+          "work_type": "Peinture à l'huile et aquarelle (paysages maritimes, industriels)",
+          "key_locations": [
+            {
+              "location": "Londres, Royaume-Uni",
+              "work_type": "Studio et thèmes industriels de la Tamise",
+              "presence_period": "Résidence principale, production constante 1790-1851"
+            },
+            {
+              "location": "Venise, Italie",
+              "work_type": "Études de la lumière et de l'eau",
+              "presence_period": "Trois voyages majeurs de production, 1819, 1833, 1840"
+            }
+          ]
+        },
+        {
+          "name": "Giovanni Fattori",
+          "origin": "Italie",
+          "active_period": "1850-1908",
+          "main_style": "Macchiaioli (Impressionnisme italien précoce, 'taches')",
+          "emblematic_work": "Le Sentinelle sur la ligne",
+          "work_type": "Peinture à l'huile (scènes militaires et paysages rustiques)",
+          "key_locations": [
+            {
+              "location": "Florence, Italie",
+              "work_type": "Studio et Caffè Michelangiolo (débats artistiques)",
+              "presence_period": "Enseignement et production de portraits, 1850-1908"
+            },
+            {
+              "location": "Maremme, Italie",
+              "work_type": "Paysages et vie rurale de la Toscane",
+              "presence_period": "Périodes de production clés, 1870s-1900s"
+            }
+          ]
+        },
+        {
+          "name": "Winslow Homer",
+          "origin": "USA",
+          "active_period": "1860-1910",
+          "main_style": "Réalisme / Pré-Impressionnisme maritime",
+          "emblematic_work": "The Gulf Stream",
+          "work_type": "Peinture à l'huile et aquarelle (marine, guerre civile)",
+          "key_locations": [
+            {
+              "location": "Prouts Neck, Maine, USA",
+              "work_type": "Scènes marines et de vie de pêcheur",
+              "presence_period": "Production maritime constante, 1883-1910"
+            },
+            {
+              "location": "Cuba et Bahamas",
+              "work_type": "Études de la lumière tropicale",
+              "presence_period": "Voyages de production en aquarelle, 1884-1904"
+            }
+          ]
+        }
+      ]
+    },
+    "impressionism": {
+      "variant_note": "Mouvement central axé sur la capture de l'instant, de la lumière et des effets atmosphériques, avec ses parallèles internationaux.",
+      "artists": [
+        {
+          "name": "Claude Monet",
+          "origin": "France",
+          "active_period": "1860s-1926",
+          "main_style": "Impressionnisme",
+          "emblematic_work": "Impression, soleil levant",
+          "work_type": "Peinture à l'huile (en plein air, séries)",
+          "key_locations": [
+            {
+              "location": "Giverny, France",
+              "work_type": "Jardin de Nymphéas et Pont japonais",
+              "presence_period": "Production majeure, 1883-1926"
+            },
+            {
+              "location": "Londres, Royaume-Uni",
+              "work_type": "Séries de la Tamise et du Parlement",
+              "presence_period": "Séjours de production, 1899, 1900, 1901"
+            },
+            {
+              "location": "Rouen, France",
+              "work_type": "Séries de la Cathédrale",
+              "presence_period": "Séjours de production, 1892, 1893"
+            }
+          ]
+        },
+        {
+          "name": "Pierre-Auguste Renoir",
+          "origin": "France",
+          "active_period": "1860s-1919",
+          "main_style": "Impressionnisme",
+          "emblematic_work": "Le Bal du moulin de la Galette",
+          "work_type": "Peinture à l'huile (portraits, scènes de genre, nus, lumière tachetée)",
+          "key_locations": [
+            {
+              "location": "Paris (Montmartre), France",
+              "work_type": "Scènes de la vie parisienne, bals, portraits",
+              "presence_period": "Production urbaine majeure, 1860s-1880s"
+            },
+            {
+              "location": "Chatou et Bougival, France",
+              "work_type": "Scènes de canotiers, déjeuners, bords de Seine",
+              "presence_period": "Séjours estivaux de production, 1870s-1881"
+            },
+            {
+              "location": "Cagnes-sur-Mer, France",
+              "work_type": "Nus monumentaux, paysages méditerranéens, portraits",
+              "presence_period": "Installation définitive (Domaine des Collettes) et production tardive, 1903-1919"
+            }
+          ]
+        },
+        {
+          "name": "Berthe Morisot",
+          "origin": "France",
+          "active_period": "1864-1895",
+          "main_style": "Impressionnisme",
+          "emblematic_work": "Le Berceau",
+          "work_type": "Peinture à l'huile, aquarelle (scènes domestiques, lumière naturelle)",
+          "key_locations": [
+            {
+              "location": "Paris, France",
+              "work_type": "Scènes d'intérieur, portraits et organisation d'expositions",
+              "presence_period": "Résidence principale et production continue, 1864-1895"
+            },
+            {
+              "location": "Bougival, France",
+              "work_type": "Peinture de plein air, scènes de jardins et paysages",
+              "presence_period": "Campagnes estivales de production, 1881-1884"
+            }
+          ]
+        },
+        {
+          "name": "Mary Cassatt",
+          "origin": "USA / France",
+          "active_period": "1870s-1910s",
+          "main_style": "Impressionnisme",
+          "emblematic_work": "The Child's Bath",
+          "work_type": "Peinture à l'huile et gravure (scènes domestiques, mères et enfants)",
+          "key_locations": [
+            {
+              "location": "Paris, France",
+              "work_type": "Studio et expositions impressionnistes",
+              "presence_period": "Production constante, 1874-1926"
+            },
+            {
+              "location": "Grez-sur-Loing, France",
+              "work_type": "Paysages et scènes domestiques",
+              "presence_period": "Séjours de production fréquents, 1878-1886"
+            }
+          ]
+        },
+        {
+          "name": "Eva Gonzalès",
+          "origin": "France",
+          "active_period": "1869-1883",
+          "main_style": "Impressionnisme / Réalisme",
+          "emblematic_work": "Une Loge aux Italiens",
+          "work_type": "Peinture à l'huile, pastel (portraits, scènes de théâtre et de la vie moderne)",
+          "key_locations": [
+            {
+              "location": "Paris, France",
+              "work_type": "Travail en atelier (élève de Manet), Salons",
+              "presence_period": "Production principale, 1869-1883"
+            },
+            {
+              "location": "Dieppe, France",
+              "work_type": "Paysages marins, scènes de plage",
+              "presence_period": "Séjours estivaux de production, 1871, 1879"
+            }
+          ]
+        },
+        {
+          "name": "Louise Catherine Breslau",
+          "origin": "Allemagne / Suisse",
+          "active_period": "1876-1927",
+          "main_style": "Naturalisme / Impressionnisme tardif",
+          "emblematic_work": "Les Amies",
+          "work_type": "Peinture à l'huile, pastel (portraits intimistes, figures féminines)",
+          "key_locations": [
+            {
+              "location": "Paris, France",
+              "work_type": "Études à l'Académie Julian, portraits",
+              "presence_period": "Production intense, 1876-1900"
+            },
+            {
+              "location": "Neuilly-sur-Seine, France",
+              "work_type": "Scènes de la vie domestique et d'atelier",
+              "presence_period": "Installation et production en studio, 1900-1927"
+            }
+          ]
+        },
+        {
+          "name": "Joaquín Sorolla",
+          "origin": "Espagne",
+          "active_period": "1880-1923",
+          "main_style": "Impressionnisme espagnol / Luminisme",
+          "emblematic_work": "Paseo a orillas del mar",
+          "work_type": "Peinture à l'huile (Lumière intense du soleil, marine)",
+          "key_locations": [
+            {
+              "location": "Valence, Espagne",
+              "work_type": "Plages et scènes de bain",
+              "presence_period": "Production estivale constante, 1880-1923"
+            },
+            {
+              "location": "Madrid, Espagne",
+              "work_type": "Portraits et jardins",
+              "presence_period": "Résidence principale et studio, 1889-1923"
+            }
+          ]
+        },
+        {
+          "name": "John Singer Sargent",
+          "origin": "USA / Royaume-Uni",
+          "active_period": "1870s-1925",
+          "main_style": "Impressionnisme (portraits et aquarelles)",
+          "emblematic_work": "Portrait of Madame X",
+          "work_type": "Peinture à l'huile et aquarelle (portraits, scènes de voyage)",
+          "key_locations": [
+            {
+              "location": "Londres, Royaume-Uni",
+              "work_type": "Studio de portrait de la haute société",
+              "presence_period": "Production de portraits, 1886-1925"
+            },
+            {
+              "location": "Venise, Italie",
+              "work_type": "Aquarelles et scènes de rue",
+              "presence_period": "Nombreux voyages de production, 1898, 1903, 1913"
+            }
+          ]
+        },
+        {
+          "name": "Camille Pissarro",
+          "origin": "France",
+          "active_period": "1860s-1903",
+          "main_style": "Impressionnisme (rural et urbain)",
+          "emblematic_work": "Le Boulevard Montmartre la nuit",
+          "work_type": "Peinture à l'huile (paysages ruraux, scènes de ville, marchés)",
+          "key_locations": [
+            {
+              "location": "Pontoise, France",
+              "work_type": "Paysages ruraux et scènes de marché",
+              "presence_period": "Production rurale majeure, 1866-1883"
+            },
+            {
+              "location": "Paris, France",
+              "work_type": "Séries urbaines (Boulevard Montmartre)",
+              "presence_period": "Production urbaine tardive, 1893-1897"
+            }
+          ]
+        }
+      ]
+    },
+    "post_impressionism": {
+      "variant_note": "Mouvements nés en réaction à l'Impressionnisme, cherchant plus d'expression, de structure ou de symbolisme, incluant le Néo-impressionnisme, le Synthétisme et le Fauvisme naissant.",
+      "artists": [
+        {
+          "name": "Vincent van Gogh",
+          "origin": "Pays-Bas / France",
+          "active_period": "1880-1890",
+          "main_style": "Néo-impressionnisme (touches expressives)",
+          "emblematic_work": "La Nuit étoilée",
+          "work_type": "Peinture à l'huile (portraits, paysages, natures mortes)",
+          "key_locations": [
+            {
+              "location": "Arles, France",
+              "work_type": "Couleurs intenses, portraits et paysages de Provence",
+              "presence_period": "Production majeure, Février 1888 - Mai 1889"
+            },
+            {
+              "location": "Auvers-sur-Oise, France",
+              "work_type": "Derniers paysages et portraits",
+              "presence_period": "Production intense, Mai - Juillet 1890"
+            }
+          ]
+        },
+        {
+          "name": "Paul Cézanne",
+          "origin": "France",
+          "active_period": "1860s-1906",
+          "main_style": "Post-Impressionnisme structurel",
+          "emblematic_work": "La Montagne Sainte-Victoire",
+          "work_type": "Peinture à l'huile (structure, perspective, paysages, natures mortes)",
+          "key_locations": [
+            {
+              "location": "Aix-en-Provence, France",
+              "work_type": "Séries de la Montagne Sainte-Victoire et natures mortes",
+              "presence_period": "Production structurale majeure, 1870-1906 (sauf séjours parisiens)"
+            }
+          ]
+        },
+        {
+          "name": "Edvard Munch",
+          "origin": "Norvège",
+          "active_period": "1880-1944",
+          "main_style": "Symbolisme / Expressionnisme précoce",
+          "emblematic_work": "Le Cri",
+          "work_type": "Peinture à l'huile, tempera, pastel (peinture psychologique)",
+          "key_locations": [
+            {
+              "location": "Oslo (Christiania), Norvège",
+              "work_type": "Studio et Frieze de la vie",
+              "presence_period": "Production constante, 1880-1892, 1909-1944"
+            },
+            {
+              "location": "Berlin, Allemagne",
+              "work_type": "Expositions provocatrices",
+              "presence_period": "Séjours de production et d'exposition, 1892-1895"
+            }
+          ]
+        },
+        {
+          "name": "Anna Boch",
+          "origin": "Belgique",
+          "active_period": "1880-1936",
+          "main_style": "Néo-impressionnisme / Pointillisme puis Impressionnisme",
+          "emblematic_work": "Côtes de Bretagne",
+          "work_type": "Peinture à l'huile (paysages lumineux, marines)",
+          "key_locations": [
+            {
+              "location": "Bruxelles, Belgique",
+              "work_type": "Studio, expositions (Groupe des XX)",
+              "presence_period": "Résidence et production principale, 1880-1936"
+            },
+            {
+              "location": "Bretagne, France",
+              "work_type": "Paysages maritimes en plein air",
+              "presence_period": "Campagnes estivales de production, 1900-1910"
+            }
+          ]
+        },
+        {
+          "name": "Georges Seurat",
+          "origin": "France",
+          "active_period": "1880-1891",
+          "main_style": "Pointillisme / Divisionnisme",
+          "emblematic_work": "Un dimanche après-midi à l'Île de la Grande Jatte",
+          "work_type": "Peinture à l'huile (touches de couleur pure)",
+          "key_locations": [
+            {
+              "location": "Paris, France",
+              "work_type": "Séries urbaines (Grande Jatte, La Baignade)",
+              "presence_period": "Production urbaine majeure, 1880-1891"
+            },
+            {
+              "location": "Honfleur, France",
+              "work_type": "Paysages maritimes et de port",
+              "presence_period": "Production maritime estivale, 1886, 1888, 1890"
+            }
+          ]
+        },
+        {
+          "name": "Paul Gauguin",
+          "origin": "France",
+          "active_period": "1870s-1903",
+          "main_style": "Synthétisme / Post-Impressionnisme symboliste",
+          "emblematic_work": "D'où venons-nous ? Que sommes-nous ? Où allons-nous ?",
+          "work_type": "Peinture à l'huile (Couleurs plates, contours marqués, symbolisme)",
+          "key_locations": [
+            {
+              "location": "Pont-Aven, France",
+              "work_type": "École de Pont-Aven, Synthétisme",
+              "presence_period": "Production synthétiste, 1886, 1888, 1889-1890"
+            },
+            {
+              "location": "Tahiti",
+              "work_type": "Peintures exotiques, scènes mythologiques",
+              "presence_period": "Production exotique, 1891-1893, 1895-1901"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

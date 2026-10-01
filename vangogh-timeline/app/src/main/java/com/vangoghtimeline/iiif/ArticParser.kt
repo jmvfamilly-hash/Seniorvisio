@@ -2,6 +2,7 @@ package com.vangoghtimeline.iiif
 
 import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.ArtworkDate
+import com.vangoghtimeline.model.ArtworkQuery
 import com.vangoghtimeline.model.IiifRef
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -22,9 +23,14 @@ import kotlinx.serialization.json.intOrNull
  * Pur Kotlin : testé sur la JVM avec une réponse type.
  */
 object ArticParser {
-    const val SEARCH_URL =
-        "https://api.artic.edu/api/v1/artworks/search?q=Vincent%20van%20Gogh&query%5Bterm%5D%5Bis_public_domain%5D=true&limit=100" +
-            "&fields=id,title,artist_title,date_start,date_end,place_of_origin,medium_display,image_id,thumbnail"
+    private const val FIELDS = "id,title,artist_title,date_start,date_end,place_of_origin,medium_display,image_id,thumbnail"
+
+    /** Recherche plein texte du nom de l'artiste, restreinte au domaine public. */
+    fun searchUrl(query: ArtworkQuery): String =
+        "https://api.artic.edu/api/v1/artworks/search?q=" + java.net.URLEncoder.encode(query.artistName, "UTF-8").replace("+", "%20") +
+            "&query%5Bterm%5D%5Bis_public_domain%5D=true&limit=100&fields=$FIELDS"
+
+    val SEARCH_URL: String = searchUrl(ArtworkQuery.VAN_GOGH)
 
     private const val DEFAULT_IIIF = "https://www.artic.edu/iiif/2"
 
@@ -38,20 +44,20 @@ object ArticParser {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Les œuvres de Van Gogh ayant une image, par date croissante. Une réponse illisible rend une liste vide. */
-    fun parse(text: String): List<Artwork> {
+    fun parse(text: String, query: ArtworkQuery = ArtworkQuery.VAN_GOGH): List<Artwork> {
         val root = try { json.parseToJsonElement(text) as? JsonObject } catch (e: Exception) { null } ?: return emptyList()
         val iiif = (root["config"] as? JsonObject)?.str("iiif_url")?.trimEnd('/') ?: DEFAULT_IIIF
         val data = root["data"] as? JsonArray ?: return emptyList()
 
         return data.mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null
-            // la recherche est plein texte : on ne garde que les œuvres DE Van Gogh, pas celles qui le citent
-            if (o.str("artist_title")?.contains("gogh", ignoreCase = true) != true) return@mapNotNull null
+            // la recherche est plein texte : on ne garde que les œuvres DE l'artiste, pas celles qui le citent
+            if (o.str("artist_title")?.let(query::matchesCreator) != true) return@mapNotNull null
             val imageId = o.str("image_id") ?: return@mapNotNull null
             val id = o.int("id") ?: return@mapNotNull null
             val title = o.str("title") ?: return@mapNotNull null
             val year = o.int("date_start") ?: o.int("date_end") ?: return@mapNotNull null
-            if (year !in 1870..1890) return@mapNotNull null
+            if (year !in query.years) return@mapNotNull null
             val thumb = o["thumbnail"] as? JsonObject
             Artwork(
                 id = "artic-$id",
@@ -65,6 +71,7 @@ object ArticParser {
                     canvasWidth = thumb?.int("width"),
                     canvasHeight = thumb?.int("height"),
                 ),
+                provider = "Art Institute of Chicago",
             )
         }.sortedWith(compareBy({ it.date.positionEpochDay }, { it.id }))
     }

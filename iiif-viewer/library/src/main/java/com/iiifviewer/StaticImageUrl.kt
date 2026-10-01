@@ -19,6 +19,12 @@ object StaticImageUrl {
     fun baseUriOf(imageUrl: String): String = PREFIX + imageUrl
     fun isStatic(url: String): Boolean = url.startsWith(PREFIX)
 
+    /** Adresse à donner au visualiseur pour ouvrir directement une image ordinaire : `static:{url}`. */
+    fun viewerUrlFor(imageUrl: String): String = PREFIX + imageUrl
+
+    /** L'URL de l'image si [viewerUrl] est de la forme `static:{url}` (http/https), sinon `null`. */
+    fun imageUrlOf(viewerUrl: String): String? = viewerUrl.removePrefix(PREFIX).takeIf { viewerUrl.startsWith(PREFIX) && it.startsWith("http") }
+
     fun parse(url: String): Request? {
         val m = tile.matchEntire(url) ?: return null
         val g = m.groupValues

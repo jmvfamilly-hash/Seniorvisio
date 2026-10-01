@@ -34,6 +34,8 @@ class HttpIiifSources : IiifSources {
     }
 
     override suspend fun loadInfo(infoUrl: String): IiifImageInfo {
+        // `static:{url}` : une image ordinaire donnée directement (pas de manifeste à lire)
+        StaticImageUrl.imageUrlOf(infoUrl)?.let { return staticInfo(IiifManifestResolver.StaticImage(it, null, null)) }
         val text = fetch(infoUrl) { it.readBytes().decodeToString() }
         // L'URL peut être celle d'un MANIFESTE (galerie, frise…) : on en tire le service d'image de la première page,
         // puis on lit son info.json.

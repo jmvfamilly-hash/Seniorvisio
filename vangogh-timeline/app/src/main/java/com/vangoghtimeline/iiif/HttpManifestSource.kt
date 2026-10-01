@@ -28,3 +28,20 @@ class HttpManifestSource : ManifestSource {
         }
     }
 }
+
+/** Accès « léger » à une image : requête `Range: bytes=0-0`, on ne lit que le code et le type de contenu. */
+class HttpImageReachability : ImageReachability {
+    override suspend fun check(url: String): Reach = withContext(Dispatchers.IO) {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        try {
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 15_000
+            conn.setRequestProperty("Range", "bytes=0-0")
+            conn.setRequestProperty("User-Agent", USER_AGENT)
+            conn.setRequestProperty("AIC-User-Agent", AIC_USER_AGENT)
+            Reach(conn.responseCode, conn.contentType)
+        } finally {
+            conn.disconnect()
+        }
+    }
+}

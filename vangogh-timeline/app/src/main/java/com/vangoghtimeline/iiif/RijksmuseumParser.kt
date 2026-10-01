@@ -24,7 +24,12 @@ import kotlinx.serialization.json.contentOrNull
  * Les formes lues sont celles du standard Linked Art ; tout champ absent ou inattendu fait ignorer l'œuvre, jamais échouer.
  */
 object RijksmuseumParser {
-    const val SEARCH_URL = "https://data.rijksmuseum.nl/search/collection?creator=Gogh%2C%20Vincent%20van&imageAvailable=true"
+    /** [creator] au format du musée : « Nom, Prénom » (ex. `Gogh, Vincent van`). */
+    fun searchUrl(creator: String): String =
+        "https://data.rijksmuseum.nl/search/collection?creator=" + java.net.URLEncoder.encode(creator, "UTF-8").replace("+", "%20") +
+            "&imageAvailable=true"
+
+    val SEARCH_URL: String = searchUrl("Gogh, Vincent van")
 
     private val json = Json { ignoreUnknownKeys = true }
     private const val AAT_ENGLISH = "300388277"

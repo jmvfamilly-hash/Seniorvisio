@@ -59,4 +59,6 @@ dependencies {
 
     // Modèle, échelle du temps, couloirs, parseur IIIF : aucun import Android, vérifiés sur la machine qui compile.
     testImplementation 'junit:junit:4.13.2'
+    // le validateur d'accès lit les manifestes avec le résolveur de la bibliothèque (org.json, absent des tests JVM Android)
+    testImplementation 'org.json:json:20231013'
 }

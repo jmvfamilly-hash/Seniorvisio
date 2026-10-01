@@ -2,6 +2,7 @@ package com.vangoghtimeline.iiif
 
 import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.ArtworkDate
+import com.vangoghtimeline.model.ArtworkQuery
 import com.vangoghtimeline.model.IiifRef
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -25,27 +26,27 @@ object EuropeanaParser {
     /** Clé de démonstration publique d'Europeana : volume limité, à remplacer par une clé personnelle (gratuite) en production. */
     const val DEMO_KEY = "api2demo"
 
-    fun searchUrl(key: String = DEMO_KEY): String =
+    fun searchUrl(query: ArtworkQuery = ArtworkQuery.VAN_GOGH, key: String = DEMO_KEY): String =
         "https://api.europeana.eu/record/v2/search.json?wskey=$key" +
-            "&query=who%3A%28%22Vincent+van+Gogh%22%29&qf=TYPE%3AIMAGE&media=true&thumbnail=true&reusability=open" +
-            "&rows=100&profile=standard"
+            "&query=who%3A%28%22" + java.net.URLEncoder.encode(query.artistName, "UTF-8") + "%22%29" +
+            "&qf=TYPE%3AIMAGE&media=true&thumbnail=true&reusability=open&rows=100&profile=standard"
 
     fun manifestUrlOf(recordId: String): String = "https://iiif.europeana.eu/presentation/" + recordId.trim('/') + "/manifest"
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun parse(text: String): List<Artwork> {
+    fun parse(text: String, query: ArtworkQuery = ArtworkQuery.VAN_GOGH): List<Artwork> {
         val root = try { json.parseToJsonElement(text) as? JsonObject } catch (e: Exception) { null } ?: return emptyList()
         val items = root["items"] as? JsonArray ?: return emptyList()
         return items.mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null
             val id = o.str("id")?.takeIf { it.count { c -> c == '/' } >= 2 } ?: return@mapNotNull null
             val creators = strings(o["dcCreator"])
-            if (creators.isNotEmpty() && creators.none { it.contains("gogh", ignoreCase = true) }) return@mapNotNull null
+            if (creators.isNotEmpty() && creators.none(query::matchesCreator)) return@mapNotNull null
             val title = strings(o["title"]).firstOrNull { it.isNotBlank() } ?: return@mapNotNull null
             val year = strings(o["year"]).firstNotNullOfOrNull { Regex("""\b(\d{4})\b""").find(it)?.groupValues?.get(1)?.toInt() }
                 ?: return@mapNotNull null
-            if (year !in 1870..1890) return@mapNotNull null
+            if (year !in query.years) return@mapNotNull null
             val preview = strings(o["edmPreview"]).firstOrNull()
             val museum = strings(o["dataProvider"]).firstOrNull().orEmpty()
             Artwork(

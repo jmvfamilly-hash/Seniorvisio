@@ -1,8 +1,6 @@
 package com.vangoghtimeline
 
 import com.vangoghtimeline.iiif.ArticParser
-import com.vangoghtimeline.iiif.ArticRepository
-import com.vangoghtimeline.iiif.ArtworkSource
 import com.vangoghtimeline.model.ArtworkDate
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -61,19 +59,6 @@ class ArticParserTest {
     @Test fun garbageGivesAnEmptyList() {
         assertTrue(ArticParser.parse("pas du json").isEmpty())
         assertTrue(ArticParser.parse("""{"data": "x"}""").isEmpty())
-    }
-
-    @Test fun repositoryFallsBackToTheCacheWhenOffline() = runBlocking {
-        val cache = File.createTempFile("artic", ".json").apply { deleteOnExit() }
-        val online = ArticRepository({ response }, cache).load()
-        assertTrue(online is ArtworkSource.Online)
-        // le réseau tombe : la copie enregistrée prend le relais
-        val offline = ArticRepository({ error("pas de réseau") }, cache).load()
-        assertTrue(offline is ArtworkSource.Cached)
-        assertEquals(2, offline!!.artworks.size)
-        // ni réseau ni copie : null (l'appelant prend le jeu de secours)
-        cache.delete()
-        assertNull(ArticRepository({ error("pas de réseau") }, cache).load())
     }
 
     @Test fun sampleArtworksCannotOpenTheViewer() {
