@@ -20,6 +20,10 @@ import kotlinx.serialization.json.JsonObject
  */
 object MetParser {
     private const val BASE = "https://collectionapi.metmuseum.org/public/collection/v1"
+    private const val BASE_V11 = "https://collectionapi.metmuseum.org/public/collection/v1.1"
+
+    /** Taille d'une page de la recherche v1.1 (paginée par `offset` et `limit`). */
+    const val PAGE_SIZE = 100
 
     fun searchUrl(query: ArtworkQuery): String =
         "$BASE/search?hasImages=true&artistOrCulture=true&q=" + java.net.URLEncoder.encode(query.artistName, "UTF-8")
@@ -32,11 +36,53 @@ object MetParser {
      */
     fun searchVariants(query: ArtworkQuery): List<String> {
         val q = java.net.URLEncoder.encode(query.artistName, "UTF-8")
-        return listOf(searchUrl(query), "$BASE/search?q=$q", "$BASE/search?departmentId=11&q=$q")
+        val page = "offset=0&limit=$PAGE_SIZE"
+        return listOf(
+            // v1.1 (Elastic, paginée) : la v1/search a été retirée le 2026-10-01 (HTTP 410)
+            "$BASE_V11/search?hasImages=true&artistOrCulture=true&q=$q&$page",
+            "$BASE_V11/search?q=$q&$page",
+            "$BASE_V11/search?departmentId=11&q=$q&$page",
+            // anciennes adresses, en dernier recours seulement
+            searchUrl(query), "$BASE/search?q=$q", "$BASE/search?departmentId=11&q=$q",
+        )
     }
 
+    /** Vrai pour une variante paginée (`offset=0&limit=…`) : il y a alors une page suivante possible. */
+    fun isPaginated(url: String): Boolean = url.contains("offset=0&")
+
+    /** Même recherche, page commençant à [offset]. */
+    fun pageUrl(url: String, offset: Int): String = url.replace("offset=0&", "offset=$offset&")
+
+    /** Nombre total de résultats annoncé par la réponse (`total`), s'il y en a un. */
+    fun parseTotal(text: String): Int? = obj(text)?.int("total")
+
     /** Identifiants de la réponse de recherche (`objectIDs` peut être `null` quand il n'y a aucun résultat). */
-    fun parseSearch(text: String): List<Int> = obj(text)?.arr("objectIDs").orEmpty().mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }
+    /**
+     * Identifiants de la réponse de recherche. Tolérant : la forme de la v1.1 n'a pas pu être vérifiée au moment de l'écriture, on
+     * accepte donc `objectIDs` (v1), puis `objects`/`results`/`items`/`data`/`ids`, des entiers OU des objets portant `objectID`/`id`,
+     * et un tableau à la racine.
+     */
+    fun parseSearch(text: String): List<Int> {
+        val root = JsonReading.root(text) ?: return emptyList()
+        fun idsOf(arr: List<kotlinx.serialization.json.JsonElement>): List<Int> = arr.mapNotNull { el ->
+            (el as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull()
+                ?: (el as? JsonObject)?.let { it.int("objectID") ?: it.int("id") }
+        }
+        if (root is kotlinx.serialization.json.JsonArray) return idsOf(root)
+        val o = root as? JsonObject ?: return emptyList()
+        for (key in listOf("objectIDs", "objects", "results", "items", "data", "ids")) {
+            val ids = idsOf(o.arr(key))
+            if (ids.isNotEmpty()) return ids
+        }
+        return emptyList()
+    }
+
+    /** Clés de premier niveau de la réponse (pour consigner sa forme quand elle réussit). */
+    fun topLevelKeys(text: String): String = when (val r = JsonReading.root(text)) {
+        is JsonObject -> r.keys.joinToString()
+        is kotlinx.serialization.json.JsonArray -> "tableau de ${r.size}"
+        else -> "non JSON"
+    }
 
     fun parseObject(text: String, query: ArtworkQuery): Artwork? {
         val o = obj(text) ?: return null

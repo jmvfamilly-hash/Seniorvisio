@@ -13,6 +13,14 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.IOException
 
+/** Le service dit lui-même que cette API est retirée (HTTP 410, ou un message « retired ») : inutile de la retenter autrement. */
+class ApiRetiredException(message: String) : IOException(message)
+
+object ApiRetired {
+    fun matches(message: String?): Boolean =
+        message != null && (message.contains("retired", ignoreCase = true) || message.contains("HTTP 410"))
+}
+
 /** L'univers d'un artiste : les œuvres des sources CONNECTÉES (fusionnées), et le rapport de chaque source. */
 class UniverseState(
     val artworks: List<Artwork>,
@@ -92,6 +100,8 @@ class UniverseLoader(
             fetchWithFallback(artist, source, spec, query)
         } catch (e: CancellationException) {
             throw e
+        } catch (e: ApiRetiredException) {
+            return retired(artist, source, cache, e)
         } catch (e: Exception) {
             return fromCache(artist, source, cache, e)
         }
@@ -131,6 +141,8 @@ class UniverseLoader(
         } catch (e: Exception) {
             val why = e.message ?: e.javaClass.simpleName
             Diag.warn("source", "recherche en échec : $why", sourceId = source.id, artistId = artist.id)
+            // API retirée par le service : le User-Agent n'y change rien, on ne retente pas
+            if (ApiRetired.matches(why)) throw ApiRetiredException(why)
             val fallback = fallbackSources[source.id]
             if (fallback == null || e is IllegalArgumentException) throw e
             try {
@@ -143,6 +155,17 @@ class UniverseLoader(
                 Diag.warn("source", "repli (User-Agent sobre) en échec aussi : ${e2.message ?: e2.javaClass.simpleName}", sourceId = source.id, artistId = artist.id)
                 throw e
             }
+        }
+    }
+
+    /** API retirée : la copie d'une connexion validée passée, sinon la source est INDISPONIBLE avec le message du service. */
+    private fun retired(artist: Artist, source: MuseumSource, cache: File, error: ApiRetiredException): Outcome {
+        Diag.error("source", "API RETIRÉE par le service : ${error.message}", sourceId = source.id, artistId = artist.id)
+        val cached = runCatching { cache.takeIf { it.exists() }?.readText() }.getOrNull()?.let(ArtworkJson::decode).orEmpty()
+        return if (cached.isNotEmpty()) {
+            Outcome(SourceReport(source.id, source.name, SourceState.CACHED, cached.size, "API retirée : copie hors ligne d'une connexion passée (${error.message?.take(160)})"), cached)
+        } else {
+            Outcome(SourceReport(source.id, source.name, SourceState.UNAVAILABLE, 0, "API retirée par le service : ${error.message}"), emptyList())
         }
     }
 

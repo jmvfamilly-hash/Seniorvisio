@@ -201,3 +201,17 @@ un échec est un rapport lisible, jamais un plantage ni une carte morte ; la cop
   recherche (complète, `q` seul, peintures européennes). Les deux échecs et le succès éventuel du repli sont dans le journal.
 - **Copier le rapport** : appui long n'importe où dans la partie basse de la fiche (le panneau d'informations, pour n'importe quel artiste) → rapport texte dans le
   presse-papiers : version et appareil, état des sources de TOUS les artistes (avec les échantillons vérifiés), journal complet, dernier plantage enregistré.
+
+## Le Met : API v1/search retirée le 2026-10-01
+
+Le premier rapport d'anomalies (appui long) a montré que le Met répondait « HTTP 410 — `/public/collection/v1/search` was retired on 2026-10-01 »
+et renvoyait vers `/public/collection/v1.1/search` (Elastic, paginée par `offset` et `limit`). Corrections :
+
+- recherche **v1.1** en premier (trois variantes : complète, `q` seul, peintures européennes), pages de 100, deux pages au plus ; les anciennes adresses ne
+  servent plus qu'en dernier recours ;
+- lecture **tolérante** de la réponse (la forme exacte de la v1.1 n'a pas pu être vérifiée) : `objectIDs`, `objects`, `results`, `items`, `data`, `ids`, entiers ou objets
+  `objectID`/`id`, tableau à la racine ; au premier succès, les clés de la réponse, le total et le début du corps sont consignés (INFO) pour confirmer la forme ;
+- **API retirée** (corps contenant « retired », ou HTTP 410) : la source passe en « indisponible : API retirée » avec le message du service, sans retenter le User-Agent sobre ;
+  une copie d'une connexion passée reste utilisée si elle existe ;
+- extrait du corps d'erreur porté à 800 caractères pour le JSON ;
+- **Europeana** : trois variantes de nom (exact, sans accents, nom de famille) ; chacune est consignée avec son résultat.

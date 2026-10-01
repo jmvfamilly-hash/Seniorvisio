@@ -66,6 +66,9 @@ fun slugOf(text: String): String =
  * l'œuvre ([match], pour écarter les œuvres qui ne font que le citer) et la plage d'années plausibles ([years]).
  */
 data class ArtworkQuery(val artistName: String, val match: String, val years: IntRange) {
+    /** Le nom sans accents (« Joaquín Sorolla » → « Joaquin Sorolla »). */
+    fun asciiName(): String = Normalizer.normalize(artistName, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+
     /** Vrai si [creator] (libellé du créateur chez le musée) désigne cet artiste : comparaison sans accents ni casse. */
     fun matchesCreator(creator: String): Boolean = slugOf(creator).contains(slugOf(match))
 

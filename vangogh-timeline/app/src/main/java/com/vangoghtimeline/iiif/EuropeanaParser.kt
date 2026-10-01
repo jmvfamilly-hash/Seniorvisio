@@ -31,6 +31,21 @@ object EuropeanaParser {
             "&query=who%3A%28%22" + java.net.URLEncoder.encode(query.artistName, "UTF-8") + "%22%29" +
             "&qf=TYPE%3AIMAGE&media=true&thumbnail=true&reusability=open&rows=100&profile=standard"
 
+    /**
+     * Recherches à essayer dans l'ordre : le nom exact ; le nom sans accents (les notices portent souvent « Joaquin Sorolla ») ;
+     * le nom de famille seul (« Sorolla y Bastida, Joaquín »). Les doublons d'adresse sont retirés.
+     */
+    fun searchVariants(query: ArtworkQuery, key: String = DEMO_KEY): List<String> {
+        fun url(who: String) = "https://api.europeana.eu/record/v2/search.json?wskey=$key&query=who%3A%28" + who + "%29" +
+            "&qf=TYPE%3AIMAGE&media=true&thumbnail=true&reusability=open&rows=100&profile=standard"
+        fun quoted(name: String) = "%22" + java.net.URLEncoder.encode(name, "UTF-8") + "%22"
+        return listOf(
+            searchUrl(query, key),
+            url(quoted(query.asciiName())),
+            url(java.net.URLEncoder.encode(query.match, "UTF-8")),
+        ).distinct()
+    }
+
     fun manifestUrlOf(recordId: String): String = "https://iiif.europeana.eu/presentation/" + recordId.trim('/') + "/manifest"
 
     private val json = Json { ignoreUnknownKeys = true }

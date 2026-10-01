@@ -12,6 +12,9 @@ import kotlinx.serialization.json.intOrNull
 internal object JsonReading {
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** Racine d'une réponse (objet ou tableau), ou `null` si ce n'est pas du JSON. */
+    fun root(text: String): JsonElement? = try { json.parseToJsonElement(text) } catch (e: Exception) { null }
+
     fun obj(text: String): JsonObject? = try { json.parseToJsonElement(text) as? JsonObject } catch (e: Exception) { null }
 
     fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull

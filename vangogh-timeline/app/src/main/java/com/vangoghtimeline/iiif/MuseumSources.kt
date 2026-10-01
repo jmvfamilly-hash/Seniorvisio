@@ -37,8 +37,31 @@ class EuropeanaSource(private val http: ManifestSource, private val key: String 
     override val id = "europeana"
     override val name = "Europeana"
     override val europeanaKeyword = "\u0000"   // Europeana ne fait pas doublon avec elle-même
-    override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> =
-        EuropeanaParser.parse(http.fetch(EuropeanaParser.searchUrl(query, key)), query)
+
+    /** Variantes de nom essayées dans l'ordre (exact, sans accents, nom de famille) ; chacune est consignée avec son résultat. */
+    override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> {
+        val variants = EuropeanaParser.searchVariants(query, key)
+        var firstError: Exception? = null
+        var answered = false
+        for ((index, url) in variants.withIndex()) {
+            try {
+                val arts = EuropeanaParser.parse(http.fetch(url), query)
+                answered = true
+                if (arts.isNotEmpty()) {
+                    if (index > 0) Diag.warn("source", "recherche : variante ${index + 1}/${variants.size} utilisée (les précédentes n'ont rien donné)", url, id)
+                    return arts
+                }
+                Diag.warn("source", "recherche : variante ${index + 1}/${variants.size} sans œuvre exploitable", url, id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (firstError == null) firstError = e
+                Diag.warn("source", "recherche : variante ${index + 1}/${variants.size} en échec : ${e.message ?: e.javaClass.simpleName}", url, id)
+            }
+        }
+        if (!answered && firstError != null) throw firstError
+        return emptyList()
+    }
 }
 
 class ClevelandSource(private val http: ManifestSource) : MuseumSource {
@@ -58,7 +81,7 @@ class SmkSource(private val http: ManifestSource) : MuseumSource {
 }
 
 /**
- * The Met : une recherche, puis une notice par œuvre (au plus [maxObjects], [parallelism] à la fois).
+ * The Met : une recherche, puis une notice par œuvre (au plus [maxObjects], [parallelism] à la fois ; la recherche v1.1 est paginée par 100, deux pages au plus).
  *
  * La recherche essaie des VARIANTES d'adresse dans l'ordre (complète, `q` seul, peintures européennes) : la première qui répond avec
  * des résultats gagne. Chaque variante en échec est consignée dans [Diag] même si la suivante réussit. Une notice en échec est
@@ -66,7 +89,7 @@ class SmkSource(private val http: ManifestSource) : MuseumSource {
  */
 class MetSource(
     private val http: ManifestSource,
-    private val maxObjects: Int = 80,
+    private val maxObjects: Int = 120,
     private val parallelism: Int = 6,
 ) : MuseumSource {
     override val id = "met"
@@ -96,23 +119,40 @@ class MetSource(
 
     private suspend fun searchIds(query: ArtworkQuery): List<Int> {
         val variants = MetParser.searchVariants(query)
-        var last: Exception? = null
+        var firstError: Exception? = null
         for ((index, url) in variants.withIndex()) {
             try {
-                val ids = MetParser.parseSearch(http.fetch(url))
+                val text = http.fetch(url)
+                val ids = MetParser.parseSearch(text)
                 if (ids.isNotEmpty()) {
                     if (index > 0) Diag.warn("source", "recherche : variante ${index + 1}/${variants.size} utilisée après l'échec des précédentes", url, id)
-                    return ids
+                    // forme de la réponse consignée : la v1.1 n'a pas pu être vérifiée à l'écriture, le rapport la montrera
+                    Diag.info("source", "recherche réussie : clés [${MetParser.topLevelKeys(text)}], total ${MetParser.parseTotal(text)}, ${ids.size} identifiants ; début : ${text.take(200).replace('\n', ' ')}", url, id)
+                    return ids + morePages(url, ids.size, MetParser.parseTotal(text))
                 }
-                Diag.warn("source", "recherche : variante ${index + 1}/${variants.size} sans résultat", url, id)
+                Diag.warn("source", "recherche : variante ${index + 1}/${variants.size} sans résultat (clés [${MetParser.topLevelKeys(text)}])", url, id)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                last = e
+                if (firstError == null) firstError = e
                 Diag.warn("source", "recherche : variante ${index + 1}/${variants.size} en échec : ${e.message ?: e.javaClass.simpleName}", url, id)
             }
         }
-        throw last ?: IllegalStateException("recherche sans résultat (${variants.size} variantes essayées)")
+        throw firstError ?: IllegalStateException("recherche sans résultat (${variants.size} variantes essayées)")
+    }
+
+    /** Page suivante (une seule) d'une recherche paginée dont la première page était pleine ; son échec n'enlève rien à la première. */
+    private suspend fun morePages(url: String, firstPageSize: Int, total: Int?): List<Int> {
+        if (!MetParser.isPaginated(url) || firstPageSize < MetParser.PAGE_SIZE || (total != null && total <= MetParser.PAGE_SIZE)) return emptyList()
+        val next = MetParser.pageUrl(url, MetParser.PAGE_SIZE)
+        return try {
+            MetParser.parseSearch(http.fetch(next))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Diag.warn("source", "page 2 de la recherche en échec (la première page est gardée) : ${e.message ?: e.javaClass.simpleName}", next, id)
+            emptyList()
+        }
     }
 }
 

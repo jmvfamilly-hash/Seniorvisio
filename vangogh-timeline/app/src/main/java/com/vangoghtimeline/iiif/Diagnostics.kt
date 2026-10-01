@@ -36,7 +36,7 @@ class DiagEvent(
  */
 object Diag {
     const val MAX_EVENTS = 600
-    const val MAX_MESSAGE = 600
+    const val MAX_MESSAGE = 1200
     private const val MERGE_LOOKBACK = 40
 
     private val lock = Any()

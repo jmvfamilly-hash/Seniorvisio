@@ -160,7 +160,8 @@ class DiagnosticsTest {
         val artist = vg.copy(sources = listOf(SourceSpec("met")))
         val q = ArtworkQuery.of(artist)
         val variants = MetParser.searchVariants(q)
-        assertEquals(3, variants.size)
+        assertEquals(6, variants.size)                 // 3 variantes v1.1 (paginées) puis 3 anciennes v1
+        assertTrue(variants.take(3).all { it.contains("/v1.1/search") } && variants.drop(3).none { it.contains("/v1.1/") })
         val metObject = """{"objectID":7,"isPublicDomain":true,"title":"Irises","artistDisplayName":"Vincent van Gogh","objectBeginDate":1890,"objectEndDate":1890,"primaryImage":"https://images.metmuseum.org/7.jpg"}"""
         // la variante 1 répond 410, la 2 aussi, la 3 réussit
         val http = FakeHttp(mapOf(variants[2] to """{"total":1,"objectIDs":[7]}""", MetParser.objectUrl(7) to metObject))
@@ -168,9 +169,10 @@ class DiagnosticsTest {
         assertEquals(SourceState.CONNECTED, state.reports.single().state)
         assertEquals(listOf("Irises"), state.artworks.map { it.title })
         val msgs = Diag.snapshot().map { it.message }
-        assertTrue(msgs.toString(), msgs.any { it.contains("variante 1/3 en échec") })
-        assertTrue(msgs.toString(), msgs.any { it.contains("variante 2/3 en échec") })
-        assertTrue(msgs.toString(), msgs.any { it.contains("variante 3/3 utilisée") })
+        assertTrue(msgs.toString(), msgs.any { it.contains("variante 1/6 en échec") })
+        assertTrue(msgs.toString(), msgs.any { it.contains("variante 2/6 en échec") })
+        assertTrue(msgs.toString(), msgs.any { it.contains("variante 3/6 utilisée") })
+        assertTrue(msgs.toString(), msgs.any { it.contains("recherche réussie : clés [total, objectIDs]") })     // la forme de la réponse est consignée
     }
 
     @Test fun whenEveryMetVariantFailsTheSourceIsUnreachableWithAllFailuresLogged() = runBlocking {
@@ -178,7 +180,90 @@ class DiagnosticsTest {
         val http = FakeHttp(emptyMap())
         val state = UniverseLoader(defaultMuseumSources(http), SourceValidator(http, reachOk), tmp()).load(artist) { }
         assertEquals(SourceState.UNREACHABLE, state.reports.single().state)
-        assertEquals(3, Diag.snapshot().count { it.message.contains("variante") && it.level == DiagLevel.WARN })
+        assertEquals(6, Diag.snapshot().count { it.message.contains("variante") && it.level == DiagLevel.WARN })
         assertTrue(Diag.snapshot().any { it.level == DiagLevel.ERROR && it.message.contains("injoignable") })
+    }
+
+    // ── Met v1.1, API retirée, Europeana : variantes ──────────────────────────────
+    private class CountingHttp(val pages: Map<String, String>) : ManifestSource {
+        val asked = ArrayList<String>()
+        override suspend fun fetch(url: String): String { asked += url; return pages[url] ?: throw IOException("HTTP 403 sur $url") }
+    }
+
+    @Test fun metSearchParsingToleratesSeveralShapes() {
+        assertEquals(listOf(1, 2), MetParser.parseSearch("""{"total":2,"objectIDs":[1,2]}"""))
+        assertEquals(listOf(3, 4), MetParser.parseSearch("""{"total":2,"objects":[{"objectID":3},{"objectID":4}]}"""))
+        assertEquals(listOf(5), MetParser.parseSearch("""{"results":[{"id":5}]}"""))
+        assertEquals(listOf(6, 7), MetParser.parseSearch("""[6,7]"""))
+        assertTrue(MetParser.parseSearch("""{"total":0,"objectIDs":null}""").isEmpty())
+        assertTrue(MetParser.parseSearch("pas du json").isEmpty())
+    }
+
+    @Test fun metV11IsPaginatedAndTheSecondPageIsRequested() = runBlocking {
+        val artist = vg.copy(sources = listOf(SourceSpec("met")))
+        val v1 = MetParser.searchVariants(ArtworkQuery.of(artist))[0]
+        assertTrue(MetParser.isPaginated(v1))
+        val page1 = (1..100).joinToString(",") { """{"objectID":$it}""" }
+        val http = CountingHttp(mapOf(
+            v1 to """{"total":130,"objects":[$page1]}""",
+            MetParser.pageUrl(v1, 100) to """{"total":130,"objects":[{"objectID":101},{"objectID":102}]}""",
+        ))
+        UniverseLoader(defaultMuseumSources(http), SourceValidator(http, reachOk), tmp()).load(artist) { }
+        assertTrue(http.asked.contains(MetParser.pageUrl(v1, 100)))                      // page 2 demandée
+        assertTrue(http.asked.contains(MetParser.objectUrl(102)))                        // et ses notices
+    }
+
+    private class FailingSource(val message: String) : MuseumSource {
+        var calls = 0
+        override val id = "fixed"
+        override val name = "Fixe"
+        override val europeanaKeyword = "fixe"
+        override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> { calls++; throw IOException(message) }
+    }
+
+    @Test fun aRetiredApiIsUnavailableAndTheFallbackIsNotTried() = runBlocking {
+        val artist = vg.copy(sources = listOf(SourceSpec("fixed")))
+        val primary = FailingSource("HTTP 410 sur https://m/v1/search — corps : « /v1/search was retired on 2026-10-01 »")
+        val fallback = FailingSource("ne doit pas être appelé")
+        val state = UniverseLoader(mapOf("fixed" to primary), SourceValidator(CountingHttp(emptyMap()), reachOk), tmp(), fallbackSources = mapOf("fixed" to fallback)).load(artist) { }
+        val r = state.reports.single()
+        assertEquals(SourceState.UNAVAILABLE, r.state)
+        assertTrue(r.detail, r.detail.contains("API retirée") && r.detail.contains("retired on 2026-10-01"))
+        assertEquals(0, fallback.calls)
+        assertTrue(Diag.snapshot().any { it.level == DiagLevel.ERROR && it.message.contains("API RETIRÉE") })
+    }
+
+    @Test fun aRetiredApiFallsBackToAPastValidatedCopy() = runBlocking {
+        val artist = vg.copy(sources = listOf(SourceSpec("aic")))
+        val dir = tmp()
+        val pages = CountingHttp(aicPages(ArtworkQuery.of(artist)))
+        UniverseLoader(defaultMuseumSources(pages), SourceValidator(pages, reachOk), dir).load(artist) { }
+        val gone = object : MuseumSource {
+            override val id = "aic"; override val name = "AIC"; override val europeanaKeyword = "art institute"
+            override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> = throw IOException("HTTP 410 sur https://x")
+        }
+        val state = UniverseLoader(mapOf("aic" to gone), SourceValidator(pages, reachOk), dir).load(artist) { }
+        assertEquals(SourceState.CACHED, state.reports.single().state)
+        assertEquals(1, state.artworks.size)
+    }
+
+    @Test fun europeanaVariantsAreTriedAndTheUsefulOneIsLogged() = runBlocking {
+        val artist = ArtistCatalog.parse(File("src/main/assets/artists_by_movement.json").readText()).first { it.id == "joaquin-sorolla" }
+            .copy(sources = listOf(SourceSpec("europeana")))
+        val q = ArtworkQuery.of(artist)
+        val variants = com.vangoghtimeline.iiif.EuropeanaParser.searchVariants(q)
+        assertEquals(3, variants.size)
+        assertTrue(variants[0].contains("Joaqu%C3%ADn") && variants[1].contains("Joaquin") && variants[2].endsWith("&profile=standard") && variants[2].contains("%28Sorolla%29"))
+        val items = """{"items":[{"id":"/9/s","title":["Playa de Valencia"],"dcCreator":["Sorolla y Bastida, Joaquín"],"year":["1908"],"edmPreview":["https://t/1"],"dataProvider":["Museo"]}]}"""
+        val manifest = """{"@type":"sc:Manifest","sequences":[{"canvases":[{"images":[{"resource":{"@id":"https://s/iiif/x/full/full/0/default.jpg","service":{"@id":"https://s/iiif/x"}}}]}]}]}"""
+        val http = CountingHttp(mapOf(
+            variants[0] to """{"items":[]}""", variants[1] to items,
+            "https://iiif.europeana.eu/presentation/9/s/manifest" to manifest, "https://s/iiif/x/info.json" to """{"width":10,"height":10}""",
+        ))
+        val state = UniverseLoader(defaultMuseumSources(http), SourceValidator(http, reachOk), tmp()).load(artist) { }
+        assertEquals(listOf("Playa de Valencia"), state.artworks.map { it.title })
+        val msgs = Diag.snapshot().map { it.message }
+        assertTrue(msgs.toString(), msgs.any { it.contains("variante 1/3 sans œuvre exploitable") })
+        assertTrue(msgs.toString(), msgs.any { it.contains("variante 2/3 utilisée") })
     }
 }

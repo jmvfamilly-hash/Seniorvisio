@@ -16,7 +16,7 @@ const val PLAIN_USER_AGENT = "VanGoghTimeline/1.0"
 /**
  * Lit un manifeste ou une réponse d'API par HTTP (Android/JVM). Seul fichier réseau du module.
  *
- * Une réponse en erreur lève une [IOException] qui dit TOUT ce qu'on sait : code, URL, serveur, type, début du corps (300 caractères).
+ * Une réponse en erreur lève une [IOException] qui dit TOUT ce qu'on sait : code, URL, serveur, type, début du corps (300 caractères, 800 pour du JSON).
  * Un « HTTP 410 » seul ne dit pas si c'est une API retirée ou un pare-feu qui refuse : le corps le dit.
  */
 class HttpManifestSource(private val userAgent: String = USER_AGENT) : ManifestSource {
@@ -39,7 +39,9 @@ class HttpManifestSource(private val userAgent: String = USER_AGENT) : ManifestS
 
     private fun describeError(code: Int, url: String, conn: HttpURLConnection): String {
         val body = try {
-            conn.errorStream?.use { it.readBytes().take(300).toByteArray().decodeToString() }?.replace(Regex("\\s+"), " ")?.trim()
+            // un corps JSON porte souvent l'explication complète (API retirée…) : on en garde davantage
+            val limit = if (conn.contentType?.contains("json", ignoreCase = true) == true) 800 else 300
+            conn.errorStream?.use { it.readBytes().take(limit).toByteArray().decodeToString() }?.replace(Regex("\\s+"), " ")?.trim()
         } catch (e: Exception) { null }
         val details = listOfNotNull(
             conn.getHeaderField("Server")?.let { "serveur : $it" },
