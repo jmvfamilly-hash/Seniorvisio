@@ -276,3 +276,5 @@ Non vérifié (réseau bloqué dans l'environnement de build) : formats réels W
 - **Europeana** : variantes exacte, sans accents, « Nom, Prénom », nom ET prénom (créateur exigé), nom de famille seul (créateur exigé).
 - **CER.ES / Museo Sorolla** (`CeresProbe`, Sorolla seulement) : sonde de reconnaissance, aucune œuvre ajoutée. Elle consigne, pour la fiche d'une œuvre connue (table FDOC, musée MSM), l'accueil et
   des adresses OAI-PMH probables : code, titre, formulaires et champs, images, mentions de droits, début du corps.
+
+**Berthe Morisot** (rev24) : univers ouvert avec les 7 mêmes sources (Rijksmuseum : « Morisot, Berthe » ; Wikimedia : article `Berthe_Morisot`). Le créateur est vérifié strictement (nom + prénom ou initiale).

@@ -217,12 +217,14 @@ class RightsTest {
     // ── Catalogue : toutes les sources pour les quatre artistes ───────────────────
     @Test fun everyArtistWithAUniverseGetsEverySourceInPriorityOrder() {
         val expected = listOf("aic", "rijks", "cleveland", "met", "smk", "europeana", "wikimedia")
-        for (id in listOf("vincent-van-gogh", "john-singer-sargent", "pierre-auguste-renoir")) {
+        for (id in listOf("vincent-van-gogh", "john-singer-sargent", "pierre-auguste-renoir", "berthe-morisot")) {
             assertEquals(id, expected, artist(id).sources.map { it.sourceId })
         }
         assertEquals(expected + "ceres", artist("joaquin-sorolla").sources.map { it.sourceId })       // la sonde CER.ES : Sorolla seulement
         assertEquals("Museo Sorolla", artist("joaquin-sorolla").sources.first { it.sourceId == "europeana" }.term)
         assertEquals("Sorolla y Bastida, Joaquín", artist("joaquin-sorolla").sources.first { it.sourceId == "rijks" }.term)
-        assertTrue(catalog.filter { it.hasUniverse }.map { it.id }.toSet() == setOf("vincent-van-gogh", "john-singer-sargent", "joaquin-sorolla", "pierre-auguste-renoir"))
+        assertEquals("Morisot, Berthe", artist("berthe-morisot").sources.first { it.sourceId == "rijks" }.term)
+        assertEquals("Berthe_Morisot", artist("berthe-morisot").sources.first { it.sourceId == "wikimedia" }.term)
+        assertTrue(catalog.filter { it.hasUniverse }.map { it.id }.toSet() == setOf("vincent-van-gogh", "john-singer-sargent", "joaquin-sorolla", "pierre-auguste-renoir", "berthe-morisot"))
     }
 }

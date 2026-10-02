@@ -89,7 +89,7 @@ object ArtistExtras {
         "winslow-homer" to Extras(1836, 1910, "Winslow_Homer"),
         "claude-monet" to Extras(1840, 1926, "Claude_Monet"),
         "pierre-auguste-renoir" to Extras(1841, 1919, "Pierre-Auguste_Renoir", allSources("Renoir, Pierre Auguste")),
-        "berthe-morisot" to Extras(1841, 1895, "Berthe_Morisot"),
+        "berthe-morisot" to Extras(1841, 1895, "Berthe_Morisot", allSources("Morisot, Berthe")),
         "mary-cassatt" to Extras(1844, 1926, "Mary_Cassatt"),
         "eva-gonzales" to Extras(1849, 1883, "Eva_Gonzal%C3%A8s"),
         "louise-catherine-breslau" to Extras(1856, 1927, "Louise_Catherine_Breslau"),
