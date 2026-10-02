@@ -40,6 +40,8 @@ class AppModel(
     val portraits = mutableStateMapOf<String, String>()
 
     private val started = HashSet<String>()
+    /** Artistes dont un chargement est EN COURS : un deuxième (appuis répétés sur « Actualiser ») multiplierait les requêtes et ferait bloquer les musées. */
+    private val loading = HashSet<String>()
 
     /**
      * Prépare l'univers de cet artiste (une seule fois par lancement) : il s'affiche tout de suite depuis le magasin local, puis les
@@ -58,6 +60,10 @@ class AppModel(
     }
 
     private fun launchLoad(artist: Artist, force: Boolean) {
+        if (!loading.add(artist.id)) {
+            Diag.info("magasin", "chargement déjà en cours, demande ignorée${if (force) " (actualisation)" else ""}", artistId = artist.id, key = "load-busy|${artist.id}")
+            return
+        }
         scope.launch {
             try {
                 loader.load(artist, force) { universes[artist.id] = it }
@@ -66,6 +72,8 @@ class AppModel(
             } catch (e: Exception) {
                 started.remove(artist.id)   // une prochaine sélection réessaie
                 Diag.error("magasin", "chargement de l'univers en échec : ${e.message ?: e.javaClass.simpleName}", artistId = artist.id)
+            } finally {
+                loading.remove(artist.id)
             }
         }
     }

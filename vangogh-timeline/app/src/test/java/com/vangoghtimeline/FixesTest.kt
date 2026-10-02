@@ -125,7 +125,7 @@ class FixesTest {
 
     @Test fun aTemporaryBlockIsRetriedWithBackoffAndEveryWaitIsLogged() = runBlocking {
         val sleeps = ArrayList<Long>()
-        val inner = FlakyHttp(2, "HTTP 403 sur https://collectionapi.metmuseum.org/x — type : text/html · corps : « Incapsula »")
+        val inner = FlakyHttp(2, "HTTP 429 sur https://collectionapi.metmuseum.org/x")
         val src = RetryingSource(inner, RateLimiter(2, 0, sleep = { }), "metmuseum.org", listOf(2_000, 5_000), sleep = { sleeps += it })
         assertEquals("ok", src.fetch("https://collectionapi.metmuseum.org/x"))
         assertEquals(listOf(2_000L, 5_000L), sleeps)
@@ -184,5 +184,33 @@ class FixesTest {
         assertEquals(listOf("met-7"), second.map { it.id })
         assertFalse(asked.contains(MetParser.objectUrl(7)))            // la notice vient du disque
         assertTrue(asked.contains(v))                                  // la recherche, elle, est refaite
+    }
+
+    // ── disjoncteur anti-robot ────────────────────────────────────────────────────
+    @Test fun aFirewallBlockPausesEveryCallerInsteadOfRetryingEachRequest() = runBlocking {
+        var t = 1_000_000L
+        val limiter = RateLimiter(2, 0, sleep = { }, now = { t })
+        val inner = FlakyHttp(1_000, "HTTP 403 sur https://collectionapi.metmuseum.org/x — type : text/html · corps : « Incapsula »")
+        val src = RetryingSource(inner, limiter, "metmuseum.org", sleep = { throw AssertionError("aucune attente par requête") })
+        fun fails() = try { runBlocking { src.fetch("https://collectionapi.metmuseum.org/x") }; false } catch (e: IOException) { TemporaryBlock.matches(e.message) }
+        assertTrue(fails()); assertEquals(1, inner.calls)                    // pas de nouvel essai : la pause commence (15 s)
+        assertTrue(fails()); assertEquals(1, inner.calls)                    // pendant la pause : échec immédiat, le serveur n'est PAS sollicité
+        t += 16_000
+        assertTrue(fails()); assertEquals(2, inner.calls)                    // pause finie : un essai, bloqué encore → pause doublée (30 s)
+        assertTrue(limiter.blockedForMs() in 29_000..30_000)
+        assertTrue(Diag.snapshot().any { it.message.contains("pare-feu anti-robot") })
+    }
+
+    @Test fun aMetFirewallBlockStopsTheSourceInsteadOfSilentlyDroppingNotices() = runBlocking {
+        val sargent = q("john-singer-sargent")
+        val v = MetParser.searchVariants(sargent)[0]
+        val http = object : ManifestSource {
+            override suspend fun fetch(url: String): String =
+                if (url == v) """{"total":2,"objectIDs":[7,8]}""" else throw IOException("HTTP 403 sur $url — type : text/html · corps : « Incapsula »")
+        }
+        val artist = catalog.first { it.id == "john-singer-sargent" }.copy(sources = listOf(SourceSpec("met")))
+        val state = UniverseLoader(mapOf("met" to MetSource(http)), SourceValidator(http, reachOk), tmp(), limitedRetryDelayMs = -1).load(artist) { }
+        assertEquals(SourceState.LIMITED, state.reports.single().state)      // pas « connectée avec 0 œuvre » ni « vide » : réessayée plus tard
+        assertTrue(state.artworks.isEmpty())
     }
 }

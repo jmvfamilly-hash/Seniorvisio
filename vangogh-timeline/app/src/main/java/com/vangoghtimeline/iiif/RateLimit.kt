@@ -6,12 +6,17 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import java.io.IOException
 
 /**
  * Blocage temporaire ou limite de débit : `429`, `503`, ou `403` avec une PAGE HTML (le pare-feu anti-robot « Incapsula » du Met répond
  * ainsi quand on le sollicite trop). Différent d'un refus définitif : on attend et on retente.
  */
 object TemporaryBlock {
+    /** Pare-feu anti-robot (page HTML de blocage) : insister aggrave le blocage, contrairement à une limite de débit passagère (429, 503). */
+    fun isFirewall(message: String?): Boolean =
+        message != null && message.contains("HTTP 403") && (message.contains("text/html", ignoreCase = true) || message.contains("Incapsula", ignoreCase = true))
+
     fun matches(message: String?): Boolean {
         if (message == null) return false
         if (message.contains("HTTP 429") || message.contains("HTTP 503")) return true
@@ -30,6 +35,22 @@ class RateLimiter(
     private val now: () -> Long = { System.currentTimeMillis() },
 ) {
     private val gate = Semaphore(parallel)
+
+    // ── disjoncteur : après un blocage par pare-feu, TOUS les appelants font une pause (15 s, puis 30, 60, 120 s si le blocage persiste) ──
+    @Volatile private var blockedUntil = 0L
+    @Volatile private var blocks = 0
+
+    /** Millisecondes de pause restantes (0 = libre). */
+    fun blockedForMs(): Long = (blockedUntil - now()).coerceAtLeast(0)
+
+    fun markBlocked() {
+        val pause = minOf(15_000L shl blocks.coerceAtMost(3), 120_000L)
+        blocks++
+        blockedUntil = now() + pause
+    }
+
+    fun markOk() { blocks = 0 }
+
     private val slotLock = Mutex()
     private var nextSlot = 0L
 
@@ -59,13 +80,22 @@ class RetryingSource(
 ) : ManifestSource {
     override suspend fun fetch(url: String): String {
         if (!url.contains(hostContains)) return inner.fetch(url)
+        // pause en cours après un blocage par pare-feu : on n'insiste pas (échec immédiat, repris plus tard par le chargeur)
+        limiter.blockedForMs().takeIf { it > 0 }?.let {
+            throw IOException("HTTP 403 sur $url — type : text/html · pause anti-robot en cours (Incapsula), encore ${it / 1000} s")
+        }
         var attempt = 0
         while (true) {
             try {
-                return limiter.run { inner.fetch(url) }
+                return limiter.run { inner.fetch(url) }.also { limiter.markOk() }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                if (TemporaryBlock.isFirewall(e.message)) {
+                    limiter.markBlocked()
+                    Diag.warn("réseau", "pare-feu anti-robot : requêtes vers $hostContains en pause ${limiter.blockedForMs() / 1000} s", url, key = "firewall|$hostContains")
+                    throw e
+                }
                 if (!TemporaryBlock.matches(e.message) || attempt >= retryDelaysMs.size) throw e
                 val wait = retryDelaysMs[attempt++]
                 Diag.warn(

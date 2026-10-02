@@ -12,6 +12,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
@@ -66,6 +68,8 @@ class UniverseLoader(
     private val limitedRetryDelayMs: Long = 60_000,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
+    private val storeLock = Mutex()
+
     private class Outcome(val report: SourceReport, val artworks: List<Artwork>, val fetchedAt: Long)
 
     suspend fun load(artist: Artist, force: Boolean = false, onUpdate: (UniverseState) -> Unit): UniverseState = coroutineScope {
@@ -131,8 +135,11 @@ class UniverseLoader(
                 outcome.report.name, outcome.report.state, outcome.report.detail, outcome.report.count,
                 if (outcome.report.state.connected) outcome.fetchedAt else 0L, now, outcome.artworks, outcome.report.probes,
             )
-            val copy = StoredUniverse(UniverseStore.PARSER_VERSION, stored.toMap())
-            withContext(Dispatchers.IO) { UniverseStore.write(cacheDir, artist.id, copy) }
+            // l'instantané est pris DANS le verrou, juste avant l'écriture : sinon une source plus lente pouvait réécrire un état plus ancien
+            storeLock.withLock {
+                val copy = StoredUniverse(UniverseStore.PARSER_VERSION, stored.toMap())
+                withContext(Dispatchers.IO) { UniverseStore.write(cacheDir, artist.id, copy) }
+            }
             onUpdate(snapshot(done))
         }
 
@@ -140,11 +147,15 @@ class UniverseLoader(
         if (toRun.isNotEmpty()) onUpdate(snapshot(true))     // (sinon, déjà publié « terminé » depuis le magasin)
 
         // sources bloquées temporairement : UN nouvel essai automatique après une pause, sans gêner l'affichage (déjà publié ci-dessus)
-        val limited = artist.sources.filter { reports[it.sourceId]?.state == SourceState.LIMITED }
-        if (limited.isNotEmpty() && limitedRetryDelayMs >= 0) {
-            Diag.info("source", "nouvel essai automatique dans ${limitedRetryDelayMs / 1000} s des sources bloquées temporairement : ${limited.joinToString { it.sourceId }}", artistId = artist.id)
+        // (jusqu'à 3 reprises : chacune lit de nouvelles notices, gardées en cache, avant le prochain blocage)
+        var round = 0
+        while (round < 3 && limitedRetryDelayMs >= 0) {
+            val limited = artist.sources.filter { reports[it.sourceId]?.state == SourceState.LIMITED }
+            if (limited.isEmpty()) break
+            Diag.info("source", "nouvel essai automatique (${round + 1}/3) dans ${limitedRetryDelayMs / 1000} s des sources bloquées temporairement : ${limited.joinToString { it.sourceId }}", artistId = artist.id)
             delay(limitedRetryDelayMs)
             limited.map { spec -> async { runAndStore(spec, true) } }.awaitAll()
+            round++
         }
         snapshot(true)
     }

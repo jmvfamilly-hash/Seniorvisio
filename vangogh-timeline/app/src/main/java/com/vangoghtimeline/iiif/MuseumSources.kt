@@ -166,6 +166,8 @@ class MetSource(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        // blocage temporaire : on arrête (source « limitée », reprise plus tard) ; les notices déjà lues sont en cache disque
+                        if (TemporaryBlock.matches(e.message)) throw e
                         // notice ignorée : consignée (regroupée), la source continue
                         tally.raw++
                         tally.drop(if (e.message?.contains("HTTP 404") == true) "n'existent plus (404)" else "non lues (erreur réseau)")

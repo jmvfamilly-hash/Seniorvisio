@@ -311,3 +311,15 @@ Le rapport rev25 montrait des HTTP 429 de Wikimedia sur les licences (3 essais �
 **Rev28** : le filtre des annulations normales reconnaît désormais les messages préfixés (« essai 1 : Canceled », « essai 1 : Socket is closed ») ; en rev25 il ne voyait que les messages nus, et le journal restait envahi.
 
 **Claude Monet et Paul Gauguin** (rev29) : univers ouverts avec les mêmes sources (Rijksmuseum : « Monet, Claude », « Gauguin, Paul »). NGA : Monet 29 et Gauguin 178 œuvres extraites de l'open data (constituants 1726 et 1330, Wikidata Q296 et Q37693).
+
+## Rev30 : le Met bloqué, chargements multiples, écriture du magasin (rapport rev28)
+
+Le rapport rev28 montrait Wikimedia sans aucun 429 (largeurs 1920/3840 acceptées), mais :
+
+- **Le Met bloqué par son pare-feu (Incapsula)** : le journal de Sargent montre ~9 chargements simultanés (appuis répétés sur « Actualiser »), donc des centaines de requêtes, 155 × HTTP 403 et la source « injoignable ».
+  - `AppModel` n'accepte plus qu'**un chargement à la fois par artiste** (la demande en double est ignorée et consignée).
+  - **Disjoncteur** (`RateLimiter`) : après un 403 de pare-feu, tous les appelants font une pause (15 s, puis 30, 60, 120 s si le blocage persiste) ; les requêtes échouent tout de suite pendant la pause, sans insister.
+  - Un blocage **arrête la source** (état LIMITÉE) au lieu d'écarter en silence des dizaines de notices ; jusqu'à 3 reprises automatiques, chacune lit de nouvelles notices (gardées sur disque) avant le prochain blocage.
+  - Cadence du Met : 250 ms entre deux départs (au lieu de 150).
+- **Magasin local** : les sources qui finissent en même temps écrivaient le même fichier temporaire et pouvaient se réécrire un état plus ancien. Écriture désormais sérialisée, avec un instantané pris sous verrou.
+- **Wikimedia** : la requête SPARQL est ordonnée (`ORDER BY ?item`) : avec `LIMIT 300` sans ordre, le sous-ensemble retenu changeait d'un chargement à l'autre (174 à 242 œuvres pour Sargent). Elle reste limitée à 300 œuvres.

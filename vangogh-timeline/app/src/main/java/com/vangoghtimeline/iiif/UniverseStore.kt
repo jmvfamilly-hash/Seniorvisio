@@ -86,13 +86,18 @@ object UniverseStore {
     }
 
     /** Écriture atomique (fichier temporaire puis renommage) : une interruption ne laisse jamais un fichier tronqué. */
+    private val writeLock = Any()
+
     fun write(dir: File, artistId: String, universe: StoredUniverse) {
-        runCatching {
-            dir.mkdirs()
-            val target = fileOf(dir, artistId)
-            val tmp = File(dir, "$artistId.json.tmp")
-            tmp.writeText(encode(universe))
-            if (!tmp.renameTo(target)) { target.delete(); tmp.renameTo(target) }
+        // un seul écrivain à la fois : plusieurs sources qui finissent ensemble écrivaient le MÊME fichier temporaire
+        synchronized(writeLock) {
+            runCatching {
+                dir.mkdirs()
+                val target = fileOf(dir, artistId)
+                val tmp = File(dir, "$artistId.json.tmp")
+                tmp.writeText(encode(universe))
+                if (!tmp.renameTo(target)) { target.delete(); tmp.renameTo(target) }
+            }
         }
     }
 

@@ -57,7 +57,7 @@ object WikimediaParser {
         "SELECT ?item ?itemLabel ?inception ?image ?collectionLabel WHERE { " +
             "?item wdt:P170 wd:$qid ; wdt:P18 ?image . " +
             "OPTIONAL { ?item wdt:P571 ?inception . } OPTIONAL { ?item wdt:P195 ?collection . } " +
-            "SERVICE wikibase:label { bd:serviceParam wikibase:language \"en,fr,es,nl,de,it\" . } } LIMIT $LIMIT"
+            "SERVICE wikibase:label { bd:serviceParam wikibase:language \"en,fr,es,nl,de,it\" . } } ORDER BY ?item LIMIT $LIMIT"
 
     fun sparqlUrl(qid: String): String =
         "https://query.wikidata.org/sparql?format=json&query=" + URLEncoder.encode(sparql(qid), "UTF-8")
