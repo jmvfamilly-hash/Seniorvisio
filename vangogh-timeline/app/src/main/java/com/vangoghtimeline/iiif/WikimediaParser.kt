@@ -22,15 +22,28 @@ import java.net.URLEncoder
  * 2. une requête SPARQL liste ses œuvres qui ont une image (propriétés « créateur » P170 et « image » P18) avec titre, année de création
  *    (« inception » P571) et musée détenteur (P195) ;
  * 3. l'API de Commons donne, par lots, la taille du fichier et sa **licence** (`extmetadata` : nom, adresse, auteur de la photographie) ;
- * 4. l'image s'ouvre par `Special:FilePath/{fichier}?width=…` (miniature de la taille voulue, servie par Commons) : une image ordinaire,
+ * 4. l'image s'ouvre par `Special:FilePath/{fichier}?width=…` (miniature à une largeur STANDARD de Commons, voir [STANDARD_WIDTHS]) : une image ordinaire,
  *    découpée en tuiles par la visionneuse.
  *
  * Pur Kotlin : testé sur la JVM avec des réponses types (formats documentés, non comparés à des réponses réelles).
  */
 object WikimediaParser {
-    const val PREVIEW_WIDTH = 400
-    const val VIEW_WIDTH = 3000
+    /**
+     * Wikimedia ne sert les miniatures qu'à des largeurs STANDARD ; toute autre largeur (400, 3000…) est refusée par une limite de débit
+     * (HTTP 429). Ces largeurs viennent de la politique des miniatures de Commons.
+     */
+    val STANDARD_WIDTHS = listOf(20, 40, 60, 120, 250, 330, 500, 960, 1280, 1920, 3840)
+    const val PREVIEW_WIDTH = 500
+    /** Largeur d'ouverture quand la taille du fichier est connue / inconnue (la licence d'un lot a pu échouer). */
+    const val VIEW_WIDTH = 3840
+    const val VIEW_WIDTH_UNKNOWN_SIZE = 1920
     const val BATCH = 20
+
+    /** Plus grande largeur standard qui ne dépasse ni [target] ni la largeur du fichier [original] (inconnue = pas de borne). */
+    fun standardWidth(target: Int, original: Int?): Int {
+        val limit = minOf(target, original ?: Int.MAX_VALUE)
+        return STANDARD_WIDTHS.lastOrNull { it <= limit } ?: STANDARD_WIDTHS.first()
+    }
     private const val LIMIT = 300
 
     fun qidUrl(wikipediaTitle: String): String =
@@ -116,8 +129,8 @@ object WikimediaParser {
         return Artwork(
             id = "wikimedia-${item.qid}", title = item.label, date = ArtworkDate.year(year),
             iiif = IiifRef(
-                manifestUrl = "wikimedia:${item.qid}", thumbnailUrl = filePathUrl(item.file, PREVIEW_WIDTH),
-                canvasWidth = info?.width, canvasHeight = info?.height, imageUrl = filePathUrl(item.file, VIEW_WIDTH),
+                manifestUrl = "wikimedia:${item.qid}", thumbnailUrl = filePathUrl(item.file, standardWidth(PREVIEW_WIDTH, info?.width)),
+                canvasWidth = info?.width, canvasHeight = info?.height, imageUrl = filePathUrl(item.file, standardWidth(if (info?.width != null) VIEW_WIDTH else VIEW_WIDTH_UNKNOWN_SIZE, info?.width)),
             ),
             provider = if (item.collection != null) "Wikimedia · ${item.collection}" else "Wikimedia Commons",
             rights = rights,

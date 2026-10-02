@@ -6,6 +6,7 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.iiifviewer.DiskTileCache
+import com.iiifviewer.HostEtiquette
 import com.iiifviewer.HttpUpgrade
 import com.vangoghtimeline.iiif.AIC_USER_AGENT
 import com.vangoghtimeline.iiif.USER_AGENT
@@ -30,6 +31,20 @@ class TimelineApp : Application(), ImageLoaderFactory {
         CrashReporter.install(this)
     }
 
+    private val wikimediaLock = Any()
+    private var wikimediaNextSlot = 0L
+
+    /** Espace d'au moins 250 ms les départs de requêtes vers Wikimedia (toutes les vignettes de la frise passent par ici). */
+    private fun waitWikimediaSlot() {
+        val wait = synchronized(wikimediaLock) {
+            val now = System.currentTimeMillis()
+            val start = maxOf(now, wikimediaNextSlot)
+            wikimediaNextSlot = start + 250
+            start - now
+        }
+        if (wait > 0) Thread.sleep(wait)
+    }
+
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
             .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.25).build() }
@@ -47,11 +62,27 @@ class TimelineApp : Application(), ImageLoaderFactory {
                     val request = if (original.url.scheme == "http" && HttpUpgrade.needsUpgrade(original.url.toString()))
                         original.newBuilder().url(original.url.newBuilder().scheme("https").build()).build() else original
                     val builder = request.newBuilder()
-                        .header("User-Agent", USER_AGENT)
+                        .header("User-Agent", HostEtiquette.userAgentFor(request.url.toString(), USER_AGENT))
                         .header("AIC-User-Agent", AIC_USER_AGENT)
                     // le Referer n'est utile qu'au serveur d'images de l'AIC : pas d'indication envoyée aux autres musées
                     if (request.url.host.endsWith("artic.edu")) builder.header("Referer", "https://www.artic.edu/")
-                    chain.proceed(builder.build())
+                    val outgoing = builder.build()
+                    // Wikimedia limite le débit : une file (250 ms entre deux départs) et UN nouvel essai après un 429 (Retry-After, 1 à 4 s)
+                    if (!HostEtiquette.isWikimedia(outgoing.url.toString())) return@addInterceptor chain.proceed(outgoing)
+                    try {
+                        waitWikimediaSlot()
+                        var response = chain.proceed(outgoing)
+                        if (response.code == 429 || response.code == 503) {
+                            val pause = (response.header("Retry-After")?.trim()?.toLongOrNull() ?: 2L).coerceIn(1L, 4L)
+                            response.close()
+                            Thread.sleep(pause * 1000)
+                            waitWikimediaSlot()
+                            response = chain.proceed(outgoing)
+                        }
+                        response
+                    } catch (e: InterruptedException) {
+                        throw java.io.InterruptedIOException("annulé")
+                    }
                 }.build()
             }
             .respectCacheHeaders(false)

@@ -289,3 +289,13 @@ en IIIF par `api.nga.gov/iiif/{uuid}` (zoom profond) ; la source reste soumise �
 - **Écartées et comptées** : « d'après », « suiveur », « imitateur », « attribué à », collaborations ; œuvres sans date précise (l'intervalle d'une vie entière) ; hors des dates plausibles.
 - **Droits** : image en open access → domaine public (CC0) ; sinon « accès restreint (usage loyal) » avec la résolution maximale annoncée. Ajouté à tous les artistes qui ont un univers.
 - Quand le backend Supabase existera, le glaneur lira ces CSV directement et ces fichiers disparaîtront.
+
+## Rev26 : Wikimedia sans 429 (rapport rev25)
+
+Le rapport rev25 montrait des HTTP 429 de Wikimedia sur les licences (3 essais épuisés), les vignettes (×10) et l'ouverture d'œuvres (2 erreurs « visionneuse »). Causes probables et corrections :
+
+- **Largeurs non standard** : Commons ne sert les miniatures qu'à des largeurs standard (20, 40, 60, 120, 250, 330, 500, 960, 1280, 1920, 3840) ; nous demandions 400 et 3000. Désormais 500 pour la vignette, et pour l'ouverture la plus grande largeur standard
+  que permet le fichier (3840 au plus ; 1920 si la taille est inconnue). Jamais plus large que le fichier.
+- **User-Agent** : Wikimedia exige un User-Agent qui identifie l'application ; un User-Agent de navigateur y reçoit des limites. `HostEtiquette` (bibliothèque) en envoie un dédié à `*.wikimedia.org`, `*.wikidata.org`, `*.wikipedia.org`
+  (contact : le profil GitHub, jamais une adresse e-mail), dans les vignettes (Coil), les recherches, la validation et la visionneuse.
+- **Cadence** : les vignettes Wikimedia passent par une file (250 ms entre deux départs) avec UN nouvel essai après un 429 (`Retry-After`) ; la visionneuse retente 2 fois un 429/503 (pauses du serveur) ; les lots de licences se lisent un à la fois.

@@ -119,18 +119,36 @@ class HttpIiifSources(
         }
     }
 
+    /** Limite de débit ou indisponibilité passagère (429, 503) : la lecture est retentée après la pause demandée par le serveur. */
+    private class RetryAfter(val code: Int, val url: String, val waitMs: Long) : IOException("HTTP $code sur $url")
+
+    /** Au plus 3 essais pour un 429/503 (pause du `Retry-After` du serveur, sinon 2 s, 4 s) ; l'erreur finale reste « HTTP 429 sur … ». */
+    private suspend fun <T> fetch(url: String, read: (java.io.InputStream) -> T): T {
+        var attempt = 0
+        while (true) {
+            try {
+                return fetchOnce(url, read)
+            } catch (e: RetryAfter) {
+                if (attempt >= 2) throw IOException("HTTP ${e.code} sur ${e.url}")
+                kotlinx.coroutines.delay(e.waitMs * (attempt + 1))
+                attempt++
+            }
+        }
+    }
+
     /**
      * GET annulable : HttpURLConnection bloque un thread et ignore l'annulation de la coroutine.
      * Un « veilleur » frère coupe donc la connexion dès que la coroutine est annulée, ce qui fait
      * échouer la lecture bloquée — c'est ce qui rend l'annulation agressive du TileManager réelle.
      */
-    private suspend fun <T> fetch(url: String, read: (java.io.InputStream) -> T): T =
+    private suspend fun <T> fetchOnce(url: String, read: (java.io.InputStream) -> T): T =
         withContext(Dispatchers.IO) {
             val conn = URL(HttpUpgrade.secure(url)).openConnection() as HttpURLConnection   // Android refuse le HTTP non chiffré
             conn.connectTimeout = 10_000
             conn.readTimeout = 15_000
-            // certains serveurs (AIC derrière Cloudflare) refusent en 403 les requêtes sans User-Agent identifiable
-            conn.setRequestProperty("User-Agent", BROWSER_USER_AGENT)
+            // certains serveurs (AIC derrière Cloudflare) refusent en 403 les requêtes sans User-Agent identifiable ;
+            // Wikimedia, lui, exige un User-Agent qui identifie l'application (sinon limites de débit)
+            conn.setRequestProperty("User-Agent", HostEtiquette.userAgentFor(url, BROWSER_USER_AGENT))
             conn.setRequestProperty("AIC-User-Agent", "IiifViewer/1.0 (Android)")
             conn.setRequestProperty("Referer", "https://${URL(url).host}/")
             conn.setRequestProperty("Accept", "application/json, image/*, */*")
@@ -139,7 +157,12 @@ class HttpIiifSources(
                     try { awaitCancellation() } finally { conn.disconnect() }
                 }
                 try {
-                    if (conn.responseCode !in 200..299) throw IOException("HTTP ${conn.responseCode} sur $url")
+                    val code = conn.responseCode
+                    if (code == 429 || code == 503) {
+                        val wait = conn.getHeaderField("Retry-After")?.trim()?.toLongOrNull()?.coerceIn(1, 5)?.times(1000) ?: 2_000L
+                        throw RetryAfter(code, url, wait)
+                    }
+                    if (code !in 200..299) throw IOException("HTTP $code sur $url")
                     conn.inputStream.use(read)
                 } finally {
                     watchdog.cancel()

@@ -163,8 +163,8 @@ class RightsTest {
         val item = WikimediaParser.parseSparql(sparql)[0]
         val art = WikimediaParser.toArtwork(item, WikimediaParser.parseImageInfo(imageInfo)["Joaquín Sorolla - Paseo.jpg"], q)!!
         assertEquals("wikimedia-Q111", art.id); assertEquals(1909, art.date.year); assertEquals("Wikimedia · Museo Sorolla", art.provider)
-        assertTrue(art.iiif.viewerUrl!!.startsWith("static:https://commons.wikimedia.org/wiki/Special:FilePath/") && art.iiif.viewerUrl!!.endsWith("?width=3000"))
-        assertTrue(art.iiif.thumbnailUrlFor(300, 200)!!.endsWith("?width=400"))
+        assertTrue(art.iiif.viewerUrl!!.startsWith("static:https://commons.wikimedia.org/wiki/Special:FilePath/") && art.iiif.viewerUrl!!.endsWith("?width=3840"))        // fichier de 6000 px : largeur standard 3840
+        assertTrue(art.iiif.thumbnailUrlFor(300, 200)!!.endsWith("?width=500"))
         assertEquals(6000f / 4000f, art.iiif.aspectRatio, 1e-4f)
         assertEquals(RightsKind.PUBLIC_DOMAIN, art.rights!!.kind)
         // licence non lue : droits « non précisés », jamais présumés

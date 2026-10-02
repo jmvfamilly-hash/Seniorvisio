@@ -1,5 +1,6 @@
 package com.vangoghtimeline.iiif
 
+import com.iiifviewer.HostEtiquette
 import com.iiifviewer.HttpUpgrade
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -38,7 +39,7 @@ class HttpManifestSource(private val userAgent: String = USER_AGENT) : ManifestS
             conn.readTimeout = 15_000
             conn.setRequestProperty("Accept", "application/ld+json, application/json")
             // l'API AIC (derrière Cloudflare) répond 403 aux requêtes sans User-Agent identifiable
-            conn.setRequestProperty("User-Agent", userAgent)
+            conn.setRequestProperty("User-Agent", HostEtiquette.userAgentFor(url, userAgent))   // Wikimedia : User-Agent qui identifie l'application
             conn.setRequestProperty("AIC-User-Agent", AIC_USER_AGENT)
             val code = conn.responseCode
             if (code !in 200..299) throw IOException(describeError(code, url, conn))
@@ -72,7 +73,7 @@ class HttpImageReachability : ImageReachability {
             conn.connectTimeout = 10_000
             conn.readTimeout = 15_000
             conn.setRequestProperty("Range", "bytes=0-0")
-            conn.setRequestProperty("User-Agent", USER_AGENT)
+            conn.setRequestProperty("User-Agent", HostEtiquette.userAgentFor(url, USER_AGENT))
             conn.setRequestProperty("AIC-User-Agent", AIC_USER_AGENT)
             Reach(conn.responseCode, conn.contentType)
         } finally {

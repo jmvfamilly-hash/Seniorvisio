@@ -297,7 +297,7 @@ class RijksSource(
  * Les licences sont lues par lots de [WikimediaParser.BATCH] fichiers ; un lot en échec laisse ses œuvres avec une licence « non lue »
  * (échec consigné), il ne fait pas échouer la source.
  */
-class WikimediaSource(private val http: ManifestSource, private val parallelism: Int = 3) : MuseumSource {
+class WikimediaSource(private val http: ManifestSource, private val parallelism: Int = 1) : MuseumSource {
     override val id = "wikimedia"
     override val name = "Wikimedia (Wikidata + Commons)"
     override val europeanaKeyword = "\u0000"
