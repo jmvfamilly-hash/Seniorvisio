@@ -32,7 +32,7 @@ fun TimeAxis(plan: TimelinePlan, state: TimelineScrollState, modifier: Modifier 
     val yearStyle = remember { TextStyle(color = Color(0xFFE9E2D0), fontSize = 13.sp) }
     val monthStyle = remember { TextStyle(color = Color(0xFF9C978A), fontSize = 10.sp) }
 
-    Canvas(modifier.fillMaxWidth().height(40.dp).background(Color(0xFF15171B))) {
+    Canvas(modifier.fillMaxWidth().height(40.dp).background(Color(0xB315171B))) {
         val sx = state.scrollX // lu ici : seul le dessin est invalidé par le défilement
         val reach = if (roller) 0.5f * size.width else 0f
         val firstDay = floor(plan.scale.dayAt(sx - reach - plan.leftInset)).toLong()

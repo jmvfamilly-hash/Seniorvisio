@@ -30,7 +30,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.vangoghtimeline.model.Artist
 import com.vangoghtimeline.model.Artwork
+import com.vangoghtimeline.model.careerLines
 import com.vangoghtimeline.model.RightsKind
 import com.vangoghtimeline.model.formatFr
 
@@ -57,16 +59,15 @@ internal fun RightsBadge(kind: RightsKind, modifier: Modifier = Modifier) {
  * conditions d'usage, adresse de la licence), un autre la replie. N'intercepte pas les gestes du visualiseur ailleurs que sur la barre.
  */
 @Composable
-internal fun RightsBar(artwork: Artwork, artistName: String?, modifier: Modifier = Modifier) {
+internal fun RightsBar(artwork: Artwork, artist: Artist?, artistName: String?, level: Int, onLevel: (Int) -> Unit, modifier: Modifier = Modifier) {
     val rights = artwork.rights
-    var expanded by remember(artwork.id) { mutableStateOf(false) }
+    val expanded = level >= 2
     val uriHandler = LocalUriHandler.current
     Column(
         modifier
             .padding(10.dp)
             .fillMaxWidth(0.92f)
             .background(Color(0xD9000000), RoundedCornerShape(10.dp))
-            .pointerInput(artwork.id) { detectTapGestures(onTap = { expanded = !expanded }) }
             .padding(horizontal = 10.dp, vertical = 7.dp),
     ) {
         BasicText(
@@ -90,7 +91,7 @@ internal fun RightsBar(artwork: Artwork, artistName: String?, modifier: Modifier
         }
         if (expanded) {
             Spacer(Modifier.height(6.dp))
-            Column(Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState())) {
+            Column(Modifier.heightIn(max = if (level >= 3) 320.dp else 240.dp).verticalScroll(rememberScrollState())) {
                 artistName?.let { Line("Artiste : $it") }
                 artwork.place?.let { Line("Lieu : $it") }
                 if (artwork.details.none { it.first == "Technique" }) artwork.medium?.let { Line("Technique : $it") }
@@ -108,9 +109,19 @@ internal fun RightsBar(artwork: Artwork, artistName: String?, modifier: Modifier
                     Line("Conditions : ${rights.conditions}")
                     rights.url?.let { Line("Licence : $it") }
                 }
+                if (level >= 3 && artist != null) {
+                    // niveau 3 : l'artiste et son parcours
+                    Line("L'artiste", bold = true)
+                    Line("${artist.name}${artist.lifespan?.let { " ($it)" } ?: ""} · ${artist.origin} · ${artist.movement.labelFr}")
+                    if (artist.mainStyle.isNotBlank()) Line("Style : ${artist.mainStyle}")
+                    if (artist.emblematicWork.isNotBlank()) Line("Œuvre emblématique : ${artist.emblematicWork}")
+                    val career = careerLines(artist)
+                    if (career.isNotEmpty()) Line("Parcours", bold = true)
+                    career.forEach { Line(it) }
+                }
             }
-            Line("(touchez la barre pour réduire)", dim = true)
         }
+        DetailSlider(level, 3, onLevel)
     }
 }
 

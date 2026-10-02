@@ -397,3 +397,10 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 
 - Le panneau de tri sous la recherche est retiré (ordre par période).
 - Un **curseur transparent à 3 positions**, au centre sous le demi-cercle : 1 = nom et dates ; 2 = détails actuels ; 3 = contenu étendu (origine, œuvre emblématique, sources détaillées, licences, actualisation) — seulement si l'artiste a un univers (sinon le curseur s'arrête à 2).
+
+## Rev42 — curseur de détail partagé, fond conservé dans la frise
+
+- Le curseur démarre au **niveau 1** et son niveau est **partagé** entre le menu et la vue détaillée d'une œuvre (état dans `AppRoot`).
+- Vue détaillée : niveau 1 = « artiste — titre, date » et licence ; niveau 2 = fiche de l'œuvre (lieu, technique, dimensions, crédit, lien, attribution, conditions) ; niveau 3 = en plus l'artiste (origine, mouvement, style, œuvre emblématique) et son **parcours** lieu par lieu. Le toucher sur la barre ne déplie plus : c'est le curseur.
+- Menu niveau 3 : ajoute le parcours de l'artiste.
+- L'**image de fond** de l'artiste (`BackdropLayer.kt`, partagée avec le menu) reste derrière la frise chronologique, sous un voile sombre.

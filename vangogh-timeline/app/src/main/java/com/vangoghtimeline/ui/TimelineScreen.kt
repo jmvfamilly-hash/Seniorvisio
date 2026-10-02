@@ -2,6 +2,7 @@ package com.vangoghtimeline.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,6 +54,8 @@ fun TimelineScreen(
     prefetcher: TimelinePrefetcher? = null,
     /** Nom de l'artiste (et ses dates de vie) affiché en tête de la frise ; `null` = pas d'en-tête. */
     title: String? = null,
+    /** Artiste dont l'image de fond (celle du menu) reste derrière la frise. */
+    backdropArtistId: String? = null,
 ) {
     val density = LocalDensity.current
     val state = rememberTimelineScrollState()
@@ -97,11 +100,21 @@ fun TimelineScreen(
         }
     }
 
-    Column(modifier.fillMaxSize().background(Background)) {
+    val backdrops = rememberBackdrops()
+    val backdrop = backdrops.of(backdropArtistId)
+    Box(modifier.fillMaxSize().background(Background)) {
+        if (backdrop != null) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                BackdropImage(backdrop, backdrops.embedded, with(density) { maxWidth.toPx() }, with(density) { maxHeight.toPx() })
+            }
+            // voile : la frise et ses cartes restent lisibles sur le tableau
+            Box(Modifier.fillMaxSize().background(Color(0xB30F1114)))
+        }
+    Column(Modifier.fillMaxSize()) {
         if (title != null) {
             BasicText(
                 title,
-                modifier = Modifier.fillMaxWidth().background(Color(0xFF14171B)).padding(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.fillMaxWidth().background(Color(0xB314171B)).padding(horizontal = 12.dp, vertical = 6.dp),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = TextStyle(color = Color(0xFFE6E9ED), fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
@@ -136,5 +149,6 @@ fun TimelineScreen(
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth(0.38f).padding(10.dp),
             )
         }
+    }
     }
 }

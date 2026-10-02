@@ -49,6 +49,7 @@ import com.vangoghtimeline.iiif.Diag
 import com.iiifviewer.HttpIiifSources
 import com.vangoghtimeline.TimelineApp
 import com.iiifviewer.rememberIiifZoomController
+import com.vangoghtimeline.model.Artist
 import com.vangoghtimeline.model.Artwork
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -97,6 +98,10 @@ fun TimelineHost(
     /** Artiste dont on montre l'univers : son nom en tête de la frise, et dans la vue détaillée d'une œuvre. */
     artistName: String? = null,
     artistLife: String? = null,
+    /** L'artiste (fond de la frise, niveau 3 de la vue détaillée) et le niveau de détail partagé avec le menu. */
+    artist: Artist? = null,
+    level: Int = 1,
+    onLevel: (Int) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var request by remember { mutableStateOf<OpenRequest?>(null) }
@@ -168,7 +173,7 @@ fun TimelineHost(
     BackHandler(enabled = request != null && !closing) { close() }
 
     Box(modifier.fillMaxSize().onSizeChanged { rootSize = it }) {
-        TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, title = artistName?.let { n -> artistLife?.let { "$n · $it" } ?: n })
+        TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, backdropArtistId = artist?.id, title = artistName?.let { n -> artistLife?.let { "$n · $it" } ?: n })
 
         credit?.let {
             BasicText(
@@ -224,7 +229,7 @@ fun TimelineHost(
                     }
                     // pendant le dézoom de sortie, les doigts sont absorbés : on ne relance pas un zoom en plein retour
                     // licence et conditions de l'œuvre ouverte (un toucher sur la barre déplie le détail)
-                    if (viewerTop && !closing) RightsBar(req.artwork, artistName, Modifier.align(Alignment.BottomStart))
+                    if (viewerTop && !closing) RightsBar(req.artwork, artist, artistName, level, onLevel, Modifier.align(Alignment.BottomStart))
                     if (closing) Box(Modifier.fillMaxSize().pointerInput(Unit) {
                         awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
                     })

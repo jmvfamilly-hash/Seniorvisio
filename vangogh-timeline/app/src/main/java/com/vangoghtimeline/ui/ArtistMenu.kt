@@ -75,8 +75,7 @@ import com.vangoghtimeline.iiif.SourceReport
 import com.vangoghtimeline.iiif.SourceState
 import com.vangoghtimeline.model.AgeFormat
 import com.vangoghtimeline.model.Artist
-import com.vangoghtimeline.model.BackdropIndex
-import com.vangoghtimeline.model.ThirdsFit
+import com.vangoghtimeline.model.careerLines
 import com.vangoghtimeline.model.Backdrop
 import com.vangoghtimeline.model.MenuRow
 import com.vangoghtimeline.model.SortMode
@@ -117,18 +116,18 @@ fun ArtistMenuScreen(
     onReportLongPress: () -> Unit = {},
     /** « Actualiser » : recherche et revalide toutes les sources de l'artiste sélectionné. */
     onRefresh: (Artist) -> Unit = {},
+    /** Niveau de détail (1 nom et dates, 2 détails, 3 contenu étendu), partagé avec la vue détaillée d'une œuvre. */
+    level: Int = 1,
+    onLevel: (Int) -> Unit = {},
 ) {
     var query by rememberSaveable { mutableStateOf("") }
-    var level by rememberSaveable { mutableStateOf(2) }          // 1 = nom et dates, 2 = détails, 3 = contenu étendu
     val sort = SortMode.PERIOD
     val rows = remember(artists, query, sort) { menuRows(artists, query, sort) }
     val items = remember(rows) { rows.filterIsInstance<MenuRow.Item>().map { it.artist } }
     val selected = artists.firstOrNull { it.id == selectedId }
-    val context = LocalContext.current
-    val index = remember { runCatching { BackdropIndex.parse(context.assets.open("backdrops/index.json").bufferedReader().use { it.readText() }) }.getOrDefault(emptyMap()) }
-    val embedded = remember { runCatching { context.assets.list("backdrops")?.toSet() }.getOrNull().orEmpty() }
+    val backdrops = rememberBackdrops()
     // fond : l'artiste sélectionné, à défaut le premier de la liste (le menu n'est jamais « vide »)
-    val backdrop = (selected ?: items.firstOrNull() ?: artists.firstOrNull())?.let { index[it.id] }?.takeIf { it.usable }
+    val backdrop = backdrops.of((selected ?: items.firstOrNull() ?: artists.firstOrNull())?.id)
 
     BoxWithConstraints(modifier.fillMaxSize().background(Ink)) {
         // lus ici : les lambdas imbriquées (Row, Column…) ont leur propre récepteur et n'ont plus accès à maxWidth / maxHeight
@@ -141,19 +140,8 @@ fun ArtistMenuScreen(
 
         // ── fond : un tableau, regard / visage / arbre sur la règle des tiers, fondu entre deux artistes ──
         Crossfade(targetState = backdrop, animationSpec = tween(700), label = "fond") { b ->
-            Box(Modifier.fillMaxSize().clipToBounds(), contentAlignment = Alignment.TopStart) {
-                if (b != null) {
-                    val p = ThirdsFit.fit(b.width, b.height, screenW, screenH, b.poiX, b.poiY, b.kind)
-                    val data: Any = if ("${b.artistId}.jpg" in embedded) b.assetUri else b.remoteUrl
-                    AsyncImage(
-                        model = ImageRequest.Builder(context).data(data).size(Size.ORIGINAL).crossfade(true).build(),
-                        contentDescription = b.credit,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier
-                            .requiredSize(with(density) { p.imageW.toDp() }, with(density) { p.imageH.toDp() })
-                            .offset { IntOffset(p.offsetX.roundToInt(), p.offsetY.roundToInt()) },
-                    )
-                }
+            Box(Modifier.fillMaxSize()) {
+                BackdropImage(b, backdrops.embedded, screenW, screenH)
                 // voile : le texte reste lisible quelle que soit la clarté du tableau
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x99000000), Color(0x22000000), Color(0xB3000000)))))
             }
@@ -170,7 +158,7 @@ fun ArtistMenuScreen(
             // au centre du cercle : le curseur du niveau de détail (le niveau 3 n'existe que si l'artiste a un univers)
             val maxLevel = if (selected?.hasUniverse == true) 3 else 2
             val shown = level.coerceAtMost(maxLevel)
-            DetailSlider(shown, maxLevel) { level = it }
+            DetailSlider(shown, maxLevel) { onLevel(it) }
         }
     }
 }
@@ -361,6 +349,10 @@ private fun ArtistPanel(
             // niveau 3 : contenu étendu (origine, œuvre emblématique, sources détaillées)
             InfoRow("Origine", artist.origin)
             InfoRow("Œuvre emblématique", artist.emblematicWork)
+            careerLines(artist).takeIf { it.isNotEmpty() }?.let { lines ->
+                BasicText("Parcours", style = TextStyle(color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold), modifier = Modifier.padding(top = 6.dp))
+                for (l in lines) BasicText(l, style = TextStyle(color = Color(0xFFF1F3F5), fontSize = 12.sp), modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp))
+            }
         }
         UniverseSection(artist, model, onTap, onRefresh, expanded = shown >= 3)
     }
@@ -453,7 +445,7 @@ private fun SourceLine(r: SourceReport) {
 
 /** Curseur transparent à 1 à 3 positions (nom et dates / détails / contenu étendu) ; toucher ou glisser. Les positions au-delà de [max] sont grisées. */
 @Composable
-private fun DetailSlider(level: Int, max: Int, onLevel: (Int) -> Unit) {
+internal fun DetailSlider(level: Int, max: Int, onLevel: (Int) -> Unit) {
     val currentLevel by rememberUpdatedState(onLevel)
     val density = LocalDensity.current
     val widthDp = 220.dp

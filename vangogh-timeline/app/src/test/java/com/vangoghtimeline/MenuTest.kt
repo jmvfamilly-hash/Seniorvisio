@@ -114,4 +114,11 @@ class MenuTest {
         assertEquals(1f, parsed["x"]!!.poiX, 0f)              // borné à 0..1
         assertTrue(parsed["y"]!!.usable && parsed["y"]!!.kind == PoiKind.TREE)
     }
+
+    @Test fun careerLinesListTheArtistsPlacesInOrder() {
+        val vg = catalog.first { it.id == "vincent-van-gogh" }
+        val lines = com.vangoghtimeline.model.careerLines(vg)
+        assertEquals(vg.locations.size, lines.size)
+        assertTrue(lines.toString(), lines.all { it.isNotBlank() } && lines.any { it.contains("Arles") })
+    }
 }

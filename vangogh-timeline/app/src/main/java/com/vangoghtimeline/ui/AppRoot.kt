@@ -50,6 +50,7 @@ fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: () -> String =
     }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var openedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var level by rememberSaveable { mutableStateOf(1) }          // niveau de détail, partagé entre le menu et la vue détaillée
 
     LaunchedEffect(artists) { model.loadPortraits(artists) }
 
@@ -61,6 +62,7 @@ fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: () -> String =
             model = model,
             onReportLongPress = copyReport,
             onRefresh = { model.refresh(it) },
+            level = level, onLevel = { level = it },
             onTap = { artist ->
                 if (selectedId == artist.id && artist.hasUniverse) {
                     model.prepare(artist)
@@ -78,7 +80,7 @@ fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: () -> String =
         Box(Modifier.fillMaxSize().background(Color(0xFF0F1114))) {
             when {
                 state != null && state.artworks.isNotEmpty() ->
-                    key(opened.id) { TimelineHost(state.artworks, credit = state.credit, artistName = opened.name, artistLife = opened.lifespan) }
+                    key(opened.id) { TimelineHost(state.artworks, credit = state.credit, artistName = opened.name, artistLife = opened.lifespan, artist = opened, level = level, onLevel = { level = it }) }
                 state != null && state.done -> Message(
                     "Aucune œuvre de ${opened.name} n'a pu être connectée.\n" +
                         state.reports.joinToString("\n") { "${it.name} : ${it.detail}" } + "\n\n(retour : geste système)",
