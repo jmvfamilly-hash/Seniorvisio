@@ -206,7 +206,7 @@ class RightsTest {
         val q = ArtworkQuery.of(artist("joaquin-sorolla"))
         assertTrue(CeresProbe(http).fetch(q, SourceSpec("ceres")).isEmpty())
         val log = Diag.snapshot().filter { it.category == "reconnaissance" }
-        assertTrue(log.toString(), log.any { it.message.contains("titre « Museo Sorolla »") && it.message.contains("txt_busqueda") && it.message.contains("/img/a.jpg") && it.message.contains("OAI-PMH : non") })
+        assertTrue(log.toString(), log.any { it.message.contains("titre « Museo Sorolla »") && it.message.contains("txt_busqueda") && it.message.contains("/img/a.jpg") && !it.message.contains("OAI-PMH") })
         assertTrue(log.any { it.message.startsWith("inaccessible") })                       // les autres adresses sont consignées en échec
 
         val sorolla = artist("joaquin-sorolla").copy(sources = listOf(SourceSpec("ceres")))
@@ -218,10 +218,11 @@ class RightsTest {
 
     // ── Catalogue : toutes les sources pour les quatre artistes ───────────────────
     @Test fun everyArtistWithAUniverseGetsEverySourceInPriorityOrder() {
-        val expected = listOf("aic", "rijks", "cleveland", "met", "smk", "nga", "europeana", "wikimedia")
-        for (id in listOf("vincent-van-gogh", "john-singer-sargent", "pierre-auguste-renoir", "berthe-morisot", "claude-monet", "paul-gauguin")) {
+        val expected = listOf("aic", "rijks", "cleveland", "met", "smk", "nga", "getty", "mfa", "europeana", "wikimedia")
+        for (id in listOf("john-singer-sargent", "pierre-auguste-renoir", "berthe-morisot", "claude-monet", "paul-gauguin")) {
             assertEquals(id, expected, artist(id).sources.map { it.sourceId })
         }
+        assertEquals(expected + "vgm", artist("vincent-van-gogh").sources.map { it.sourceId })       // la sonde du Van Gogh Museum : Van Gogh seulement
         assertEquals(expected + "ceres", artist("joaquin-sorolla").sources.map { it.sourceId })       // la sonde CER.ES : Sorolla seulement
         assertEquals("Museo Sorolla", artist("joaquin-sorolla").sources.first { it.sourceId == "europeana" }.term)
         assertEquals("Sorolla y Bastida, Joaquín", artist("joaquin-sorolla").sources.first { it.sourceId == "rijks" }.term)

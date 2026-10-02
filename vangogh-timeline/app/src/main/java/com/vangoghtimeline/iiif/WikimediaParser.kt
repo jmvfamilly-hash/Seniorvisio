@@ -14,6 +14,8 @@ import com.vangoghtimeline.model.RightsInfo
 import com.vangoghtimeline.model.RightsKind
 import java.net.URLDecoder
 import java.net.URLEncoder
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Œuvres d'un artiste via **Wikidata + Wikimedia Commons** (APIs publiques, sans clé) :
@@ -37,14 +39,16 @@ object WikimediaParser {
     /** Largeur d'ouverture quand la taille du fichier est connue / inconnue (la licence d'un lot a pu échouer). */
     const val VIEW_WIDTH = 3840
     const val VIEW_WIDTH_UNKNOWN_SIZE = 1920
-    const val BATCH = 20
+    const val BATCH = 30
+
+    /** Œuvres par page SPARQL (la source suit les pages, voir [WikimediaSource]). */
+    const val SPARQL_PAGE = 300
 
     /** Plus grande largeur standard qui ne dépasse ni [target] ni la largeur du fichier [original] (inconnue = pas de borne). */
     fun standardWidth(target: Int, original: Int?): Int {
         val limit = minOf(target, original ?: Int.MAX_VALUE)
         return STANDARD_WIDTHS.lastOrNull { it <= limit } ?: STANDARD_WIDTHS.first()
     }
-    private const val LIMIT = 300
 
     fun qidUrl(wikipediaTitle: String): String =
         "https://en.wikipedia.org/w/api.php?action=query&prop=pageprops&ppprop=wikibase_item&redirects=1&format=json&titles=" + wikipediaTitle
@@ -53,14 +57,14 @@ object WikimediaParser {
     fun parseQid(text: String): String? =
         obj(text)?.objOf("query")?.objOf("pages")?.values?.firstNotNullOfOrNull { (it as? kotlinx.serialization.json.JsonObject)?.objOf("pageprops")?.str("wikibase_item") }
 
-    fun sparql(qid: String): String =
+    fun sparql(qid: String, offset: Int = 0): String =
         "SELECT ?item ?itemLabel ?inception ?image ?collectionLabel WHERE { " +
             "?item wdt:P170 wd:$qid ; wdt:P18 ?image . " +
             "OPTIONAL { ?item wdt:P571 ?inception . } OPTIONAL { ?item wdt:P195 ?collection . } " +
-            "SERVICE wikibase:label { bd:serviceParam wikibase:language \"en,fr,es,nl,de,it\" . } } ORDER BY ?item LIMIT $LIMIT"
+            "SERVICE wikibase:label { bd:serviceParam wikibase:language \"en,fr,es,nl,de,it\" . } } ORDER BY ?item LIMIT $SPARQL_PAGE OFFSET $offset"
 
-    fun sparqlUrl(qid: String): String =
-        "https://query.wikidata.org/sparql?format=json&query=" + URLEncoder.encode(sparql(qid), "UTF-8")
+    fun sparqlUrl(qid: String, offset: Int = 0): String =
+        "https://query.wikidata.org/sparql?format=json&query=" + URLEncoder.encode(sparql(qid, offset), "UTF-8")
 
     /** Une œuvre lue dans la réponse SPARQL, avant la lecture de la licence. */
     class Item(val qid: String, val label: String, val year: Int?, val file: String, val collection: String?)
@@ -111,6 +115,34 @@ object WikimediaParser {
             val meta = info.objOf("extmetadata")
             fun m(k: String) = meta?.objOf(k)?.str("value")
             out[name] = FileInfo(info.int("width"), info.int("height"), RightsCatalog.fromCommons(m("LicenseShortName"), m("LicenseUrl"), m("Artist")))
+        }
+        return out
+    }
+
+    /**
+     * Métadonnées déjà lues, gardées sur disque d'un passage à l'autre : `null` = demandé mais absent de la réponse (fichier supprimé),
+     * à ne pas redemander. Clé = nom normalisé ([normalizedName]).
+     */
+    fun encodeInfoCache(map: Map<String, FileInfo?>): String = buildJsonObject {
+        for ((name, info) in map) put(name, buildJsonObject {
+            if (info != null) {
+                info.width?.let { put("w", it) }; info.height?.let { put("h", it) }
+                put("rk", info.rights.kind.name); put("rl", info.rights.label); put("rc", info.rights.conditions)
+                info.rights.url?.let { put("ru", it) }; info.rights.attribution?.let { put("ra", it) }
+            }
+        })
+    }.toString()
+
+    fun decodeInfoCache(text: String): HashMap<String, FileInfo?> {
+        val out = HashMap<String, FileInfo?>()
+        val root = obj(text) ?: return out
+        for ((name, el) in root) {
+            val o = el as? kotlinx.serialization.json.JsonObject ?: continue
+            val kind = o.str("rk")?.let { runCatching { RightsKind.valueOf(it) }.getOrNull() }
+            out[name] = if (kind == null) null else FileInfo(
+                o.int("w"), o.int("h"),
+                RightsInfo(kind, o.str("rl").orEmpty(), o.str("ru"), o.str("ra"), o.str("rc") ?: RightsCatalog.conditionsFor(kind)),
+            )
         }
         return out
     }

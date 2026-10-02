@@ -340,3 +340,12 @@ La vignette disparaissait donc derrière un écran noir, puis l'image apparaissa
 
 - `IiifZoomViewer` : avec `transparentUntilReady`, le fond est transparent AUSSI pendant l'attente de l'`info.json`.
 - `TimelineHost` : la vignette reste telle quelle jusqu'aux premières tuiles (plus de délai de 3 s au-delà duquel elle s'effaçait) ; un témoin d'attente (anneau et « Chargement de l'image… »), visible si l'attente dépasse 300 ms, l'accompagne. En cas d'erreur, la vignette reste avec le message.
+
+## Rev34 : Wikimedia paginé, sondes Getty / MFA Boston / Van Gogh Museum
+
+- **Wikimedia paginé et progressif** : la requête SPARQL (`ORDER BY ?item`) est suivie page par page (300 œuvres, jusqu'à 1 200 par artiste ; avant : 300 au plus, donc Monet ou Sargent tronqués). Les licences ne sont lues que pour les œuvres qu'on garde (dates plausibles), par lots de 30,
+  un lot à la fois. **Cache disque** (`wikimedia_cache` : pages SPARQL 24 h, licences) : un passage qui atteint son délai (25 s ; le chargeur coupe à 45 s) rend ce qu'il a — licence « non lue » en attendant — et la source est PARTIELLE, reprise automatiquement
+  (3 passages, puis 5 minutes plus tard) jusqu'à ce que tout soit lu ; chaque lot n'est demandé qu'une fois. Un lot en échec (429…) n'enlève rien. `PARSER_VERSION` = 5.
+- **Sondes de reconnaissance** (aucune œuvre ajoutée) : **J. Paul Getty Museum** (données Linked Art, SPARQL, recherche du site), **Museum of Fine Arts, Boston** (recherche de la collection), **Van Gogh Museum** (Van Gogh seulement) ; en plus de CER.ES.
+  Chaque sonde consigne dans le journal : code, titre, formulaires, champs, images, mentions IIIF / JSON-LD / OAI-PMH / licences, forme d'un JSON, début du corps. Le prochain rapport d'anomalies dira quelle forme prend chaque service, pour écrire les vraies sources.
+  Pourquoi pas directement des sources : ces trois musées ne publient aucune donnée sur GitHub (contrairement au NGA) et leurs services n'étaient pas joignables depuis l'environnement de développement ; un lecteur écrit à l'aveugle aurait été faux.

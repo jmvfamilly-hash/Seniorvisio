@@ -75,11 +75,14 @@ object ArtistExtras {
      * @param rijks nom du créateur au format du Rijksmuseum (« Nom, Prénom »)
      * @param europeanaProvider fournisseur de données Europeana propre à l'artiste (ex. « Museo Sorolla »), si connu
      * @param ceres vrai pour un artiste des musées d'État espagnols : ajoute la sonde de reconnaissance CER.ES
+     * @param vgm vrai pour Van Gogh : ajoute la sonde du Van Gogh Museum
+     *
+     * Getty et MFA Boston sont des sondes de reconnaissance (aucune œuvre ajoutée) tant que leur accès n'est pas connu.
      */
-    private fun allSources(rijks: String, europeanaProvider: String? = null, ceres: Boolean = false) = listOf(
-        s("aic"), s("rijks", rijks), s("cleveland"), s("met"), s("smk"), s("nga"),
+    private fun allSources(rijks: String, europeanaProvider: String? = null, ceres: Boolean = false, vgm: Boolean = false) = listOf(
+        s("aic"), s("rijks", rijks), s("cleveland"), s("met"), s("smk"), s("nga"), s("getty"), s("mfa"),
         s("europeana", europeanaProvider), s("wikimedia"),
-    ) + if (ceres) listOf(s("ceres")) else emptyList()
+    ) + (if (vgm) listOf(s("vgm")) else emptyList()) + (if (ceres) listOf(s("ceres")) else emptyList())
 
     private val all: Map<String, Extras> = mapOf(
         "gustave-courbet" to Extras(1819, 1877, "Gustave_Courbet"),
@@ -96,7 +99,7 @@ object ArtistExtras {
         "joaquin-sorolla" to Extras(1863, 1923, "Joaqu%C3%ADn_Sorolla", allSources("Sorolla y Bastida, Joaquín", "Museo Sorolla", ceres = true)),
         "john-singer-sargent" to Extras(1856, 1925, "John_Singer_Sargent", allSources("Sargent, John Singer")),
         "camille-pissarro" to Extras(1830, 1903, "Camille_Pissarro"),
-        "vincent-van-gogh" to Extras(1853, 1890, "Vincent_van_Gogh", allSources("Gogh, Vincent van")),
+        "vincent-van-gogh" to Extras(1853, 1890, "Vincent_van_Gogh", allSources("Gogh, Vincent van", vgm = true)),
         "paul-cezanne" to Extras(1839, 1906, "Paul_C%C3%A9zanne"),
         "edvard-munch" to Extras(1863, 1944, "Edvard_Munch"),
         "anna-boch" to Extras(1848, 1936, "Anna_Boch"),

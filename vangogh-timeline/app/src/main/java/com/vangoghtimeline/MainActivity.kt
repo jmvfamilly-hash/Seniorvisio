@@ -95,14 +95,15 @@ class MainActivity : ComponentActivity() {
             val wikiLimiter = RateLimiter(parallel = 2, minGapMs = 400)
             val wikiRetries = listOf(2_000L, 5_000L, 10_000L)
             val notices = File(filesDir, "met_notices")
+            val wikimediaCache = File(filesDir, "wikimedia_cache")      // pages SPARQL et licences, reprises d'un passage à l'autre
             // National Gallery of Art : fichiers extraits de son open data (assets/nga/), lus sans réseau
             val ngaAsset: (String) -> String? = { name -> runCatching { assets.open("nga/$name.json").bufferedReader().use { it.readText() } }.getOrNull() }
             val loader = UniverseLoader(
-                defaultMuseumSources(http, RetryingSource(http, metLimiter, "metmuseum.org"), notices, RetryingSource(http, wikiLimiter, "wiki", wikiRetries), ngaAsset),
+                defaultMuseumSources(http, RetryingSource(http, metLimiter, "metmuseum.org"), notices, RetryingSource(http, wikiLimiter, "wiki", wikiRetries), wikimediaCache = wikimediaCache, ngaAsset = ngaAsset),
                 SourceValidator(http, HttpImageReachability()),
                 File(filesDir, "universe_store").apply { mkdirs() },     // magasin JSON local : un fichier par artiste
                 // repli : mêmes sources avec un User-Agent sobre, si un serveur refuse celui d'un navigateur
-                fallbackSources = defaultMuseumSources(plainHttp, RetryingSource(plainHttp, metLimiter, "metmuseum.org"), notices, RetryingSource(plainHttp, wikiLimiter, "wiki", wikiRetries), ngaAsset),
+                fallbackSources = defaultMuseumSources(plainHttp, RetryingSource(plainHttp, metLimiter, "metmuseum.org"), notices, RetryingSource(plainHttp, wikiLimiter, "wiki", wikiRetries), wikimediaCache = wikimediaCache, ngaAsset = ngaAsset),
             )
             AppModel(scope, loader, http, File(filesDir, "portraits.json"))
         }

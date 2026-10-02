@@ -330,89 +330,182 @@ class RijksSource(
 
 /**
  * Wikimedia (Wikidata + Commons) : voir [WikimediaParser]. Le terme de la source est le titre de l'article Wikipédia de l'artiste.
- * Les licences sont lues par lots de [WikimediaParser.BATCH] fichiers ; un lot en échec laisse ses œuvres avec une licence « non lue »
- * (échec consigné), il ne fait pas échouer la source.
+ *
+ * **Paginée et progressive** : la requête SPARQL (ordonnée) est suivie page par page (300 œuvres, jusqu'à [maxItems]) ; les licences sont
+ * lues par lots de [WikimediaParser.BATCH] fichiers, un lot à la fois (Commons limite le débit). Pages SPARQL (24 h) et licences sont gardées
+ * dans [cacheDir] : un passage qui s'arrête à son délai ([softDeadlineMs], le chargeur coupe à 45 s) rend ce qu'il a — les œuvres dont la
+ * licence n'est pas encore lue s'affichent avec « licence non lue » — et la source est PARTIELLE (reprise automatique, voir [isComplete]).
+ * Un lot en échec n'enlève rien : ses fichiers restent à lire au passage suivant.
  */
-class WikimediaSource(private val http: ManifestSource, private val parallelism: Int = 1) : MuseumSource {
+class WikimediaSource(
+    private val http: ManifestSource,
+    private val maxItems: Int = 1200,
+    private val cacheDir: java.io.File? = null,
+    private val softDeadlineMs: Long = 25_000,
+    private val clockNanos: () -> Long = System::nanoTime,
+) : MuseumSource {
     override val id = "wikimedia"
     override val name = "Wikimedia (Wikidata + Commons)"
     override val europeanaKeyword = "\u0000"
     private val qids = HashMap<String, String>()
+    private val unfinished: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    override fun isComplete(query: ArtworkQuery): Boolean = artistIdOf(query) !in unfinished
 
-    override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> = coroutineScope {
+    private fun cacheFile(name: String) = cacheDir?.let { java.io.File(it, name) }
+    private fun readPage(slug: String, offset: Int): String? = runCatching {
+        cacheFile("$slug-sparql-$offset.json")?.takeIf { it.exists() && System.currentTimeMillis() - it.lastModified() < 24 * 3_600_000L }?.readText()
+    }.getOrNull()
+    private fun writePage(slug: String, offset: Int, text: String) { runCatching { cacheDir?.mkdirs(); cacheFile("$slug-sparql-$offset.json")?.writeText(text) } }
+
+    override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> {
         val title = spec.term ?: throw IllegalArgumentException("Wikimedia : titre de l'article Wikipédia manquant")
+        val slug = artistIdOf(query)
+        val started = clockNanos()
+        fun elapsedMs() = (clockNanos() - started) / 1_000_000
         val qid = qids[title] ?: (WikimediaParser.parseQid(http.fetch(WikimediaParser.qidUrl(title)))
             ?: throw IOException("identifiant Wikidata introuvable pour l'article « $title »")).also { qids[title] = it }
         val tally = Tally()
-        val items = WikimediaParser.parseSparql(http.fetch(WikimediaParser.sparqlUrl(qid)), tally)
-        val gate = Semaphore(parallelism)
-        val infos = HashMap<String, WikimediaParser.FileInfo>()
-        items.map { it.file }.chunked(WikimediaParser.BATCH).map { files ->
-            async {
-                gate.withPermit {
-                    try {
-                        WikimediaParser.parseImageInfo(http.fetch(WikimediaParser.imageInfoUrl(files)))
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Diag.warn("source", "licences d'un lot de ${files.size} fichiers non lues : ${e.message ?: e.javaClass.simpleName}", sourceId = id, artistId = artistIdOf(query), key = "wikimedia-batch|${e.message?.take(40)}")
-                        emptyMap()
-                    }
+
+        // ── 1. œuvres : pages SPARQL ─────────────────────────────────────────────
+        val items = LinkedHashMap<String, WikimediaParser.Item>()
+        var incomplete = false
+        var offset = 0
+        while (offset < maxItems) {
+            val text = readPage(slug, offset) ?: run {
+                if (offset > 0 && elapsedMs() > softDeadlineMs * 3 / 5) { incomplete = true; return@run null }   // le reste au prochain passage
+                try {
+                    http.fetch(WikimediaParser.sparqlUrl(qid, offset)).also { writePage(slug, offset, it) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (offset == 0) throw e
+                    Diag.warn("source", "page SPARQL ${offset / WikimediaParser.SPARQL_PAGE + 1} en échec (les pages déjà lues sont gardées) : ${e.message ?: e.javaClass.simpleName}", sourceId = id, artistId = slug, key = "wikimedia-page|${e.message?.take(40)}")
+                    incomplete = true
+                    null
                 }
+            } ?: break
+            val before = tally.raw
+            WikimediaParser.parseSparql(text, tally).forEach { items.putIfAbsent(it.qid, it) }
+            if (tally.raw - before < WikimediaParser.SPARQL_PAGE) break           // dernière page
+            offset += WikimediaParser.SPARQL_PAGE
+        }
+
+        // ── 2. licences : seulement pour les œuvres qu'on gardera, un lot à la fois, avec cache disque ──
+        val candidates = items.values.filter { it.year == null || it.year in query.years }
+        tally.drop("hors des dates plausibles", items.size - candidates.size)
+        val infoFile = cacheFile("$slug-info.json")
+        val infos: HashMap<String, WikimediaParser.FileInfo?> = infoFile?.let { f -> runCatching { f.takeIf { it.exists() }?.readText() }.getOrNull() }
+            ?.let(WikimediaParser::decodeInfoCache) ?: HashMap()
+        val missing = candidates.map { WikimediaParser.normalizedName(it.file) }.filter { it !in infos }.distinct()
+        var postponed = 0
+        for (batch in missing.chunked(WikimediaParser.BATCH)) {
+            if (elapsedMs() > softDeadlineMs) { postponed += batch.size; continue }
+            try {
+                val got = WikimediaParser.parseImageInfo(http.fetch(WikimediaParser.imageInfoUrl(batch)))
+                for (name in batch) infos[name] = got[name]                       // absent de la réponse : mémorisé « sans métadonnées »
+                runCatching { cacheDir?.mkdirs(); infoFile?.writeText(WikimediaParser.encodeInfoCache(infos)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                postponed += batch.size
+                Diag.warn("source", "licences d'un lot de ${batch.size} fichiers non lues (reprises au prochain passage) : ${e.message ?: e.javaClass.simpleName}", sourceId = id, artistId = slug, key = "wikimedia-batch|${e.message?.take(40)}")
             }
-        }.awaitAll().forEach { infos.putAll(it) }
-        val artworks = items.mapNotNull { WikimediaParser.toArtwork(it, infos[WikimediaParser.normalizedName(it.file)], query, tally) }
-        tally.log(id, artistIdOf(query))
-        artworks
+        }
+        if (postponed > 0) Diag.info("source", "$postponed licences restent à lire (elles s'afficheront « non lues » en attendant)", sourceId = id, artistId = slug, key = "wikimedia-left|$slug")
+        if (incomplete || postponed > 0) unfinished += slug else unfinished -= slug
+
+        val artworks = candidates.mapNotNull { WikimediaParser.toArtwork(it, infos[WikimediaParser.normalizedName(it.file)], query, tally) }
+        tally.log(id, slug)
+        return artworks
     }
 }
 
 /**
- * Source de RECONNAISSANCE de **CER.ES** (Red Digital de Colecciones de Museos de España, dont le Museo Sorolla) : aucun point d'accès
- * vérifié n'est connu. Elle interroge la fiche d'une œuvre connue (déduite d'un identifiant Europeana : table FDOC, musée MSM), la page
- * d'accueil et quelques adresses probables de moissonnage OAI-PMH, puis consigne dans [Diag] ce qui revient : code, titre de la page,
- * formulaires et champs, liens d'images, mentions de licence, début du corps. N'ajoute aucune œuvre : le vrai lecteur s'écrira avec ces formes.
+ * Source de RECONNAISSANCE : aucun point d'accès vérifié n'est connu pour ce musée. Elle interroge quelques adresses probables et consigne dans
+ * [Diag] ce qui revient (code, titre, formulaires, champs, images, mentions IIIF/JSON-LD, forme d'un JSON, début du corps) pour écrire le vrai
+ * lecteur au cycle suivant. N'ajoute aucune œuvre.
  */
-class CeresProbe(private val http: ManifestSource) : MuseumSource {
-    override val id = "ceres"
-    override val name = "CER.ES / Museo Sorolla (reconnaissance)"
-    override val europeanaKeyword = "museo sorolla"
+open class ProbeSource(
+    override val id: String,
+    override val name: String,
+    override val europeanaKeyword: String,
+    private val http: ManifestSource,
+    /** Adresses à essayer ; reçoit le nom de l'artiste déjà encodé pour une URL. */
+    private val urls: (term: String) -> List<String>,
+) : MuseumSource {
     override val reconnaissanceOnly = true
 
     override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> {
-        val urls = listOf(
-            "https://ceres.mcu.es/pages/Main?idt=27659&inventary=85829&table=FDOC&museum=MSM",
-            "https://ceres.cultura.gob.es/",
-            "https://ceres.mcu.es/pages/Main",
-            "https://ceres.mcu.es/oai/?verb=Identify",
-            "https://ceres.cultura.gob.es/oai/request?verb=Identify",
-        )
-        for (url in urls) {
+        val term = java.net.URLEncoder.encode(query.artistName, "UTF-8").replace("+", "%20")
+        for (url in urls(term)) {
             try {
-                Diag.info("reconnaissance", describe(http.fetch(url)), url, id, artistIdOf(query), key = "ceres|$url")
+                Diag.info("reconnaissance", describe(http.fetch(url)), url, id, artistIdOf(query), key = "$id|$url")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Diag.warn("reconnaissance", "inaccessible : ${e.message ?: e.javaClass.simpleName}", url, id, artistIdOf(query), key = "ceres|$url|err")
+                Diag.warn("reconnaissance", "inaccessible : ${e.message ?: e.javaClass.simpleName}", url, id, artistIdOf(query), key = "$id|$url|err")
             }
         }
         return emptyList()
     }
 
     internal companion object {
-        /** Forme d'une page HTML (ou d'une réponse OAI) en une ligne : de quoi écrire un lecteur sans la page sous les yeux. */
+        /** Forme d'une réponse (page HTML, JSON ou OAI) en une ligne : de quoi écrire un lecteur sans la page sous les yeux. */
         fun describe(text: String): String {
             val flat = text.replace(Regex("\\s+"), " ")
+            val json = flat.trimStart().let { it.startsWith("{") || it.startsWith("[") }
             val title = Regex("<title[^>]*>(.*?)</title>", RegexOption.IGNORE_CASE).find(flat)?.groupValues?.get(1)?.trim()?.take(100)
             val forms = Regex("<form[^>]*action=\"([^\"]*)\"", RegexOption.IGNORE_CASE).findAll(flat).map { it.groupValues[1] }.distinct().take(4).toList()
             val inputs = Regex("<(?:input|select|textarea)[^>]*name=\"([^\"]+)\"", RegexOption.IGNORE_CASE).findAll(flat).map { it.groupValues[1] }.distinct().take(15).toList()
             val images = Regex("(?:src|href)=\"([^\"]+\\.(?:jpe?g|png|tiff?)[^\"]*)\"", RegexOption.IGNORE_CASE).findAll(flat).map { it.groupValues[1] }.distinct().take(4).toList()
-            val oai = Regex("OAI-PMH|repositoryName|oai_dc", RegexOption.IGNORE_CASE).containsMatchIn(flat)
-            val licence = Regex("creative commons|licencia|derechos de reproducci|dominio p.blico|copyright", RegexOption.IGNORE_CASE).findAll(flat).map { it.value.lowercase() }.distinct().take(4).toList()
-            return "${text.length} caractères · titre « ${title ?: "—"} » · formulaires $forms · champs $inputs · images $images · OAI-PMH : ${if (oai) "oui" else "non"} · mentions de droits $licence · début : ${flat.take(160)}"
+            val marks = listOf("IIIF", "manifest", "OAI-PMH", "application/ld+json", "__NEXT_DATA__", "sparql", "linked.art", "creativecommons", "open access", "public domain")
+                .filter { flat.contains(it, ignoreCase = true) }
+            val licence = Regex("creative commons|licencia|copyright|public domain|open access|CC0", RegexOption.IGNORE_CASE).findAll(flat).map { it.value.lowercase() }.distinct().take(4).toList()
+            return "${text.length} caractères · " +
+                (if (json) "JSON : ${JsonReading.describeShape(text)}" else "titre « ${title ?: "—"} » · formulaires $forms · champs $inputs · images $images") +
+                " · repères $marks · droits $licence · début : ${flat.take(160)}"
         }
     }
 }
+
+/** CER.ES (Red Digital de Colecciones de Museos de España, dont le Museo Sorolla) : la fiche d'une œuvre connue (déduite d'un identifiant Europeana), l'accueil et des adresses OAI-PMH probables. */
+class CeresProbe(http: ManifestSource) : ProbeSource("ceres", "CER.ES / Museo Sorolla (reconnaissance)", "museo sorolla", http, { _ ->
+    listOf(
+        "https://ceres.mcu.es/pages/Main?idt=27659&inventary=85829&table=FDOC&museum=MSM",
+        "https://ceres.cultura.gob.es/",
+        "https://ceres.mcu.es/pages/Main",
+        "https://ceres.mcu.es/oai/?verb=Identify",
+        "https://ceres.cultura.gob.es/oai/request?verb=Identify",
+    )
+})
+
+/** J. Paul Getty Museum : données ouvertes Linked Art (JSON-LD), point SPARQL et recherche du site ; images IIIF probables sur media.getty.edu. */
+class GettyProbe(http: ManifestSource) : ProbeSource("getty", "J. Paul Getty Museum (reconnaissance)", "getty", http, { term ->
+    listOf(
+        "https://data.getty.edu/museum/collection/",
+        "https://data.getty.edu/museum/collection/sparql?query=" + java.net.URLEncoder.encode("SELECT ?s WHERE { ?s ?p ?o } LIMIT 1", "UTF-8"),
+        "https://www.getty.edu/art/collection/search?q=$term",
+        "https://www.getty.edu/art/collection/",
+    )
+})
+
+/** Museum of Fine Arts, Boston : recherche de la collection en ligne et accueil. */
+class MfaProbe(http: ManifestSource) : ProbeSource("mfa", "Museum of Fine Arts, Boston (reconnaissance)", "museum of fine arts, boston", http, { term ->
+    listOf(
+        "https://collections.mfa.org/search/objects/*/$term",
+        "https://collections.mfa.org/",
+        "https://collections.mfa.org/advancedsearch/Objects/$term",
+    )
+})
+
+/** Van Gogh Museum : recherche de la collection en ligne et plateforme « Van Gogh Worldwide ». */
+class VanGoghMuseumProbe(http: ManifestSource) : ProbeSource("vgm", "Van Gogh Museum (reconnaissance)", "van gogh museum", http, { term ->
+    listOf(
+        "https://www.vangoghmuseum.nl/en/collection",
+        "https://www.vangoghmuseum.nl/en/collection?q=$term",
+        "https://vangoghworldwide.org/",
+    )
+})
 
 /** Les sources implémentées, par identifiant (celui des [SourceSpec]). */
 fun defaultMuseumSources(
@@ -422,10 +515,13 @@ fun defaultMuseumSources(
     metNoticeCache: java.io.File? = null,
     /** Accès à Wikidata/Commons : cadencé et retenté (limite de débit 429) ; par défaut, le même que les autres. */
     wikiHttp: ManifestSource = http,
+    /** Dossier du cache de Wikimedia (pages SPARQL et licences, d'un passage à l'autre) ; `null` = pas de cache. */
+    wikimediaCache: java.io.File? = null,
     /** Lecture d'un fichier d'`assets/nga/` (nom sans extension) ; `null` = pas de fichier. */
     ngaAsset: (String) -> String? = { null },
 ): Map<String, MuseumSource> =
     listOf(
         AicSource(http), RijksSource(http), EuropeanaSource(http), MetSource(metHttp, noticeCache = metNoticeCache),
-        ClevelandSource(http), SmkSource(http), NgaSource(ngaAsset), WikimediaSource(wikiHttp), CeresProbe(http),
+        ClevelandSource(http), SmkSource(http), NgaSource(ngaAsset), WikimediaSource(wikiHttp, cacheDir = wikimediaCache),
+        CeresProbe(http), GettyProbe(http), MfaProbe(http), VanGoghMuseumProbe(http),
     ).associateBy { it.id }
