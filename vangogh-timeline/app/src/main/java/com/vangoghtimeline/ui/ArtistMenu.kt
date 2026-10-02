@@ -1,52 +1,70 @@
 package com.vangoghtimeline.ui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -54,26 +72,34 @@ import com.vangoghtimeline.iiif.SourceReport
 import com.vangoghtimeline.iiif.SourceState
 import com.vangoghtimeline.model.AgeFormat
 import com.vangoghtimeline.model.Artist
-import com.vangoghtimeline.model.Movement
+import com.vangoghtimeline.model.ArtistBackdrops
+import com.vangoghtimeline.model.Backdrop
+import com.vangoghtimeline.model.MenuRow
+import com.vangoghtimeline.model.SortMode
+import com.vangoghtimeline.model.menuRows
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 private val Gold = Color(0xFFF0D58A)
-private val DimGold = Color(0xFF8A7440)
-private val Ink = Color(0xFF0F1114)
-private val Muted = Color(0xFF9AA3AF)
-
-/** Dégradé de la barre « période d'activité » : une teinte par famille (avant / pendant / après l'impressionnisme). */
-internal fun movementColors(m: Movement): List<Color> = when (m) {
-    Movement.PRE_IMPRESSIONISM -> listOf(Color(0xFFC98A3B), Color(0xFFE3B65A))
-    Movement.IMPRESSIONISM -> listOf(Color(0xFF3B7DD8), Color(0xFF4FB8A6), Color(0xFFF2B84B), Color(0xFFE56B4D))
-    Movement.POST_IMPRESSIONISM -> listOf(Color(0xFF7B4FB8), Color(0xFFD86AA5), Color(0xFFF2A154))
-}
+private val DimGold = Color(0xFFB59A5A)
+private val Muted = Color(0xFFC3C9D1)
+private val Glass = Color(0x8C161A20)          // panneaux translucides : le tableau reste visible dessous
+private val GlassBorder = Color(0x40FFFFFF)
+private val Ink = Color(0xFF0E1013)
 
 /**
- * Menu de sélection d'un artiste (maquette « Chronologie des Impressionnistes »).
+ * Menu de sélection d'un artiste (maquette « Chronologie des Impressionnistes »), en deux dispositions :
  *
- * - Un portrait par artiste, en cadre doré ; **grisé** quand l'artiste n'a pas d'univers (aucune source d'œuvres configurée).
- * - **Un toucher** sélectionne (et lance en arrière-plan la connexion + validation de ses sources) ; ses informations s'affichent
- *   dessous. **Un autre toucher** sur l'artiste sélectionné ouvre son univers dans la frise (décision dans [onTap], voir [AppRoot]).
+ * - **Portrait** : un point d'intérêt d'un tableau majeur de l'artiste en fond plein écran ([ArtistBackdrops]) ; en haut une barre de recherche
+ *   transparente et le tri ; une bande verticale de portraits à droite ; la fiche de l'artiste (style, lieu, période, sources) en bas.
+ * - **Paysage** : la fiche et la recherche à gauche, les portraits sur un **arc de cercle** à droite (glisser pour les faire défiler).
+ *
+ * Un toucher sur un portrait sélectionne l'artiste (et lance la connexion de ses sources, voir [AppRoot]) ; un autre toucher, ou le bouton
+ * « Ouvrir la frise », ouvre son univers. Appui long dans la fiche : rapport d'anomalies. Le zoom sémantique, la navigation thématique et les
+ * filtres par pays viendront plus tard.
  */
 @Composable
 fun ArtistMenuScreen(
@@ -82,246 +108,354 @@ fun ArtistMenuScreen(
     model: AppModel,
     onTap: (Artist) -> Unit,
     modifier: Modifier = Modifier,
-    /** Appui long dans la partie basse de la fiche : copie le rapport d'anomalies (tous artistes, tous services, navigation). */
+    /** Appui long dans la fiche : copie le rapport d'anomalies (tous artistes, tous services, navigation). */
     onReportLongPress: () -> Unit = {},
     /** « Actualiser » : recherche et revalide toutes les sources de l'artiste sélectionné. */
     onRefresh: (Artist) -> Unit = {},
 ) {
+    var query by rememberSaveable { mutableStateOf("") }
+    var sortName by rememberSaveable { mutableStateOf(SortMode.PERIOD.name) }
+    val sort = SortMode.valueOf(sortName)
+    val rows = remember(artists, query, sort) { menuRows(artists, query, sort) }
     val selected = artists.firstOrNull { it.id == selectedId }
-    val currentReport by rememberUpdatedState(onReportLongPress)
-    Column(
-        modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF1B1F27), Color(0xFF0E1013))))
-            .statusBarsPadding(),
+    // fond : l'artiste sélectionné, à défaut le premier qui a un fond (le menu n'est jamais « vide »)
+    val backdropArtistId = selected?.id?.takeIf { ArtistBackdrops.of(it) != null } ?: artists.firstOrNull { ArtistBackdrops.of(it.id) != null }?.id
+    val backdrop = backdropArtistId?.let { ArtistBackdrops.of(it) }
+
+    BoxWithConstraints(modifier.fillMaxSize().background(Ink)) {
+        val landscape = maxWidth > maxHeight
+        val density = LocalDensity.current
+        val aspect = with(density) { maxWidth.toPx() / maxHeight.toPx() }
+        val outWidth = if (landscape) 1600 else 1080
+
+        // ── fond : point d'intérêt d'un tableau majeur, fondu entre deux artistes ──
+        Crossfade(targetState = backdrop, animationSpec = tween(700), label = "fond") { b ->
+            Box(Modifier.fillMaxSize()) {
+                if (b != null) {
+                    AsyncImage(model = b.url(aspect, outWidth), contentDescription = b.credit, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                }
+                // voile : le texte reste lisible quelle que soit la clarté du tableau
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x99000000), Color(0x22000000), Color(0xB3000000)))))
+            }
+        }
+
+        if (landscape) {
+            Row(Modifier.fillMaxSize().statusBarsPadding().padding(12.dp)) {
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    SearchBar(query) { query = it }
+                    Spacer(Modifier.height(8.dp))
+                    SortPanel(sort) { sortName = it.name }
+                    Spacer(Modifier.weight(1f))
+                    ArtistPanel(selected, backdrop, model, onTap, onRefresh, onReportLongPress, Modifier.heightIn(max = maxHeight * 0.62f))
+                    CaptionBar(backdrop)
+                }
+                ArcPicker(
+                    items = rows.filterIsInstance<MenuRow.Item>().map { it.artist },
+                    selectedId = selectedId, portraits = model.portraits, onTap = onTap,
+                    modifier = Modifier.width(maxWidth * 0.40f).fillMaxHeight(),
+                )
+            }
+        } else {
+            Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp)) {
+                SearchBar(query) { query = it }
+                Spacer(Modifier.height(8.dp))
+                SortPanel(sort) { sortName = it.name }
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Bottom) {
+                        ArtistPanel(selected, backdrop, model, onTap, onRefresh, onReportLongPress, Modifier.heightIn(max = maxHeight * 0.58f))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    PortraitStrip(rows, selectedId, model.portraits, onTap, Modifier.width(78.dp).fillMaxHeight())
+                }
+                CaptionBar(backdrop)
+            }
+        }
+    }
+}
+
+// ── recherche et tri ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun SearchBar(query: String, onChange: (String) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Glass).border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.padding(horizontal = 18.dp, vertical = 10.dp)) {
-            BasicText(
-                "Chronologie des Impressionnistes",
-                style = TextStyle(color = Color.White, fontSize = 22.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold),
-            )
-            BasicText(
-                "MOUVEMENT ARTISTIQUE",
-                style = TextStyle(color = Gold, fontSize = 13.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp),
-            )
-            Spacer(Modifier.height(4.dp))
-            BasicText("PARCOURS TEMPOREL & PÉRIODES ACTIVES  ·  défilez horizontalement", style = TextStyle(color = Muted, fontSize = 10.sp, letterSpacing = 0.5.sp))
+        Canvas(Modifier.size(22.dp)) {
+            val r = size.minDimension * 0.34f
+            drawCircle(Muted, radius = r, center = Offset(size.width * 0.42f, size.height * 0.42f), style = Stroke(width = 3f))
+            drawLine(Muted, Offset(size.width * 0.66f, size.height * 0.66f), Offset(size.width * 0.92f, size.height * 0.92f), strokeWidth = 3.5f, cap = StrokeCap.Round)
         }
+        Spacer(Modifier.width(10.dp))
+        BasicTextField(
+            value = query,
+            onValueChange = onChange,
+            singleLine = true,
+            textStyle = TextStyle(color = Color.White, fontSize = 17.sp),
+            cursorBrush = SolidColor(Color.White),
+            modifier = Modifier.weight(1f),
+            decorationBox = { inner ->
+                Box { if (query.isEmpty()) BasicText("Rechercher un artiste, un pays, un style…", style = TextStyle(color = Color(0xFF8E96A1), fontSize = 17.sp)); inner() }
+            },
+        )
+    }
+}
 
-        LazyRow(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(artists, key = { it.id }) { artist ->
-                ArtistCard(artist, artist.id == selectedId, model.portraits[artist.id]) { onTap(artist) }
-            }
-        }
-
-        PeriodsBar(artists, selected)
-
-        Column(
-            Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                // appui long n'importe où dans la partie basse de la fiche ; un défilement annule l'appui long
-                .pointerInput(Unit) { detectTapGestures(onLongPress = { currentReport() }) }
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp, vertical = 12.dp),
-        ) {
-            if (selected == null) {
-                BasicText("Touchez un portrait pour voir son artiste.", style = TextStyle(color = Muted, fontSize = 14.sp))
-            } else {
-                ArtistInfo(selected, model, onRefresh)
-            }
-            Spacer(Modifier.height(14.dp))
+@Composable
+private fun SortPanel(sort: SortMode, onSort: (SortMode) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Glass).border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        val currentSort by rememberUpdatedState(onSort)
+        BasicText("TRIER PAR :", style = TextStyle(color = Color.White, fontSize = 12.sp, letterSpacing = 0.6.sp))
+        for (mode in SortMode.values()) {
+            val on = mode == sort
             BasicText(
-                "Appui long dans cette zone : copier le rapport d'anomalies (tous les artistes, tous les services, navigation).",
-                style = TextStyle(color = Color(0xFF6B7480), fontSize = 10.sp, fontStyle = FontStyle.Italic),
+                mode.label,
+                maxLines = 1,
+                style = TextStyle(color = if (on) Gold else Color.White, fontSize = 11.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal),
+                modifier = Modifier
+                    .border(BorderStroke(1.dp, if (on) Gold else GlassBorder), RoundedCornerShape(8.dp))
+                    .pointerInput(mode) { detectTapGestures(onTap = { currentSort(mode) }) }
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
             )
         }
     }
 }
 
+// ── portraits : bande verticale (portrait) et arc de cercle (paysage) ──────────────
+
 @Composable
-private fun ArtistCard(artist: Artist, selected: Boolean, portraitUrl: String?, onTap: () -> Unit) {
+private fun PortraitChip(artist: Artist, selected: Boolean, portraitUrl: String?, size: androidx.compose.ui.unit.Dp, onTap: () -> Unit, modifier: Modifier = Modifier) {
     val currentTap by rememberUpdatedState(onTap)
     val enabled = artist.hasUniverse
-    Column(
-        Modifier
-            .width(150.dp)
-            .graphicsLayer {
-                val s = if (selected) 1.04f else 1f
-                scaleX = s; scaleY = s
-                alpha = if (enabled || selected) 1f else 0.62f
-            }
+    Box(
+        modifier
+            .size(size)
+            .graphicsLayer { alpha = if (enabled || selected) 1f else 0.6f }
+            .border(BorderStroke(if (selected) 3.dp else 1.5.dp, if (selected) Gold else DimGold), RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xFF2E343E), Color(0xFF14171C))))
             .pointerInput(artist.id) { detectTapGestures(onTap = { currentTap() }) },
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(0.78f)
-                .border(BorderStroke(if (selected) 3.dp else 2.dp, if (selected) Gold else DimGold), RoundedCornerShape(6.dp))
-                .clip(RoundedCornerShape(6.dp))
-                .background(Brush.verticalGradient(listOf(Color(0xFF2E343E), Color(0xFF14171C)))),
-            contentAlignment = Alignment.Center,
-        ) {
-            BasicText(artist.initials, style = TextStyle(color = Color(0xFF5B6573), fontSize = 38.sp, fontFamily = FontFamily.Serif))
-            if (portraitUrl != null) {
-                AsyncImage(
-                    model = portraitUrl,
-                    contentDescription = artist.name,
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.TopCenter,
-                    // sans univers : portrait en niveaux de gris
-                    colorFilter = if (enabled) null else ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }),
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+        BasicText(artist.initials, style = TextStyle(color = Color(0xFF8B96A3), fontSize = 20.sp, fontFamily = FontFamily.Serif))
+        if (portraitUrl != null) {
+            AsyncImage(
+                model = portraitUrl,
+                contentDescription = artist.name,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopCenter,
+                // sans univers : portrait en niveaux de gris
+                colorFilter = if (enabled) null else ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }),
+                modifier = Modifier.fillMaxSize(),
+            )
         }
-        Spacer(Modifier.height(6.dp))
-        BasicText(
-            artist.name.uppercase(),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        BasicText(
-            artist.lifespan ?: "",
-            style = TextStyle(color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(4.dp))
-        // barre « période d'activité » : colorée si l'artiste a un univers, sinon grise
-        val range = if (artist.activeStart != null && artist.activeEnd != null) "${artist.activeStart} – ${artist.activeEnd}" else artist.activePeriod
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(4.dp))
-                .background(
-                    if (enabled) Brush.horizontalGradient(movementColors(artist.movement))
-                    else Brush.horizontalGradient(listOf(Color(0xFF4A505A), Color(0xFF3A3F48))),
-                )
-                .padding(vertical = 3.dp),
+    }
+}
+
+/** Bande verticale de portraits, à droite (portrait) : groupes sous un titre, défilement vertical. */
+@Composable
+private fun PortraitStrip(rows: List<MenuRow>, selectedId: String?, portraits: Map<String, String>, onTap: (Artist) -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier.clip(RoundedCornerShape(16.dp)).background(Glass).border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(16.dp))) {
+        LazyColumn(
+            contentPadding = PaddingValues(vertical = 8.dp, horizontal = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            BasicText("PÉRIODE D'ACTIVITÉ", style = TextStyle(color = Color.White, fontSize = 7.sp, letterSpacing = 0.6.sp))
-            BasicText(range, style = TextStyle(color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+            items(rows, key = { r -> when (r) { is MenuRow.Header -> "h:${r.text}"; is MenuRow.Item -> r.artist.id } }) { row ->
+                when (row) {
+                    is MenuRow.Header -> BasicText(
+                        row.text, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                        style = TextStyle(color = DimGold, fontSize = 8.sp, letterSpacing = 0.4.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    )
+                    is MenuRow.Item -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        PortraitChip(row.artist, row.artist.id == selectedId, portraits[row.artist.id], 62.dp, onTap = { onTap(row.artist) })
+                        BasicText(
+                            row.artist.name.substringAfterLast(' '), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(color = if (row.artist.id == selectedId) Gold else Color.White, fontSize = 9.sp, textAlign = TextAlign.Center),
+                            modifier = Modifier.width(66.dp).padding(top = 2.dp),
+                        )
+                    }
+                }
+            }
         }
-        Spacer(Modifier.height(4.dp))
-        BasicText(
-            "« ${artist.emblematicWork} »",
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            style = TextStyle(color = Muted, fontSize = 9.sp, fontStyle = FontStyle.Italic, textAlign = TextAlign.Center),
-            modifier = Modifier.fillMaxWidth(),
-        )
     }
 }
 
-/** Axe du temps du menu : la période d'activité de l'artiste sélectionné, mise en valeur sur l'ensemble du catalogue. */
+/**
+ * Portraits sur un ARC DE CERCLE le long du bord droit (paysage) : glisser verticalement les fait défiler le long de l'arc ; le portrait du
+ * centre est le plus grand. Sélectionner un artiste (toucher) le ramène au centre.
+ */
 @Composable
-private fun PeriodsBar(artists: List<Artist>, selected: Artist?) {
-    val minYear = artists.mapNotNull { it.activeStart }.minOrNull() ?: 1780
-    val maxYear = artists.mapNotNull { it.activeEnd }.maxOrNull() ?: 1950
-    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
-        Canvas(Modifier.fillMaxWidth().height(26.dp)) {
-            val span = (maxYear - minYear).coerceAtLeast(1)
-            fun x(year: Int) = (year - minYear).toFloat() / span * size.width
-            val axisY = size.height * 0.62f
-            drawLine(Color(0xFF3A4350), Offset(0f, axisY), Offset(size.width, axisY), strokeWidth = 4f)
-            var year = (minYear / 10 + 1) * 10
-            while (year < maxYear) {
-                val tall = year % 50 == 0
-                drawLine(Color(0xFF566070), Offset(x(year), axisY - if (tall) 9f else 5f), Offset(x(year), axisY + if (tall) 9f else 5f), strokeWidth = 2f)
-                year += 10
-            }
-            val s = selected?.activeStart
-            val e = selected?.activeEnd
-            if (selected != null && s != null && e != null) {
-                val left = x(s)
-                val width = (x(e) - left).coerceAtLeast(6f)
-                val colors = if (selected.hasUniverse) movementColors(selected.movement) else listOf(Color(0xFF7A828E), Color(0xFF5A616B))
-                drawRoundRect(
-                    brush = Brush.horizontalGradient(colors, startX = left, endX = left + width),
-                    topLeft = Offset(left, axisY - 7f),
-                    size = Size(width, 14f),
-                    cornerRadius = CornerRadius(7f, 7f),
+private fun ArcPicker(items: List<Artist>, selectedId: String?, portraits: Map<String, String>, onTap: (Artist) -> Unit, modifier: Modifier = Modifier) {
+    val scope = rememberCoroutineScope()
+    val pos = remember { Animatable(0f) }                  // position (en nombre de portraits) de celui qui est au centre de l'arc
+    val selectedIndex = items.indexOfFirst { it.id == selectedId }
+    LaunchedEffect(selectedIndex, items.size) { if (selectedIndex >= 0) pos.animateTo(selectedIndex.toFloat(), tween(350)) }
+    val density = LocalDensity.current
+    BoxWithConstraints(modifier) {
+        val wPx = with(density) { maxWidth.toPx() }
+        val hPx = with(density) { maxHeight.toPx() }
+        val radius = hPx * 0.62f
+        val step = 0.30f                                   // radians entre deux portraits
+        val itemPx = radius * step
+        val halfPx = with(density) { 31.dp.toPx() }
+        Box(
+            Modifier.fillMaxSize().pointerInput(items.size) {
+                detectVerticalDragGestures(
+                    onDragEnd = { scope.launch { pos.animateTo(pos.value.roundToInt().coerceIn(0, (items.size - 1).coerceAtLeast(0)).toFloat(), tween(250)) } },
+                    onVerticalDrag = { change, dy ->
+                        change.consume()
+                        scope.launch { pos.snapTo((pos.value - dy / itemPx).coerceIn(-0.4f, items.size - 0.6f)) }
+                    },
                 )
+            },
+        ) {
+            items.forEachIndexed { i, artist ->
+                val rel = i - pos.value
+                if (abs(rel) <= 3.4f) {
+                    val theta = rel * step
+                    val cx = wPx * 0.36f + radius * (1f - cos(theta))
+                    val cy = hPx / 2f + radius * sin(theta)
+                    val scale = (1.3f - 0.13f * abs(rel)).coerceAtLeast(0.7f)
+                    PortraitChip(
+                        artist, artist.id == selectedId, portraits[artist.id], 62.dp, onTap = { onTap(artist) },
+                        modifier = Modifier
+                            .offset { IntOffset((cx - halfPx).roundToInt(), (cy - halfPx).roundToInt()) }
+                            .graphicsLayer { scaleX = scale; scaleY = scale },
+                    )
+                }
             }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            BasicText("$minYear", style = TextStyle(color = Muted, fontSize = 10.sp))
-            BasicText(
-                selected?.let { s -> "${s.activeStart ?: ""}–${s.activeEnd ?: ""}  ·  ${s.movement.labelFr}" } ?: "",
-                style = TextStyle(color = Gold, fontSize = 10.sp),
-            )
-            BasicText("$maxYear", style = TextStyle(color = Muted, fontSize = 10.sp))
         }
     }
 }
 
+// ── fiche de l'artiste ──────────────────────────────────────────────────────────────
+
+/** Légende du tableau de fond (crédit) et rappel du geste de rapport. */
 @Composable
-private fun ArtistInfo(artist: Artist, model: AppModel, onRefresh: (Artist) -> Unit) {
-    BasicText(artist.name, style = TextStyle(color = Color.White, fontSize = 20.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold))
+private fun CaptionBar(backdrop: Backdrop?) {
     BasicText(
-        listOfNotNull(artist.lifespan, artist.origin, artist.mainStyle).filter { it.isNotBlank() }.joinToString("  ·  "),
-        style = TextStyle(color = Gold, fontSize = 12.sp),
+        (backdrop?.credit ?: "") + "   ·   appui long sur la fiche : rapport d'anomalies",
+        maxLines = 2, overflow = TextOverflow.Ellipsis,
+        style = TextStyle(color = Color(0xB3FFFFFF), fontSize = 9.sp, fontStyle = FontStyle.Italic),
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
     )
-    Spacer(Modifier.height(8.dp))
-    Label("Œuvre emblématique")
-    Body(artist.emblematicWork)
-    Label("Type d'œuvres")
-    Body(artist.workType)
-    if (artist.locations.isNotEmpty()) {
-        Label("Lieux de création")
-        for (l in artist.locations) {
-            BasicText("• ${l.location}", style = TextStyle(color = Color(0xFFE3E7EC), fontSize = 13.sp, fontWeight = FontWeight.Bold))
-            Body("${l.workType} — ${l.period}")
+}
+
+/**
+ * La fiche : nom, tableau de fond et mouvement ; style, œuvres, lieu et période ; l'état de l'univers (œuvres, sources — dépliable, avec
+ * « Actualiser ») et le bouton d'ouverture de la frise. Défile si elle est plus haute que sa place ; l'appui long ouvre le rapport.
+ */
+@Composable
+private fun ArtistPanel(
+    artist: Artist?, backdrop: Backdrop?, model: AppModel,
+    onTap: (Artist) -> Unit, onRefresh: (Artist) -> Unit, onReport: () -> Unit, modifier: Modifier = Modifier,
+) {
+    val currentReport by rememberUpdatedState(onReport)
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0x99261C12))
+            .border(BorderStroke(1.dp, Color(0x55F0D58A)), RoundedCornerShape(16.dp))
+            // appui long n'importe où dans la fiche : rapport d'anomalies ; un défilement annule l'appui long
+            .pointerInput(Unit) { detectTapGestures(onLongPress = { currentReport() }) }
+            .verticalScroll(rememberScrollState())
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (artist == null) {
+            BasicText("Touchez un portrait pour découvrir l'artiste.", style = TextStyle(color = Color.White, fontSize = 15.sp, textAlign = TextAlign.Center))
+            return@Column
         }
+        BasicText(artist.name, maxLines = 2, style = TextStyle(color = Color.White, fontSize = 26.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center))
+        // le tableau montré en fond (et sa date), comme « Juin 1888 » dans la maquette
+        val shownWork = backdrop?.takeIf { it.artistId == artist.id }
+        BasicText(
+            shownWork?.let { "${it.titleFr}, ${it.date}" } ?: (artist.lifespan ?: ""),
+            style = TextStyle(color = Color(0xFFEFE6D0), fontSize = 16.sp, fontFamily = FontFamily.Serif, textAlign = TextAlign.Center),
+        )
+        Spacer(Modifier.height(4.dp))
+        BasicText(artist.movement.labelFr, style = TextStyle(color = Gold, fontSize = 17.sp, fontFamily = FontFamily.Serif, textAlign = TextAlign.Center))
+        Spacer(Modifier.height(8.dp))
+        InfoRow("Style", artist.mainStyle)
+        InfoRow("Œuvres", artist.workType)
+        artist.locations.firstOrNull()?.let { InfoRow("Lieu", artist.locations.take(2).joinToString(" · ") { it.location }) }
+        InfoRow("Période", listOfNotNull(artist.activePeriod.takeIf { it.isNotBlank() }, artist.lifespan?.let { "($it)" }).joinToString(" "))
+        Spacer(Modifier.height(10.dp))
+        UniverseSection(artist, model, onTap, onRefresh)
     }
-    Spacer(Modifier.height(10.dp))
-    Label("Univers dans la frise")
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    if (value.isBlank()) return
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(10.dp)).background(Color(0x66000000)).padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        BasicText("$label : ", style = TextStyle(color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold))
+        BasicText(value, style = TextStyle(color = Color(0xFFF1F3F5), fontSize = 12.sp))
+    }
+}
+
+/** L'univers de l'artiste : résumé d'une ligne, détail des sources dépliable, bouton d'ouverture de la frise. */
+@Composable
+private fun UniverseSection(artist: Artist, model: AppModel, onTap: (Artist) -> Unit, onRefresh: (Artist) -> Unit) {
+    var details by rememberSaveable(artist.id) { mutableStateOf(false) }
     val state = model.universes[artist.id]
-    when {
-        !artist.hasUniverse -> Body("Pas encore d'univers pour cet artiste : aucune source d'œuvres n'est connectée. Il est grisé tant qu'une source n'est pas validée.")
-        state == null -> Body("Vérification de l'accès aux œuvres…")
-        else -> {
+    val currentTap by rememberUpdatedState(onTap)
+    val currentRefresh by rememberUpdatedState(onRefresh)
+    if (!artist.hasUniverse) {
+        BasicText("Pas encore d'univers pour cet artiste : aucune source d'œuvres n'est connectée.", style = TextStyle(color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center))
+        return
+    }
+    val summary = when {
+        state == null -> "Vérification de l'accès aux œuvres…"
+        state.artworks.isNotEmpty() -> "${state.artworks.size} œuvres · ${state.connectedCount}/${state.reports.size} sources${if (state.done) "" else " · chargement…"}"
+        state.done -> "Aucune source validée pour l'instant."
+        else -> "Connexion des sources en cours…"
+    }
+    BasicText(
+        "$summary   ${if (details) "▲" else "▼"}",
+        style = TextStyle(color = Color(0xFFE3E7EC), fontSize = 12.sp, textAlign = TextAlign.Center),
+        modifier = Modifier.pointerInput(artist.id) { detectTapGestures(onTap = { details = !details }) }.padding(vertical = 4.dp),
+    )
+    if (details && state != null) {
+        Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
             for (r in state.reports) SourceLine(r)
             if (state.artworks.isNotEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                BasicText(
-                    "Licences : ${state.rightsSummary}. Consultation privée ; la licence et les conditions de chaque œuvre s'affichent à l'ouverture (pastille PD / CC / © / ?).",
-                    style = TextStyle(color = Color(0xFFC9D0D8), fontSize = 11.sp),
-                )
+                BasicText("Licences : ${state.rightsSummary}. Consultation privée ; licence et conditions de chaque œuvre à l'ouverture (PD / CC / © / ?).", style = TextStyle(color = Color(0xFFC9D0D8), fontSize = 11.sp), modifier = Modifier.padding(top = 4.dp))
             }
-            Spacer(Modifier.height(6.dp))
-            // fraîcheur des données (magasin local, rafraîchi après 7 jours) et bouton « Actualiser »
             val age = if (state.updatedAtMs > 0) AgeFormat.fr(System.currentTimeMillis() - state.updatedAtMs) else null
             BasicText(
-                (if (age != null) "Données mises à jour $age (actualisation automatique après 7 jours)." else "Données en cours d'obtention.") +
-                    if (!state.done) "  Mise à jour en cours…" else "",
-                style = TextStyle(color = Muted, fontSize = 11.sp),
+                (if (age != null) "Données mises à jour $age (actualisation automatique après 7 jours)." else "Données en cours d'obtention.") + if (!state.done) "  Mise à jour en cours…" else "",
+                style = TextStyle(color = Muted, fontSize = 11.sp), modifier = Modifier.padding(top = 4.dp),
             )
-            val currentRefresh by rememberUpdatedState(onRefresh)
             BasicText(
                 "Actualiser maintenant",
                 style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold),
-                modifier = Modifier
-                    .padding(top = 6.dp)
-                    .background(Color(0xFF2A3340), RoundedCornerShape(14.dp))
-                    .pointerInput(artist.id) { detectTapGestures(onTap = { currentRefresh(artist) }) }
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.padding(top = 6.dp).background(Color(0x66FFFFFF), RoundedCornerShape(14.dp))
+                    .pointerInput(artist.id) { detectTapGestures(onTap = { currentRefresh(artist) }) }.padding(horizontal = 12.dp, vertical = 6.dp),
             )
-            Spacer(Modifier.height(8.dp))
-            val msg = when {
-                state.artworks.isNotEmpty() -> "Touchez à nouveau le portrait pour ouvrir son univers (${state.artworks.size} œuvres${if (state.done) "" else ", d'autres arrivent"})."
-                state.done -> "Aucune source validée : l'univers ne peut pas s'ouvrir pour l'instant."
-                else -> "Connexion des sources en cours…"
-            }
-            BasicText(msg, style = TextStyle(color = Gold, fontSize = 13.sp, fontWeight = FontWeight.Bold))
         }
     }
+    Spacer(Modifier.height(8.dp))
+    val canOpen = state != null && state.artworks.isNotEmpty()
+    BasicText(
+        "Ouvrir la frise  ›",
+        style = TextStyle(color = if (canOpen) Ink else Color(0xFFB0B6BF), fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
+        modifier = Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (canOpen) Gold else Color(0x55FFFFFF))
+            .pointerInput(artist.id, canOpen) { detectTapGestures(onTap = { if (canOpen) currentTap(artist) }) }
+            .padding(vertical = 10.dp),
+    )
 }
 
 @Composable
@@ -341,15 +475,4 @@ private fun SourceLine(r: SourceReport) {
             BasicText(r.detail, style = TextStyle(color = Muted, fontSize = 11.sp))
         }
     }
-}
-
-@Composable
-private fun Label(text: String) {
-    Spacer(Modifier.height(6.dp))
-    BasicText(text.uppercase(), style = TextStyle(color = DimGold, fontSize = 10.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold))
-}
-
-@Composable
-private fun Body(text: String) {
-    BasicText(text, style = TextStyle(color = Color(0xFFC9D0D8), fontSize = 13.sp))
 }

@@ -372,3 +372,15 @@ Le rapport rev35 a répondu aux sondes :
 - **Getty** : lit la documentation (`/docs/`, extrait lisible de 900 caractères), les types RDF les plus fréquents, la première œuvre trouvée par SPARQL (puis sa fiche JSON-LD, suivie) et une recherche par nom.
 - **MFA Boston** et **Van Gogh Museum** : lisent la page de résultats puis la PREMIÈRE fiche d'objet qu'elle contient (liens d'objets, images, droits, extrait). Le journal dit « (suite) » pour la fiche suivie.
 - **Reprise du Met** : une source LIMITÉE (bloquée avant toute notice) est retentée au bout de **5 minutes** (au lieu d'une heure), comme une lecture partielle.
+
+## Rev37 : nouveau menu (maquette « fond plein écran, bande de portraits »)
+
+Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
+
+- **Fond plein écran** : un point d'intérêt d'un tableau majeur de l'artiste sélectionné, en fondu entre deux artistes (`model/ArtistBackdrops.kt`). C'est une DÉCOUPE IIIF (région `x,y,w,h` de la forme de l'écran, calculée selon l'orientation)
+  d'une image open access du National Gallery of Art (CC0, `api.nga.gov/iiif`, tailles et identifiants lus dans les données NGA, vérifiés par un test) : Van Gogh *Autoportrait* 1889, Monet *Le Pont japonais*, Renoir *La Fillette à l'arrosoir*,
+  Morisot *Les Sœurs*, Gauguin *Danse des petites Bretonnes*, Sargent *Ellen Peabody Endicott*, Sorolla *Isabelita et Thor*. Les centres et zooms de découpe sont des choix éditoriaux, à affiner à l'œil. Légende de crédit en bas.
+- **Recherche transparente** (nom, pays, style) et **tri** PÉRIODE (les plus récents en haut, comme la maquette) / PAYS / ALPHABÉTIQUE. Retirés pour l'instant : filtres par pays, zoom sémantique, navigation thématique, tri par affinités.
+- **Portrait** : bande verticale de portraits à droite, groupés sous des titres ; fiche en bas (nom, tableau de fond et date, mouvement, Style / Œuvres / Lieu / Période, résumé de l'univers).
+- **Paysage** : fiche et recherche à gauche, portraits sur un **arc de cercle** à droite (glisser verticalement pour les faire défiler ; sélectionner un artiste le ramène au centre).
+- Conservé : un toucher sélectionne, un autre (ou « Ouvrir la frise ›») ouvre l'univers ; détail des sources dépliable (▼) avec licences, fraîcheur et « Actualiser maintenant » ; **appui long sur la fiche** = rapport d'anomalies.
