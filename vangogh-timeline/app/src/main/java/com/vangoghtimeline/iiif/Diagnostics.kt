@@ -99,6 +99,8 @@ object Diag {
 class Tally {
     var raw = 0
     var kept = 0
+    /** Œuvres gardées SANS date, placées à la moitié de la période d'activité. */
+    var estimated = 0
     private val reasons = LinkedHashMap<String, Int>()
 
     /** Forme de la réponse, renseignée quand rien n'est retenu (clés du premier niveau et du premier élément). */
@@ -107,7 +109,7 @@ class Tally {
     fun drop(reason: String, n: Int = 1) { if (n > 0) reasons[reason] = (reasons[reason] ?: 0) + n }
 
     fun summary(): String =
-        "$raw reçues, $kept retenues" + if (reasons.isEmpty()) "" else " — écartées : " + reasons.entries.joinToString(", ") { "${it.value} ${it.key}" }
+        "$raw reçues, $kept retenues" + (if (estimated > 0) " (dont $estimated à date estimée)" else "") + if (reasons.isEmpty()) "" else " — écartées : " + reasons.entries.joinToString(", ") { "${it.value} ${it.key}" }
 
     /** Consigne le bilan : alerte si rien n'est retenu (avec la forme de la réponse), info sinon. */
     fun log(sourceId: String, artistId: String?, label: String? = null) {

@@ -38,9 +38,11 @@ class NgaTest {
             ${work(7, "Attributed to Auguste Renoir")}
         ]}"""
         val t = Tally()
-        assertEquals(listOf("nga-1"), NgaParser.parse(text, q, t).map { it.id })
-        assertEquals("7 reçues, 1 retenues", t.summary().substringBefore(" — "))
-        assertTrue(t.summary(), t.summary().contains("1 d'un autre artiste") && t.summary().contains("1 sans date précise") && t.summary().contains("1 hors des dates plausibles"))
+        val arts = NgaParser.parse(text, q, t)
+        assertEquals(listOf("nga-5", "nga-1"), arts.sortedBy { it.id }.map { it.id }.sortedBy { if (it == "nga-5") 0 else 1 })   // 5 : sans date précise, gardée à date estimée
+        assertTrue(arts.first { it.id == "nga-5" }.date.estimated && !arts.first { it.id == "nga-1" }.date.estimated)
+        assertEquals("7 reçues, 2 retenues (dont 1 à date estimée)", t.summary().substringBefore(" — "))
+        assertTrue(t.summary(), t.summary().contains("1 d'un autre artiste") && t.summary().contains("1 hors des dates plausibles"))
     }
 
     @Test fun anOpenAccessImageIsPublicDomainAndARestrictedOneIsViewOnly() {

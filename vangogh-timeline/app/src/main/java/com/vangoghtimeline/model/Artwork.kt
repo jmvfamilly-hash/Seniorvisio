@@ -16,6 +16,8 @@ data class ArtworkDate(
     val month: Int = 1,
     val day: Int = 1,
     val precision: DatePrecision = DatePrecision.DAY,
+    /** Vrai si la date est INCONNUE et placée à la moitié de la période d'activité de l'artiste (faute de mieux) : à ne pas présenter comme une date réelle. */
+    val estimated: Boolean = false,
 ) {
     init { require(CivilCalendar.isValid(year, month, day)) { "date invalide: $year-$month-$day" } }
 
@@ -44,6 +46,9 @@ data class ArtworkDate(
         fun exact(year: Int, month: Int, day: Int) = ArtworkDate(year, month, day, DatePrecision.DAY)
         fun month(year: Int, month: Int) = ArtworkDate(year, month, 1, DatePrecision.MONTH)
         fun year(year: Int) = ArtworkDate(year, 1, 1, DatePrecision.YEAR)
+
+        /** Date inconnue, placée à l'année [year] (moitié de la période d'activité) et marquée comme telle. */
+        fun estimated(year: Int) = ArtworkDate(year, 1, 1, DatePrecision.YEAR, estimated = true)
 
         /**
          * `YYYY`, `YYYY-MM`, `YYYY-MM-DD` ou une `xsd:dateTime` (`1888-10-01T00:00:00Z`, le format de `navDate`).

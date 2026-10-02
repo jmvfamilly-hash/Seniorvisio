@@ -64,13 +64,12 @@ object ArticParser {
             val imageId = o.str("image_id") ?: run { tally?.drop("sans image"); return@mapNotNull null }
             val id = o.int("id") ?: return@mapNotNull null
             val title = o.str("title") ?: return@mapNotNull null
-            val year = o.int("date_start") ?: o.int("date_end") ?: run { tally?.drop("sans date"); return@mapNotNull null }
-            if (year !in query.years) { tally?.drop("hors des dates plausibles"); return@mapNotNull null }
+            val date = dateOf(o.int("date_start") ?: o.int("date_end"), query, tally) ?: return@mapNotNull null
             val thumb = o["thumbnail"] as? JsonObject
             Artwork(
                 id = "artic-$id",
                 title = title,
-                date = ArtworkDate.year(year),
+                date = date,
                 place = o.str("place_of_origin")?.substringBefore(',')?.trim()?.ifEmpty { null },
                 medium = o.str("medium_display"),
                 iiif = IiifRef(

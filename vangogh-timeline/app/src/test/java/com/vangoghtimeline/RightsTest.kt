@@ -169,7 +169,8 @@ class RightsTest {
         assertEquals(RightsKind.PUBLIC_DOMAIN, art.rights!!.kind)
         // licence non lue : droits « non précisés », jamais présumés
         assertEquals(RightsKind.UNKNOWN, WikimediaParser.toArtwork(item, null, q)!!.rights!!.kind)
-        assertNull(WikimediaParser.toArtwork(WikimediaParser.parseSparql(sparql)[1], null, q))                       // sans année : placée nulle part
+        // sans année : placée à la moitié de la période d'activité, marquée estimée
+        assertTrue(WikimediaParser.toArtwork(WikimediaParser.parseSparql(sparql)[1], null, q)!!.date.estimated)
     }
 
     private class FakeHttp(val pages: Map<String, String>) : ManifestSource {
@@ -192,8 +193,9 @@ class RightsTest {
         val http2 = FakeHttp(http.pages + (WikimediaParser.imageInfoUrl(itemsAll.map { it.file }) to imageInfo))
         val state = UniverseLoader(defaultMuseumSources(http2), SourceValidator(http2, reachOk), tmp()).load(sorolla) { }
         assertEquals(SourceState.CONNECTED, state.reports.single().state)
-        assertEquals(listOf("Paseo a orillas del mar"), state.artworks.map { it.title })
-        assertEquals("1 domaine public", state.rightsSummary)
+        assertEquals(setOf("Paseo a orillas del mar", "Sans date"), state.artworks.map { it.title }.toSet())      // l'œuvre sans date est gardée, à date estimée
+        assertTrue(state.artworks.first { it.title == "Sans date" }.date.estimated)
+        assertTrue(state.rightsSummary, state.rightsSummary.contains("1 domaine public"))
         assertTrue(state.credit, state.credit.contains("Wikimedia"))
     }
 

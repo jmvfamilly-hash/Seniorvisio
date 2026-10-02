@@ -23,7 +23,7 @@ object ArtworkJson {
     fun encode(list: List<Artwork>): String = buildJsonArray {
         for (a in list) add(buildJsonObject {
             put("id", a.id); put("title", a.title); put("provider", a.provider)
-            put("year", a.date.year); put("month", a.date.month); put("day", a.date.day); put("precision", a.date.precision.name)
+            put("year", a.date.year); put("month", a.date.month); put("day", a.date.day); put("precision", a.date.precision.name); if (a.date.estimated) put("de", true)
             a.place?.let { put("place", it) }; a.medium?.let { put("medium", it) }
             put("manifest", a.iiif.manifestUrl)
             a.iiif.imageServiceId?.let { put("service", it) }; a.iiif.thumbnailUrl?.let { put("thumb", it) }
@@ -45,7 +45,7 @@ object ArtworkJson {
                 fun i(k: String) = (o[k] as? JsonPrimitive)?.intOrNull
                 Artwork(
                     id = s("id")!!, title = s("title")!!,
-                    date = ArtworkDate(i("year")!!, i("month") ?: 1, i("day") ?: 1, DatePrecision.valueOf(s("precision")!!)),
+                    date = ArtworkDate(i("year")!!, i("month") ?: 1, i("day") ?: 1, DatePrecision.valueOf(s("precision")!!), estimated = (o["de"] as? JsonPrimitive)?.contentOrNull == "true"),
                     place = s("place"), medium = s("medium"),
                     iiif = IiifRef(s("manifest")!!, s("service"), s("thumb"), i("w"), i("h"), s("image")),
                     provider = s("provider").orEmpty(),

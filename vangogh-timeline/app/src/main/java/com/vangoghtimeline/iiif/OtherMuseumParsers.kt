@@ -94,11 +94,10 @@ object MetParser {
         val image = o.str("primaryImage")?.takeIf { it.startsWith("http") } ?: run { tally?.drop(if (publicDomain) "sans image" else "hors domaine public (pas d'image publiée)"); return null }
         if (o.str("artistDisplayName")?.let(query::matchesCreator) != true) { tally?.drop("d'un autre artiste"); return null }
         val title = o.str("title")?.takeIf { it.isNotBlank() } ?: run { tally?.drop("sans titre"); return null }
-        val year = yearOf(o.int("objectBeginDate"), o.int("objectEndDate")) ?: run { tally?.drop("sans date"); return null }
-        if (year !in query.years) { tally?.drop("hors des dates plausibles"); return null }
+        val date = dateOf(yearOf(o.int("objectBeginDate"), o.int("objectEndDate")), query, tally) ?: return null
         tally?.let { it.kept++ }
         return Artwork(
-            id = "met-$id", title = title.trim(), date = ArtworkDate.year(year), medium = o.str("medium")?.takeIf { it.isNotBlank() },
+            id = "met-$id", title = title.trim(), date = date, medium = o.str("medium")?.takeIf { it.isNotBlank() },
             iiif = IiifRef(manifestUrl = "met:$id", thumbnailUrl = o.str("primaryImageSmall")?.takeIf { it.startsWith("http") }, imageUrl = image),
             provider = "The Metropolitan Museum of Art",
             rights = if (publicDomain) RightsCatalog.publicDomain("Domaine public — Met Open Access (CC0)", "https://www.metmuseum.org/about-the-met/policies-and-documents/open-access")
@@ -138,12 +137,13 @@ object ClevelandParser {
             val print = images?.objOf("print")?.str("url")?.takeIf { it.startsWith("http") }
             val web = images?.objOf("web")?.str("url")?.takeIf { it.startsWith("http") }
             val image = print ?: web ?: run { tally?.drop("sans image"); return@mapNotNull null }
-            val year = MetParser.yearOf(o.int("creation_date_earliest"), o.int("creation_date_latest"))
-                ?: o.str("creation_date")?.let { Regex("""\b(1[5-9]\d{2})\b""").find(it)?.groupValues?.get(1)?.toInt() }
-                ?: run { tally?.drop("sans date"); return@mapNotNull null }
-            if (year !in query.years) { tally?.drop("hors des dates plausibles"); return@mapNotNull null }
+            val date = dateOf(
+                MetParser.yearOf(o.int("creation_date_earliest"), o.int("creation_date_latest"))
+                    ?: o.str("creation_date")?.let { Regex("""\b(1[5-9]\d{2})\b""").find(it)?.groupValues?.get(1)?.toInt() },
+                query, tally,
+            ) ?: return@mapNotNull null
             Artwork(
-                id = "cleveland-$id", title = title.trim(), date = ArtworkDate.year(year), medium = o.str("technique")?.takeIf { it.isNotBlank() },
+                id = "cleveland-$id", title = title.trim(), date = date, medium = o.str("technique")?.takeIf { it.isNotBlank() },
                 iiif = IiifRef(
                     manifestUrl = "cleveland:$id", thumbnailUrl = web ?: print, imageUrl = image,
                     canvasWidth = images?.objOf("print")?.int("width") ?: images?.objOf("web")?.int("width"),
@@ -187,11 +187,9 @@ object SmkParser {
                 ?: o.str("image_iiif_info")?.takeIf { it.startsWith("http") }?.removeSuffix("/info.json")?.trimEnd('/')
                 ?: run { tally?.drop("sans service IIIF"); return@mapNotNull null }
             val dated = o.arr("production_date").firstNotNullOfOrNull { it as? JsonObject }
-            val year = MetParser.yearOf(dated?.str("start")?.take(4)?.toIntOrNull(), dated?.str("end")?.take(4)?.toIntOrNull())
-                ?: run { tally?.drop("sans date"); return@mapNotNull null }
-            if (year !in query.years) { tally?.drop("hors des dates plausibles"); return@mapNotNull null }
+            val date = dateOf(MetParser.yearOf(dated?.str("start")?.take(4)?.toIntOrNull(), dated?.str("end")?.take(4)?.toIntOrNull()), query, tally) ?: return@mapNotNull null
             Artwork(
-                id = "smk-" + slug(number), title = title.trim(), date = ArtworkDate.year(year),
+                id = "smk-" + slug(number), title = title.trim(), date = date,
                 iiif = IiifRef(manifestUrl = "smk:$number", imageServiceId = service, canvasWidth = o.int("image_width"), canvasHeight = o.int("image_height")),
                 provider = "Statens Museum for Kunst",
                 rights = if (o["public_domain"].let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content == "true" })

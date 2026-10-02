@@ -17,8 +17,7 @@ import kotlinx.serialization.json.JsonObject
  * mis à jour chaque jour). L'appli ne les télécharge jamais : `tools/nga_extract.py` en tire un petit JSON par artiste
  * (`assets/nga/{artiste}.json`), que ce lecteur analyse. Les images, elles, sont servies en IIIF par `api.nga.gov/iiif/{uuid}`.
  *
- * Écartées (et comptées) : œuvres « d'après », « suiveur », « imitateur », « attribué à », collaborations ; œuvres sans date précise
- * (l'intervalle d'une vie entière) ; hors des dates plausibles.
+ * Écartées (et comptées) : œuvres « d'après », « suiveur », « imitateur », « attribué à », collaborations ; hors des dates plausibles. Une œuvre sans date précise (l'intervalle d'une vie entière) est gardée, à la moitié de la période d'activité.
  */
 object NgaParser {
     private val DOUBTFUL = Regex("""\b(after|follower|imitator|attributed|school|circle|copy|workshop|manner)\b|\band\b""", RegexOption.IGNORE_CASE)
@@ -41,15 +40,14 @@ object NgaParser {
             val begin = o.int("begin")
             val end = o.int("end")
             // sans date lisible, un intervalle large est celui de la vie de l'artiste : pas une date d'œuvre
-            if (o.str("date").isNullOrBlank() && begin != null && end != null && end - begin > 10) { tally?.drop("sans date précise"); return@mapNotNull null }
-            val year = MetParser.yearOf(begin, end) ?: run { tally?.drop("sans date"); return@mapNotNull null }
-            if (year !in query.years) { tally?.drop("hors des dates plausibles"); return@mapNotNull null }
+            val lifeSpan = o.str("date").isNullOrBlank() && begin != null && end != null && end - begin > 10
+            val date = dateOf(if (lifeSpan) null else MetParser.yearOf(begin, end), query, tally) ?: return@mapNotNull null
             val open = o.bool("openaccess") == true
             val credit = o.str("credit")?.takeIf { it.isNotBlank() }
             val attributionLine = "National Gallery of Art, Washington" + (credit?.let { " — $it" } ?: "")
             val maxPixels = o.int("maxpixels")
             Artwork(
-                id = "nga-$id", title = title.trim(), date = ArtworkDate.year(year),
+                id = "nga-$id", title = title.trim(), date = date,
                 medium = o.str("medium")?.takeIf { it.isNotBlank() },
                 iiif = IiifRef(manifestUrl = "nga:${o.str("accession") ?: id}", imageServiceId = service.trimEnd('/'), canvasWidth = o.int("width"), canvasHeight = o.int("height")),
                 provider = "National Gallery of Art",

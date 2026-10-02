@@ -73,7 +73,7 @@ object StorePolicy {
  */
 object UniverseStore {
     /** 2 : filtres relâchés (œuvres protégées consultables) et licences enregistrées avec chaque œuvre. */
-    const val PARSER_VERSION = 2
+    const val PARSER_VERSION = 3
 
     private val json = Json { ignoreUnknownKeys = true }
 

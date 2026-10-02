@@ -299,3 +299,11 @@ Le rapport rev25 montrait des HTTP 429 de Wikimedia sur les licences (3 essais �
 - **User-Agent** : Wikimedia exige un User-Agent qui identifie l'application ; un User-Agent de navigateur y reçoit des limites. `HostEtiquette` (bibliothèque) en envoie un dédié à `*.wikimedia.org`, `*.wikidata.org`, `*.wikipedia.org`
   (contact : le profil GitHub, jamais une adresse e-mail), dans les vignettes (Coil), les recherches, la validation et la visionneuse.
 - **Cadence** : les vignettes Wikimedia passent par une file (250 ms entre deux départs) avec UN nouvel essai après un 429 (`Retry-After`) ; la visionneuse retente 2 fois un 429/503 (pauses du serveur) ; les lots de licences se lisent un à la fois.
+
+## Rev27 : œuvres sans date et année de secours Europeana
+
+- **Europeana** : sans `year`, l'année vient de `edmTimespanLabel` (ou de sa version par langue) : « 1880 - 1890 » → 1885, « 1890s » → 1890 ; écart de plus de 50 ans ou aucune année lisible → pas de repli.
+- **Toutes les sources** (AIC, Europeana, Met, Cleveland, SMK, NGA, Wikimedia) : une œuvre sans date n'est plus écartée. Elle est placée à la **moitié de la période d'activité** de l'artiste (catalogue : ex. Van Gogh 1880–1890 → 1885 ;
+  à défaut, le milieu des dates plausibles) et **marquée estimée** : elle s'affiche « vers 1885 (date inconnue) ». Le bilan d'analyse le dit : « 20 retenues (dont 6 à date estimée) ».
+- **Doublons** : une œuvre à date estimée disparaît si le même titre existe, daté, dans une autre source (ArtworkMerge).
+- Une année connue mais hors des dates plausibles reste écartée. `PARSER_VERSION` = 3 (les univers enregistrés sont relus). Le Rijksmuseum, dont la date vient du format Linked Art, n'est pas concerné.

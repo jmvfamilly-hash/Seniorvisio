@@ -11,12 +11,15 @@ object ArtworkMerge {
     fun merge(lists: List<List<Artwork>>): List<Artwork> {
         val seen = HashSet<String>()
         val out = ArrayList<Artwork>()
-        for (list in lists) for (a in list) {
-            if (seen.add(keyOf(a))) out += a
-        }
+        // les œuvres DATÉES d'abord ; une œuvre à date estimée disparaît si le même titre existe, daté, dans une autre source
+        for (list in lists) for (a in list) if (!a.date.estimated && seen.add(keyOf(a))) out += a
+        val datedTitles = out.map { titleOf(it) }.toSet()
+        for (list in lists) for (a in list) if (a.date.estimated && titleOf(a) !in datedTitles && seen.add(keyOf(a))) out += a
         return out.sortedWith(compareBy({ it.date.positionEpochDay }, { it.id }))
     }
 
     /** « The Bedroom (1889) » et « the bedroom. » sont la même œuvre : on ignore casse, accents de ponctuation et espaces. */
+    private fun titleOf(a: Artwork) = a.title.lowercase().filter { it.isLetterOrDigit() }
+
     fun keyOf(a: Artwork): String = a.title.lowercase().filter { it.isLetterOrDigit() } + "@" + a.date.year
 }

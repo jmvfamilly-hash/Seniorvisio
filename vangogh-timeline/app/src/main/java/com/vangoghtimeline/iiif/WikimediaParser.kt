@@ -119,15 +119,14 @@ object WikimediaParser {
     fun normalizedName(file: String): String = file.replace('_', ' ')
 
     fun toArtwork(item: Item, info: FileInfo?, query: ArtworkQuery, tally: Tally? = null): Artwork? {
-        val year = item.year ?: run { tally?.drop("sans année de création"); return null }
-        if (year !in query.years) { tally?.drop("hors des dates plausibles"); return null }
+        val date = dateOf(item.year, query, tally) ?: return null
         val rights = info?.rights ?: RightsInfo(
             RightsKind.UNKNOWN, "Licence du fichier non lue (œuvre ancienne : probablement domaine public)",
             "https://commons.wikimedia.org/wiki/File:" + URLEncoder.encode(item.file, "UTF-8").replace("+", "_"), null,
         )
         tally?.let { it.kept++ }
         return Artwork(
-            id = "wikimedia-${item.qid}", title = item.label, date = ArtworkDate.year(year),
+            id = "wikimedia-${item.qid}", title = item.label, date = date,
             iiif = IiifRef(
                 manifestUrl = "wikimedia:${item.qid}", thumbnailUrl = filePathUrl(item.file, standardWidth(PREVIEW_WIDTH, info?.width)),
                 canvasWidth = info?.width, canvasHeight = info?.height, imageUrl = filePathUrl(item.file, standardWidth(if (info?.width != null) VIEW_WIDTH else VIEW_WIDTH_UNKNOWN_SIZE, info?.width)),

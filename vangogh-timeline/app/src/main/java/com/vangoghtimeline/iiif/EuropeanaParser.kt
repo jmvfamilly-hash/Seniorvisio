@@ -84,9 +84,10 @@ object EuropeanaParser {
             if (creators.isEmpty() && strictCreator) { tally?.drop("sans créateur déclaré"); return@mapNotNull null }
             if (creators.isNotEmpty() && creators.none(query::matchesCreator)) { tally?.drop("d'un autre créateur"); return@mapNotNull null }
             val title = strings(o["title"]).firstOrNull { it.isNotBlank() } ?: return@mapNotNull null
+            // année de secours : la période (`edmTimespanLabel`, ex. « 1880 - 1890 » → 1885), sinon la moitié de la période d'activité (voir dateOf)
             val year = strings(o["year"]).firstNotNullOfOrNull { Regex("""\b(\d{4})\b""").find(it)?.groupValues?.get(1)?.toInt() }
-                ?: run { tally?.drop("sans année"); return@mapNotNull null }
-            if (year !in query.years) { tally?.drop("hors des dates plausibles"); return@mapNotNull null }
+                ?: timespanYear(o)
+            val date = dateOf(year, query, tally) ?: return@mapNotNull null
             val noPreview = (o["previewNoDistribute"] as? JsonPrimitive)?.contentOrNull == "true"
             // « previewNoDistribute » : le fournisseur interdit de redistribuer l'aperçu → pas de vignette (l'œuvre reste consultable)
             val preview = if (noPreview) null else strings(o["edmPreview"]).firstOrNull()
@@ -97,7 +98,7 @@ object EuropeanaParser {
             Artwork(
                 id = "europeana-" + id.trim('/').replace('/', '_'),
                 title = title.trim(),
-                date = ArtworkDate.year(year),
+                date = date,
                 iiif = IiifRef(manifestUrl = manifestUrlOf(id), thumbnailUrl = preview),
                 provider = if (museum.isEmpty()) "Europeana" else "Europeana · $museum",
                 rights = rights,
@@ -105,6 +106,23 @@ object EuropeanaParser {
         }
         if (tally != null) { tally.kept += artworks.size; if (artworks.isEmpty()) tally.shape = JsonReading.describeShape(text) }
         return artworks
+    }
+
+    /** Toutes les chaînes d'un élément JSON (liste, objet de langues…), à plat. */
+    private fun allStrings(e: JsonElement?): List<String> = when (e) {
+        is JsonArray -> e.flatMap { allStrings(it) }
+        is JsonObject -> e.values.flatMap { allStrings(it) }
+        is JsonPrimitive -> listOfNotNull(e.takeIf { it.isString }?.contentOrNull)
+        else -> emptyList()
+    }
+
+    /** Année de secours d'une notice : milieu des années trouvées dans `edmTimespanLabel` (écart d'au plus 50 ans), sinon rien. */
+    internal fun timespanYear(o: JsonObject): Int? {
+        val years = (allStrings(o["edmTimespanLabel"]) + allStrings(o["edmTimespanLabelLangAware"]))
+            .flatMap { Regex("""(?<!\d)(\d{4})(?!\d)""").findAll(it).map { m -> m.groupValues[1].toInt() }.toList() }
+            .filter { it in 1000..2100 }
+        if (years.isEmpty() || years.max() - years.min() > 50) return null
+        return (years.min() + years.max()) / 2
     }
 
     private fun strings(e: JsonElement?): List<String> = when (e) {

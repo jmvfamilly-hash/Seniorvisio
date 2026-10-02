@@ -65,7 +65,12 @@ fun slugOf(text: String): String =
  * Ce qu'on cherche pour un artiste dans les API des musées : son nom, le fragment de nom qui doit apparaître chez le créateur de
  * l'œuvre ([match], pour écarter les œuvres qui ne font que le citer) et la plage d'années plausibles ([years]).
  */
-data class ArtworkQuery(val artistName: String, val match: String, val years: IntRange) {
+data class ArtworkQuery(val artistName: String, val match: String, val years: IntRange, val undatedYear: Int? = null) {
+    /** Année où l'on place une œuvre SANS date : la moitié de la période d'activité de l'artiste (à défaut, des dates plausibles). */
+    val fallbackYear: Int get() = (undatedYear ?: ((years.first + years.last) / 2)).coerceIn(years.first, years.last)
+
+    fun estimatedDate(): ArtworkDate = ArtworkDate.estimated(fallbackYear)
+
     /** Le nom sans accents (« Joaquín Sorolla » → « Joaquin Sorolla »). */
     fun asciiName(): String = Normalizer.normalize(artistName, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
 
@@ -97,7 +102,8 @@ data class ArtworkQuery(val artistName: String, val match: String, val years: In
             val last = artist.name.split(' ').last { it.isNotBlank() }
             val from = (artist.birthYear ?: artist.activeStart ?: 1800) + 10
             val to = (artist.deathYear ?: artist.activeEnd ?: 1950) + 1
-            return ArtworkQuery(artist.name, last, from..to)
+            val middle = if (artist.activeStart != null && artist.activeEnd != null) (artist.activeStart + artist.activeEnd) / 2 else null
+            return ArtworkQuery(artist.name, last, from..to, middle)
         }
     }
 }
