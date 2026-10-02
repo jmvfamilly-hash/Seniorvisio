@@ -123,9 +123,12 @@ fun ArtistMenuScreen(
     val backdrop = backdropArtistId?.let { ArtistBackdrops.of(it) }
 
     BoxWithConstraints(modifier.fillMaxSize().background(Ink)) {
-        val landscape = maxWidth > maxHeight
+        // lus ici : les lambdas imbriquées (Row, Column…) ont leur propre récepteur et n'ont plus accès à maxWidth / maxHeight
+        val maxW = maxWidth
+        val maxH = maxHeight
+        val landscape = maxW > maxH
         val density = LocalDensity.current
-        val aspect = with(density) { maxWidth.toPx() / maxHeight.toPx() }
+        val aspect = with(density) { maxW.toPx() / maxH.toPx() }
         val outWidth = if (landscape) 1600 else 1080
 
         // ── fond : point d'intérêt d'un tableau majeur, fondu entre deux artistes ──
@@ -146,13 +149,13 @@ fun ArtistMenuScreen(
                     Spacer(Modifier.height(8.dp))
                     SortPanel(sort) { sortName = it.name }
                     Spacer(Modifier.weight(1f))
-                    ArtistPanel(selected, backdrop, model, onTap, onRefresh, onReportLongPress, Modifier.heightIn(max = maxHeight * 0.62f))
+                    ArtistPanel(selected, backdrop, model, onTap, onRefresh, onReportLongPress, Modifier.heightIn(max = maxH * 0.62f))
                     CaptionBar(backdrop)
                 }
                 ArcPicker(
                     items = rows.filterIsInstance<MenuRow.Item>().map { it.artist },
                     selectedId = selectedId, portraits = model.portraits, onTap = onTap,
-                    modifier = Modifier.width(maxWidth * 0.40f).fillMaxHeight(),
+                    modifier = Modifier.width(maxW * 0.40f).fillMaxHeight(),
                 )
             }
         } else {
@@ -163,7 +166,7 @@ fun ArtistMenuScreen(
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Bottom) {
-                        ArtistPanel(selected, backdrop, model, onTap, onRefresh, onReportLongPress, Modifier.heightIn(max = maxHeight * 0.58f))
+                        ArtistPanel(selected, backdrop, model, onTap, onRefresh, onReportLongPress, Modifier.heightIn(max = maxH * 0.58f))
                     }
                     Spacer(Modifier.width(8.dp))
                     PortraitStrip(rows, selectedId, model.portraits, onTap, Modifier.width(78.dp).fillMaxHeight())
