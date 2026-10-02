@@ -119,6 +119,21 @@ class SmkSource(private val http: ManifestSource) : MuseumSource {
 }
 
 /**
+ * National Gallery of Art : pas d'API en ligne, seulement un open data en CSV. Les œuvres des artistes de la frise sont extraites
+ * à l'avance (`tools/nga_extract.py`) dans des fichiers `assets/nga/{artiste}.json` lus par [readAsset] (voir [NgaParser]).
+ */
+class NgaSource(private val readAsset: (String) -> String?) : MuseumSource {
+    override val id = "nga"
+    override val name = "National Gallery of Art"
+    override val europeanaKeyword = "national gallery of art"
+    override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> {
+        val text = readAsset(NgaParser.assetName(query)) ?: return emptyList()    // aucun fichier pour cet artiste : source vide, pas une erreur
+        val tally = Tally()
+        return NgaParser.parse(text, query, tally).also { tally.log(id, artistIdOf(query)) }
+    }
+}
+
+/**
  * The Met : une recherche, puis une notice par œuvre (au plus [maxObjects], [parallelism] à la fois ; la recherche v1.1 est paginée par 100, deux pages au plus).
  *
  * La recherche essaie des VARIANTES d'adresse dans l'ordre (complète, `q` seul, peintures européennes) : la première qui répond avec
@@ -371,8 +386,10 @@ fun defaultMuseumSources(
     metNoticeCache: java.io.File? = null,
     /** Accès à Wikidata/Commons : cadencé et retenté (limite de débit 429) ; par défaut, le même que les autres. */
     wikiHttp: ManifestSource = http,
+    /** Lecture d'un fichier d'`assets/nga/` (nom sans extension) ; `null` = pas de fichier. */
+    ngaAsset: (String) -> String? = { null },
 ): Map<String, MuseumSource> =
     listOf(
         AicSource(http), RijksSource(http), EuropeanaSource(http), MetSource(metHttp, noticeCache = metNoticeCache),
-        ClevelandSource(http), SmkSource(http), WikimediaSource(wikiHttp), CeresProbe(http),
+        ClevelandSource(http), SmkSource(http), NgaSource(ngaAsset), WikimediaSource(wikiHttp), CeresProbe(http),
     ).associateBy { it.id }

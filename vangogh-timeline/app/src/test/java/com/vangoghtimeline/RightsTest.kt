@@ -216,7 +216,7 @@ class RightsTest {
 
     // ── Catalogue : toutes les sources pour les quatre artistes ───────────────────
     @Test fun everyArtistWithAUniverseGetsEverySourceInPriorityOrder() {
-        val expected = listOf("aic", "rijks", "cleveland", "met", "smk", "europeana", "wikimedia")
+        val expected = listOf("aic", "rijks", "cleveland", "met", "smk", "nga", "europeana", "wikimedia")
         for (id in listOf("vincent-van-gogh", "john-singer-sargent", "pierre-auguste-renoir", "berthe-morisot")) {
             assertEquals(id, expected, artist(id).sources.map { it.sourceId })
         }

@@ -77,7 +77,7 @@ object ArtistExtras {
      * @param ceres vrai pour un artiste des musées d'État espagnols : ajoute la sonde de reconnaissance CER.ES
      */
     private fun allSources(rijks: String, europeanaProvider: String? = null, ceres: Boolean = false) = listOf(
-        s("aic"), s("rijks", rijks), s("cleveland"), s("met"), s("smk"),
+        s("aic"), s("rijks", rijks), s("cleveland"), s("met"), s("smk"), s("nga"),
         s("europeana", europeanaProvider), s("wikimedia"),
     ) + if (ceres) listOf(s("ceres")) else emptyList()
 

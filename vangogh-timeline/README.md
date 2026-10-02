@@ -278,3 +278,14 @@ Non vérifié (réseau bloqué dans l'environnement de build) : formats réels W
   des adresses OAI-PMH probables : code, titre, formulaires et champs, images, mentions de droits, début du corps.
 
 **Berthe Morisot** (rev24) : univers ouvert avec les 7 mêmes sources (Rijksmuseum : « Morisot, Berthe » ; Wikimedia : article `Berthe_Morisot`). Le créateur est vérifié strictement (nom + prénom ou initiale).
+
+## National Gallery of Art (rev24)
+
+Le NGA ne publie **pas d'API en ligne** : seulement son open data en CSV (CC0, ~170 Mo, mis à jour chaque jour). L'appli ne le télécharge jamais. `tools/nga_extract.py` (à relancer de temps en temps
+sur un clone de `NationalGalleryOfArt/opendata`) en tire un petit JSON par artiste, `app/src/main/assets/nga/{artiste}.json` (2 à 80 Ko), lu par `NgaParser` sans réseau. Les images sont servies
+en IIIF par `api.nga.gov/iiif/{uuid}` (zoom profond) ; la source reste soumise à la validation d'accès comme les autres.
+
+- **Contenu actuel** (extrait de l'open data réel) : Van Gogh 23, Morisot 28, Renoir 80, Sargent 161, Sorolla 1 œuvres, avant filtrage.
+- **Écartées et comptées** : « d'après », « suiveur », « imitateur », « attribué à », collaborations ; œuvres sans date précise (l'intervalle d'une vie entière) ; hors des dates plausibles.
+- **Droits** : image en open access → domaine public (CC0) ; sinon « accès restreint (usage loyal) » avec la résolution maximale annoncée. Ajouté à tous les artistes qui ont un univers.
+- Quand le backend Supabase existera, le glaneur lira ces CSV directement et ces fichiers disparaîtront.
