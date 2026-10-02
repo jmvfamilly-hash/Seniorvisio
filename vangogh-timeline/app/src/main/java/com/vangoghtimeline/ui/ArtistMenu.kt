@@ -327,7 +327,7 @@ private fun ArtistInfo(artist: Artist, model: AppModel, onRefresh: (Artist) -> U
 @Composable
 private fun SourceLine(r: SourceReport) {
     val color = when (r.state) {
-        SourceState.CONNECTED, SourceState.CACHED -> Color(0xFF4CC38A)
+        SourceState.CONNECTED, SourceState.CACHED, SourceState.PARTIAL -> Color(0xFF4CC38A)
         SourceState.REJECTED, SourceState.UNREACHABLE -> Color(0xFFE5645A)
         SourceState.PENDING -> Color(0xFFE3B65A)
         SourceState.LIMITED -> Color(0xFFE59A3B)

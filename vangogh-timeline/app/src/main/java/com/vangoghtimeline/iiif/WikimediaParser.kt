@@ -132,6 +132,8 @@ object WikimediaParser {
                 canvasWidth = info?.width, canvasHeight = info?.height, imageUrl = filePathUrl(item.file, standardWidth(if (info?.width != null) VIEW_WIDTH else VIEW_WIDTH_UNKNOWN_SIZE, info?.width)),
             ),
             provider = if (item.collection != null) "Wikimedia · ${item.collection}" else "Wikimedia Commons",
+            details = detailsOf("Collection" to item.collection, "Fichier Commons" to item.file, "Wikidata" to item.qid),
+            pageUrl = "https://commons.wikimedia.org/wiki/File:" + URLEncoder.encode(item.file, "UTF-8").replace("+", "_"),
             rights = rights,
         )
     }

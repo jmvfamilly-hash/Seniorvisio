@@ -208,9 +208,10 @@ class DiagnosticsTest {
             v1 to """{"total":130,"objects":[$page1]}""",
             MetParser.pageUrl(v1, 100) to """{"total":130,"objects":[{"objectID":101},{"objectID":102}]}""",
         ))
-        UniverseLoader(defaultMuseumSources(http), SourceValidator(http, reachOk), tmp()).load(artist) { }
+        UniverseLoader(defaultMuseumSources(http), SourceValidator(http, reachOk), tmp(), limitedRetryDelayMs = -1).load(artist) { }
         assertTrue(http.asked.contains(MetParser.pageUrl(v1, 100)))                      // page 2 demandée
-        assertTrue(http.asked.contains(MetParser.objectUrl(102)))                        // et ses notices
+        // lecture par tranches : au plus 100 notices NON gardées par passage (les 2 autres attendent le passage suivant)
+        assertEquals(100, http.asked.count { it.contains("/objects/") })
     }
 
     private class FailingSource(val message: String) : MuseumSource {

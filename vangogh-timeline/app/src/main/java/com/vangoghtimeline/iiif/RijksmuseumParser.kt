@@ -74,6 +74,8 @@ object RijksmuseumParser {
         date = info.date,
         iiif = IiifRef(manifestUrl = "rijks:${info.number}", imageServiceId = serviceId),
         provider = "Rijksmuseum",
+        details = detailsOf("N° d'inventaire" to info.number),
+        pageUrl = "https://www.rijksmuseum.nl/en/collection/${info.number}",
         // politique de données ouvertes du Rijksmuseum : œuvres du domaine public, images publiées en CC0 (non revérifié œuvre par œuvre)
         rights = RightsCatalog.publicDomain("Domaine public — images CC0 (Rijksmuseum)", "https://www.rijksmuseum.nl/en/research/conduct-research/data/policy"),
     )

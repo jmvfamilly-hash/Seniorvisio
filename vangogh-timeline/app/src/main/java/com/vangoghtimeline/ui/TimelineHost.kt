@@ -84,6 +84,9 @@ fun TimelineHost(
     artworks: List<Artwork>,
     modifier: Modifier = Modifier,
     credit: String? = null,
+    /** Artiste dont on montre l'univers : son nom en tête de la frise, et dans la vue détaillée d'une œuvre. */
+    artistName: String? = null,
+    artistLife: String? = null,
 ) {
     val scope = rememberCoroutineScope()
     var request by remember { mutableStateOf<OpenRequest?>(null) }
@@ -153,7 +156,7 @@ fun TimelineHost(
     BackHandler(enabled = request != null && !closing) { close() }
 
     Box(modifier.fillMaxSize().onSizeChanged { rootSize = it }) {
-        TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher)
+        TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, title = artistName?.let { n -> artistLife?.let { "$n · $it" } ?: n })
 
         credit?.let {
             BasicText(
@@ -209,7 +212,7 @@ fun TimelineHost(
                     }
                     // pendant le dézoom de sortie, les doigts sont absorbés : on ne relance pas un zoom en plein retour
                     // licence et conditions de l'œuvre ouverte (un toucher sur la barre déplie le détail)
-                    if (viewerTop && !closing) RightsBar(req.artwork, Modifier.align(Alignment.BottomStart))
+                    if (viewerTop && !closing) RightsBar(req.artwork, artistName, Modifier.align(Alignment.BottomStart))
                     if (closing) Box(Modifier.fillMaxSize().pointerInput(Unit) {
                         awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
                     })

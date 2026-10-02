@@ -41,7 +41,7 @@ def main(data, out):
         works[by_object[oid]].append({
             "id": oid, "accession": r["accessionnum"], "title": r["title"], "date": r["displaydate"],
             "begin": int(r["beginyear"]) if r["beginyear"] else None, "end": int(r["endyear"]) if r["endyear"] else None,
-            "medium": r["medium"], "classification": r["classification"], "credit": r["creditline"], "attribution": r["attribution"],
+            "medium": r["medium"], "dimensions": next((l for l in r["dimensions"].splitlines() if l.startswith("overall")), (r["dimensions"].splitlines() or [""])[0]), "classification": r["classification"], "credit": r["creditline"], "attribution": r["attribution"],
             "image": im["uuid"], "iiif": im["iiifurl"], "width": int(im["width"] or 0), "height": int(im["height"] or 0),
             "maxpixels": int(im["maxpixels"]) if im["maxpixels"] else None, "openaccess": im["openaccess"] == "1",
         })

@@ -49,6 +49,9 @@ object StorePolicy {
     /** Un échec (refusée, injoignable, vide, limitée…) ou une copie hors ligne est retenté au bout d'une heure. */
     const val RETRY_MS = 3_600_000L
 
+    /** Une lecture partielle reprend au bout de 5 minutes (chaque passage lit de nouvelles notices, gardées en cache). */
+    const val PARTIAL_RETRY_MS = 300_000L
+
     fun decide(stored: StoredSource?, nowMs: Long, force: Boolean = false): StoreDecision {
         if (stored == null) return StoreDecision.FETCH
         val usable = stored.state.connected && stored.artworks.isNotEmpty()
@@ -59,6 +62,7 @@ object StorePolicy {
                 if (age in 0 until FRESH_MS) StoreDecision.FRESH else StoreDecision.REFRESH      // horloge reculée : on rafraîchit
             }
             SourceState.CACHED -> if (nowMs - stored.attemptedAt in 0 until RETRY_MS) StoreDecision.FRESH else StoreDecision.REFRESH
+            SourceState.PARTIAL -> if (nowMs - stored.attemptedAt in 0 until PARTIAL_RETRY_MS) StoreDecision.FRESH else StoreDecision.REFRESH
             SourceState.PENDING -> StoreDecision.FETCH
             else -> if (nowMs - stored.attemptedAt in 0 until RETRY_MS) StoreDecision.FRESH else StoreDecision.FETCH
         }
@@ -73,7 +77,7 @@ object StorePolicy {
  */
 object UniverseStore {
     /** 2 : filtres relâchés (œuvres protégées consultables) et licences enregistrées avec chaque œuvre. */
-    const val PARSER_VERSION = 3
+    const val PARSER_VERSION = 4
 
     private val json = Json { ignoreUnknownKeys = true }
 

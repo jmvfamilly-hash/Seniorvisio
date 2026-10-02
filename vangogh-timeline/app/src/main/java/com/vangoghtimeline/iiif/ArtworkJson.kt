@@ -29,6 +29,8 @@ object ArtworkJson {
             a.iiif.imageServiceId?.let { put("service", it) }; a.iiif.thumbnailUrl?.let { put("thumb", it) }
             a.iiif.canvasWidth?.let { put("w", it) }; a.iiif.canvasHeight?.let { put("h", it) }
             a.iiif.imageUrl?.let { put("image", it) }
+            if (a.details.isNotEmpty()) put("det", buildJsonArray { for ((k, v) in a.details) add(buildJsonArray { add(JsonPrimitive(k)); add(JsonPrimitive(v)) }) })
+            a.pageUrl?.let { put("pu", it) }
             a.rights?.let { r ->
                 put("rk", r.kind.name); put("rl", r.label); put("rc", r.conditions)
                 r.url?.let { put("ru", it) }; r.attribution?.let { put("ra", it) }
@@ -49,6 +51,12 @@ object ArtworkJson {
                     place = s("place"), medium = s("medium"),
                     iiif = IiifRef(s("manifest")!!, s("service"), s("thumb"), i("w"), i("h"), s("image")),
                     provider = s("provider").orEmpty(),
+                    details = (o["det"] as? JsonArray).orEmpty().mapNotNull { row ->
+                        val r = row as? JsonArray ?: return@mapNotNull null
+                        val k = (r.getOrNull(0) as? JsonPrimitive)?.contentOrNull; val v = (r.getOrNull(1) as? JsonPrimitive)?.contentOrNull
+                        if (k != null && v != null) k to v else null
+                    },
+                    pageUrl = s("pu"),
                     rights = s("rk")?.let { k ->
                         RightsInfo(RightsKind.valueOf(k), s("rl").orEmpty(), s("ru"), s("ra"), s("rc") ?: RightsCatalog.conditionsFor(RightsKind.valueOf(k)))
                     },

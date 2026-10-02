@@ -28,6 +28,9 @@ interface MuseumSource {
     val reconnaissanceOnly: Boolean get() = false
 
     suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork>
+
+    /** Faux si la dernière lecture pour cet artiste n'est pas finie (lecture par tranches) : le chargeur la reprendra. */
+    fun isComplete(query: ArtworkQuery): Boolean = true
 }
 
 private fun artistIdOf(query: ArtworkQuery) = slugOf(query.artistName)
@@ -142,25 +145,40 @@ class NgaSource(private val readAsset: (String) -> String?) : MuseumSource {
  */
 class MetSource(
     private val http: ManifestSource,
-    private val maxObjects: Int = 120,
+    private val maxObjects: Int = 400,
     private val parallelism: Int = 6,
     /** Notices déjà lues (une par fichier) : elles ne changent pas, on ne les redemande pas (et le Met n'est pas sollicité deux fois). */
     private val noticeCache: java.io.File? = null,
+    /** Notices NON gardées sur disque lues par passage : au-delà, la lecture s'arrête (source PARTIELLE) et reprend au passage suivant. */
+    private val maxRequests: Int = 100,
+    /** Passé ce délai, on ne lance plus de nouvelle notice (le chargeur coupe à 45 s : mieux vaut rendre ce qu'on a que tout perdre). */
+    private val softDeadlineMs: Long = 30_000,
+    private val clockNanos: () -> Long = System::nanoTime,
 ) : MuseumSource {
     override val id = "met"
     override val name = "The Metropolitan Museum of Art"
     override val europeanaKeyword = "metropolitan"
 
+    private val unfinished: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    override fun isComplete(query: ArtworkQuery): Boolean = artistIdOf(query) !in unfinished
+
     override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> = coroutineScope {
         val ids = searchIds(query).take(maxObjects)
         val gate = Semaphore(parallelism)
         val tally = Tally()
+        val started = clockNanos()
+        val requests = java.util.concurrent.atomic.AtomicInteger()
+        val postponed = java.util.concurrent.atomic.AtomicInteger()
         val artworks = ids.map { objectId ->
             async {
                 gate.withPermit {
                     val url = MetParser.objectUrl(objectId)
                     try {
                         val cached = readNotice(objectId)
+                        if (cached == null && (requests.incrementAndGet() > maxRequests || (clockNanos() - started) / 1_000_000 > softDeadlineMs)) {
+                            postponed.incrementAndGet()
+                            return@withPermit null
+                        }
                         val text = cached ?: http.fetch(url).also { writeNotice(objectId, it) }
                         MetParser.parseObject(text, query, tally)
                     } catch (e: CancellationException) {
@@ -177,6 +195,13 @@ class MetSource(
                 }
             }
         }.awaitAll().filterNotNull()
+        if (postponed.get() > 0) {
+            unfinished += artistIdOf(query)
+            tally.raw += postponed.get()
+            tally.drop("à lire au prochain chargement", postponed.get())
+        } else {
+            unfinished -= artistIdOf(query)
+        }
         tally.log(id, artistIdOf(query))
         artworks
     }
@@ -212,18 +237,27 @@ class MetSource(
         throw firstError ?: IllegalStateException("recherche sans résultat (${variants.size} variantes essayées)")
     }
 
-    /** Page suivante (une seule) d'une recherche paginée dont la première page était pleine ; son échec n'enlève rien à la première. */
+    /** Pages suivantes d'une recherche paginée dont la première page était pleine, jusqu'à [maxObjects] ; un échec garde les pages déjà lues. */
     private suspend fun morePages(url: String, firstPageSize: Int, total: Int?): List<Int> {
         if (!MetParser.isPaginated(url) || firstPageSize < MetParser.PAGE_SIZE || (total != null && total <= MetParser.PAGE_SIZE)) return emptyList()
-        val next = MetParser.pageUrl(url, MetParser.PAGE_SIZE)
-        return try {
-            MetParser.parseSearch(http.fetch(next))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Diag.warn("source", "page 2 de la recherche en échec (la première page est gardée) : ${e.message ?: e.javaClass.simpleName}", next, id)
-            emptyList()
+        val out = ArrayList<Int>()
+        var offset = MetParser.PAGE_SIZE
+        var lastSize = firstPageSize
+        while (offset < maxObjects && lastSize >= MetParser.PAGE_SIZE && (total == null || offset < total)) {
+            val next = MetParser.pageUrl(url, offset)
+            val page = try {
+                MetParser.parseSearch(http.fetch(next))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Diag.warn("source", "page ${offset / MetParser.PAGE_SIZE + 1} de la recherche en échec (les pages déjà lues sont gardées) : ${e.message ?: e.javaClass.simpleName}", next, id)
+                break
+            }
+            out += page
+            lastSize = page.size
+            offset += MetParser.PAGE_SIZE
         }
+        return out
     }
 }
 

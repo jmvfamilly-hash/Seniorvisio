@@ -78,7 +78,7 @@ fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: () -> String =
         Box(Modifier.fillMaxSize().background(Color(0xFF0F1114))) {
             when {
                 state != null && state.artworks.isNotEmpty() ->
-                    key(opened.id) { TimelineHost(state.artworks, credit = state.credit) }
+                    key(opened.id) { TimelineHost(state.artworks, credit = state.credit, artistName = opened.name, artistLife = opened.lifespan) }
                 state != null && state.done -> Message(
                     "Aucune œuvre de ${opened.name} n'a pu être connectée.\n" +
                         state.reports.joinToString("\n") { "${it.name} : ${it.detail}" } + "\n\n(retour : geste système)",

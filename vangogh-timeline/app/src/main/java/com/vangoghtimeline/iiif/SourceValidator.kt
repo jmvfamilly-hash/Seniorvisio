@@ -35,6 +35,8 @@ object NetworkTolerance {
 enum class SourceState(val connected: Boolean) {
     /** Cherchée, et accès IIIF/image vérifié sur un échantillon : ses œuvres sont dans la frise. */
     CONNECTED(true),
+    /** Connectée et validée, mais la lecture n'est pas finie (ex. Met : des centaines de notices lues par tranches) : la suite vient au prochain chargement. */
+    PARTIAL(true),
     /** Réseau indisponible : copie locale d'une connexion précédente validée. */
     CACHED(true),
     /** Cherchée, mais l'accès aux images échoue sur l'échantillon : ses œuvres sont REFUSÉES. */

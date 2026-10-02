@@ -25,7 +25,7 @@ import kotlinx.serialization.json.intOrNull
  * Pur Kotlin : testé sur la JVM avec une réponse type.
  */
 object ArticParser {
-    private const val FIELDS = "id,title,artist_title,date_start,date_end,place_of_origin,medium_display,image_id,thumbnail,is_public_domain,copyright_notice"
+    private const val FIELDS = "id,title,artist_title,date_start,date_end,place_of_origin,medium_display,image_id,thumbnail,is_public_domain,copyright_notice,dimensions,credit_line,main_reference_number,classification_title"
 
     /** Recherche plein texte du nom de l'artiste. Les œuvres protégées ne sont pas écartées : leurs droits sont affichés ([rightsOf]). */
     fun searchUrl(query: ArtworkQuery): String =
@@ -79,6 +79,11 @@ object ArticParser {
                     canvasHeight = thumb?.int("height"),
                 ),
                 provider = "Art Institute of Chicago",
+                details = detailsOf(
+                    "Technique" to o.str("medium_display"), "Dimensions" to o.str("dimensions"), "Type" to o.str("classification_title"),
+                    "Crédit" to o.str("credit_line"), "N° d'inventaire" to o.str("main_reference_number"),
+                ),
+                pageUrl = "https://www.artic.edu/artworks/$id",
                 rights = rightsOf((o["is_public_domain"] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull(), o.str("copyright_notice")),
             )
         }.sortedWith(compareBy({ it.date.positionEpochDay }, { it.id }))

@@ -150,9 +150,9 @@ class UniverseLoader(
         // (jusqu'à 3 reprises : chacune lit de nouvelles notices, gardées en cache, avant le prochain blocage)
         var round = 0
         while (round < 3 && limitedRetryDelayMs >= 0) {
-            val limited = artist.sources.filter { reports[it.sourceId]?.state == SourceState.LIMITED }
+            val limited = artist.sources.filter { reports[it.sourceId]?.state.let { s -> s == SourceState.LIMITED || s == SourceState.PARTIAL } }
             if (limited.isEmpty()) break
-            Diag.info("source", "nouvel essai automatique (${round + 1}/3) dans ${limitedRetryDelayMs / 1000} s des sources bloquées temporairement : ${limited.joinToString { it.sourceId }}", artistId = artist.id)
+            Diag.info("source", "nouvel essai automatique (${round + 1}/3) dans ${limitedRetryDelayMs / 1000} s des sources bloquées ou partielles : ${limited.joinToString { it.sourceId }}", artistId = artist.id)
             delay(limitedRetryDelayMs)
             limited.map { spec -> async { runAndStore(spec, true) } }.awaitAll()
             round++
@@ -209,9 +209,10 @@ class UniverseLoader(
             Diag.error("validation", "source REFUSÉE (${probes.count { !it.ok }}/${probes.size} échantillons en échec) : $why", sourceId = source.id, artistId = artist.id)
             return Outcome(SourceReport(source.id, source.name, SourceState.REJECTED, fetched.size, "accès aux images refusé : $why", probes), emptyList(), 0L)
         }
-        val detail = "${fetched.size} œuvres · accès vérifié (${probes.count { it.ok }}/${probes.size})"
-        Diag.info("source", "connectée : $detail", sourceId = source.id, artistId = artist.id)
-        return Outcome(SourceReport(source.id, source.name, SourceState.CONNECTED, fetched.size, detail, probes), fetched, clock())
+        val partial = !source.isComplete(query)
+        val detail = "${fetched.size} œuvres${if (partial) " (lecture partielle : la suite au prochain chargement)" else ""} · accès vérifié (${probes.count { it.ok }}/${probes.size})"
+        Diag.info("source", (if (partial) "connectée, PARTIELLE : " else "connectée : ") + detail, sourceId = source.id, artistId = artist.id)
+        return Outcome(SourceReport(source.id, source.name, if (partial) SourceState.PARTIAL else SourceState.CONNECTED, fetched.size, detail, probes), fetched, clock())
     }
 
     private suspend fun fetchOnce(src: MuseumSource, spec: SourceSpec, query: ArtworkQuery): List<Artwork> =

@@ -101,6 +101,8 @@ object EuropeanaParser {
                 date = date,
                 iiif = IiifRef(manifestUrl = manifestUrlOf(id), thumbnailUrl = preview),
                 provider = if (museum.isEmpty()) "Europeana" else "Europeana · $museum",
+                details = detailsOf("Fournisseur" to museum, "Pays" to strings(o["country"]).firstOrNull(), "Description" to strings(o["dcDescription"]).firstOrNull()),
+                pageUrl = strings(o["guid"]).firstOrNull()?.takeIf { it.startsWith("http") } ?: "https://www.europeana.eu/item/${id.trim('/')}",
                 rights = rights,
             )
         }

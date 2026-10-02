@@ -51,6 +51,11 @@ object NgaParser {
                 medium = o.str("medium")?.takeIf { it.isNotBlank() },
                 iiif = IiifRef(manifestUrl = "nga:${o.str("accession") ?: id}", imageServiceId = service.trimEnd('/'), canvasWidth = o.int("width"), canvasHeight = o.int("height")),
                 provider = "National Gallery of Art",
+                details = detailsOf(
+                    "Date" to o.str("date"), "Technique" to o.str("medium"), "Dimensions" to o.str("dimensions"), "Type" to o.str("classification"),
+                    "Crédit" to credit, "N° d'inventaire" to o.str("accession"),
+                ),
+                pageUrl = "https://www.nga.gov/collection/art-object-page.$id.html",
                 rights = if (open) RightsCatalog.publicDomain("Open access (CC0) — National Gallery of Art", OPEN_ACCESS, attributionLine)
                 else RightsCatalog.viewOnly(
                     "Image à accès restreint (usage loyal)${maxPixels?.let { " — résolution limitée à $it px" } ?: ""} — National Gallery of Art", "https://www.nga.gov/legal.html", attributionLine,

@@ -1,12 +1,16 @@
 package com.vangoghtimeline.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,14 +52,15 @@ internal fun RightsBadge(kind: RightsKind, modifier: Modifier = Modifier) {
 }
 
 /**
- * Licence et conditions de l'œuvre ouverte dans la visionneuse : une ligne (pastille, licence, fournisseur) ; un toucher déplie le détail
- * (fournisseur, attribution à citer, conditions d'usage, adresse de la licence), un autre le replie. N'intercepte pas les gestes du
- * visualiseur ailleurs que sur la barre.
+ * Vue détaillée d'une œuvre ouverte dans la visionneuse : une ligne « artiste — titre, date » et la licence (pastille, licence, fournisseur) ;
+ * un toucher déplie la fiche (lieu, technique, dimensions, crédit, n° d'inventaire… selon le musée, lien vers sa fiche, attribution à citer,
+ * conditions d'usage, adresse de la licence), un autre la replie. N'intercepte pas les gestes du visualiseur ailleurs que sur la barre.
  */
 @Composable
-internal fun RightsBar(artwork: Artwork, modifier: Modifier = Modifier) {
-    val rights = artwork.rights ?: return
+internal fun RightsBar(artwork: Artwork, artistName: String?, modifier: Modifier = Modifier) {
+    val rights = artwork.rights
     var expanded by remember(artwork.id) { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
     Column(
         modifier
             .padding(10.dp)
@@ -63,24 +69,47 @@ internal fun RightsBar(artwork: Artwork, modifier: Modifier = Modifier) {
             .pointerInput(artwork.id) { detectTapGestures(onTap = { expanded = !expanded }) }
             .padding(horizontal = 10.dp, vertical = 7.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RightsBadge(rights.kind)
-            Spacer(Modifier.width(8.dp))
-            BasicText(
-                "${rights.label} · ${artwork.provider}",
-                maxLines = if (expanded) Int.MAX_VALUE else 1,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(color = Color(0xFFE6E9ED), fontSize = 11.sp),
-            )
+        BasicText(
+            (artistName?.let { "$it — " } ?: "") + artwork.title + ", " + artwork.date.formatFr(),
+            maxLines = if (expanded) Int.MAX_VALUE else 1,
+            overflow = TextOverflow.Ellipsis,
+            style = TextStyle(color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+        )
+        if (rights != null) {
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RightsBadge(rights.kind)
+                Spacer(Modifier.width(8.dp))
+                BasicText(
+                    "${rights.label} · ${artwork.provider}",
+                    maxLines = if (expanded) Int.MAX_VALUE else 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(color = Color(0xFFE6E9ED), fontSize = 11.sp),
+                )
+            }
         }
         if (expanded) {
             Spacer(Modifier.height(6.dp))
-            Line("${artwork.title} — ${artwork.date.formatFr()}", bold = true)
-            Line("Fournisseur : ${artwork.provider}")
-            rights.attribution?.let { Line("Attribution à citer : $it") }
-            Line("Conditions : ${rights.conditions}")
-            rights.url?.let { Line("Licence : $it") }
-            Line("(touchez pour réduire)", dim = true)
+            Column(Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState())) {
+                artistName?.let { Line("Artiste : $it") }
+                artwork.place?.let { Line("Lieu : $it") }
+                if (artwork.details.none { it.first == "Technique" }) artwork.medium?.let { Line("Technique : $it") }
+                artwork.details.forEach { (label, value) -> Line("$label : $value") }
+                if (artwork.provider.isNotEmpty()) Line("Fournisseur : ${artwork.provider}")
+                artwork.pageUrl?.let { url ->
+                    BasicText(
+                        "Fiche du musée : $url",
+                        modifier = Modifier.padding(top = 2.dp).clickable { runCatching { uriHandler.openUri(url) } },
+                        style = TextStyle(color = Color(0xFF8DB8F0), fontSize = 11.sp),
+                    )
+                }
+                if (rights != null) {
+                    rights.attribution?.let { Line("Attribution à citer : $it") }
+                    Line("Conditions : ${rights.conditions}")
+                    rights.url?.let { Line("Licence : $it") }
+                }
+            }
+            Line("(touchez la barre pour réduire)", dim = true)
         }
     }
 }

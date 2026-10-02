@@ -323,3 +323,12 @@ Le rapport rev28 montrait Wikimedia sans aucun 429 (largeurs 1920/3840 acceptée
   - Cadence du Met : 250 ms entre deux départs (au lieu de 150).
 - **Magasin local** : les sources qui finissent en même temps écrivaient le même fichier temporaire et pouvaient se réécrire un état plus ancien. Écriture désormais sérialisée, avec un instantané pris sous verrou.
 - **Wikimedia** : la requête SPARQL est ordonnée (`ORDER BY ?item`) : avec `LIMIT 300` sans ordre, le sous-ensemble retenu changeait d'un chargement à l'autre (174 à 242 œuvres pour Sargent). Elle reste limitée à 300 œuvres.
+
+## Rev31 : Met par tranches (E), nom de l'artiste, fiche détaillée de l'œuvre
+
+- **Met progressif (proposition E)** : jusqu'à 400 œuvres (recherche suivie sur 4 pages), lues par tranches de **100 notices non gardées sur disque** par passage et jamais au-delà de 30 s. Une lecture non terminée rend l'état **PARTIEL**
+  (connecté et validé, « lecture partielle : la suite au prochain chargement ») ; le chargeur la reprend seul (jusqu'à 3 passages, 60 s d'écart), puis au prochain chargement au bout de 5 minutes (au lieu de 7 jours).
+  Chaque notice est lue UNE seule fois (cache disque) ; un blocage anti-robot interrompt le passage sans rien perdre.
+- **Vue frise** : le nom de l'artiste et ses dates de vie en en-tête (« Berthe Morisot · 1841–1895 »).
+- **Vue détaillée d'une œuvre** : ligne « artiste — titre, date » + licence ; un toucher déplie la fiche : lieu, technique, dimensions, type, département, crédit, n° d'inventaire (selon le musée),
+  fournisseur, **lien vers la fiche du musée** (touchable), attribution à citer, conditions, licence. Chaque œuvre porte désormais `details` et `pageUrl` (AIC, Met, Cleveland, NGA, Rijksmuseum, SMK, Europeana, Wikimedia) ; `PARSER_VERSION` = 4.

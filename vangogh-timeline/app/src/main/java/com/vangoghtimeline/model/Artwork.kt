@@ -128,4 +128,8 @@ data class Artwork(
     val provider: String = "",
     /** Licence et conditions de consultation (voir [RightsInfo]) ; `null` = non renseigné. */
     val rights: RightsInfo? = null,
+    /** Détail de la fiche du musée, prêt à afficher : (« Dimensions », « 73 × 92 cm »)… Vide = rien de plus que le titre et la date. */
+    val details: List<Pair<String, String>> = emptyList(),
+    /** Adresse de la fiche de l'œuvre chez le musée (pour la consulter ou la citer). */
+    val pageUrl: String? = null,
 )

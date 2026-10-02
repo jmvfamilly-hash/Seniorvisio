@@ -20,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vangoghtimeline.model.Artwork
@@ -49,6 +51,8 @@ fun TimelineScreen(
     onArtworkTap: ((OpenRequest) -> Unit)? = null,
     roller: Boolean = true,
     prefetcher: TimelinePrefetcher? = null,
+    /** Nom de l'artiste (et ses dates de vie) affiché en tête de la frise ; `null` = pas d'en-tête. */
+    title: String? = null,
 ) {
     val density = LocalDensity.current
     val state = rememberTimelineScrollState()
@@ -94,6 +98,15 @@ fun TimelineScreen(
     }
 
     Column(modifier.fillMaxSize().background(Background)) {
+        if (title != null) {
+            BasicText(
+                title,
+                modifier = Modifier.fillMaxWidth().background(Color(0xFF14171B)).padding(horizontal = 12.dp, vertical = 6.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = TextStyle(color = Color(0xFFE6E9ED), fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+            )
+        }
         TimeAxis(plan, state, roller = roller)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             TimelineLayout(

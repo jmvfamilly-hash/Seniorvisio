@@ -100,6 +100,11 @@ object MetParser {
             id = "met-$id", title = title.trim(), date = date, medium = o.str("medium")?.takeIf { it.isNotBlank() },
             iiif = IiifRef(manifestUrl = "met:$id", thumbnailUrl = o.str("primaryImageSmall")?.takeIf { it.startsWith("http") }, imageUrl = image),
             provider = "The Metropolitan Museum of Art",
+            details = detailsOf(
+                "Date" to o.str("objectDate"), "Technique" to o.str("medium"), "Dimensions" to o.str("dimensions"), "Type" to o.str("classification"),
+                "Département" to o.str("department"), "Crédit" to o.str("creditLine"), "N° d'inventaire" to o.str("accessionNumber"),
+            ),
+            pageUrl = o.str("objectURL")?.takeIf { it.startsWith("http") } ?: "https://www.metmuseum.org/art/collection/search/$id",
             rights = if (publicDomain) RightsCatalog.publicDomain("Domaine public — Met Open Access (CC0)", "https://www.metmuseum.org/about-the-met/policies-and-documents/open-access")
             else RightsCatalog.viewOnly("Droits réservés — ${o.str("rightsAndReproduction")?.takeIf { it.isNotBlank() } ?: "voir le Met"}", "https://www.metmuseum.org/policies/image-resources"),
         )
@@ -150,6 +155,11 @@ object ClevelandParser {
                     canvasHeight = images?.objOf("print")?.int("height") ?: images?.objOf("web")?.int("height"),
                 ),
                 provider = "Cleveland Museum of Art",
+                details = detailsOf(
+                    "Date" to o.str("creation_date"), "Technique" to o.str("technique"), "Dimensions" to o.str("measurements"), "Type" to o.str("type"),
+                    "Département" to o.str("department"), "Crédit" to o.str("creditline"), "N° d'inventaire" to o.str("accession_number"),
+                ),
+                pageUrl = o.str("url")?.takeIf { it.startsWith("http") } ?: "https://www.clevelandart.org/art/$id",
                 rights = if (o.str("share_license_status")?.equals("CC0", ignoreCase = true) == true)
                     RightsCatalog.publicDomain("CC0 — Cleveland Museum of Art Open Access", "https://www.clevelandart.org/open-access")
                 else RightsCatalog.viewOnly("Droits réservés${o.str("copyright")?.takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""} — Cleveland Museum of Art", "https://www.clevelandart.org/open-access"),
@@ -192,6 +202,8 @@ object SmkParser {
                 id = "smk-" + slug(number), title = title.trim(), date = date,
                 iiif = IiifRef(manifestUrl = "smk:$number", imageServiceId = service, canvasWidth = o.int("image_width"), canvasHeight = o.int("image_height")),
                 provider = "Statens Museum for Kunst",
+                details = detailsOf("N° d'inventaire" to number),
+                pageUrl = "https://open.smk.dk/artwork/image/$number",
                 rights = if (o["public_domain"].let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content == "true" })
                     RightsCatalog.publicDomain("Domaine public — SMK Open (CC0)", "https://open.smk.dk/en/about")
                 else RightsCatalog.viewOnly("Droits réservés — ${o.str("rights")?.takeIf { it.isNotBlank() } ?: "voir le SMK"}", "https://open.smk.dk/en/about"),
