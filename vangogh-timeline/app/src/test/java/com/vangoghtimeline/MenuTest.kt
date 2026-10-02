@@ -107,8 +107,11 @@ class MenuTest {
     }
 
     @Test fun backdropsParseFromTheIndexAndUnfetchedOnesAreNotUsable() {
-        assertEquals(PoiKind.FACE, index["vincent-van-gogh"]!!.kind)
+        // le build télécharge les images et complète l'index : on ne suppose rien de l'état de Munch, seulement de ce qui est écrit à la main
         assertEquals(PoiKind.TREE, index["claude-monet"]!!.kind)
-        assertTrue(!index["edvard-munch"]!!.usable)
+        val parsed = BackdropIndex.parse("""{"backdrops":[{"artistId":"x","width":0,"height":0,"poiX":2,"kind":"face"},{"artistId":"y","width":10,"height":5,"poiX":0.2,"poiY":0.3,"kind":"tree"}]}""")
+        assertTrue(!parsed["x"]!!.usable)
+        assertEquals(1f, parsed["x"]!!.poiX, 0f)              // borné à 0..1
+        assertTrue(parsed["y"]!!.usable && parsed["y"]!!.kind == PoiKind.TREE)
     }
 }
