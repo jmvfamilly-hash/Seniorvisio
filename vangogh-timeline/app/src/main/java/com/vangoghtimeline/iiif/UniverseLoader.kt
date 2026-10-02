@@ -176,10 +176,22 @@ class UniverseLoader(
             return Outcome(SourceReport(source.id, source.name, SourceState.EMPTY, 0, "aucune œuvre exploitable pour cet artiste"), emptyList(), 0L)
         }
 
-        val (ok, probes) = validator.validate(fetched)
+        val verdict = validator.decide(fetched)
+        val ok = verdict.ok
+        val probes = verdict.lines
         // chaque échantillon en échec est consigné, MÊME si la source est finalement connectée
         for (p in probes.filter { !it.ok }) {
             Diag.warn("validation", "échantillon « ${p.artworkTitle} » : ${p.detail}", p.url, source.id, artist.id)
+        }
+        if (verdict.inconclusive) {
+            val why = probes.firstOrNull { !it.ok }?.detail ?: "réseau indisponible"
+            val cached = old?.artworks.orEmpty()
+            if (cached.isNotEmpty()) {
+                Diag.warn("validation", "accès aux images non vérifiable (réseau : $why) → copie hors ligne utilisée (${cached.size} œuvres)", sourceId = source.id, artistId = artist.id)
+                return Outcome(SourceReport(source.id, source.name, SourceState.CACHED, cached.size, "accès non vérifiable (réseau) : copie hors ligne ($why)", probes), cached, old?.fetchedAt ?: 0L)
+            }
+            Diag.warn("validation", "accès aux images non vérifiable (échantillons tous en échec de réseau, ce n'est pas un refus) : $why", sourceId = source.id, artistId = artist.id)
+            return Outcome(SourceReport(source.id, source.name, SourceState.LIMITED, fetched.size, "accès non vérifiable pour l'instant (réseau ou limite de débit), nouvel essai automatique : $why", probes), emptyList(), 0L)
         }
         if (!ok) {
             val why = probes.firstOrNull { !it.ok }?.detail ?: "accès impossible"

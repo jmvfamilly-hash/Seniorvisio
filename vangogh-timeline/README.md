@@ -260,8 +260,19 @@ sonde **Hispanic Society**. Les autres artistes seront ajoutés plus tard.
   « N domaine public · M consultation privée ».
 - **Wikimedia** (`WikimediaParser`) : Wikidata SPARQL (créateur P170, image P18, date P571, collection P195) + licence lue sur Commons (`extmetadata`) ; images via `Special:FilePath`.
 - **Europeana** : variante par fournisseur de données (Sorolla) ; droits lus dans `rights` ; `previewNoDistribute` → pas de vignette, mention dans les conditions.
-- **Hispanic Society** : source de reconnaissance, n'ajoute aucune œuvre ; la forme des réponses est consignée dans le journal pour préparer une vraie source.
+- **Hispanic Society** : la reconnaissance (rev22) a montré que ses deux serveurs sont derrière un pare-feu anti-robot (Cloudflare « Just a moment », Anubis « Making sure you're not a bot ») : inexploitable par une appli, la sonde est retirée.
 - `UniverseStore.PARSER_VERSION` = 2 : les univers enregistrés sont relus avec les nouvelles règles.
 
 Non vérifié (réseau bloqué dans l'environnement de build) : formats réels Wikidata/Commons, termes Rijksmuseum pour Sargent/Renoir/Sorolla, URL de la Hispanic Society. Le rapport d'anomalies
 (appui long) montrera les lignes « reconnaissance » / « analyse ».
+
+## Rev23 : tolérance réseau, variantes de recherche, sonde CER.ES
+
+- **Validation tolérante** (`SourceValidator.decide`) : un échantillon en échec de RÉSEAU (429, 503, délai, DNS…) est retenté une fois puis ne compte pas contre la source ; la moitié des échantillons
+  concluants doit passer. Si aucun n'est concluant, la source est LIMITÉE (nouvel essai automatique), jamais REFUSÉE à tort. Un vrai refus (404, 403 JSON, page HTML) rejette toujours.
+- **Wikidata/Commons** : file commune (2 requêtes, 400 ms d'écart) et 3 nouveaux essais patients (2, 5, 10 s) après un 429.
+- **Journal** : « Canceled », « Socket closed » et « … was cancelled » (annulations normales) ne sont plus consignés ; leur nombre figure dans le résumé du rapport.
+- **SMK** : mots-clés essayés dans l'ordre (nom complet, sans accents, nom de famille), créateur revérifié ; chaque variante est consignée.
+- **Europeana** : variantes exacte, sans accents, « Nom, Prénom », nom ET prénom (créateur exigé), nom de famille seul (créateur exigé).
+- **CER.ES / Museo Sorolla** (`CeresProbe`, Sorolla seulement) : sonde de reconnaissance, aucune œuvre ajoutée. Elle consigne, pour la fiche d'une œuvre connue (table FDOC, musée MSM), l'accueil et
+  des adresses OAI-PMH probables : code, titre, formulaires et champs, images, mentions de droits, début du corps.

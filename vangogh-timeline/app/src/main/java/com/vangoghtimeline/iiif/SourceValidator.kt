@@ -16,7 +16,20 @@ fun interface ImageReachability {
 }
 
 /** Une vérification d'accès sur une œuvre échantillon. */
-class ProbeLine(val artworkTitle: String, val url: String, val ok: Boolean, val detail: String)
+class ProbeLine(val artworkTitle: String, val url: String, val ok: Boolean, val detail: String,
+                /** Échec dû au réseau ou à une limite de débit (429, 503, délai, DNS…), pas à l'image elle-même : il ne prouve rien contre la source. */
+                val transient: Boolean = false)
+
+/** Distingue un échec de RÉSEAU (qui ne prouve rien) d'un vrai refus d'accès (404, 403 JSON, type inattendu…). */
+object NetworkTolerance {
+    fun isTransient(message: String?): Boolean {
+        if (message == null) return false
+        if (TemporaryBlock.matches(message)) return true
+        return listOf("timeout", "timed out", "délai dépassé", "unable to resolve host", "unknownhost", "no address associated", "connection reset",
+            "connection refused", "failed to connect", "unexpected end of stream", "socket closed", "canceled", "software caused connection abort",
+            "network is unreachable", "ssl").any { message.contains(it, ignoreCase = true) }
+    }
+}
 
 /** Ce que vaut une source à la connexion. */
 enum class SourceState(val connected: Boolean) {
@@ -55,13 +68,30 @@ class SourceValidator(
     private val http: ManifestSource,
     private val reach: ImageReachability,
     private val sampleSize: Int = 3,
+    /** Pause avant l'unique nouvel essai d'un échantillon en échec de réseau (remplaçable par les tests). */
+    private val retryPauseMs: Long = 1_500,
+    private val sleep: suspend (Long) -> Unit = { kotlinx.coroutines.delay(it) },
 ) {
-    suspend fun validate(artworks: List<Artwork>): Pair<Boolean, List<ProbeLine>> {
+    suspend fun validate(artworks: List<Artwork>): Pair<Boolean, List<ProbeLine>> = decide(artworks).let { it.ok to it.lines }
+
+    /** Résultat détaillé : [inconclusive] = aucun échantillon n'a pu être jugé (tous en échec de réseau) → ni connectée, ni refusée. */
+    class Verdict(val ok: Boolean, val inconclusive: Boolean, val lines: List<ProbeLine>)
+
+    /**
+     * Un échantillon en échec de RÉSEAU (429, délai, DNS…) est retenté une fois, puis NE COMPTE PAS contre la source : la moitié des
+     * échantillons CONCLUANTS doit passer. Si aucun n'est concluant, le verdict est « indéterminé » (la source sera réessayée plus tard).
+     */
+    suspend fun decide(artworks: List<Artwork>): Verdict {
         val sample = sample(artworks, sampleSize)
-        if (sample.isEmpty()) return false to emptyList()
-        val lines = sample.map { probe(it) }
-        val needed = (sample.size + 1) / 2
-        return (lines.count { it.ok } >= needed) to lines
+        if (sample.isEmpty()) return Verdict(false, false, emptyList())
+        val lines = sample.map { art ->
+            val first = probe(art)
+            if (!first.ok && first.transient) { sleep(retryPauseMs); probe(art) } else first
+        }
+        val conclusive = lines.filter { !it.transient || it.ok }
+        if (conclusive.isEmpty()) return Verdict(false, true, lines)
+        val needed = (conclusive.size + 1) / 2
+        return Verdict(conclusive.count { it.ok } >= needed, false, lines)
     }
 
     /** [n] œuvres réparties de la première à la dernière (sans doublon). */
@@ -79,7 +109,8 @@ class SourceValidator(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            ProbeLine(art.title, url, false, e.message ?: e.javaClass.simpleName)
+            val why = e.message ?: e.javaClass.simpleName
+            ProbeLine(art.title, url, false, why, transient = NetworkTolerance.isTransient(why) || NetworkTolerance.isTransient(e.javaClass.simpleName))
         }
     }
 

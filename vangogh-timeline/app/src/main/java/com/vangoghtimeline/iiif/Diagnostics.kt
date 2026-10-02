@@ -47,11 +47,20 @@ object Diag {
     /** Horloge, remplaçable par les tests. */
     @Volatile var clock: () -> Long = { System.currentTimeMillis() }
 
+    /** Annulations normales (l'utilisateur quitte une œuvre, la tuile n'est plus utile) : pas des anomalies. */
+    fun isCancellationNoise(message: String): Boolean =
+        message.trim().let { it.equals("Canceled", ignoreCase = true) || it.equals("Cancelled", ignoreCase = true) || it.contains("Socket closed", ignoreCase = true) ||
+            it.contains("Job was cancelled", ignoreCase = true) || it.contains("was cancelled", ignoreCase = true) }
+
+    /** Nombre d'annulations normales écartées du journal (affiché dans le rapport). */
+    @Volatile var ignoredCancellations = 0
+
     fun log(
         level: DiagLevel, category: String, message: String,
         url: String? = null, sourceId: String? = null, artistId: String? = context,
         key: String = "$category|$sourceId|$artistId|$message|$url",
     ) {
+        if (level != DiagLevel.ERROR && isCancellationNoise(message)) { ignoredCancellations++; return }
         val now = clock()
         val text = if (message.length > MAX_MESSAGE) message.take(MAX_MESSAGE) + "…" else message
         synchronized(lock) {
@@ -77,7 +86,7 @@ object Diag {
     /** Copie des événements, du plus ancien au plus récent. */
     fun snapshot(): List<DiagEvent> = synchronized(lock) { events.toList() }
 
-    fun clear() = synchronized(lock) { events.clear() }
+    fun clear() = synchronized(lock) { events.clear(); ignoredCancellations = 0 }
 
     /** Hôte d'une URL (clé de regroupement : mille tuiles d'un même serveur en échec forment UNE ligne). */
     fun hostOf(url: String): String = url.substringAfter("://", url).substringBefore('/').substringBefore('?')
@@ -130,7 +139,7 @@ object DiagnosticsReport {
 
         val errors = events.sumOf { if (it.level == DiagLevel.ERROR) it.count else 0 }
         val warns = events.sumOf { if (it.level == DiagLevel.WARN) it.count else 0 }
-        out.append("Résumé : ${events.size} lignes de journal — $errors erreurs, $warns alertes (échecs rattrapés par un repli compris).\n\n")
+        out.append("Résumé : ${events.size} lignes de journal — $errors erreurs, $warns alertes (échecs rattrapés par un repli compris).${if (Diag.ignoredCancellations > 0) " ${Diag.ignoredCancellations} annulations normales (« Canceled », « Socket closed ») écartées du journal." else ""}\n\n")
 
         out.append("--- Univers (état des sources par artiste) ---\n")
         for (s in sections) {

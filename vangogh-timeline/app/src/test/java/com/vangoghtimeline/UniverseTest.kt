@@ -70,7 +70,7 @@ class UniverseTest {
         assertEquals("VG", vg.initials)
         assertEquals(1880 to 1890, vg.activeStart to vg.activeEnd)
         assertEquals(2, vg.locations.size)
-        assertEquals(listOf("aic", "rijks", "cleveland", "met", "smk", "europeana", "wikimedia", "hispanic"), vg.sources.map { it.sourceId })
+        assertEquals(listOf("aic", "rijks", "cleveland", "met", "smk", "europeana", "wikimedia"), vg.sources.map { it.sourceId })
         assertEquals("Vincent_van_Gogh", vg.sources.first { it.sourceId == "wikimedia" }.term)       // titre Wikipédia, complété automatiquement
         assertEquals("Gogh, Vincent van", vg.sources.first { it.sourceId == "rijks" }.term)
         assertEquals("JS", catalog().first { it.id == "john-singer-sargent" }.initials)

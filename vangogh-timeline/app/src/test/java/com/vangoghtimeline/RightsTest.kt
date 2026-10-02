@@ -5,7 +5,7 @@ import com.vangoghtimeline.iiif.ArtworkJson
 import com.vangoghtimeline.iiif.ClevelandParser
 import com.vangoghtimeline.iiif.Diag
 import com.vangoghtimeline.iiif.EuropeanaParser
-import com.vangoghtimeline.iiif.HispanicSocietyProbe
+import com.vangoghtimeline.iiif.CeresProbe
 import com.vangoghtimeline.iiif.ImageReachability
 import com.vangoghtimeline.iiif.ManifestSource
 import com.vangoghtimeline.iiif.Reach
@@ -197,17 +197,17 @@ class RightsTest {
         assertTrue(state.credit, state.credit.contains("Wikimedia"))
     }
 
-    // ── Hispanic Society : source de reconnaissance ───────────────────────────────
-    @Test fun theHispanicSocietyProbeLogsTheShapeAndAddsNothing() = runBlocking {
-        val html = "<html><a href=\"/objects/101/titre\">A</a><a href=\"/objects/102\">B</a><a href=\"/objects/101\">A</a> iiif manifest</html>"
-        val http = FakeHttp(mapOf("https://hispanicsociety.emuseum.com/search/Sorolla/objects" to html))
+    // ── CER.ES : source de reconnaissance ─────────────────────────────────────────
+    @Test fun theCeresProbeLogsTheShapeAndAddsNothing() = runBlocking {
+        val html = "<html><head><title>Museo Sorolla</title></head><form action=\"/pages/Search\"><input name=\"txt_busqueda\"></form><img src=\"/img/a.jpg\"> Licencia</html>"
+        val http = FakeHttp(mapOf("https://ceres.mcu.es/pages/Main?idt=27659&inventary=85829&table=FDOC&museum=MSM" to html))
         val q = ArtworkQuery.of(artist("joaquin-sorolla"))
-        assertTrue(HispanicSocietyProbe(http).fetch(q, SourceSpec("hispanic", "Sorolla")).isEmpty())
+        assertTrue(CeresProbe(http).fetch(q, SourceSpec("ceres")).isEmpty())
         val log = Diag.snapshot().filter { it.category == "reconnaissance" }
-        assertTrue(log.any { it.message.contains("2 liens d'objets distincts") && it.message.contains("2 mentions iiif/manifest") })
+        assertTrue(log.toString(), log.any { it.message.contains("titre « Museo Sorolla »") && it.message.contains("txt_busqueda") && it.message.contains("/img/a.jpg") && it.message.contains("OAI-PMH : non") })
         assertTrue(log.any { it.message.startsWith("inaccessible") })                       // les autres adresses sont consignées en échec
 
-        val sorolla = artist("joaquin-sorolla").copy(sources = listOf(SourceSpec("hispanic", "Sorolla")))
+        val sorolla = artist("joaquin-sorolla").copy(sources = listOf(SourceSpec("ceres")))
         val state = UniverseLoader(defaultMuseumSources(http), SourceValidator(http, reachOk), tmp()).load(sorolla) { }
         assertEquals(SourceState.UNAVAILABLE, state.reports.single().state)
         assertTrue(state.reports.single().detail.contains("reconnaissance"))
@@ -216,10 +216,11 @@ class RightsTest {
 
     // ── Catalogue : toutes les sources pour les quatre artistes ───────────────────
     @Test fun everyArtistWithAUniverseGetsEverySourceInPriorityOrder() {
-        val expected = listOf("aic", "rijks", "cleveland", "met", "smk", "europeana", "wikimedia", "hispanic")
-        for (id in listOf("vincent-van-gogh", "john-singer-sargent", "joaquin-sorolla", "pierre-auguste-renoir")) {
+        val expected = listOf("aic", "rijks", "cleveland", "met", "smk", "europeana", "wikimedia")
+        for (id in listOf("vincent-van-gogh", "john-singer-sargent", "pierre-auguste-renoir")) {
             assertEquals(id, expected, artist(id).sources.map { it.sourceId })
         }
+        assertEquals(expected + "ceres", artist("joaquin-sorolla").sources.map { it.sourceId })       // la sonde CER.ES : Sorolla seulement
         assertEquals("Museo Sorolla", artist("joaquin-sorolla").sources.first { it.sourceId == "europeana" }.term)
         assertEquals("Sorolla y Bastida, Joaquín", artist("joaquin-sorolla").sources.first { it.sourceId == "rijks" }.term)
         assertTrue(catalog.filter { it.hasUniverse }.map { it.id }.toSet() == setOf("vincent-van-gogh", "john-singer-sargent", "joaquin-sorolla", "pierre-auguste-renoir"))

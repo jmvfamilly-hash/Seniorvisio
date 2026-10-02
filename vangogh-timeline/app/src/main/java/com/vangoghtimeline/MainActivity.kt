@@ -91,13 +91,16 @@ class MainActivity : ComponentActivity() {
             // Tout le trafic vers le Met passe par UNE file commune (2 requêtes à la fois, 150 ms d'écart) et est retenté après un blocage
             // temporaire : plusieurs artistes chargés ensemble ne déclenchent plus le pare-feu anti-robot du Met.
             val metLimiter = RateLimiter(parallel = 2, minGapMs = 150)
+            // Wikidata et Commons limitent le débit (429) : une file commune plus lente, et des nouveaux essais plus patients
+            val wikiLimiter = RateLimiter(parallel = 2, minGapMs = 400)
+            val wikiRetries = listOf(2_000L, 5_000L, 10_000L)
             val notices = File(filesDir, "met_notices")
             val loader = UniverseLoader(
-                defaultMuseumSources(http, RetryingSource(http, metLimiter, "metmuseum.org"), notices),
+                defaultMuseumSources(http, RetryingSource(http, metLimiter, "metmuseum.org"), notices, RetryingSource(http, wikiLimiter, "wiki", wikiRetries)),
                 SourceValidator(http, HttpImageReachability()),
                 File(filesDir, "universe_store").apply { mkdirs() },     // magasin JSON local : un fichier par artiste
                 // repli : mêmes sources avec un User-Agent sobre, si un serveur refuse celui d'un navigateur
-                fallbackSources = defaultMuseumSources(plainHttp, RetryingSource(plainHttp, metLimiter, "metmuseum.org"), notices),
+                fallbackSources = defaultMuseumSources(plainHttp, RetryingSource(plainHttp, metLimiter, "metmuseum.org"), notices, RetryingSource(plainHttp, wikiLimiter, "wiki", wikiRetries)),
             )
             AppModel(scope, loader, http, File(filesDir, "portraits.json"))
         }

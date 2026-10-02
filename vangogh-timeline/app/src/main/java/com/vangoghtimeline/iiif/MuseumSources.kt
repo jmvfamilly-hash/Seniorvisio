@@ -92,9 +92,29 @@ class SmkSource(private val http: ManifestSource) : MuseumSource {
     override val id = "smk"
     override val name = "Statens Museum for Kunst"
     override val europeanaKeyword = "statens museum"
+
+    /** Variantes de mots-clés (nom complet, sans accents, nom de famille) : la première qui donne des œuvres gagne ; chacune est consignée. */
     override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> {
-        val tally = Tally()
-        return SmkParser.parse(http.fetch(SmkParser.searchUrl(query)), query, tally).also { tally.log(id, artistIdOf(query)) }
+        val keys = SmkParser.searchKeys(query)
+        var firstError: Exception? = null
+        var answered = false
+        for ((index, k) in keys.withIndex()) {
+            val url = SmkParser.searchUrl(query, k)
+            try {
+                val tally = Tally()
+                val arts = SmkParser.parse(http.fetch(url), query, tally)
+                tally.log(id, artistIdOf(query), "variante ${index + 1}/${keys.size} « $k »")
+                answered = true
+                if (arts.isNotEmpty()) return arts
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (firstError == null) firstError = e
+                Diag.warn("source", "recherche : variante ${index + 1}/${keys.size} en échec : ${e.message ?: e.javaClass.simpleName}", url, id)
+            }
+        }
+        if (!answered && firstError != null) throw firstError
+        return emptyList()
     }
 }
 
@@ -297,40 +317,49 @@ class WikimediaSource(private val http: ManifestSource, private val parallelism:
 }
 
 /**
- * Source de RECONNAISSANCE de la Hispanic Society of America (eMuseum) : aucun point d'accès JSON/IIIF vérifié n'est connu. Elle interroge
- * quelques adresses de recherche et consigne dans [Diag] ce qui revient (code, type, nombre de liens d'objets, mentions IIIF, début du corps),
- * pour écrire le vrai lecteur au cycle suivant. N'ajoute aucune œuvre.
+ * Source de RECONNAISSANCE de **CER.ES** (Red Digital de Colecciones de Museos de España, dont le Museo Sorolla) : aucun point d'accès
+ * vérifié n'est connu. Elle interroge la fiche d'une œuvre connue (déduite d'un identifiant Europeana : table FDOC, musée MSM), la page
+ * d'accueil et quelques adresses probables de moissonnage OAI-PMH, puis consigne dans [Diag] ce qui revient : code, titre de la page,
+ * formulaires et champs, liens d'images, mentions de licence, début du corps. N'ajoute aucune œuvre : le vrai lecteur s'écrira avec ces formes.
  */
-class HispanicSocietyProbe(private val http: ManifestSource) : MuseumSource {
-    override val id = "hispanic"
-    override val name = "Hispanic Society of America (reconnaissance)"
-    override val europeanaKeyword = "hispanic society"
+class CeresProbe(private val http: ManifestSource) : MuseumSource {
+    override val id = "ceres"
+    override val name = "CER.ES / Museo Sorolla (reconnaissance)"
+    override val europeanaKeyword = "museo sorolla"
     override val reconnaissanceOnly = true
 
     override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> {
-        val term = java.net.URLEncoder.encode(spec.term ?: query.match, "UTF-8").replace("+", "%20")
         val urls = listOf(
-            "https://hispanicsociety.emuseum.com/search/$term/objects",
-            "https://hispanicsociety.emuseum.com/search/$term/objects/list",
-            "https://hispanicsociety.emuseum.com/search/$term",
-            "https://diglib.hispanicsociety.org/search?q=$term",
+            "https://ceres.mcu.es/pages/Main?idt=27659&inventary=85829&table=FDOC&museum=MSM",
+            "https://ceres.cultura.gob.es/",
+            "https://ceres.mcu.es/pages/Main",
+            "https://ceres.mcu.es/oai/?verb=Identify",
+            "https://ceres.cultura.gob.es/oai/request?verb=Identify",
         )
         for (url in urls) {
             try {
-                val text = http.fetch(url)
-                val links = Regex("""/objects/(\d+)""").findAll(text).map { it.groupValues[1] }.toSet().size
-                val iiif = Regex("iiif|manifest", RegexOption.IGNORE_CASE).findAll(text).count()
-                Diag.info(
-                    "reconnaissance", "${text.length} caractères, $links liens d'objets distincts, $iiif mentions iiif/manifest ; début : ${text.take(200).replace(Regex("\\s+"), " ")}",
-                    url, id, artistIdOf(query), key = "hsa|$url",
-                )
+                Diag.info("reconnaissance", describe(http.fetch(url)), url, id, artistIdOf(query), key = "ceres|$url")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Diag.warn("reconnaissance", "inaccessible : ${e.message ?: e.javaClass.simpleName}", url, id, artistIdOf(query), key = "hsa|$url|err")
+                Diag.warn("reconnaissance", "inaccessible : ${e.message ?: e.javaClass.simpleName}", url, id, artistIdOf(query), key = "ceres|$url|err")
             }
         }
         return emptyList()
+    }
+
+    internal companion object {
+        /** Forme d'une page HTML (ou d'une réponse OAI) en une ligne : de quoi écrire un lecteur sans la page sous les yeux. */
+        fun describe(text: String): String {
+            val flat = text.replace(Regex("\\s+"), " ")
+            val title = Regex("<title[^>]*>(.*?)</title>", RegexOption.IGNORE_CASE).find(flat)?.groupValues?.get(1)?.trim()?.take(100)
+            val forms = Regex("<form[^>]*action=\"([^\"]*)\"", RegexOption.IGNORE_CASE).findAll(flat).map { it.groupValues[1] }.distinct().take(4).toList()
+            val inputs = Regex("<(?:input|select|textarea)[^>]*name=\"([^\"]+)\"", RegexOption.IGNORE_CASE).findAll(flat).map { it.groupValues[1] }.distinct().take(15).toList()
+            val images = Regex("(?:src|href)=\"([^\"]+\\.(?:jpe?g|png|tiff?)[^\"]*)\"", RegexOption.IGNORE_CASE).findAll(flat).map { it.groupValues[1] }.distinct().take(4).toList()
+            val oai = Regex("OAI-PMH|repositoryName|oai_dc", RegexOption.IGNORE_CASE).containsMatchIn(flat)
+            val licence = Regex("creative commons|licencia|derechos de reproducci|dominio p.blico|copyright", RegexOption.IGNORE_CASE).findAll(flat).map { it.value.lowercase() }.distinct().take(4).toList()
+            return "${text.length} caractères · titre « ${title ?: "—"} » · formulaires $forms · champs $inputs · images $images · OAI-PMH : ${if (oai) "oui" else "non"} · mentions de droits $licence · début : ${flat.take(160)}"
+        }
     }
 }
 
@@ -340,8 +369,10 @@ fun defaultMuseumSources(
     /** Accès au Met : cadencé et retenté en cas de blocage temporaire (voir [RetryingSource]) ; par défaut, le même que les autres. */
     metHttp: ManifestSource = http,
     metNoticeCache: java.io.File? = null,
+    /** Accès à Wikidata/Commons : cadencé et retenté (limite de débit 429) ; par défaut, le même que les autres. */
+    wikiHttp: ManifestSource = http,
 ): Map<String, MuseumSource> =
     listOf(
         AicSource(http), RijksSource(http), EuropeanaSource(http), MetSource(metHttp, noticeCache = metNoticeCache),
-        ClevelandSource(http), SmkSource(http), WikimediaSource(http), HispanicSocietyProbe(http),
+        ClevelandSource(http), SmkSource(http), WikimediaSource(wikiHttp), CeresProbe(http),
     ).associateBy { it.id }

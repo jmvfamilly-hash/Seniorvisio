@@ -43,11 +43,20 @@ object EuropeanaParser {
         fun url(who: String) = "https://api.europeana.eu/record/v2/search.json?wskey=$key&query=who%3A%28" + who + "%29" +
             "&qf=TYPE%3AIMAGE&media=true&thumbnail=true&rows=100&profile=standard"
         fun quoted(name: String) = "%22" + java.net.URLEncoder.encode(name, "UTF-8") + "%22"
-        return listOf(
-            searchUrl(query, key) to false,
-            url(quoted(query.asciiName())) to false,
-            url(java.net.URLEncoder.encode(query.match, "UTF-8")) to true,
-        ).distinctBy { it.first }
+        val parts = query.artistName.trim().split(Regex("\\s+"))
+        val last = parts.last()
+        val first = parts.dropLast(1).joinToString(" ")
+        val list = ArrayList<Pair<String, Boolean>>()
+        list += searchUrl(query, key) to false
+        list += url(quoted(query.asciiName())) to false
+        if (first.isNotEmpty()) {
+            // « Nom, Prénom » : la forme des catalogues (« Sargent, John Singer »)
+            list += url(quoted("$last, $first")) to false
+            // nom ET prénom, sans guillemets : tolère l'ordre et les mots intercalés ; créateur exigé (homonymes)
+            list += url("%28" + java.net.URLEncoder.encode(last, "UTF-8") + "%20AND%20" + java.net.URLEncoder.encode(first.split(' ').first(), "UTF-8") + "%29") to true
+        }
+        list += url(java.net.URLEncoder.encode(query.match, "UTF-8")) to true
+        return list.distinctBy { it.first }
     }
 
     /** Recherche par fournisseur de données (ex. « Museo Sorolla ») : toutes les notices image de ce musée. */

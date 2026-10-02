@@ -65,8 +65,11 @@ class FixesTest {
         assertEquals(listOf("Portrait"), EuropeanaParser.parse(items, sargent, strict, strictCreator = true).map { it.title })
         assertTrue(strict.summary(), strict.summary().contains("1 sans créateur déclaré") && strict.summary().contains("1 d'un autre créateur"))
         // seule la recherche par nom de famille est stricte (sans accent dans le nom, la 2e variante fait doublon avec la 1re et disparaît)
-        assertEquals(listOf(false, true), EuropeanaParser.variants(sargent).map { it.second })
-        assertEquals(listOf(false, false, true), EuropeanaParser.variants(q("joaquin-sorolla")).map { it.second })
+        // exacte, « Nom, Prénom », nom ET prénom (créateur exigé), nom de famille seul (créateur exigé)
+        assertEquals(listOf(false, false, true, true), EuropeanaParser.variants(sargent).map { it.second })
+        assertEquals(listOf(false, false, false, true, true), EuropeanaParser.variants(q("joaquin-sorolla")).map { it.second })
+        val urls = EuropeanaParser.variants(sargent).map { it.first }
+        assertTrue(urls[1].contains("%22Sargent%2C+John+Singer%22") && urls[2].contains("%28Sargent%20AND%20John%29"))
     }
 
     // ── D. raisons des rejets ─────────────────────────────────────────────────────

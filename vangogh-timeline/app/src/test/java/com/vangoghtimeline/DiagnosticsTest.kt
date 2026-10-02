@@ -252,8 +252,8 @@ class DiagnosticsTest {
             .copy(sources = listOf(SourceSpec("europeana")))
         val q = ArtworkQuery.of(artist)
         val variants = com.vangoghtimeline.iiif.EuropeanaParser.searchVariants(q)
-        assertEquals(3, variants.size)
-        assertTrue(variants[0].contains("Joaqu%C3%ADn") && variants[1].contains("Joaquin") && variants[2].endsWith("&profile=standard") && variants[2].contains("%28Sorolla%29"))
+        assertEquals(5, variants.size)
+        assertTrue(variants[0].contains("Joaqu%C3%ADn") && variants[1].contains("Joaquin") && variants[4].endsWith("&profile=standard") && variants[4].contains("%28Sorolla%29"))
         val items = """{"items":[{"id":"/9/s","title":["Playa de Valencia"],"dcCreator":["Sorolla y Bastida, Joaquín"],"year":["1908"],"edmPreview":["https://t/1"],"dataProvider":["Museo"]}]}"""
         val manifest = """{"@type":"sc:Manifest","sequences":[{"canvases":[{"images":[{"resource":{"@id":"https://s/iiif/x/full/full/0/default.jpg","service":{"@id":"https://s/iiif/x"}}}]}]}]}"""
         val http = CountingHttp(mapOf(
@@ -263,7 +263,7 @@ class DiagnosticsTest {
         val state = UniverseLoader(defaultMuseumSources(http), SourceValidator(http, reachOk), tmp()).load(artist) { }
         assertEquals(listOf("Playa de Valencia"), state.artworks.map { it.title })
         val msgs = Diag.snapshot().map { it.message }
-        assertTrue(msgs.toString(), msgs.any { it.contains("variante 1/3 sans œuvre exploitable") })
-        assertTrue(msgs.toString(), msgs.any { it.contains("variante 2/3 utilisée") })
+        assertTrue(msgs.toString(), msgs.any { it.contains("variante 1/5 sans œuvre exploitable") })
+        assertTrue(msgs.toString(), msgs.any { it.contains("variante 2/5 utilisée") })
     }
 }

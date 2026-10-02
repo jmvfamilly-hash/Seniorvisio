@@ -165,10 +165,13 @@ object ClevelandParser {
  * `image_iiif_id` (base du service) et/ou `image_iiif_info` (son `info.json`).
  */
 object SmkParser {
-    fun searchUrl(query: ArtworkQuery): String =
+    fun searchUrl(query: ArtworkQuery, keys: String = query.artistName): String =
         "https://api.smk.dk/api/v1/art/search/?lang=en&offset=0&rows=100&filters=" +
             java.net.URLEncoder.encode("[has_image:true]", "UTF-8") +
-            "&keys=" + java.net.URLEncoder.encode(query.artistName, "UTF-8")
+            "&keys=" + java.net.URLEncoder.encode(keys, "UTF-8")
+
+    /** Mots-clés essayés dans l'ordre : le nom complet, le nom sans accents, puis le seul nom de famille (le créateur est de toute façon revérifié). */
+    fun searchKeys(query: ArtworkQuery): List<String> = listOf(query.artistName, query.asciiName(), query.match).distinct()
 
     fun parse(text: String, query: ArtworkQuery, tally: Tally? = null): List<Artwork> {
         val items = obj(text)?.arr("items")

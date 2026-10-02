@@ -70,16 +70,16 @@ object ArtistExtras {
 
     /**
      * Toutes les sources, pour un artiste qui a un univers. L'ORDRE compte : les musées directs d'abord ; les agrégateurs (Europeana, Wikimedia) en dernier,
-     * pour que, à titre et année égaux, l'œuvre vienne du musée lui-même ; la source de reconnaissance (Hispanic Society) n'ajoute aucune œuvre.
+     * pour que, à titre et année égaux, l'œuvre vienne du musée lui-même ; la sonde de reconnaissance (CER.ES) n'ajoute aucune œuvre.
      *
      * @param rijks nom du créateur au format du Rijksmuseum (« Nom, Prénom »)
      * @param europeanaProvider fournisseur de données Europeana propre à l'artiste (ex. « Museo Sorolla »), si connu
-     * @param hispanic mot cherché chez la Hispanic Society
+     * @param ceres vrai pour un artiste des musées d'État espagnols : ajoute la sonde de reconnaissance CER.ES
      */
-    private fun allSources(rijks: String, hispanic: String, europeanaProvider: String? = null) = listOf(
+    private fun allSources(rijks: String, europeanaProvider: String? = null, ceres: Boolean = false) = listOf(
         s("aic"), s("rijks", rijks), s("cleveland"), s("met"), s("smk"),
-        s("europeana", europeanaProvider), s("wikimedia"), s("hispanic", hispanic),
-    )
+        s("europeana", europeanaProvider), s("wikimedia"),
+    ) + if (ceres) listOf(s("ceres")) else emptyList()
 
     private val all: Map<String, Extras> = mapOf(
         "gustave-courbet" to Extras(1819, 1877, "Gustave_Courbet"),
@@ -88,15 +88,15 @@ object ArtistExtras {
         "giovanni-fattori" to Extras(1825, 1908, "Giovanni_Fattori"),
         "winslow-homer" to Extras(1836, 1910, "Winslow_Homer"),
         "claude-monet" to Extras(1840, 1926, "Claude_Monet"),
-        "pierre-auguste-renoir" to Extras(1841, 1919, "Pierre-Auguste_Renoir", allSources("Renoir, Pierre Auguste", "Renoir")),
+        "pierre-auguste-renoir" to Extras(1841, 1919, "Pierre-Auguste_Renoir", allSources("Renoir, Pierre Auguste")),
         "berthe-morisot" to Extras(1841, 1895, "Berthe_Morisot"),
         "mary-cassatt" to Extras(1844, 1926, "Mary_Cassatt"),
         "eva-gonzales" to Extras(1849, 1883, "Eva_Gonzal%C3%A8s"),
         "louise-catherine-breslau" to Extras(1856, 1927, "Louise_Catherine_Breslau"),
-        "joaquin-sorolla" to Extras(1863, 1923, "Joaqu%C3%ADn_Sorolla", allSources("Sorolla y Bastida, Joaquín", "Sorolla", "Museo Sorolla")),
-        "john-singer-sargent" to Extras(1856, 1925, "John_Singer_Sargent", allSources("Sargent, John Singer", "Sargent")),
+        "joaquin-sorolla" to Extras(1863, 1923, "Joaqu%C3%ADn_Sorolla", allSources("Sorolla y Bastida, Joaquín", "Museo Sorolla", ceres = true)),
+        "john-singer-sargent" to Extras(1856, 1925, "John_Singer_Sargent", allSources("Sargent, John Singer")),
         "camille-pissarro" to Extras(1830, 1903, "Camille_Pissarro"),
-        "vincent-van-gogh" to Extras(1853, 1890, "Vincent_van_Gogh", allSources("Gogh, Vincent van", "Gogh")),
+        "vincent-van-gogh" to Extras(1853, 1890, "Vincent_van_Gogh", allSources("Gogh, Vincent van")),
         "paul-cezanne" to Extras(1839, 1906, "Paul_C%C3%A9zanne"),
         "edvard-munch" to Extras(1863, 1944, "Edvard_Munch"),
         "anna-boch" to Extras(1848, 1936, "Anna_Boch"),
