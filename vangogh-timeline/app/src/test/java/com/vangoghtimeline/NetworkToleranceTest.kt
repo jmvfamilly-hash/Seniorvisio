@@ -67,9 +67,12 @@ class NetworkToleranceTest {
         Diag.warn("tuile", "Socket closed")
         Diag.warn("tuile", "StandaloneCoroutine was cancelled")
         Diag.warn("tuile", "HTTP 404 sur https://x")
+        Diag.warn("préchauffage", "essai 1 : Canceled")                 // messages réels : préfixés par « essai N : »
+        Diag.warn("tuile", "essai 1 (abandon) : Socket is closed")
+        Diag.warn("tuile", "essai 1 : Canceled by user")                // une vraie cause qui contient le mot : gardée
         Diag.error("tuile", "Canceled")                      // une erreur n'est jamais écartée
-        assertEquals(listOf(DiagLevel.WARN, DiagLevel.ERROR), Diag.snapshot().map { it.level })
-        assertEquals(3, Diag.ignoredCancellations)
+        assertEquals(listOf(DiagLevel.WARN, DiagLevel.WARN, DiagLevel.ERROR), Diag.snapshot().map { it.level })
+        assertEquals(5, Diag.ignoredCancellations)
     }
 
     @Test fun smkTriesNameVariantsUntilOneGivesWorks() = runBlocking {

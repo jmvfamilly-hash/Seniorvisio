@@ -307,3 +307,5 @@ Le rapport rev25 montrait des HTTP 429 de Wikimedia sur les licences (3 essais �
   à défaut, le milieu des dates plausibles) et **marquée estimée** : elle s'affiche « vers 1885 (date inconnue) ». Le bilan d'analyse le dit : « 20 retenues (dont 6 à date estimée) ».
 - **Doublons** : une œuvre à date estimée disparaît si le même titre existe, daté, dans une autre source (ArtworkMerge).
 - Une année connue mais hors des dates plausibles reste écartée. `PARSER_VERSION` = 3 (les univers enregistrés sont relus). Le Rijksmuseum, dont la date vient du format Linked Art, n'est pas concerné.
+
+**Rev28** : le filtre des annulations normales reconnaît désormais les messages préfixés (« essai 1 : Canceled », « essai 1 : Socket is closed ») ; en rev25 il ne voyait que les messages nus, et le journal restait envahi.

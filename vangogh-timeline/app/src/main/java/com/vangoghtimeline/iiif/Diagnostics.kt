@@ -47,10 +47,13 @@ object Diag {
     /** Horloge, remplaçable par les tests. */
     @Volatile var clock: () -> Long = { System.currentTimeMillis() }
 
-    /** Annulations normales (l'utilisateur quitte une œuvre, la tuile n'est plus utile) : pas des anomalies. */
-    fun isCancellationNoise(message: String): Boolean =
-        message.trim().let { it.equals("Canceled", ignoreCase = true) || it.equals("Cancelled", ignoreCase = true) || it.contains("Socket closed", ignoreCase = true) ||
-            it.contains("Job was cancelled", ignoreCase = true) || it.contains("was cancelled", ignoreCase = true) }
+    private val CANCELLATION = Regex("""(^|[:\s])cancel{1,2}ed\s*$|socket\s+(is\s+)?closed|was\s+cancel{1,2}ed""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Annulations normales (l'utilisateur quitte une œuvre, la tuile n'est plus utile) : pas des anomalies. Les messages arrivent
+     * souvent préfixés (« essai 1 : Canceled », « essai 1 : Socket is closed ») : on reconnaît la fin du message, pas le message entier.
+     */
+    fun isCancellationNoise(message: String): Boolean = CANCELLATION.containsMatchIn(message.trim())
 
     /** Nombre d'annulations normales écartées du journal (affiché dans le rapport). */
     @Volatile var ignoredCancellations = 0
