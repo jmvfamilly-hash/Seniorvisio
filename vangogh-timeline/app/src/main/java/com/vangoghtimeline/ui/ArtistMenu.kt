@@ -119,8 +119,8 @@ fun ArtistMenuScreen(
     onRefresh: (Artist) -> Unit = {},
 ) {
     var query by rememberSaveable { mutableStateOf("") }
-    var sortName by rememberSaveable { mutableStateOf(SortMode.PERIOD.name) }
-    val sort = SortMode.valueOf(sortName)
+    var level by rememberSaveable { mutableStateOf(2) }          // 1 = nom et dates, 2 = détails, 3 = contenu étendu
+    val sort = SortMode.PERIOD
     val rows = remember(artists, query, sort) { menuRows(artists, query, sort) }
     val items = remember(rows) { rows.filterIsInstance<MenuRow.Item>().map { it.artist } }
     val selected = artists.firstOrNull { it.id == selectedId }
@@ -160,22 +160,17 @@ fun ArtistMenuScreen(
         }
 
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp)) {
-            if (landscape) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f)) { SearchBar(query) { query = it } }
-                    SortPanel(sort, Modifier) { sortName = it.name }
-                }
-            } else {
-                SearchBar(query) { query = it }
-                Spacer(Modifier.height(8.dp))
-                SortPanel(sort, Modifier.fillMaxWidth()) { sortName = it.name }
-            }
+            SearchBar(query) { query = it }
             Spacer(Modifier.height(8.dp))
             Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Bottom, horizontalAlignment = Alignment.CenterHorizontally) {
-                ArtistPanel(selected, backdrop, model, onTap, onRefresh, onReportLongPress, Modifier.widthIn(max = 560.dp))
+                ArtistPanel(selected, backdrop, model, level, onTap, onRefresh, onReportLongPress, Modifier.widthIn(max = 560.dp))
             }
             CaptionBar(backdrop)
             ArcPicker(items, selectedId, model.portraits, onTap, landscape, maxW, Modifier.fillMaxWidth())
+            // au centre du cercle : le curseur du niveau de détail (le niveau 3 n'existe que si l'artiste a un univers)
+            val maxLevel = if (selected?.hasUniverse == true) 3 else 2
+            val shown = level.coerceAtMost(maxLevel)
+            DetailSlider(shown, maxLevel) { level = it }
         }
     }
 }
@@ -205,30 +200,6 @@ private fun SearchBar(query: String, onChange: (String) -> Unit) {
                 Box { if (query.isEmpty()) BasicText("Rechercher un artiste, un pays, un style…", style = TextStyle(color = Color(0xFF8E96A1), fontSize = 17.sp)); inner() }
             },
         )
-    }
-}
-
-@Composable
-private fun SortPanel(sort: SortMode, modifier: Modifier, onSort: (SortMode) -> Unit) {
-    Row(
-        modifier.clip(RoundedCornerShape(16.dp)).background(Glass).border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        val currentSort by rememberUpdatedState(onSort)
-        BasicText("TRIER PAR :", style = TextStyle(color = Color.White, fontSize = 12.sp, letterSpacing = 0.6.sp))
-        for (mode in SortMode.values()) {
-            val on = mode == sort
-            BasicText(
-                mode.label,
-                maxLines = 1,
-                style = TextStyle(color = if (on) Gold else Color.White, fontSize = 11.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal),
-                modifier = Modifier
-                    .border(BorderStroke(1.dp, if (on) Gold else GlassBorder), RoundedCornerShape(8.dp))
-                    .pointerInput(mode) { detectTapGestures(onTap = { currentSort(mode) }) }
-                    .padding(horizontal = 8.dp, vertical = 5.dp),
-            )
-        }
     }
 }
 
@@ -345,7 +316,7 @@ private fun CaptionBar(backdrop: Backdrop?) {
  */
 @Composable
 private fun ArtistPanel(
-    artist: Artist?, backdrop: Backdrop?, model: AppModel,
+    artist: Artist?, backdrop: Backdrop?, model: AppModel, level: Int,
     onTap: (Artist) -> Unit, onRefresh: (Artist) -> Unit, onReport: () -> Unit, modifier: Modifier = Modifier,
 ) {
     val currentReport by rememberUpdatedState(onReport)
@@ -366,6 +337,12 @@ private fun ArtistPanel(
             return@Column
         }
         BasicText(artist.name, maxLines = 2, style = TextStyle(color = Color.White, fontSize = 26.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center))
+        // niveau 1 : seulement le nom et les dates
+        val shown = if (artist.hasUniverse) level else level.coerceAtMost(2)
+        if (shown <= 1) {
+            artist.lifespan?.let { BasicText(it, style = TextStyle(color = Color(0xFFEFE6D0), fontSize = 16.sp, fontFamily = FontFamily.Serif, textAlign = TextAlign.Center)) }
+            return@Column
+        }
         // le tableau montré en fond (et sa date), comme « Juin 1888 » dans la maquette
         val shownWork = backdrop?.takeIf { it.artistId == artist.id }
         BasicText(
@@ -380,7 +357,12 @@ private fun ArtistPanel(
         artist.locations.firstOrNull()?.let { InfoRow("Lieu", artist.locations.take(2).joinToString(" · ") { it.location }) }
         InfoRow("Période", listOfNotNull(artist.activePeriod.takeIf { it.isNotBlank() }, artist.lifespan?.let { "($it)" }).joinToString(" "))
         Spacer(Modifier.height(10.dp))
-        UniverseSection(artist, model, onTap, onRefresh)
+        if (shown >= 3) {
+            // niveau 3 : contenu étendu (origine, œuvre emblématique, sources détaillées)
+            InfoRow("Origine", artist.origin)
+            InfoRow("Œuvre emblématique", artist.emblematicWork)
+        }
+        UniverseSection(artist, model, onTap, onRefresh, expanded = shown >= 3)
     }
 }
 
@@ -397,8 +379,9 @@ private fun InfoRow(label: String, value: String) {
 
 /** L'univers de l'artiste : résumé d'une ligne, détail des sources dépliable, bouton d'ouverture de la frise. */
 @Composable
-private fun UniverseSection(artist: Artist, model: AppModel, onTap: (Artist) -> Unit, onRefresh: (Artist) -> Unit) {
-    var details by rememberSaveable(artist.id) { mutableStateOf(false) }
+private fun UniverseSection(artist: Artist, model: AppModel, onTap: (Artist) -> Unit, onRefresh: (Artist) -> Unit, expanded: Boolean = false) {
+    var detailsToggle by rememberSaveable(artist.id) { mutableStateOf(false) }
+    val details = detailsToggle || expanded
     val state = model.universes[artist.id]
     val currentTap by rememberUpdatedState(onTap)
     val currentRefresh by rememberUpdatedState(onRefresh)
@@ -415,7 +398,7 @@ private fun UniverseSection(artist: Artist, model: AppModel, onTap: (Artist) -> 
     BasicText(
         "$summary   ${if (details) "▲" else "▼"}",
         style = TextStyle(color = Color(0xFFE3E7EC), fontSize = 12.sp, textAlign = TextAlign.Center),
-        modifier = Modifier.pointerInput(artist.id) { detectTapGestures(onTap = { details = !details }) }.padding(vertical = 4.dp),
+        modifier = Modifier.pointerInput(artist.id) { detectTapGestures(onTap = { detailsToggle = !detailsToggle }) }.padding(vertical = 4.dp),
     )
     if (details && state != null) {
         Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
@@ -465,5 +448,40 @@ private fun SourceLine(r: SourceReport) {
             BasicText(r.name, style = TextStyle(color = Color(0xFFE3E7EC), fontSize = 12.sp, fontWeight = FontWeight.Bold))
             BasicText(r.detail, style = TextStyle(color = Muted, fontSize = 11.sp))
         }
+    }
+}
+
+/** Curseur transparent à 1 à 3 positions (nom et dates / détails / contenu étendu) ; toucher ou glisser. Les positions au-delà de [max] sont grisées. */
+@Composable
+private fun DetailSlider(level: Int, max: Int, onLevel: (Int) -> Unit) {
+    val currentLevel by rememberUpdatedState(onLevel)
+    val density = LocalDensity.current
+    val widthDp = 220.dp
+    val widthPx = with(density) { widthDp.toPx() }
+    fun levelAt(x: Float) = (((x / widthPx) * 3f).toInt() + 1).coerceIn(1, max)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier.width(widthDp).height(34.dp)
+                .pointerInput(max) {
+                    detectTapGestures(onTap = { currentLevel(levelAt(it.x)) })
+                }
+                .pointerInput(max) {
+                    detectHorizontalDragGestures(onHorizontalDrag = { change, _ -> change.consume(); currentLevel(levelAt(change.position.x)) })
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(Modifier.fillMaxSize()) {
+                val y = size.height / 2f
+                val xs = listOf(0.1667f, 0.5f, 0.8333f).map { it * size.width }
+                drawLine(Color(0x55FFFFFF), Offset(xs[0], y), Offset(xs[2], y), strokeWidth = 3f, cap = StrokeCap.Round)
+                xs.forEachIndexed { i, x -> drawCircle(if (i + 1 <= max) Color(0x99FFFFFF) else Color(0x33FFFFFF), radius = 5f, center = Offset(x, y)) }
+                drawCircle(Color(0xCCF0D58A), radius = 12f, center = Offset(xs[level - 1], y))
+                drawCircle(Color(0x66FFFFFF), radius = 12f, center = Offset(xs[level - 1], y), style = Stroke(width = 2f))
+            }
+        }
+        BasicText(
+            when (level) { 1 -> "Nom et dates"; 2 -> "Détails"; else -> "Contenu étendu" },
+            style = TextStyle(color = Color(0xB3FFFFFF), fontSize = 10.sp),
+        )
     }
 }

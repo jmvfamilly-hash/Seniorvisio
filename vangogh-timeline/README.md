@@ -392,3 +392,8 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 - **Chargées en local** : `tools/fetch_backdrops.py` télécharge les images au build (étape du workflow) dans `assets/backdrops/{artiste}.jpg`, donc embarquées dans l'APK ; si une image manque, l'appli retombe sur l'adresse distante, puis sur un dégradé.
 - **Règle des tiers** (`ThirdsFit`) : le point d'intérêt tombe sur une ligne des tiers en largeur ET en hauteur (regard/visage sur la ligne du tiers supérieur, arbre sur la ligne la plus proche) ; l'image est agrandie juste assez (jusqu'à ×2,2) pour que ce soit possible sans laisser de vide. Testé pour 4 formes d'écran.
 - **Point d'intérêt** : estimé à la main dans l'index (visage / arbre) ; au build, OpenCV (Haar) le remplace par le visage détecté s'il y en a un (hors paysages). Sans détection ni arbre connu : centre.
+
+## Rev41 — menu : curseur de détail, tri retiré
+
+- Le panneau de tri sous la recherche est retiré (ordre par période).
+- Un **curseur transparent à 3 positions**, au centre sous le demi-cercle : 1 = nom et dates ; 2 = détails actuels ; 3 = contenu étendu (origine, œuvre emblématique, sources détaillées, licences, actualisation) — seulement si l'artiste a un univers (sinon le curseur s'arrête à 2).
