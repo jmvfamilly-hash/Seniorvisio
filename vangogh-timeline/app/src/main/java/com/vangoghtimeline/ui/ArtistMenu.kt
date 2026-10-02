@@ -8,15 +8,20 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.platform.LocalContext
+import coil.request.ImageRequest
+import coil.size.Size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,8 +31,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -72,7 +75,8 @@ import com.vangoghtimeline.iiif.SourceReport
 import com.vangoghtimeline.iiif.SourceState
 import com.vangoghtimeline.model.AgeFormat
 import com.vangoghtimeline.model.Artist
-import com.vangoghtimeline.model.ArtistBackdrops
+import com.vangoghtimeline.model.BackdropIndex
+import com.vangoghtimeline.model.ThirdsFit
 import com.vangoghtimeline.model.Backdrop
 import com.vangoghtimeline.model.MenuRow
 import com.vangoghtimeline.model.SortMode
@@ -91,11 +95,12 @@ private val GlassBorder = Color(0x40FFFFFF)
 private val Ink = Color(0xFF0E1013)
 
 /**
- * Menu de sélection d'un artiste (maquette « Chronologie des Impressionnistes »), en deux dispositions :
+ * Menu de sélection d'un artiste (maquette « Chronologie des Impressionnistes »), IDENTIQUE en portrait et en paysage :
  *
- * - **Portrait** : un point d'intérêt d'un tableau majeur de l'artiste en fond plein écran ([ArtistBackdrops]) ; en haut une barre de recherche
- *   transparente et le tri ; une bande verticale de portraits à droite ; la fiche de l'artiste (style, lieu, période, sources) en bas.
- * - **Paysage** : la fiche et la recherche à gauche, les portraits sur un **arc de cercle** à droite (glisser pour les faire défiler).
+ * - en fond plein écran, UN tableau majeur de l'artiste sélectionné (image embarquée dans l'APK, voir [BackdropIndex]), placé pour que le regard
+ *   ou le visage — à défaut un arbre — tombe sur une ligne des tiers en largeur et en hauteur ([ThirdsFit]) ;
+ * - en haut, la recherche transparente et le tri ; au milieu, la fiche de l'artiste (style, lieu, période, sources) ;
+ * - en bas au centre, les portraits sur un **demi-cercle** (glisser horizontalement pour les faire défiler, le portrait central est le plus grand).
  *
  * Un toucher sur un portrait sélectionne l'artiste (et lance la connexion de ses sources, voir [AppRoot]) ; un autre toucher, ou le bouton
  * « Ouvrir la frise », ouvre son univers. Appui long dans la fiche : rapport d'anomalies. Le zoom sémantique, la navigation thématique et les
@@ -117,10 +122,13 @@ fun ArtistMenuScreen(
     var sortName by rememberSaveable { mutableStateOf(SortMode.PERIOD.name) }
     val sort = SortMode.valueOf(sortName)
     val rows = remember(artists, query, sort) { menuRows(artists, query, sort) }
+    val items = remember(rows) { rows.filterIsInstance<MenuRow.Item>().map { it.artist } }
     val selected = artists.firstOrNull { it.id == selectedId }
-    // fond : l'artiste sélectionné, à défaut le premier qui a un fond (le menu n'est jamais « vide »)
-    val backdropArtistId = selected?.id?.takeIf { ArtistBackdrops.of(it) != null } ?: artists.firstOrNull { ArtistBackdrops.of(it.id) != null }?.id
-    val backdrop = backdropArtistId?.let { ArtistBackdrops.of(it) }
+    val context = LocalContext.current
+    val index = remember { runCatching { BackdropIndex.parse(context.assets.open("backdrops/index.json").bufferedReader().use { it.readText() }) }.getOrDefault(emptyMap()) }
+    val embedded = remember { runCatching { context.assets.list("backdrops")?.toSet() }.getOrNull().orEmpty() }
+    // fond : l'artiste sélectionné, à défaut le premier de la liste (le menu n'est jamais « vide »)
+    val backdrop = (selected ?: items.firstOrNull() ?: artists.firstOrNull())?.let { index[it.id] }?.takeIf { it.usable }
 
     BoxWithConstraints(modifier.fillMaxSize().background(Ink)) {
         // lus ici : les lambdas imbriquées (Row, Column…) ont leur propre récepteur et n'ont plus accès à maxWidth / maxHeight
@@ -128,51 +136,46 @@ fun ArtistMenuScreen(
         val maxH = maxHeight
         val landscape = maxW > maxH
         val density = LocalDensity.current
-        val aspect = with(density) { maxW.toPx() / maxH.toPx() }
-        val outWidth = if (landscape) 1600 else 1080
+        val screenW = with(density) { maxW.toPx() }
+        val screenH = with(density) { maxH.toPx() }
 
-        // ── fond : point d'intérêt d'un tableau majeur, fondu entre deux artistes ──
+        // ── fond : un tableau, regard / visage / arbre sur la règle des tiers, fondu entre deux artistes ──
         Crossfade(targetState = backdrop, animationSpec = tween(700), label = "fond") { b ->
-            Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().clipToBounds(), contentAlignment = Alignment.TopStart) {
                 if (b != null) {
-                    AsyncImage(model = b.url(aspect, outWidth), contentDescription = b.credit, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    val p = ThirdsFit.fit(b.width, b.height, screenW, screenH, b.poiX, b.poiY, b.kind)
+                    val data: Any = if ("${b.artistId}.jpg" in embedded) b.assetUri else b.remoteUrl
+                    AsyncImage(
+                        model = ImageRequest.Builder(context).data(data).size(Size.ORIGINAL).crossfade(true).build(),
+                        contentDescription = b.credit,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier
+                            .requiredSize(with(density) { p.imageW.toDp() }, with(density) { p.imageH.toDp() })
+                            .offset { IntOffset(p.offsetX.roundToInt(), p.offsetY.roundToInt()) },
+                    )
                 }
                 // voile : le texte reste lisible quelle que soit la clarté du tableau
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x99000000), Color(0x22000000), Color(0xB3000000)))))
             }
         }
 
-        if (landscape) {
-            Row(Modifier.fillMaxSize().statusBarsPadding().padding(12.dp)) {
-                Column(Modifier.weight(1f).fillMaxHeight()) {
-                    SearchBar(query) { query = it }
-                    Spacer(Modifier.height(8.dp))
-                    SortPanel(sort) { sortName = it.name }
-                    Spacer(Modifier.weight(1f))
-                    ArtistPanel(selected, backdrop, model, onTap, onRefresh, onReportLongPress, Modifier.heightIn(max = maxH * 0.62f))
-                    CaptionBar(backdrop)
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp)) {
+            if (landscape) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { SearchBar(query) { query = it } }
+                    SortPanel(sort, Modifier) { sortName = it.name }
                 }
-                ArcPicker(
-                    items = rows.filterIsInstance<MenuRow.Item>().map { it.artist },
-                    selectedId = selectedId, portraits = model.portraits, onTap = onTap,
-                    modifier = Modifier.width(maxW * 0.40f).fillMaxHeight(),
-                )
-            }
-        } else {
-            Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp)) {
+            } else {
                 SearchBar(query) { query = it }
                 Spacer(Modifier.height(8.dp))
-                SortPanel(sort) { sortName = it.name }
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.weight(1f).fillMaxWidth()) {
-                    Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Bottom) {
-                        ArtistPanel(selected, backdrop, model, onTap, onRefresh, onReportLongPress, Modifier.heightIn(max = maxH * 0.58f))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    PortraitStrip(rows, selectedId, model.portraits, onTap, Modifier.width(78.dp).fillMaxHeight())
-                }
-                CaptionBar(backdrop)
+                SortPanel(sort, Modifier.fillMaxWidth()) { sortName = it.name }
             }
+            Spacer(Modifier.height(8.dp))
+            Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Bottom, horizontalAlignment = Alignment.CenterHorizontally) {
+                ArtistPanel(selected, backdrop, model, onTap, onRefresh, onReportLongPress, Modifier.widthIn(max = 560.dp))
+            }
+            CaptionBar(backdrop)
+            ArcPicker(items, selectedId, model.portraits, onTap, landscape, maxW, Modifier.fillMaxWidth())
         }
     }
 }
@@ -206,9 +209,9 @@ private fun SearchBar(query: String, onChange: (String) -> Unit) {
 }
 
 @Composable
-private fun SortPanel(sort: SortMode, onSort: (SortMode) -> Unit) {
+private fun SortPanel(sort: SortMode, modifier: Modifier, onSort: (SortMode) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Glass).border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+        modifier.clip(RoundedCornerShape(16.dp)).background(Glass).border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -260,78 +263,63 @@ private fun PortraitChip(artist: Artist, selected: Boolean, portraitUrl: String?
     }
 }
 
-/** Bande verticale de portraits, à droite (portrait) : groupes sous un titre, défilement vertical. */
-@Composable
-private fun PortraitStrip(rows: List<MenuRow>, selectedId: String?, portraits: Map<String, String>, onTap: (Artist) -> Unit, modifier: Modifier = Modifier) {
-    Box(modifier.clip(RoundedCornerShape(16.dp)).background(Glass).border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(16.dp))) {
-        LazyColumn(
-            contentPadding = PaddingValues(vertical = 8.dp, horizontal = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            items(rows, key = { r -> when (r) { is MenuRow.Header -> "h:${r.text}"; is MenuRow.Item -> r.artist.id } }) { row ->
-                when (row) {
-                    is MenuRow.Header -> BasicText(
-                        row.text, maxLines = 3, overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(color = DimGold, fontSize = 8.sp, letterSpacing = 0.4.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    )
-                    is MenuRow.Item -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        PortraitChip(row.artist, row.artist.id == selectedId, portraits[row.artist.id], 62.dp, onTap = { onTap(row.artist) })
-                        BasicText(
-                            row.artist.name.substringAfterLast(' '), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            style = TextStyle(color = if (row.artist.id == selectedId) Gold else Color.White, fontSize = 9.sp, textAlign = TextAlign.Center),
-                            modifier = Modifier.width(66.dp).padding(top = 2.dp),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 /**
- * Portraits sur un ARC DE CERCLE le long du bord droit (paysage) : glisser verticalement les fait défiler le long de l'arc ; le portrait du
- * centre est le plus grand. Sélectionner un artiste (toucher) le ramène au centre.
+ * Portraits sur un DEMI-CERCLE, centré en bas de l'écran (identique en portrait et en paysage) : le portrait du centre est le plus haut et le plus
+ * grand, les autres redescendent de part et d'autre. Glisser horizontalement les fait défiler ; toucher un portrait le sélectionne et le ramène
+ * au centre. Les titres de groupe du tri ne sont pas affichés ici (l'ordre, lui, suit le tri choisi).
  */
 @Composable
-private fun ArcPicker(items: List<Artist>, selectedId: String?, portraits: Map<String, String>, onTap: (Artist) -> Unit, modifier: Modifier = Modifier) {
+private fun ArcPicker(
+    items: List<Artist>, selectedId: String?, portraits: Map<String, String>, onTap: (Artist) -> Unit,
+    landscape: Boolean, screenWidth: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier,
+) {
     val scope = rememberCoroutineScope()
     val pos = remember { Animatable(0f) }                  // position (en nombre de portraits) de celui qui est au centre de l'arc
     val selectedIndex = items.indexOfFirst { it.id == selectedId }
     LaunchedEffect(selectedIndex, items.size) { if (selectedIndex >= 0) pos.animateTo(selectedIndex.toFloat(), tween(350)) }
     val density = LocalDensity.current
-    BoxWithConstraints(modifier) {
+    val chip = 60.dp
+    val radiusPx = with(density) { (if (landscape) 170.dp else minOf(screenWidth * 0.6f, 300.dp)).toPx() }
+    val chipPx = with(density) { chip.toPx() }
+    val maxTheta = 0.95f                                    // l'arc va de -54° à +54° autour du centre
+    val stepRad = (chipPx * 1.15f) / radiusPx               // angle entre deux portraits voisins
+    val arcLenPx = radiusPx * stepRad
+    val drop = radiusPx * (1f - cos(maxTheta))
+    val height = with(density) { (drop + chipPx * 1.3f + 30.dp.toPx()).toDp() }
+    BoxWithConstraints(modifier.height(height)) {
         val wPx = with(density) { maxWidth.toPx() }
-        val hPx = with(density) { maxHeight.toPx() }
-        val radius = hPx * 0.62f
-        val step = 0.30f                                   // radians entre deux portraits
-        val itemPx = radius * step
-        val halfPx = with(density) { 31.dp.toPx() }
         Box(
             Modifier.fillMaxSize().pointerInput(items.size) {
-                detectVerticalDragGestures(
+                detectHorizontalDragGestures(
                     onDragEnd = { scope.launch { pos.animateTo(pos.value.roundToInt().coerceIn(0, (items.size - 1).coerceAtLeast(0)).toFloat(), tween(250)) } },
-                    onVerticalDrag = { change, dy ->
+                    onHorizontalDrag = { change, dx ->
                         change.consume()
-                        scope.launch { pos.snapTo((pos.value - dy / itemPx).coerceIn(-0.4f, items.size - 0.6f)) }
+                        scope.launch { pos.snapTo((pos.value - dx / arcLenPx).coerceIn(-0.4f, items.size - 0.6f)) }
                     },
                 )
             },
         ) {
             items.forEachIndexed { i, artist ->
                 val rel = i - pos.value
-                if (abs(rel) <= 3.4f) {
-                    val theta = rel * step
-                    val cx = wPx * 0.36f + radius * (1f - cos(theta))
-                    val cy = hPx / 2f + radius * sin(theta)
-                    val scale = (1.3f - 0.13f * abs(rel)).coerceAtLeast(0.7f)
-                    PortraitChip(
-                        artist, artist.id == selectedId, portraits[artist.id], 62.dp, onTap = { onTap(artist) },
-                        modifier = Modifier
-                            .offset { IntOffset((cx - halfPx).roundToInt(), (cy - halfPx).roundToInt()) }
-                            .graphicsLayer { scaleX = scale; scaleY = scale },
-                    )
+                val theta = rel * stepRad
+                if (abs(theta) <= maxTheta + stepRad * 0.5f) {
+                    val cx = wPx / 2f + radiusPx * sin(theta)
+                    val top = chipPx * 0.2f + radiusPx * (1f - cos(theta))
+                    val scale = (1.3f - 0.42f * abs(theta) / maxTheta).coerceAtLeast(0.8f)
+                    val selectedNow = artist.id == selectedId
+                    Column(
+                        Modifier
+                            .offset { IntOffset((cx - chipPx / 2f).roundToInt(), top.roundToInt()) }
+                            .graphicsLayer { scaleX = scale; scaleY = scale; alpha = (1.1f - abs(theta) / (maxTheta + stepRad)).coerceIn(0.35f, 1f) },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        PortraitChip(artist, selectedNow, portraits[artist.id], chip, onTap = { onTap(artist) })
+                        BasicText(
+                            artist.name.substringAfterLast(' '), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(color = if (selectedNow) Gold else Color.White, fontSize = 9.sp, textAlign = TextAlign.Center),
+                            modifier = Modifier.width(chip + 6.dp).padding(top = 2.dp),
+                        )
+                    }
                 }
             }
         }
@@ -344,7 +332,7 @@ private fun ArcPicker(items: List<Artist>, selectedId: String?, portraits: Map<S
 @Composable
 private fun CaptionBar(backdrop: Backdrop?) {
     BasicText(
-        (backdrop?.credit ?: "") + "   ·   appui long sur la fiche : rapport d'anomalies",
+        (backdrop?.credit?.plus("   ·   ") ?: "") + "appui long sur la fiche : rapport d'anomalies",
         maxLines = 2, overflow = TextOverflow.Ellipsis,
         style = TextStyle(color = Color(0xB3FFFFFF), fontSize = 9.sp, fontStyle = FontStyle.Italic),
         modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
@@ -381,7 +369,7 @@ private fun ArtistPanel(
         // le tableau montré en fond (et sa date), comme « Juin 1888 » dans la maquette
         val shownWork = backdrop?.takeIf { it.artistId == artist.id }
         BasicText(
-            shownWork?.let { "${it.titleFr}, ${it.date}" } ?: (artist.lifespan ?: ""),
+            shownWork?.let { "${it.title}, ${it.date}" } ?: (artist.lifespan ?: ""),
             style = TextStyle(color = Color(0xFFEFE6D0), fontSize = 16.sp, fontFamily = FontFamily.Serif, textAlign = TextAlign.Center),
         )
         Spacer(Modifier.height(4.dp))

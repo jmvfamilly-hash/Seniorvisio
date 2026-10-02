@@ -384,3 +384,11 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 - **Portrait** : bande verticale de portraits à droite, groupés sous des titres ; fiche en bas (nom, tableau de fond et date, mouvement, Style / Œuvres / Lieu / Période, résumé de l'univers).
 - **Paysage** : fiche et recherche à gauche, portraits sur un **arc de cercle** à droite (glisser verticalement pour les faire défiler ; sélectionner un artiste le ramène au centre).
 - Conservé : un toucher sélectionne, un autre (ou « Ouvrir la frise ›») ouvre l'univers ; détail des sources dépliable (▼) avec licences, fraîcheur et « Actualiser maintenant » ; **appui long sur la fiche** = rapport d'anomalies.
+
+## Rev39 — menu v2 : demi-cercle unique, fond local sur la règle des tiers
+
+- **Un seul menu** en portrait et en paysage : recherche et tri en haut, fiche au milieu, portraits sur un **demi-cercle centré en bas** (glisser horizontalement ; le portrait central est le plus haut et le plus grand).
+- **Un fond pour les 20 artistes**, même sans univers (`assets/backdrops/index.json`) : 14 tableaux open access du National Gallery of Art (CC0) ; pour Cézanne, Munch, Boch, Fattori, Gonzalès et Breslau (absents des données ouvertes du NGA), le tableau le plus connu de Wikidata, servi par Commons (largeur standard 1280).
+- **Chargées en local** : `tools/fetch_backdrops.py` télécharge les images au build (étape du workflow) dans `assets/backdrops/{artiste}.jpg`, donc embarquées dans l'APK ; si une image manque, l'appli retombe sur l'adresse distante, puis sur un dégradé.
+- **Règle des tiers** (`ThirdsFit`) : le point d'intérêt tombe sur une ligne des tiers en largeur ET en hauteur (regard/visage sur la ligne du tiers supérieur, arbre sur la ligne la plus proche) ; l'image est agrandie juste assez (jusqu'à ×2,2) pour que ce soit possible sans laisser de vide. Testé pour 4 formes d'écran.
+- **Point d'intérêt** : estimé à la main dans l'index (visage / arbre) ; au build, OpenCV (Haar) le remplace par le visage détecté s'il y en a un (hors paysages). Sans détection ni arbre connu : centre.
