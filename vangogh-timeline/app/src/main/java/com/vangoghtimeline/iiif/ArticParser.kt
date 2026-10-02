@@ -4,6 +4,8 @@ import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.ArtworkDate
 import com.vangoghtimeline.model.ArtworkQuery
 import com.vangoghtimeline.model.IiifRef
+import com.vangoghtimeline.model.RightsCatalog
+import com.vangoghtimeline.model.RightsInfo
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -23,12 +25,12 @@ import kotlinx.serialization.json.intOrNull
  * Pur Kotlin : testé sur la JVM avec une réponse type.
  */
 object ArticParser {
-    private const val FIELDS = "id,title,artist_title,date_start,date_end,place_of_origin,medium_display,image_id,thumbnail"
+    private const val FIELDS = "id,title,artist_title,date_start,date_end,place_of_origin,medium_display,image_id,thumbnail,is_public_domain,copyright_notice"
 
-    /** Recherche plein texte du nom de l'artiste, restreinte au domaine public. */
+    /** Recherche plein texte du nom de l'artiste. Les œuvres protégées ne sont pas écartées : leurs droits sont affichés ([rightsOf]). */
     fun searchUrl(query: ArtworkQuery): String =
         "https://api.artic.edu/api/v1/artworks/search?q=" + java.net.URLEncoder.encode(query.artistName, "UTF-8").replace("+", "%20") +
-            "&query%5Bterm%5D%5Bis_public_domain%5D=true&limit=100&fields=$FIELDS"
+            "&limit=100&fields=$FIELDS"
 
     val SEARCH_URL: String = searchUrl(ArtworkQuery.VAN_GOGH)
 
@@ -42,6 +44,11 @@ object ArticParser {
      */
     fun manifestUrl(artworkId: Int): String = "https://api.artic.edu/api/v1/artworks/$artworkId/manifest.json"
     private val json = Json { ignoreUnknownKeys = true }
+
+    /** Domaine public (images CC0 de l'AIC) ou, sinon, consultation privée avec la mention de droits du musée. */
+    internal fun rightsOf(publicDomain: Boolean?, notice: String?): RightsInfo =
+        if (publicDomain == true) RightsCatalog.publicDomain("Domaine public (CC0) — Art Institute of Chicago", "https://www.artic.edu/open-access/open-access-images")
+        else RightsCatalog.viewOnly("Droits réservés${notice?.takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""} — Art Institute of Chicago", "https://www.artic.edu/terms")
 
     /** Les œuvres de Van Gogh ayant une image, par date croissante. Une réponse illisible rend une liste vide. */
     fun parse(text: String, query: ArtworkQuery = ArtworkQuery.VAN_GOGH, tally: Tally? = null): List<Artwork> {
@@ -73,6 +80,7 @@ object ArticParser {
                     canvasHeight = thumb?.int("height"),
                 ),
                 provider = "Art Institute of Chicago",
+                rights = rightsOf((o["is_public_domain"] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull(), o.str("copyright_notice")),
             )
         }.sortedWith(compareBy({ it.date.positionEpochDay }, { it.id }))
         if (tally != null) { tally.kept += artworks.size; if (artworks.isEmpty()) tally.shape = JsonReading.describeShape(text) }

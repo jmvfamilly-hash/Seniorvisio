@@ -10,6 +10,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import java.io.IOException
 
 /**
  * Un musée (ou agrégateur) interrogeable pour un artiste. [fetch] ne fait QUE chercher et lire : il lève une exception si le
@@ -22,6 +23,9 @@ interface MuseumSource {
 
     /** Fragment (minuscule) du champ « fournisseur » d'Europeana pour ce musée : ses notices Europeana font doublon avec cette source. */
     val europeanaKeyword: String
+
+    /** Vrai pour une source de RECONNAISSANCE : elle n'ajoute aucune œuvre, elle consigne la forme des réponses d'un service à explorer. */
+    val reconnaissanceOnly: Boolean get() = false
 
     suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork>
 }
@@ -45,7 +49,9 @@ class EuropeanaSource(private val http: ManifestSource, private val key: String 
 
     /** Variantes de nom essayées dans l'ordre (exact, sans accents, nom de famille) ; chacune est consignée avec son résultat. */
     override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> {
-        val variants = EuropeanaParser.variants(query, key)
+        val variants = EuropeanaParser.variants(query, key).toMutableList()
+        // fournisseur de données propre à l'artiste (ex. « Museo Sorolla ») : toutes les notices image de ce musée, créateur non exigé
+        spec.term?.let { variants += EuropeanaParser.dataProviderUrl(it, key) to false }
         var firstError: Exception? = null
         var answered = false
         for ((index, variant) in variants.withIndex()) {
@@ -251,6 +257,83 @@ class RijksSource(
     }
 }
 
+/**
+ * Wikimedia (Wikidata + Commons) : voir [WikimediaParser]. Le terme de la source est le titre de l'article Wikipédia de l'artiste.
+ * Les licences sont lues par lots de [WikimediaParser.BATCH] fichiers ; un lot en échec laisse ses œuvres avec une licence « non lue »
+ * (échec consigné), il ne fait pas échouer la source.
+ */
+class WikimediaSource(private val http: ManifestSource, private val parallelism: Int = 3) : MuseumSource {
+    override val id = "wikimedia"
+    override val name = "Wikimedia (Wikidata + Commons)"
+    override val europeanaKeyword = "\u0000"
+    private val qids = HashMap<String, String>()
+
+    override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> = coroutineScope {
+        val title = spec.term ?: throw IllegalArgumentException("Wikimedia : titre de l'article Wikipédia manquant")
+        val qid = qids[title] ?: (WikimediaParser.parseQid(http.fetch(WikimediaParser.qidUrl(title)))
+            ?: throw IOException("identifiant Wikidata introuvable pour l'article « $title »")).also { qids[title] = it }
+        val tally = Tally()
+        val items = WikimediaParser.parseSparql(http.fetch(WikimediaParser.sparqlUrl(qid)), tally)
+        val gate = Semaphore(parallelism)
+        val infos = HashMap<String, WikimediaParser.FileInfo>()
+        items.map { it.file }.chunked(WikimediaParser.BATCH).map { files ->
+            async {
+                gate.withPermit {
+                    try {
+                        WikimediaParser.parseImageInfo(http.fetch(WikimediaParser.imageInfoUrl(files)))
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Diag.warn("source", "licences d'un lot de ${files.size} fichiers non lues : ${e.message ?: e.javaClass.simpleName}", sourceId = id, artistId = artistIdOf(query), key = "wikimedia-batch|${e.message?.take(40)}")
+                        emptyMap()
+                    }
+                }
+            }
+        }.awaitAll().forEach { infos.putAll(it) }
+        val artworks = items.mapNotNull { WikimediaParser.toArtwork(it, infos[WikimediaParser.normalizedName(it.file)], query, tally) }
+        tally.log(id, artistIdOf(query))
+        artworks
+    }
+}
+
+/**
+ * Source de RECONNAISSANCE de la Hispanic Society of America (eMuseum) : aucun point d'accès JSON/IIIF vérifié n'est connu. Elle interroge
+ * quelques adresses de recherche et consigne dans [Diag] ce qui revient (code, type, nombre de liens d'objets, mentions IIIF, début du corps),
+ * pour écrire le vrai lecteur au cycle suivant. N'ajoute aucune œuvre.
+ */
+class HispanicSocietyProbe(private val http: ManifestSource) : MuseumSource {
+    override val id = "hispanic"
+    override val name = "Hispanic Society of America (reconnaissance)"
+    override val europeanaKeyword = "hispanic society"
+    override val reconnaissanceOnly = true
+
+    override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> {
+        val term = java.net.URLEncoder.encode(spec.term ?: query.match, "UTF-8").replace("+", "%20")
+        val urls = listOf(
+            "https://hispanicsociety.emuseum.com/search/$term/objects",
+            "https://hispanicsociety.emuseum.com/search/$term/objects/list",
+            "https://hispanicsociety.emuseum.com/search/$term",
+            "https://diglib.hispanicsociety.org/search?q=$term",
+        )
+        for (url in urls) {
+            try {
+                val text = http.fetch(url)
+                val links = Regex("""/objects/(\d+)""").findAll(text).map { it.groupValues[1] }.toSet().size
+                val iiif = Regex("iiif|manifest", RegexOption.IGNORE_CASE).findAll(text).count()
+                Diag.info(
+                    "reconnaissance", "${text.length} caractères, $links liens d'objets distincts, $iiif mentions iiif/manifest ; début : ${text.take(200).replace(Regex("\\s+"), " ")}",
+                    url, id, artistIdOf(query), key = "hsa|$url",
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Diag.warn("reconnaissance", "inaccessible : ${e.message ?: e.javaClass.simpleName}", url, id, artistIdOf(query), key = "hsa|$url|err")
+            }
+        }
+        return emptyList()
+    }
+}
+
 /** Les sources implémentées, par identifiant (celui des [SourceSpec]). */
 fun defaultMuseumSources(
     http: ManifestSource,
@@ -258,5 +341,7 @@ fun defaultMuseumSources(
     metHttp: ManifestSource = http,
     metNoticeCache: java.io.File? = null,
 ): Map<String, MuseumSource> =
-    listOf(AicSource(http), RijksSource(http), EuropeanaSource(http), MetSource(metHttp, noticeCache = metNoticeCache), ClevelandSource(http), SmkSource(http))
-        .associateBy { it.id }
+    listOf(
+        AicSource(http), RijksSource(http), EuropeanaSource(http), MetSource(metHttp, noticeCache = metNoticeCache),
+        ClevelandSource(http), SmkSource(http), WikimediaSource(http), HispanicSocietyProbe(http),
+    ).associateBy { it.id }

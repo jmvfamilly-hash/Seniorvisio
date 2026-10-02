@@ -121,4 +121,6 @@ data class Artwork(
     val iiif: IiifRef,
     /** Musée / agrégateur d'où vient l'œuvre (ex. « Rijksmuseum »), pour le crédit et la déduplication. Vide = inconnu. */
     val provider: String = "",
+    /** Licence et conditions de consultation (voir [RightsInfo]) ; `null` = non renseigné. */
+    val rights: RightsInfo? = null,
 )

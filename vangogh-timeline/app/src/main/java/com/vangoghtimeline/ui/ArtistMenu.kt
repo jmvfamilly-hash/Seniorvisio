@@ -288,6 +288,13 @@ private fun ArtistInfo(artist: Artist, model: AppModel, onRefresh: (Artist) -> U
         state == null -> Body("Vérification de l'accès aux œuvres…")
         else -> {
             for (r in state.reports) SourceLine(r)
+            if (state.artworks.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                BasicText(
+                    "Licences : ${state.rightsSummary}. Consultation privée ; la licence et les conditions de chaque œuvre s'affichent à l'ouverture (pastille PD / CC / © / ?).",
+                    style = TextStyle(color = Color(0xFFC9D0D8), fontSize = 11.sp),
+                )
+            }
             Spacer(Modifier.height(6.dp))
             // fraîcheur des données (magasin local, rafraîchi après 7 jours) et bouton « Actualiser »
             val age = if (state.updatedAtMs > 0) AgeFormat.fr(System.currentTimeMillis() - state.updatedAtMs) else null

@@ -3,6 +3,7 @@ package com.vangoghtimeline.iiif
 import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.ArtworkDate
 import com.vangoghtimeline.model.IiifRef
+import com.vangoghtimeline.model.RightsCatalog
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -73,6 +74,8 @@ object RijksmuseumParser {
         date = info.date,
         iiif = IiifRef(manifestUrl = "rijks:${info.number}", imageServiceId = serviceId),
         provider = "Rijksmuseum",
+        // politique de données ouvertes du Rijksmuseum : œuvres du domaine public, images publiées en CC0 (non revérifié œuvre par œuvre)
+        rights = RightsCatalog.publicDomain("Domaine public — images CC0 (Rijksmuseum)", "https://www.rijksmuseum.nl/en/research/conduct-research/data/policy"),
     )
 
     /** Anglais d'abord, sinon le terme préféré, sinon le premier nom. */

@@ -4,6 +4,7 @@ import com.vangoghtimeline.model.Artist
 import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.ArtworkMerge
 import com.vangoghtimeline.model.ArtworkQuery
+import com.vangoghtimeline.model.RightsCatalog
 import com.vangoghtimeline.model.SourceSpec
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -35,6 +36,9 @@ class UniverseState(
     /** Date (ms) des données les plus anciennes parmi les sources connectées ; 0 si aucune. */
     val updatedAtMs: Long = 0L,
 ) {
+    /** « 120 domaine public · 14 licence ouverte · 3 consultation privée » : décompte des licences des œuvres montrées. */
+    val rightsSummary: String get() = RightsCatalog.summary(artworks)
+
     val connectedCount: Int get() = reports.count { it.state.connected }
 }
 
@@ -88,11 +92,12 @@ class UniverseLoader(
 
         fun snapshot(done: Boolean): UniverseState {
             // Europeana agrège les mêmes musées : ses notices d'un musée déjà connecté directement sont écartées.
-            val directKeywords = artist.sources.filter { it.sourceId != "europeana" && connected.containsKey(it.sourceId) }
+            val aggregators = setOf("europeana", "wikimedia")
+            val directKeywords = artist.sources.filter { it.sourceId !in aggregators && connected.containsKey(it.sourceId) }
                 .mapNotNull { sources[it.sourceId]?.europeanaKeyword }
             val lists = artist.sources.map { spec ->
                 val list = connected[spec.sourceId].orEmpty()
-                if (spec.sourceId == "europeana") list.filterNot { a -> directKeywords.any { a.provider.lowercase().contains(it) } } else list
+                if (spec.sourceId in aggregators) list.filterNot { a -> directKeywords.any { a.provider.lowercase().contains(it) } } else list
             }
             val merged = ArtworkMerge.merge(lists)
             val credit = artist.sources.mapIndexedNotNull { i, spec ->
@@ -162,6 +167,9 @@ class UniverseLoader(
         } catch (e: Exception) {
             if (TemporaryBlock.matches(e.message)) return limited(artist, source, old, e)
             return fromCache(artist, source, old, e)
+        }
+        if (source.reconnaissanceOnly) {
+            return Outcome(SourceReport(source.id, source.name, SourceState.UNAVAILABLE, 0, "source de reconnaissance : aucune œuvre ajoutée, la forme des réponses est consignée dans le journal"), emptyList(), 0L)
         }
         if (fetched.isEmpty()) {
             Diag.warn("source", "aucune œuvre exploitable pour cet artiste", sourceId = source.id, artistId = artist.id)

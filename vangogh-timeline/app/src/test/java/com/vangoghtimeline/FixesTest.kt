@@ -75,13 +75,13 @@ class FixesTest {
         fun notice(id: Int, pd: Boolean, image: String, artist: String) =
             """{"objectID":$id,"isPublicDomain":$pd,"title":"T$id","artistDisplayName":"$artist","objectBeginDate":1890,"objectEndDate":1890,"primaryImage":"$image"}"""
         val t = Tally()
-        assertEquals(null, MetParser.parseObject(notice(1, false, "https://i/1.jpg", "John Singer Sargent"), sargent, t))
+        assertEquals("met-1", MetParser.parseObject(notice(1, false, "https://i/1.jpg", "John Singer Sargent"), sargent, t)!!.id)   // hors domaine public avec image : consultation privée
         assertEquals(null, MetParser.parseObject(notice(2, true, "", "John Singer Sargent"), sargent, t))
         assertEquals(null, MetParser.parseObject(notice(3, true, "https://i/3.jpg", "Autre"), sargent, t))
         assertEquals("met-4", MetParser.parseObject(notice(4, true, "https://i/4.jpg", "John Singer Sargent"), sargent, t)!!.id)
-        assertEquals("4 reçues, 1 retenues — écartées : 1 hors domaine public, 1 sans image, 1 d'un autre artiste", t.summary())
+        assertEquals("4 reçues, 2 retenues — écartées : 1 sans image, 1 d'un autre artiste", t.summary())
         t.log("met", "john-singer-sargent")
-        assertTrue(Diag.snapshot().single().let { it.level == DiagLevel.INFO && it.message.contains("analyse : 4 reçues, 1 retenues") })
+        assertTrue(Diag.snapshot().single().let { it.level == DiagLevel.INFO && it.message.contains("analyse : 4 reçues, 2 retenues") })
     }
 
     @Test fun anEmptyResultLogsTheShapeOfTheResponse() {

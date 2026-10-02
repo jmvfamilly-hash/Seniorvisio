@@ -4,6 +4,9 @@ import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.ArtworkDate
 import com.vangoghtimeline.model.DatePrecision
 import com.vangoghtimeline.model.IiifRef
+import com.vangoghtimeline.model.RightsCatalog
+import com.vangoghtimeline.model.RightsInfo
+import com.vangoghtimeline.model.RightsKind
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -26,6 +29,10 @@ object ArtworkJson {
             a.iiif.imageServiceId?.let { put("service", it) }; a.iiif.thumbnailUrl?.let { put("thumb", it) }
             a.iiif.canvasWidth?.let { put("w", it) }; a.iiif.canvasHeight?.let { put("h", it) }
             a.iiif.imageUrl?.let { put("image", it) }
+            a.rights?.let { r ->
+                put("rk", r.kind.name); put("rl", r.label); put("rc", r.conditions)
+                r.url?.let { put("ru", it) }; r.attribution?.let { put("ra", it) }
+            }
         })
     }.toString()
 
@@ -42,6 +49,9 @@ object ArtworkJson {
                     place = s("place"), medium = s("medium"),
                     iiif = IiifRef(s("manifest")!!, s("service"), s("thumb"), i("w"), i("h"), s("image")),
                     provider = s("provider").orEmpty(),
+                    rights = s("rk")?.let { k ->
+                        RightsInfo(RightsKind.valueOf(k), s("rl").orEmpty(), s("ru"), s("ra"), s("rc") ?: RightsCatalog.conditionsFor(RightsKind.valueOf(k)))
+                    },
                 )
             } catch (e: Exception) { null }
         }

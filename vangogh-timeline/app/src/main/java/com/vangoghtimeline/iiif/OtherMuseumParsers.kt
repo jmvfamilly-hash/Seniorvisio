@@ -11,6 +11,7 @@ import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.ArtworkDate
 import com.vangoghtimeline.model.ArtworkQuery
 import com.vangoghtimeline.model.IiifRef
+import com.vangoghtimeline.model.RightsCatalog
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -88,8 +89,9 @@ object MetParser {
         tally?.let { it.raw++ }
         val o = obj(text) ?: run { tally?.drop("illisibles"); return null }
         val id = o.int("objectID") ?: run { tally?.drop("sans identifiant"); return null }
-        if (o.bool("isPublicDomain") != true) { tally?.drop("hors domaine public"); return null }
-        val image = o.str("primaryImage")?.takeIf { it.startsWith("http") } ?: run { tally?.drop("sans image"); return null }
+        // pas de filtre « domaine public » : le Met ne publie d'image que pour ces œuvres ; sans image, l'œuvre n'est pas consultable
+        val publicDomain = o.bool("isPublicDomain") == true
+        val image = o.str("primaryImage")?.takeIf { it.startsWith("http") } ?: run { tally?.drop(if (publicDomain) "sans image" else "hors domaine public (pas d'image publiée)"); return null }
         if (o.str("artistDisplayName")?.let(query::matchesCreator) != true) { tally?.drop("d'un autre artiste"); return null }
         val title = o.str("title")?.takeIf { it.isNotBlank() } ?: run { tally?.drop("sans titre"); return null }
         val year = yearOf(o.int("objectBeginDate"), o.int("objectEndDate")) ?: run { tally?.drop("sans date"); return null }
@@ -99,6 +101,8 @@ object MetParser {
             id = "met-$id", title = title.trim(), date = ArtworkDate.year(year), medium = o.str("medium")?.takeIf { it.isNotBlank() },
             iiif = IiifRef(manifestUrl = "met:$id", thumbnailUrl = o.str("primaryImageSmall")?.takeIf { it.startsWith("http") }, imageUrl = image),
             provider = "The Metropolitan Museum of Art",
+            rights = if (publicDomain) RightsCatalog.publicDomain("Domaine public — Met Open Access (CC0)", "https://www.metmuseum.org/about-the-met/policies-and-documents/open-access")
+            else RightsCatalog.viewOnly("Droits réservés — ${o.str("rightsAndReproduction")?.takeIf { it.isNotBlank() } ?: "voir le Met"}", "https://www.metmuseum.org/policies/image-resources"),
         )
     }
 
@@ -117,7 +121,7 @@ object MetParser {
  */
 object ClevelandParser {
     fun searchUrl(query: ArtworkQuery): String =
-        "https://openaccess-api.clevelandart.org/api/artworks/?cc0=1&has_image=1&limit=100&artists=" +
+        "https://openaccess-api.clevelandart.org/api/artworks/?has_image=1&limit=100&artists=" +
             java.net.URLEncoder.encode(query.artistName, "UTF-8")
 
     fun parse(text: String, query: ArtworkQuery, tally: Tally? = null): List<Artwork> {
@@ -146,6 +150,9 @@ object ClevelandParser {
                     canvasHeight = images?.objOf("print")?.int("height") ?: images?.objOf("web")?.int("height"),
                 ),
                 provider = "Cleveland Museum of Art",
+                rights = if (o.str("share_license_status")?.equals("CC0", ignoreCase = true) == true)
+                    RightsCatalog.publicDomain("CC0 — Cleveland Museum of Art Open Access", "https://www.clevelandart.org/open-access")
+                else RightsCatalog.viewOnly("Droits réservés${o.str("copyright")?.takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""} — Cleveland Museum of Art", "https://www.clevelandart.org/open-access"),
             )
         }
         if (tally != null) { tally.kept += artworks.size; if (artworks.isEmpty()) tally.shape = JsonReading.describeShape(text) }
@@ -160,7 +167,7 @@ object ClevelandParser {
 object SmkParser {
     fun searchUrl(query: ArtworkQuery): String =
         "https://api.smk.dk/api/v1/art/search/?lang=en&offset=0&rows=100&filters=" +
-            java.net.URLEncoder.encode("[has_image:true],[public_domain:true]", "UTF-8") +
+            java.net.URLEncoder.encode("[has_image:true]", "UTF-8") +
             "&keys=" + java.net.URLEncoder.encode(query.artistName, "UTF-8")
 
     fun parse(text: String, query: ArtworkQuery, tally: Tally? = null): List<Artwork> {
@@ -184,6 +191,9 @@ object SmkParser {
                 id = "smk-" + slug(number), title = title.trim(), date = ArtworkDate.year(year),
                 iiif = IiifRef(manifestUrl = "smk:$number", imageServiceId = service, canvasWidth = o.int("image_width"), canvasHeight = o.int("image_height")),
                 provider = "Statens Museum for Kunst",
+                rights = if (o["public_domain"].let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content == "true" })
+                    RightsCatalog.publicDomain("Domaine public — SMK Open (CC0)", "https://open.smk.dk/en/about")
+                else RightsCatalog.viewOnly("Droits réservés — ${o.str("rights")?.takeIf { it.isNotBlank() } ?: "voir le SMK"}", "https://open.smk.dk/en/about"),
             )
         }
         if (tally != null) { tally.kept += artworks.size; if (artworks.isEmpty()) tally.shape = JsonReading.describeShape(text) }

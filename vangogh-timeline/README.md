@@ -247,3 +247,21 @@ filtrées resteraient 7 jours. Écriture atomique (fichier temporaire puis renom
 **Cache de tuiles** (`cacheDir/iiif_tiles`, `DiskTileCache`, 256 Mo) : les tuiles, images ordinaires (Met, Cleveland) et `info.json`/manifestes déjà vus sont gardés sur disque ; au-delà du
 plafond, les moins récemment utilisées sont supprimées en premier (la date du fichier est rafraîchie à chaque lecture). Les textes expirent après 30 jours. Une œuvre déjà ouverte se
 rouvre sans retélécharger, même hors ligne. Les vignettes ont leur propre cache disque (Coil, 100 Mo). Les statistiques du cache (fichiers, Mo, taux de réussite) figurent dans le rapport d'anomalies.
+
+## Toutes les sources ouvertes, droits affichés (rev22)
+
+Pour les 4 artistes qui ont un univers (Van Gogh, Sargent, Sorolla, Renoir), **toutes les sources sont ouvertes** : AIC, Rijksmuseum, Europeana, Met, Cleveland, SMK, **Wikimedia** et la
+sonde **Hispanic Society**. Les autres artistes seront ajoutés plus tard.
+
+- **Œuvres consultables en usage privé** : on ne filtre plus sur le seul domaine public (AIC, Met, Cleveland, SMK, Europeana sans `reusability=open`). Une œuvre protégée qui a une image publiée est
+  gardée, marquée « consultation privée » ; sans image publiée, elle est écartée (raison consignée).
+- **Licences et conditions** (`model/Rights.kt`) : chaque œuvre porte un `RightsInfo` (PD / CC / © / ?, libellé, URL de licence, attribution, conditions). Pastille en haut à droite de la vignette ;
+  dans la visionneuse, la barre `RightsBar` (une ligne, un tap la déplie : titre, date, fournisseur, attribution, conditions, lien) ; le panneau de l'artiste résume
+  « N domaine public · M consultation privée ».
+- **Wikimedia** (`WikimediaParser`) : Wikidata SPARQL (créateur P170, image P18, date P571, collection P195) + licence lue sur Commons (`extmetadata`) ; images via `Special:FilePath`.
+- **Europeana** : variante par fournisseur de données (Sorolla) ; droits lus dans `rights` ; `previewNoDistribute` → pas de vignette, mention dans les conditions.
+- **Hispanic Society** : source de reconnaissance, n'ajoute aucune œuvre ; la forme des réponses est consignée dans le journal pour préparer une vraie source.
+- `UniverseStore.PARSER_VERSION` = 2 : les univers enregistrés sont relus avec les nouvelles règles.
+
+Non vérifié (réseau bloqué dans l'environnement de build) : formats réels Wikidata/Commons, termes Rijksmuseum pour Sargent/Renoir/Sorolla, URL de la Hispanic Society. Le rapport d'anomalies
+(appui long) montrera les lignes « reconnaissance » / « analyse ».

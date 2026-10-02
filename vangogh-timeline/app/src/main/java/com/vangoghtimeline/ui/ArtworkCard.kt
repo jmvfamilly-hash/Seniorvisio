@@ -152,6 +152,8 @@ fun ArtworkCard(
             },
     ) {
         ArtworkImage(artwork, widthPx, heightPx)
+        // pastille de licence : PD domaine public, CC licence ouverte, © consultation privée, ? non précisé
+        artwork.rights?.let { RightsBadge(it.kind, Modifier.align(Alignment.TopEnd).padding(5.dp)) }
         Column(
             Modifier
                 .align(Alignment.BottomStart)

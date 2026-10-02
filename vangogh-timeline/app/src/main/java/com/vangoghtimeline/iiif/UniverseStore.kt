@@ -72,7 +72,8 @@ object StorePolicy {
  * fichiers d'une autre version sont ignorés, sinon d'anciennes œuvres mal filtrées resteraient 7 jours.
  */
 object UniverseStore {
-    const val PARSER_VERSION = 1
+    /** 2 : filtres relâchés (œuvres protégées consultables) et licences enregistrées avec chaque œuvre. */
+    const val PARSER_VERSION = 2
 
     private val json = Json { ignoreUnknownKeys = true }
 

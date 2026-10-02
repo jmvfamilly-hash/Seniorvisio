@@ -4,6 +4,7 @@ import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.ArtworkDate
 import com.vangoghtimeline.model.ArtworkQuery
 import com.vangoghtimeline.model.IiifRef
+import com.vangoghtimeline.model.RightsCatalog
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -29,7 +30,7 @@ object EuropeanaParser {
     fun searchUrl(query: ArtworkQuery = ArtworkQuery.VAN_GOGH, key: String = DEMO_KEY): String =
         "https://api.europeana.eu/record/v2/search.json?wskey=$key" +
             "&query=who%3A%28%22" + java.net.URLEncoder.encode(query.artistName, "UTF-8") + "%22%29" +
-            "&qf=TYPE%3AIMAGE&media=true&thumbnail=true&reusability=open&rows=100&profile=standard"
+            "&qf=TYPE%3AIMAGE&media=true&thumbnail=true&rows=100&profile=standard"
 
     /**
      * Recherches à essayer dans l'ordre : le nom exact ; le nom sans accents (les notices portent souvent « Joaquin Sorolla ») ;
@@ -40,7 +41,7 @@ object EuropeanaParser {
     /** Même liste, avec pour chaque adresse : vrai si c'est la recherche par nom de famille seul (analyse stricte du créateur). */
     fun variants(query: ArtworkQuery, key: String = DEMO_KEY): List<Pair<String, Boolean>> {
         fun url(who: String) = "https://api.europeana.eu/record/v2/search.json?wskey=$key&query=who%3A%28" + who + "%29" +
-            "&qf=TYPE%3AIMAGE&media=true&thumbnail=true&reusability=open&rows=100&profile=standard"
+            "&qf=TYPE%3AIMAGE&media=true&thumbnail=true&rows=100&profile=standard"
         fun quoted(name: String) = "%22" + java.net.URLEncoder.encode(name, "UTF-8") + "%22"
         return listOf(
             searchUrl(query, key) to false,
@@ -48,6 +49,12 @@ object EuropeanaParser {
             url(java.net.URLEncoder.encode(query.match, "UTF-8")) to true,
         ).distinctBy { it.first }
     }
+
+    /** Recherche par fournisseur de données (ex. « Museo Sorolla ») : toutes les notices image de ce musée. */
+    fun dataProviderUrl(provider: String, key: String = DEMO_KEY): String =
+        "https://api.europeana.eu/record/v2/search.json?wskey=$key&query=*" +
+            "&qf=DATA_PROVIDER%3A%22" + java.net.URLEncoder.encode(provider, "UTF-8") + "%22" +
+            "&qf=TYPE%3AIMAGE&media=true&thumbnail=true&rows=100&profile=standard"
 
     fun manifestUrlOf(recordId: String): String = "https://iiif.europeana.eu/presentation/" + recordId.trim('/') + "/manifest"
 
@@ -71,14 +78,20 @@ object EuropeanaParser {
             val year = strings(o["year"]).firstNotNullOfOrNull { Regex("""\b(\d{4})\b""").find(it)?.groupValues?.get(1)?.toInt() }
                 ?: run { tally?.drop("sans année"); return@mapNotNull null }
             if (year !in query.years) { tally?.drop("hors des dates plausibles"); return@mapNotNull null }
-            val preview = strings(o["edmPreview"]).firstOrNull()
+            val noPreview = (o["previewNoDistribute"] as? JsonPrimitive)?.contentOrNull == "true"
+            // « previewNoDistribute » : le fournisseur interdit de redistribuer l'aperçu → pas de vignette (l'œuvre reste consultable)
+            val preview = if (noPreview) null else strings(o["edmPreview"]).firstOrNull()
             val museum = strings(o["dataProvider"]).firstOrNull().orEmpty()
+            val rightsUrl = strings(o["rights"]).firstOrNull()
+            val rights = RightsCatalog.fromRightsUrl(rightsUrl, attribution = museum.ifEmpty { null }?.let { "$it, via Europeana" })
+                .let { if (noPreview) it.copy(conditions = it.conditions + " Aperçu non redistribuable : vignette masquée.") else it }
             Artwork(
                 id = "europeana-" + id.trim('/').replace('/', '_'),
                 title = title.trim(),
                 date = ArtworkDate.year(year),
                 iiif = IiifRef(manifestUrl = manifestUrlOf(id), thumbnailUrl = preview),
                 provider = if (museum.isEmpty()) "Europeana" else "Europeana · $museum",
+                rights = rights,
             )
         }
         if (tally != null) { tally.kept += artworks.size; if (artworks.isEmpty()) tally.shape = JsonReading.describeShape(text) }

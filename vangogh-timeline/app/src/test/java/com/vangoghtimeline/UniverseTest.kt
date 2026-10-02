@@ -70,7 +70,8 @@ class UniverseTest {
         assertEquals("VG", vg.initials)
         assertEquals(1880 to 1890, vg.activeStart to vg.activeEnd)
         assertEquals(2, vg.locations.size)
-        assertEquals(listOf("aic", "rijks", "cleveland", "met", "europeana"), vg.sources.map { it.sourceId })
+        assertEquals(listOf("aic", "rijks", "cleveland", "met", "smk", "europeana", "wikimedia", "hispanic"), vg.sources.map { it.sourceId })
+        assertEquals("Vincent_van_Gogh", vg.sources.first { it.sourceId == "wikimedia" }.term)       // titre Wikipédia, complété automatiquement
         assertEquals("Gogh, Vincent van", vg.sources.first { it.sourceId == "rijks" }.term)
         assertEquals("JS", catalog().first { it.id == "john-singer-sargent" }.initials)
     }
@@ -104,7 +105,11 @@ class UniverseTest {
         assertEquals("static:https://images.metmuseum.org/CRDImages/ad/original/DT1.jpg", art.iiif.viewerUrl)
         assertEquals("https://images.metmuseum.org/CRDImages/ad/web-large/DT1.jpg", art.iiif.thumbnailUrlFor(300, 200))
         assertTrue(art.iiif.canOpenViewer)
-        assertNull(MetParser.parseObject(ok.replace("true", "false"), sargent))                       // pas du domaine public
+        // protégée mais avec une image publiée : consultable en privé, licence « droits réservés »
+        val protectedWork = MetParser.parseObject(ok.replace("\"isPublicDomain\":true", "\"isPublicDomain\":false"), sargent)!!
+        assertEquals(com.vangoghtimeline.model.RightsKind.VIEW_ONLY, protectedWork.rights!!.kind)
+        assertEquals(com.vangoghtimeline.model.RightsKind.PUBLIC_DOMAIN, art.rights!!.kind)
+        assertNull(MetParser.parseObject(ok.replace("\"isPublicDomain\":true", "\"isPublicDomain\":false").replace("https://images.metmuseum.org/CRDImages/ad/original/DT1.jpg", ""), sargent))   // protégée et sans image
         assertNull(MetParser.parseObject(ok.replace("John Singer Sargent", "Autre"), sargent))      // autre artiste
         assertNull(MetParser.parseObject(ok.replace("https://images.metmuseum.org/CRDImages/ad/original/DT1.jpg", ""), sargent)) // pas d'image
     }
