@@ -93,11 +93,13 @@ fun IiifZoomViewer(
 
     val loaded = info
     if (loaded == null) {
-        // En attente de l'info.json (ou échec) : fond seul, mais l'appui long reste actif.
+        // En attente de l'info.json (ou échec) : fond seul, mais l'appui long reste actif. Avec [transparentUntilReady], le fond est
+        // TRANSPARENT : la vignette d'une transition reste visible pendant cette attente (qui peut durer plusieurs secondes quand il
+        // faut télécharger toute une image ordinaire) au lieu de disparaître derrière un écran noir.
         Box(
             modifier
                 .fillMaxSize()
-                .background(Backdrop)
+                .background(if (transparentUntilReady) Color.Transparent else Backdrop)
                 .pointerInput(Unit) { detectTapGestures(onLongPress = { longPress() }) },
         )
     } else {

@@ -53,14 +53,24 @@ import com.vangoghtimeline.model.Artwork
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.draw.clip
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
 private const val OPEN_MS = 450
 private const val CLOSE_MS = 320
 private const val FADE_MS = 250
-private const val VIEWER_READY_TIMEOUT_MS = 3000L
 
 /**
  * La frise + l'ouverture d'une œuvre dans le visualiseur IIIF, par une transition « la vignette devient la page » :
@@ -127,7 +137,9 @@ fun TimelineHost(
             expand.snapTo(0f)
             expand.animateTo(1f, tween(OPEN_MS, easing = FastOutSlowInEasing))
             viewerTop = true                          // fin de l'animation : les tuiles se posent PAR-DESSUS la vignette
-            withTimeoutOrNull(VIEWER_READY_TIMEOUT_MS) { snapshotFlow { viewerReady || viewerError != null }.first { it } }
+            // La vignette RESTE, telle quelle, tant que les premières tuiles ne sont pas à l'écran (un témoin d'attente l'accompagne,
+            // voir WaitIndicator) : plus de délai après lequel elle disparaîtrait sur un écran vide. En cas d'erreur, elle reste aussi.
+            snapshotFlow { viewerReady }.first { it }
             overlayAlpha.animateTo(0f, tween(FADE_MS))
         }
     }
@@ -222,7 +234,34 @@ fun TimelineHost(
             if (!viewerTop || overlayAlpha.value > 0.001f) {
                 ExpandingCard(req, expand, overlayAlpha, rootSize)
             }
+            // Témoin d'attente : le visualiseur charge encore (téléchargement de l'image, lecture des informations, premières tuiles).
+            if (viewerShown && viewerTop && !viewerReady && viewerError == null && !closing) {
+                WaitIndicator(Modifier.align(Alignment.Center).zIndex(3f))
+            }
         }
+    }
+}
+
+/** Témoin d'attente (anneau qui tourne et mot), visible seulement si l'attente dépasse 300 ms : pas de clignotement quand tout est déjà prêt. */
+@Composable
+private fun WaitIndicator(modifier: Modifier = Modifier) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(300); visible = true }
+    if (!visible) return
+    val transition = rememberInfiniteTransition(label = "attente")
+    val angle by transition.animateFloat(
+        initialValue = 0f, targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)), label = "angle",
+    )
+    Row(
+        modifier.background(Color(0xCC000000), RoundedCornerShape(20.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Canvas(Modifier.size(20.dp)) {
+            drawArc(Color.White, startAngle = angle, sweepAngle = 270f, useCenter = false, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
+        }
+        Spacer(Modifier.width(10.dp))
+        BasicText("Chargement de l'image…", style = TextStyle(color = Color.White, fontSize = 13.sp))
     }
 }
 

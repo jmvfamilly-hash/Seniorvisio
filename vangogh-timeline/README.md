@@ -332,3 +332,11 @@ Le rapport rev28 montrait Wikimedia sans aucun 429 (largeurs 1920/3840 acceptée
 - **Vue frise** : le nom de l'artiste et ses dates de vie en en-tête (« Berthe Morisot · 1841–1895 »).
 - **Vue détaillée d'une œuvre** : ligne « artiste — titre, date » + licence ; un toucher déplie la fiche : lieu, technique, dimensions, type, département, crédit, n° d'inventaire (selon le musée),
   fournisseur, **lien vers la fiche du musée** (touchable), attribution à citer, conditions, licence. Chaque œuvre porte désormais `details` et `pageUrl` (AIC, Met, Cleveland, NGA, Rijksmuseum, SMK, Europeana, Wikimedia) ; `PARSER_VERSION` = 4.
+
+## Écran noir à l'ouverture d'une œuvre
+
+Cause : le visualiseur, monté par-dessus la vignette dès la fin de l'animation, dessinait un fond OPAQUE tant que son `info.json` n'était pas lu — plusieurs secondes pour une image ordinaire (Met, Cleveland, Wikimedia, NGA), qu'il faut télécharger en entier avant de connaître sa taille.
+La vignette disparaissait donc derrière un écran noir, puis l'image apparaissait.
+
+- `IiifZoomViewer` : avec `transparentUntilReady`, le fond est transparent AUSSI pendant l'attente de l'`info.json`.
+- `TimelineHost` : la vignette reste telle quelle jusqu'aux premières tuiles (plus de délai de 3 s au-delà duquel elle s'effaçait) ; un témoin d'attente (anneau et « Chargement de l'image… »), visible si l'attente dépasse 300 ms, l'accompagne. En cas d'erreur, la vignette reste avec le message.
