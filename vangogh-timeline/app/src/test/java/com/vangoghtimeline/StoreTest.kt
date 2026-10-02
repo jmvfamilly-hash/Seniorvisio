@@ -58,10 +58,13 @@ class StoreTest {
         assertEquals(StoreDecision.FRESH, StorePolicy.decide(stored(SourceState.CACHED, now - 30 * day, now - 10 * 60_000), now))
         assertEquals(StoreDecision.REFRESH, StorePolicy.decide(stored(SourceState.CACHED, now - 30 * day, now - 2 * hour), now))
         // un échec aussi : pas avant une heure, puis on cherche à nouveau
-        for (st in listOf(SourceState.REJECTED, SourceState.UNREACHABLE, SourceState.EMPTY, SourceState.UNAVAILABLE, SourceState.LIMITED)) {
+        for (st in listOf(SourceState.REJECTED, SourceState.UNREACHABLE, SourceState.EMPTY, SourceState.UNAVAILABLE)) {
             assertEquals(st.name, StoreDecision.FRESH, StorePolicy.decide(stored(st, 0, now - 59 * 60_000, 0), now))
             assertEquals(st.name, StoreDecision.FETCH, StorePolicy.decide(stored(st, 0, now - 61 * 60_000, 0), now))
         }
+        // un blocage temporaire (pare-feu du Met) est retenté au bout de 5 minutes, pas d'une heure
+        assertEquals(StoreDecision.FRESH, StorePolicy.decide(stored(SourceState.LIMITED, 0, now - 4 * 60_000, 0), now))
+        assertEquals(StoreDecision.FETCH, StorePolicy.decide(stored(SourceState.LIMITED, 0, now - 6 * 60_000, 0), now))
         // « Actualiser » : une source utilisable est rafraîchie (et reste affichée), une autre est cherchée
         assertEquals(StoreDecision.REFRESH, StorePolicy.decide(stored(SourceState.CONNECTED, now, now), now, force = true))
         assertEquals(StoreDecision.FETCH, StorePolicy.decide(stored(SourceState.EMPTY, 0, now, 0), now, force = true))

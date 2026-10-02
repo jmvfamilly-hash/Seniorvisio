@@ -360,3 +360,15 @@ Le rapport rev33 (version sans la pagination Wikimedia) montrait : Monet 388, Re
 - **Œuvre à image introuvable** : un échantillon dont l'image est DÉFINITIVEMENT absente (404…) est retiré de la source (ex. Rijksmuseum, « Bloemen » de Monet : vignettes 404 ×5) ; un échec de réseau (429, délai) ne retire jamais rien.
 - **Journal** : les écartés portent un exemple (« 41 hors domaine public (ex. n°437104 « … », Claude Monet, …, isPublicDomain=false) ») : le Met rend 41 notices de Monet sans image, ce que le journal ne permettait pas d'expliquer.
 - Non corrigé : vignette AIC « BitmapFactory returned a null bitmap » (une image Van Gogh que le serveur sert illisible, ×8) ; Wikimedia de Gauguin a dépassé 45 s avant le repli (la pagination de la rev34 lit la première page seule).
+
+## Rev36 : reconnaissance, 2e passe (Getty, MFA Boston, Van Gogh Museum) et reprise du Met (rapport rev35)
+
+Le rapport rev35 a répondu aux sondes :
+- **Getty** : `data.getty.edu/museum/collection/` redirige vers `/museum/collection/docs/` ; le point **SPARQL répond** en JSON standard (`head` / `results`, premier sujet `…/collection/group/…`) ; la recherche du site (`getty.edu/art/collection/search`) est une page de coquille qui mentionne IIIF. Une vraie source est donc possible.
+- **MFA Boston** : `collections.mfa.org/search/objects/*/{nom}` renvoie une page de résultats HTML (Apache Tapestry, formulaires avec `jsessionid`, 72 Ko) ; pas d'API vue.
+- Wikimedia paginé fonctionne (Monet 969 œuvres, Sargent 818, licences lues en plusieurs passages) ; le Met reste le point faible (blocage Incapsula quand plusieurs artistes se chargent à la suite).
+
+2e passe de reconnaissance (la forme exacte des données manque encore pour écrire les sources) :
+- **Getty** : lit la documentation (`/docs/`, extrait lisible de 900 caractères), les types RDF les plus fréquents, la première œuvre trouvée par SPARQL (puis sa fiche JSON-LD, suivie) et une recherche par nom.
+- **MFA Boston** et **Van Gogh Museum** : lisent la page de résultats puis la PREMIÈRE fiche d'objet qu'elle contient (liens d'objets, images, droits, extrait). Le journal dit « (suite) » pour la fiche suivie.
+- **Reprise du Met** : une source LIMITÉE (bloquée avant toute notice) est retentée au bout de **5 minutes** (au lieu d'une heure), comme une lecture partielle.

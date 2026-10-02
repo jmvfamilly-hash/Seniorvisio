@@ -125,20 +125,29 @@ class WikimediaPagedTest {
     }
 
     @Test fun theInternationalProbesLogTheShapeOfWhatTheyFindAndAddNothing() = runBlocking {
+        val getty = "https://data.getty.edu/museum/collection"
         val http = object : ManifestSource {
-            override suspend fun fetch(url: String): String =
-                if (url.startsWith("https://data.getty.edu/museum/collection/sparql")) """{"head":{"vars":["s"]},"results":{"bindings":[]}}"""
-                else if (url == "https://collections.mfa.org/") "<html><head><title>MFA Collections</title></head><form action=\"/search\"><input name=\"q\"></form> open access IIIF</html>"
-                else throw IOException("HTTP 403 sur $url")
+            override suspend fun fetch(url: String): String = when {
+                url == "$getty/docs/" -> "<html><head><title>Getty Museum Collection API</title></head><body><h1>SPARQL endpoint</h1><p>Use /sparql with a query.</p></body></html>"
+                url.startsWith("$getty/sparql") && url.contains("P108i") -> """{"head":{"vars":["s"]},"results":{"bindings":[{"s":{"type":"uri","value":"$getty/object/abc-123"}}]}}"""
+                url.startsWith("$getty/sparql") -> """{"head":{"vars":["type","n"]},"results":{"bindings":[]}}"""
+                url == "$getty/object/abc-123" -> """{"@context":"https://linked.art/ns/v1/linked-art.json","id":"$getty/object/abc-123","type":"HumanMadeObject","representation":[{"id":"https://media.getty.edu/iiif/image/x"}]}"""
+                url.startsWith("https://collections.mfa.org/search/objects") -> "<html><head><title>Results – MFA</title></head><a href=\"/objects/12345/the-slug;jsessionid=AB\">x</a><img src=\"/img/a.jpg\"> open access IIIF</html>"
+                url == "https://collections.mfa.org/objects/12345/the-slug" -> "<html><head><title>The Slug – MFA</title></head><body>Medium: oil. Credit line: gift. Open access</body></html>"
+                else -> throw IOException("HTTP 403 sur $url")
+            }
         }
         val vg = ArtworkQuery("Vincent van Gogh", "gogh", 1863..1891)
         assertTrue(GettyProbe(http).fetch(vg, SourceSpec("getty")).isEmpty())
         assertTrue(MfaProbe(http).fetch(vg, SourceSpec("mfa")).isEmpty())
         assertTrue(VanGoghMuseumProbe(http).fetch(vg, SourceSpec("vgm")).isEmpty())
         val log = Diag.snapshot().filter { it.category == "reconnaissance" }
+        assertTrue(log.toString(), log.any { it.sourceId == "getty" && it.message.contains("texte") && it.message.contains("SPARQL endpoint") })          // la documentation, lisible
         assertTrue(log.toString(), log.any { it.sourceId == "getty" && it.message.contains("JSON") && it.message.contains("head") })
-        assertTrue(log.toString(), log.any { it.sourceId == "mfa" && it.message.contains("titre « MFA Collections »") && it.message.contains("IIIF") })
+        assertTrue(log.toString(), log.any { it.sourceId == "getty" && it.message.startsWith("(suite)") && it.message.contains("HumanMadeObject") })   // la fiche JSON-LD suivie
+        assertTrue(log.toString(), log.any { it.sourceId == "mfa" && it.message.contains("liens d'objets [/objects/12345/the-slug]") && it.message.contains("IIIF") })
+        assertTrue(log.toString(), log.any { it.sourceId == "mfa" && it.message.startsWith("(suite)") && it.message.contains("Medium: oil") })        // la 1re fiche d'objet suivie
         assertTrue(log.any { it.sourceId == "vgm" && it.message.startsWith("inaccessible") })
-        assertTrue(log.any { it.url!!.contains("q=Vincent%20van%20Gogh") })              // l'artiste est dans l'adresse cherchée
+        assertTrue(log.any { it.url!!.contains("q=Vincent%20van%20Gogh") || it.url!!.contains("%22vincent+van+gogh%22") || it.url!!.contains("vincent+van+gogh") })   // l'artiste est dans l'adresse cherchée
     }
 }

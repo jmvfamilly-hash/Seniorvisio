@@ -427,54 +427,69 @@ class WikimediaSource(
 
 /**
  * Source de RECONNAISSANCE : aucun point d'accès vérifié n'est connu pour ce musée. Elle interroge quelques adresses probables et consigne dans
- * [Diag] ce qui revient (code, titre, formulaires, champs, images, mentions IIIF/JSON-LD, forme d'un JSON, début du corps) pour écrire le vrai
- * lecteur au cycle suivant. N'ajoute aucune œuvre.
+ * [Diag] ce qui revient (code, titre, formulaires, champs, images, liens d'objets, mentions IIIF/JSON-LD, forme d'un JSON, extrait lisible) pour
+ * écrire le vrai lecteur au cycle suivant. [follow] peut tirer d'une réponse d'autres adresses à lire (ex. la première fiche d'objet d'une
+ * recherche). N'ajoute aucune œuvre.
  */
 open class ProbeSource(
     override val id: String,
     override val name: String,
     override val europeanaKeyword: String,
     private val http: ManifestSource,
+    /** Longueur de l'extrait du corps consigné (160 pour une page ordinaire ; plus pour une documentation ou une réponse SPARQL). */
+    private val excerptChars: Int = 160,
+    /** D'une réponse, les adresses suivantes à lire (la première seulement est suivie). */
+    private val follow: (text: String) -> List<String> = { emptyList() },
     /** Adresses à essayer ; reçoit le nom de l'artiste déjà encodé pour une URL. */
     private val urls: (term: String) -> List<String>,
 ) : MuseumSource {
     override val reconnaissanceOnly = true
 
+    private suspend fun probe(url: String, query: ArtworkQuery, followed: Boolean) {
+        try {
+            val text = http.fetch(url)
+            Diag.info("reconnaissance", (if (followed) "(suite) " else "") + describe(text, excerptChars), url, id, artistIdOf(query), key = "$id|$url")
+            if (!followed) follow(text).firstOrNull()?.let { probe(it, query, followed = true) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Diag.warn("reconnaissance", "inaccessible : ${e.message ?: e.javaClass.simpleName}", url, id, artistIdOf(query), key = "$id|$url|err")
+        }
+    }
+
     override suspend fun fetch(query: ArtworkQuery, spec: SourceSpec): List<Artwork> {
         val term = java.net.URLEncoder.encode(query.artistName, "UTF-8").replace("+", "%20")
-        for (url in urls(term)) {
-            try {
-                Diag.info("reconnaissance", describe(http.fetch(url)), url, id, artistIdOf(query), key = "$id|$url")
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Diag.warn("reconnaissance", "inaccessible : ${e.message ?: e.javaClass.simpleName}", url, id, artistIdOf(query), key = "$id|$url|err")
-            }
-        }
+        for (url in urls(term)) probe(url, query, followed = false)
         return emptyList()
     }
 
     internal companion object {
+        /** Texte lisible d'une page : sans scripts, styles ni balises, espaces réduits. */
+        fun readable(text: String): String =
+            text.replace(Regex("(?is)<(script|style)[^>]*>.*?</\\1>"), " ").replace(Regex("<[^>]+>"), " ").replace(Regex("&nbsp;|&amp;"), " ").replace(Regex("\\s+"), " ").trim()
+
         /** Forme d'une réponse (page HTML, JSON ou OAI) en une ligne : de quoi écrire un lecteur sans la page sous les yeux. */
-        fun describe(text: String): String {
+        fun describe(text: String, excerptChars: Int = 160): String {
             val flat = text.replace(Regex("\\s+"), " ")
             val json = flat.trimStart().let { it.startsWith("{") || it.startsWith("[") }
             val title = Regex("<title[^>]*>(.*?)</title>", RegexOption.IGNORE_CASE).find(flat)?.groupValues?.get(1)?.trim()?.take(100)
-            val forms = Regex("<form[^>]*action=\"([^\"]*)\"", RegexOption.IGNORE_CASE).findAll(flat).map { it.groupValues[1] }.distinct().take(4).toList()
+            val forms = Regex("<form[^>]*action=\"([^\"]*)\"", RegexOption.IGNORE_CASE).findAll(flat).map { it.groupValues[1].substringBefore(";jsessionid") }.distinct().take(4).toList()
             val inputs = Regex("<(?:input|select|textarea)[^>]*name=\"([^\"]+)\"", RegexOption.IGNORE_CASE).findAll(flat).map { it.groupValues[1] }.distinct().take(15).toList()
-            val images = Regex("(?:src|href)=\"([^\"]+\\.(?:jpe?g|png|tiff?)[^\"]*)\"", RegexOption.IGNORE_CASE).findAll(flat).map { it.groupValues[1] }.distinct().take(4).toList()
+            val images = Regex("(?:src|href)=\"([^\"]+\\.(?:jpe?g|png|tiff?)[^\"]*)\"", RegexOption.IGNORE_CASE).findAll(flat).map { it.groupValues[1] }.filterNot { it.contains("icon") || it.contains("favicon") }.distinct().take(4).toList()
+            val links = Regex("href=\"([^\"]*/(?:objects?|artworks?|collection)/[\\w.-]*\\d[\\w.-]*[^\"]*)\"", RegexOption.IGNORE_CASE).findAll(flat).map { it.groupValues[1].substringBefore(";jsessionid") }.distinct().take(3).toList()
             val marks = listOf("IIIF", "manifest", "OAI-PMH", "application/ld+json", "__NEXT_DATA__", "sparql", "linked.art", "creativecommons", "open access", "public domain")
                 .filter { flat.contains(it, ignoreCase = true) }
             val licence = Regex("creative commons|licencia|copyright|public domain|open access|CC0", RegexOption.IGNORE_CASE).findAll(flat).map { it.value.lowercase() }.distinct().take(4).toList()
+            val body = if (json || excerptChars <= 160) flat.take(excerptChars) else readable(text).take(excerptChars)
             return "${text.length} caractères · " +
-                (if (json) "JSON : ${JsonReading.describeShape(text)}" else "titre « ${title ?: "—"} » · formulaires $forms · champs $inputs · images $images") +
-                " · repères $marks · droits $licence · début : ${flat.take(160)}"
+                (if (json) "JSON : ${JsonReading.describeShape(text)}" else "titre « ${title ?: "—"} » · formulaires $forms · champs $inputs · images $images · liens d'objets $links") +
+                " · repères $marks · droits $licence · " + (if (json || excerptChars <= 160) "début" else "texte") + " : $body"
         }
     }
 }
 
 /** CER.ES (Red Digital de Colecciones de Museos de España, dont le Museo Sorolla) : la fiche d'une œuvre connue (déduite d'un identifiant Europeana), l'accueil et des adresses OAI-PMH probables. */
-class CeresProbe(http: ManifestSource) : ProbeSource("ceres", "CER.ES / Museo Sorolla (reconnaissance)", "museo sorolla", http, { _ ->
+class CeresProbe(http: ManifestSource) : ProbeSource("ceres", "CER.ES / Museo Sorolla (reconnaissance)", "museo sorolla", http, urls = { _ ->
     listOf(
         "https://ceres.mcu.es/pages/Main?idt=27659&inventary=85829&table=FDOC&museum=MSM",
         "https://ceres.cultura.gob.es/",
@@ -484,33 +499,47 @@ class CeresProbe(http: ManifestSource) : ProbeSource("ceres", "CER.ES / Museo So
     )
 })
 
-/** J. Paul Getty Museum : données ouvertes Linked Art (JSON-LD), point SPARQL et recherche du site ; images IIIF probables sur media.getty.edu. */
-class GettyProbe(http: ManifestSource) : ProbeSource("getty", "J. Paul Getty Museum (reconnaissance)", "getty", http, { term ->
-    listOf(
-        "https://data.getty.edu/museum/collection/",
-        "https://data.getty.edu/museum/collection/sparql?query=" + java.net.URLEncoder.encode("SELECT ?s WHERE { ?s ?p ?o } LIMIT 1", "UTF-8"),
-        "https://www.getty.edu/art/collection/search?q=$term",
-        "https://www.getty.edu/art/collection/",
-    )
-})
+private fun sparqlUrl(query: String) = "https://data.getty.edu/museum/collection/sparql?query=" + java.net.URLEncoder.encode(query, "UTF-8")
 
-/** Museum of Fine Arts, Boston : recherche de la collection en ligne et accueil. */
-class MfaProbe(http: ManifestSource) : ProbeSource("mfa", "Museum of Fine Arts, Boston (reconnaissance)", "museum of fine arts, boston", http, { term ->
-    listOf(
-        "https://collections.mfa.org/search/objects/*/$term",
-        "https://collections.mfa.org/",
-        "https://collections.mfa.org/advancedsearch/Objects/$term",
-    )
-})
+/**
+ * J. Paul Getty Museum. Reconnaissance rev35 : `data.getty.edu/museum/collection/` renvoie vers `/docs/` et son point **SPARQL répond** (JSON standard
+ * `head`/`results`). Cette 2e passe lit la documentation, les types RDF les plus fréquents, une œuvre (SPARQL puis sa fiche JSON-LD) et une recherche
+ * par nom, pour écrire la vraie source.
+ */
+class GettyProbe(http: ManifestSource) : ProbeSource(
+    "getty", "J. Paul Getty Museum (reconnaissance)", "getty", http, excerptChars = 900,
+    follow = { text -> Regex("\"(https://data\\.getty\\.edu/museum/collection/object/[^\"]+)\"").find(text)?.groupValues?.get(1)?.let { listOf(it) } ?: emptyList() },
+    urls = { term ->
+        listOf(
+            "https://data.getty.edu/museum/collection/docs/",
+            sparqlUrl("SELECT ?type (COUNT(*) AS ?n) WHERE { ?s a ?type } GROUP BY ?type ORDER BY DESC(?n) LIMIT 25"),
+            sparqlUrl("SELECT ?s WHERE { ?s <http://www.cidoc-crm.org/cidoc-crm/P108i_was_produced_by> ?p } LIMIT 1"),
+            sparqlUrl("SELECT ?s ?p ?o WHERE { ?s ?p ?o . FILTER(isLiteral(?o) && CONTAINS(LCASE(STR(?o)), \"" + java.net.URLDecoder.decode(term, "UTF-8").lowercase() + "\")) } LIMIT 8"),
+        )
+    },
+)
 
-/** Van Gogh Museum : recherche de la collection en ligne et plateforme « Van Gogh Worldwide ». */
-class VanGoghMuseumProbe(http: ManifestSource) : ProbeSource("vgm", "Van Gogh Museum (reconnaissance)", "van gogh museum", http, { term ->
-    listOf(
-        "https://www.vangoghmuseum.nl/en/collection",
-        "https://www.vangoghmuseum.nl/en/collection?q=$term",
-        "https://vangoghworldwide.org/",
-    )
-})
+/**
+ * Museum of Fine Arts, Boston. Reconnaissance rev35 : la recherche de `collections.mfa.org` (chemin `search/objects`, un astérisque, puis le nom) répond une page de résultats (Apache Tapestry,
+ * pas d'API). Cette 2e passe lit la page de résultats puis la PREMIÈRE fiche d'objet trouvée, pour voir les liens, les images et les droits.
+ */
+class MfaProbe(http: ManifestSource) : ProbeSource(
+    "mfa", "Museum of Fine Arts, Boston (reconnaissance)", "museum of fine arts, boston", http, excerptChars = 700,
+    follow = { text -> Regex("href=\"(/objects/\\d+[^\"]*)\"").find(text)?.groupValues?.get(1)?.substringBefore(";jsessionid")?.let { listOf("https://collections.mfa.org$it") } ?: emptyList() },
+    urls = { term -> listOf("https://collections.mfa.org/search/objects/*/$term") },
+)
+
+/** Van Gogh Museum : recherche de la collection en ligne, puis la première fiche d'œuvre trouvée ; plateforme « Van Gogh Worldwide ». */
+class VanGoghMuseumProbe(http: ManifestSource) : ProbeSource(
+    "vgm", "Van Gogh Museum (reconnaissance)", "van gogh museum", http, excerptChars = 700,
+    follow = { text -> Regex("href=\"(/en/collection/[sd]\\d+[^\"]*)\"").find(text)?.groupValues?.get(1)?.let { listOf("https://www.vangoghmuseum.nl$it") } ?: emptyList() },
+    urls = { term ->
+        listOf(
+            "https://www.vangoghmuseum.nl/en/collection?q=$term",
+            "https://vangoghworldwide.org/",
+        )
+    },
+)
 
 /** Les sources implémentées, par identifiant (celui des [SourceSpec]). */
 fun defaultMuseumSources(
