@@ -61,7 +61,9 @@ class UniverseTest {
         assertTrue(byId.getValue("joaquin-sorolla").hasUniverse)
         assertTrue(byId.getValue("pierre-auguste-renoir").hasUniverse)
         assertFalse(byId.getValue("gustave-courbet").hasUniverse)
-        assertFalse(byId.getValue("claude-monet").hasUniverse)
+        assertTrue(byId.getValue("claude-monet").hasUniverse)
+        assertTrue(byId.getValue("paul-gauguin").hasUniverse)
+        assertFalse(byId.getValue("paul-cezanne").hasUniverse)
     }
 
     @Test fun artistFieldsAndSources() {

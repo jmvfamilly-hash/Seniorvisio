@@ -309,3 +309,5 @@ Le rapport rev25 montrait des HTTP 429 de Wikimedia sur les licences (3 essais �
 - Une année connue mais hors des dates plausibles reste écartée. `PARSER_VERSION` = 3 (les univers enregistrés sont relus). Le Rijksmuseum, dont la date vient du format Linked Art, n'est pas concerné.
 
 **Rev28** : le filtre des annulations normales reconnaît désormais les messages préfixés (« essai 1 : Canceled », « essai 1 : Socket is closed ») ; en rev25 il ne voyait que les messages nus, et le journal restait envahi.
+
+**Claude Monet et Paul Gauguin** (rev29) : univers ouverts avec les mêmes sources (Rijksmuseum : « Monet, Claude », « Gauguin, Paul »). NGA : Monet 29 et Gauguin 178 œuvres extraites de l'open data (constituants 1726 et 1330, Wikidata Q296 et Q37693).

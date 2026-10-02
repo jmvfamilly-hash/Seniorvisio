@@ -87,7 +87,7 @@ object ArtistExtras {
         "j-m-w-turner" to Extras(1775, 1851, "J._M._W._Turner"),
         "giovanni-fattori" to Extras(1825, 1908, "Giovanni_Fattori"),
         "winslow-homer" to Extras(1836, 1910, "Winslow_Homer"),
-        "claude-monet" to Extras(1840, 1926, "Claude_Monet"),
+        "claude-monet" to Extras(1840, 1926, "Claude_Monet", allSources("Monet, Claude")),
         "pierre-auguste-renoir" to Extras(1841, 1919, "Pierre-Auguste_Renoir", allSources("Renoir, Pierre Auguste")),
         "berthe-morisot" to Extras(1841, 1895, "Berthe_Morisot", allSources("Morisot, Berthe")),
         "mary-cassatt" to Extras(1844, 1926, "Mary_Cassatt"),
@@ -101,7 +101,7 @@ object ArtistExtras {
         "edvard-munch" to Extras(1863, 1944, "Edvard_Munch"),
         "anna-boch" to Extras(1848, 1936, "Anna_Boch"),
         "georges-seurat" to Extras(1859, 1891, "Georges_Seurat"),
-        "paul-gauguin" to Extras(1848, 1903, "Paul_Gauguin"),
+        "paul-gauguin" to Extras(1848, 1903, "Paul_Gauguin", allSources("Gauguin, Paul")),
     )
 
     fun of(id: String): Extras? = all[id]

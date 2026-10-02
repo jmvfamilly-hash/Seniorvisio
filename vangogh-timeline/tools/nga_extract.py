@@ -8,13 +8,15 @@ Le NGA ne publie pas d'API en ligne, seulement ces fichiers, mis à jour environ
 import csv, json, os, sys
 
 csv.field_size_limit(10**9)
-# artiste de la frise -> identifiant de constituant NGA (constituents.csv ; vérifié sur Wikidata Q5582, Q105320, Q39931, Q155626, et le nom pour Sorolla)
+# artiste de la frise -> identifiant de constituant NGA (constituents.csv ; vérifié sur Wikidata Q5582, Q105320, Q39931, Q155626, Q296, Q37693, et le nom pour Sorolla)
 ARTISTS = {
     "vincent-van-gogh": 1349,
     "berthe-morisot": 1733,
     "pierre-auguste-renoir": 1823,
     "john-singer-sargent": 1858,
     "joaquin-sorolla": 42403,
+    "claude-monet": 1726,
+    "paul-gauguin": 1330,
 }
 CLASSIFICATIONS = {"Painting", "Drawing", "Print", "Sculpture", "Photograph"}
 

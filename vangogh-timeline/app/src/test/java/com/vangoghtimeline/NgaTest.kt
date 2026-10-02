@@ -63,7 +63,7 @@ class NgaTest {
     }
 
     @Test fun theRealExtractedFilesAreReadable() {
-        val expected = mapOf("vincent-van-gogh" to 15..23, "berthe-morisot" to 12..28, "pierre-auguste-renoir" to 60..80, "john-singer-sargent" to 100..161, "joaquin-sorolla" to 1..1)
+        val expected = mapOf("vincent-van-gogh" to 15..23, "berthe-morisot" to 12..28, "pierre-auguste-renoir" to 60..80, "john-singer-sargent" to 100..161, "joaquin-sorolla" to 1..1, "claude-monet" to 5..400, "paul-gauguin" to 5..400)
         for ((id, range) in expected) {
             val t = Tally()
             val arts = NgaParser.parse(asset(id), query(id), t)
