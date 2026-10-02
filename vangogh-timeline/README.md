@@ -349,3 +349,14 @@ La vignette disparaissait donc derrière un écran noir, puis l'image apparaissa
 - **Sondes de reconnaissance** (aucune œuvre ajoutée) : **J. Paul Getty Museum** (données Linked Art, SPARQL, recherche du site), **Museum of Fine Arts, Boston** (recherche de la collection), **Van Gogh Museum** (Van Gogh seulement) ; en plus de CER.ES.
   Chaque sonde consigne dans le journal : code, titre, formulaires, champs, images, mentions IIIF / JSON-LD / OAI-PMH / licences, forme d'un JSON, début du corps. Le prochain rapport d'anomalies dira quelle forme prend chaque service, pour écrire les vraies sources.
   Pourquoi pas directement des sources : ces trois musées ne publient aucune donnée sur GitHub (contrairement au NGA) et leurs services n'étaient pas joignables depuis l'environnement de développement ; un lecteur écrit à l'aveugle aurait été faux.
+
+## Rev35 : Met plus doux et partiel, images introuvables, exemples d'écartés (rapport rev33)
+
+Le rapport rev33 (version sans la pagination Wikimedia) montrait : Monet 388, Renoir 520, Morisot 222, Van Gogh 391, Gauguin 685 œuvres ; les appuis répétés sur « Actualiser » ignorés comme prévu ; plus aucun 429 de Wikimedia. Mais :
+
+- **Le Met bloqué par Incapsula après ~70 notices**, à chaque passage : la source rendait « bloquée, aucune copie » alors que 60 à 80 notices venaient d'être lues. Désormais :
+  - un blocage **rend ce qui est lu** (état PARTIEL, visible tout de suite) ; il ne lève plus d'erreur que si aucune notice n'a pu être lue ;
+  - la cadence est **adaptative** : chaque blocage double l'écart entre deux requêtes (400 ms de base, 2 s au plus) ; 30 réussites de suite le ramènent d'un cran ; une seule requête à la fois ; 60 notices non gardées au plus par passage.
+- **Œuvre à image introuvable** : un échantillon dont l'image est DÉFINITIVEMENT absente (404…) est retiré de la source (ex. Rijksmuseum, « Bloemen » de Monet : vignettes 404 ×5) ; un échec de réseau (429, délai) ne retire jamais rien.
+- **Journal** : les écartés portent un exemple (« 41 hors domaine public (ex. n°437104 « … », Claude Monet, …, isPublicDomain=false) ») : le Met rend 41 notices de Monet sans image, ce que le journal ne permettait pas d'expliquer.
+- Non corrigé : vignette AIC « BitmapFactory returned a null bitmap » (une image Van Gogh que le serveur sert illisible, ×8) ; Wikimedia de Gauguin a dépassé 45 s avant le repli (la pagination de la rev34 lit la première page seule).

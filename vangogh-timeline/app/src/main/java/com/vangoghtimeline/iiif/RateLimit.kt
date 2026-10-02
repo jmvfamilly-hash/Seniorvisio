@@ -30,11 +30,19 @@ object TemporaryBlock {
  */
 class RateLimiter(
     parallel: Int = 2,
-    private val minGapMs: Long = 150,
+    minGapMs: Long = 150,
     private val sleep: suspend (Long) -> Unit = { delay(it) },
     private val now: () -> Long = { System.currentTimeMillis() },
 ) {
     private val gate = Semaphore(parallel)
+
+    // ── cadence ADAPTATIVE : chaque blocage double l'écart entre deux départs (jusqu'à 2 s) ; 30 réussites de suite le ramènent vers l'écart de base ──
+    private val baseGapMs = minGapMs
+    @Volatile private var gapMs = minGapMs
+    @Volatile private var okStreak = 0
+
+    /** Écart actuel entre deux départs (visible pour les tests et le journal). */
+    fun currentGapMs(): Long = gapMs
 
     // ── disjoncteur : après un blocage par pare-feu, TOUS les appelants font une pause (15 s, puis 30, 60, 120 s si le blocage persiste) ──
     @Volatile private var blockedUntil = 0L
@@ -47,9 +55,14 @@ class RateLimiter(
         val pause = minOf(15_000L shl blocks.coerceAtMost(3), 120_000L)
         blocks++
         blockedUntil = now() + pause
+        gapMs = minOf(maxOf(gapMs, 1L) * 2, 2_000L)
+        okStreak = 0
     }
 
-    fun markOk() { blocks = 0 }
+    fun markOk() {
+        blocks = 0
+        if (gapMs > baseGapMs && ++okStreak >= 30) { gapMs = maxOf(baseGapMs, gapMs / 2); okStreak = 0 }
+    }
 
     private val slotLock = Mutex()
     private var nextSlot = 0L
@@ -58,7 +71,7 @@ class RateLimiter(
         val wait = slotLock.withLock {
             val t = now()
             val start = maxOf(t, nextSlot)
-            nextSlot = start + minGapMs
+            nextSlot = start + gapMs
             start - t
         }
         if (wait > 0) sleep(wait)

@@ -82,7 +82,7 @@ class FixesTest {
         assertEquals(null, MetParser.parseObject(notice(2, true, "", "John Singer Sargent"), sargent, t))
         assertEquals(null, MetParser.parseObject(notice(3, true, "https://i/3.jpg", "Autre"), sargent, t))
         assertEquals("met-4", MetParser.parseObject(notice(4, true, "https://i/4.jpg", "John Singer Sargent"), sargent, t)!!.id)
-        assertEquals("4 reçues, 2 retenues — écartées : 1 sans image, 1 d'un autre artiste", t.summary())
+        assertTrue(t.summary(), t.summary().startsWith("4 reçues, 2 retenues — écartées : 1 sans image (ex. n°2 « T2 »") && t.summary().contains("1 d'un autre artiste (ex. n°3"))
         t.log("met", "john-singer-sargent")
         assertTrue(Diag.snapshot().single().let { it.level == DiagLevel.INFO && it.message.contains("analyse : 4 reçues, 2 retenues") })
     }

@@ -91,8 +91,8 @@ object MetParser {
         val id = o.int("objectID") ?: run { tally?.drop("sans identifiant"); return null }
         // pas de filtre « domaine public » : le Met ne publie d'image que pour ces œuvres ; sans image, l'œuvre n'est pas consultable
         val publicDomain = o.bool("isPublicDomain") == true
-        val image = o.str("primaryImage")?.takeIf { it.startsWith("http") } ?: run { tally?.drop(if (publicDomain) "sans image" else "hors domaine public (pas d'image publiée)"); return null }
-        if (o.str("artistDisplayName")?.let(query::matchesCreator) != true) { tally?.drop("d'un autre artiste"); return null }
+        val image = o.str("primaryImage")?.takeIf { it.startsWith("http") } ?: run { tally?.drop(if (publicDomain) "sans image" else "hors domaine public (pas d'image publiée)", example = "n°$id « ${o.str("title")?.take(40)} », ${o.str("artistDisplayName")?.take(30)}, ${o.str("objectDate")}, isPublicDomain=${o["isPublicDomain"]}"); return null }
+        if (o.str("artistDisplayName")?.let(query::matchesCreator) != true) { tally?.drop("d'un autre artiste", example = "n°$id « ${o.str("title")?.take(40)} », ${o.str("artistDisplayName")?.take(30)}"); return null }
         val title = o.str("title")?.takeIf { it.isNotBlank() } ?: run { tally?.drop("sans titre"); return null }
         val date = dateOf(yearOf(o.int("objectBeginDate"), o.int("objectEndDate")), query, tally) ?: return null
         tally?.let { it.kept++ }

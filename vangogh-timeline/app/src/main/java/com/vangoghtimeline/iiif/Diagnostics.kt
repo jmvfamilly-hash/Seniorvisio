@@ -109,10 +109,16 @@ class Tally {
     /** Forme de la réponse, renseignée quand rien n'est retenu (clés du premier niveau et du premier élément). */
     var shape: String? = null
 
-    fun drop(reason: String, n: Int = 1) { if (n > 0) reasons[reason] = (reasons[reason] ?: 0) + n }
+    private val examples = LinkedHashMap<String, MutableList<String>>()
+
+    /** [example] : un exemple d'élément écarté (identifiant, titre…), gardé pour le journal (2 au plus par raison) : il dit POURQUOI, pas seulement combien. */
+    fun drop(reason: String, n: Int = 1, example: String? = null) {
+        if (n > 0) reasons[reason] = (reasons[reason] ?: 0) + n
+        if (example != null) examples.getOrPut(reason) { ArrayList() }.let { if (it.size < 2) it += example }
+    }
 
     fun summary(): String =
-        "$raw reçues, $kept retenues" + (if (estimated > 0) " (dont $estimated à date estimée)" else "") + if (reasons.isEmpty()) "" else " — écartées : " + reasons.entries.joinToString(", ") { "${it.value} ${it.key}" }
+        "$raw reçues, $kept retenues" + (if (estimated > 0) " (dont $estimated à date estimée)" else "") + if (reasons.isEmpty()) "" else " — écartées : " + reasons.entries.joinToString(", ") { "${it.value} ${it.key}" + (examples[it.key]?.let { ex -> " (ex. ${ex.joinToString(" ; ")})" } ?: "") }
 
     /** Consigne le bilan : alerte si rien n'est retenu (avec la forme de la réponse), info sinon. */
     fun log(sourceId: String, artistId: String?, label: String? = null) {

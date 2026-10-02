@@ -90,7 +90,7 @@ class MainActivity : ComponentActivity() {
             val plainHttp = HttpManifestSource(PLAIN_USER_AGENT)
             // Tout le trafic vers le Met passe par UNE file commune (2 requêtes à la fois, 150 ms d'écart) et est retenté après un blocage
             // temporaire : plusieurs artistes chargés ensemble ne déclenchent plus le pare-feu anti-robot du Met.
-            val metLimiter = RateLimiter(parallel = 2, minGapMs = 250)
+            val metLimiter = RateLimiter(parallel = 1, minGapMs = 400)
             // Wikidata et Commons limitent le débit (429) : une file commune plus lente, et des nouveaux essais plus patients
             val wikiLimiter = RateLimiter(parallel = 2, minGapMs = 400)
             val wikiRetries = listOf(2_000L, 5_000L, 10_000L)

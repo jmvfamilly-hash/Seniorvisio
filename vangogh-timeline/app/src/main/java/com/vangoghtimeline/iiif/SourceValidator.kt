@@ -18,7 +18,9 @@ fun interface ImageReachability {
 /** Une vérification d'accès sur une œuvre échantillon. */
 class ProbeLine(val artworkTitle: String, val url: String, val ok: Boolean, val detail: String,
                 /** Échec dû au réseau ou à une limite de débit (429, 503, délai, DNS…), pas à l'image elle-même : il ne prouve rien contre la source. */
-                val transient: Boolean = false)
+                val transient: Boolean = false,
+                /** Identifiant de l'œuvre échantillon (pour retirer une œuvre dont l'image est introuvable). */
+                val artworkId: String? = null)
 
 /** Distingue un échec de RÉSEAU (qui ne prouve rien) d'un vrai refus d'accès (404, 403 JSON, type inattendu…). */
 object NetworkTolerance {
@@ -104,15 +106,15 @@ class SourceValidator(
     }
 
     suspend fun probe(art: Artwork): ProbeLine {
-        val url = art.iiif.viewerUrl ?: return ProbeLine(art.title, "", false, "aucune adresse d'image")
+        val url = art.iiif.viewerUrl ?: return ProbeLine(art.title, "", false, "aucune adresse d'image", artworkId = art.id)
         return try {
             val detail = check(url)
-            ProbeLine(art.title, url, true, detail)
+            ProbeLine(art.title, url, true, detail, artworkId = art.id)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             val why = e.message ?: e.javaClass.simpleName
-            ProbeLine(art.title, url, false, why, transient = NetworkTolerance.isTransient(why) || NetworkTolerance.isTransient(e.javaClass.simpleName))
+            ProbeLine(art.title, url, false, why, transient = NetworkTolerance.isTransient(why) || NetworkTolerance.isTransient(e.javaClass.simpleName), artworkId = art.id)
         }
     }
 

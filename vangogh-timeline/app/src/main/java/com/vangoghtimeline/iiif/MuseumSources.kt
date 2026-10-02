@@ -150,7 +150,7 @@ class MetSource(
     /** Notices déjà lues (une par fichier) : elles ne changent pas, on ne les redemande pas (et le Met n'est pas sollicité deux fois). */
     private val noticeCache: java.io.File? = null,
     /** Notices NON gardées sur disque lues par passage : au-delà, la lecture s'arrête (source PARTIELLE) et reprend au passage suivant. */
-    private val maxRequests: Int = 100,
+    private val maxRequests: Int = 60,
     /** Passé ce délai, on ne lance plus de nouvelle notice (le chargeur coupe à 45 s : mieux vaut rendre ce qu'on a que tout perdre). */
     private val softDeadlineMs: Long = 30_000,
     private val clockNanos: () -> Long = System::nanoTime,
@@ -169,12 +169,15 @@ class MetSource(
         val started = clockNanos()
         val requests = java.util.concurrent.atomic.AtomicInteger()
         val postponed = java.util.concurrent.atomic.AtomicInteger()
+        val blockMessage = java.util.concurrent.atomic.AtomicReference<String?>(null)
         val artworks = ids.map { objectId ->
             async {
                 gate.withPermit {
                     val url = MetParser.objectUrl(objectId)
                     try {
                         val cached = readNotice(objectId)
+                        // pare-feu déclenché pendant ce passage : on n'insiste pas, le reste attend le passage suivant
+                        if (cached == null && blockMessage.get() != null) { postponed.incrementAndGet(); return@withPermit null }
                         if (cached == null && (requests.incrementAndGet() > maxRequests || (clockNanos() - started) / 1_000_000 > softDeadlineMs)) {
                             postponed.incrementAndGet()
                             return@withPermit null
@@ -184,8 +187,8 @@ class MetSource(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        // blocage temporaire : on arrête (source « limitée », reprise plus tard) ; les notices déjà lues sont en cache disque
-                        if (TemporaryBlock.matches(e.message)) throw e
+                        // blocage temporaire : cette notice et les suivantes attendent le prochain passage ; celles déjà lues sont gardées (cache disque)
+                        if (TemporaryBlock.matches(e.message)) { blockMessage.compareAndSet(null, e.message); postponed.incrementAndGet(); return@withPermit null }
                         // notice ignorée : consignée (regroupée), la source continue
                         tally.raw++
                         tally.drop(if (e.message?.contains("HTTP 404") == true) "n'existent plus (404)" else "non lues (erreur réseau)")
@@ -195,6 +198,8 @@ class MetSource(
                 }
             }
         }.awaitAll().filterNotNull()
+        // bloqué avant d'avoir pu lire une seule notice : rien à montrer, la source est « limitée » (reprise plus tard)
+        blockMessage.get()?.let { if (artworks.isEmpty()) throw IOException(it) }
         if (postponed.get() > 0) {
             unfinished += artistIdOf(query)
             tally.raw += postponed.get()

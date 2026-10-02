@@ -149,8 +149,9 @@ class DiagnosticsTest {
         val artist = vg.copy(sources = listOf(SourceSpec("fixed")))
         val state = UniverseLoader(mapOf("fixed" to FixedSource(works)), SourceValidator(http, reach, sampleSize = 3), tmp()).load(artist) { }
         assertEquals(SourceState.CONNECTED, state.reports.single().state)      // 2 sur 3 : connectée…
-        val failed = Diag.snapshot().filter { it.category == "validation" }
+        val failed = Diag.snapshot().filter { it.category == "validation" && it.message.startsWith("échantillon") }
         assertEquals(1, failed.size)                                           // …mais l'échantillon en échec est consigné
+        assertTrue(Diag.snapshot().any { it.category == "validation" && it.message.contains("image introuvable retirée") })   // et son œuvre retirée
         assertTrue(failed[0].message.contains("HTTP 403"))
         assertEquals("fixed", failed[0].sourceId)
         assertEquals(artist.id, failed[0].artistId)
@@ -210,8 +211,8 @@ class DiagnosticsTest {
         ))
         UniverseLoader(defaultMuseumSources(http), SourceValidator(http, reachOk), tmp(), limitedRetryDelayMs = -1).load(artist) { }
         assertTrue(http.asked.contains(MetParser.pageUrl(v1, 100)))                      // page 2 demandée
-        // lecture par tranches : au plus 100 notices NON gardées par passage (les 2 autres attendent le passage suivant)
-        assertEquals(100, http.asked.count { it.contains("/objects/") })
+        // lecture par tranches : au plus 60 notices NON gardées par passage (les autres attendent le passage suivant)
+        assertEquals(60, http.asked.count { it.contains("/objects/") })
     }
 
     private class FailingSource(val message: String) : MuseumSource {

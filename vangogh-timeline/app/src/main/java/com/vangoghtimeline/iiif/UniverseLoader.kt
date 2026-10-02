@@ -209,10 +209,14 @@ class UniverseLoader(
             Diag.error("validation", "source REFUSÉE (${probes.count { !it.ok }}/${probes.size} échantillons en échec) : $why", sourceId = source.id, artistId = artist.id)
             return Outcome(SourceReport(source.id, source.name, SourceState.REJECTED, fetched.size, "accès aux images refusé : $why", probes), emptyList(), 0L)
         }
+        // une œuvre échantillon dont l'image est DÉFINITIVEMENT introuvable (404…) est retirée : elle afficherait une vignette cassée
+        val brokenIds = probes.filter { !it.ok && !it.transient }.mapNotNull { it.artworkId }.toSet()
+        val kept = if (brokenIds.isEmpty()) fetched else fetched.filterNot { it.id in brokenIds }
+        if (brokenIds.isNotEmpty()) Diag.warn("validation", "${fetched.size - kept.size} œuvre(s) à image introuvable retirée(s) : ${probes.filter { !it.ok && !it.transient }.joinToString { "« ${it.artworkTitle} »" }}", sourceId = source.id, artistId = artist.id)
         val partial = !source.isComplete(query)
-        val detail = "${fetched.size} œuvres${if (partial) " (lecture partielle : la suite au prochain chargement)" else ""} · accès vérifié (${probes.count { it.ok }}/${probes.size})"
+        val detail = "${kept.size} œuvres${if (partial) " (lecture partielle : la suite au prochain chargement)" else ""} · accès vérifié (${probes.count { it.ok }}/${probes.size})"
         Diag.info("source", (if (partial) "connectée, PARTIELLE : " else "connectée : ") + detail, sourceId = source.id, artistId = artist.id)
-        return Outcome(SourceReport(source.id, source.name, if (partial) SourceState.PARTIAL else SourceState.CONNECTED, fetched.size, detail, probes), fetched, clock())
+        return Outcome(SourceReport(source.id, source.name, if (partial) SourceState.PARTIAL else SourceState.CONNECTED, kept.size, detail, probes), kept, clock())
     }
 
     private suspend fun fetchOnce(src: MuseumSource, spec: SourceSpec, query: ArtworkQuery): List<Artwork> =
