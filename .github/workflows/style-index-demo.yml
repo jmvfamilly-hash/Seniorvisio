@@ -33,9 +33,11 @@ jobs:
         run: |
           pip install --quiet torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install --quiet -r style-index-demo/requirements.txt
-          # Moondream2 lit les images avec libvips
+          # Moondream2 : environnement à part (son code distant ne suit pas les dernières versions de transformers) ; il lit les images avec libvips
           sudo apt-get install -y -qq libvips42 > /dev/null
-          pip install --quiet pyvips
+          python -m venv /tmp/md
+          /tmp/md/bin/pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
+          /tmp/md/bin/pip install --quiet "transformers==4.51.3" accelerate einops pillow pyvips numpy
 
       - name: Télécharger les œuvres de Gauguin (Wikimedia Commons)
         run: python style-index-demo/run_demo.py fetch
@@ -52,7 +54,7 @@ jobs:
       - name: Moondream2 (même échantillon, mêmes consignes)
         continue-on-error: true
         timeout-minutes: 60
-        run: python style-index-demo/run_demo.py moondream
+        run: /tmp/md/bin/python style-index-demo/run_demo.py moondream
 
       - name: Enregistrer les résultats dans le dépôt
         run: |

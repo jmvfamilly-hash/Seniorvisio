@@ -289,6 +289,9 @@ def moondream_stage():
         print("Moondream2 déjà fait")
         return
     from transformers import AutoModelForCausalLM
+    import transformers
+    d["errors"].pop("moondream", None)
+    d.setdefault("env", {})["moondream_transformers"] = transformers.__version__
     model = None
     for rev in ("2025-06-21", "2025-04-14", "2025-01-09"):
         try:
