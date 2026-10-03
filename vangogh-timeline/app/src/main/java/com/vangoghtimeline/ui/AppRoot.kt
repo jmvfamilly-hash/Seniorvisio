@@ -3,6 +3,7 @@ package com.vangoghtimeline.ui
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -88,7 +89,7 @@ fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: () -> String =
                     style = TextStyle(color = Color(0xFFF0D58A), fontSize = 12.sp),
                     modifier = Modifier.align(Alignment.TopEnd).padding(top = 40.dp, end = 10.dp)
                         .background(Color(0xCC000000), androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
-                        .pointerInput(missingCount) { androidx.compose.foundation.gestures.detectTapGestures(onTap = { if (!loadingMissing) { loadingMissing = true; model.loadMissing(artists) { } } }) }
+                        .pointerInput(missingCount) { detectTapGestures(onTap = { if (!loadingMissing) { loadingMissing = true; model.loadMissing(artists) { } } }) }
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                 )
             }

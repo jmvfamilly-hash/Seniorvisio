@@ -1,6 +1,7 @@
 package com.vangoghtimeline.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -272,4 +273,4 @@ private fun TourButton(text: String, onTap: () -> Unit) {
 }
 
 private fun Modifier.androidx_pointerTap(onTap: () -> Unit): Modifier =
-    this.pointerInput(Unit) { androidx.compose.foundation.gestures.detectTapGestures(onTap = { onTap() }) }
+    this.pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) }
