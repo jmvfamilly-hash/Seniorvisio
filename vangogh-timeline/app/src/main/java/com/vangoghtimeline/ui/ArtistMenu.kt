@@ -23,6 +23,8 @@ import coil.size.Size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -150,15 +152,28 @@ fun ArtistMenuScreen(
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp)) {
             SearchBar(query) { query = it }
             Spacer(Modifier.height(8.dp))
-            Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Bottom, horizontalAlignment = Alignment.CenterHorizontally) {
-                ArtistPanel(selected, backdrop, model, level, onTap, onRefresh, onReportLongPress, Modifier.widthIn(max = 560.dp))
-            }
-            CaptionBar(backdrop)
-            ArcPicker(items, selectedId, model.portraits, onTap, landscape, maxW, Modifier.fillMaxWidth())
-            // au centre du cercle : le curseur du niveau de détail (le niveau 3 n'existe que si l'artiste a un univers)
+            // le niveau 3 n'existe que si l'artiste a un univers
             val maxLevel = if (selected?.hasUniverse == true) 3 else 2
             val shown = level.coerceAtMost(maxLevel)
-            DetailSlider(shown, maxLevel) { onLevel(it) }
+            if (landscape) {
+                // paysage : fiche au milieu ; demi-cercle centré en bas, curseur au centre du cercle
+                Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Bottom, horizontalAlignment = Alignment.CenterHorizontally) {
+                    ArtistPanel(selected, backdrop, model, level, onTap, onRefresh, onReportLongPress, Modifier.widthIn(max = 560.dp))
+                }
+                CaptionBar(backdrop)
+                ArcPicker(items, selectedId, model.portraits, onTap, landscape, maxW, Modifier.fillMaxWidth())
+                DetailSlider(shown, maxLevel) { onLevel(it) }
+            } else {
+                // portrait : la fiche à gauche ; à droite le demi-cercle de portraits et, tout à droite, le curseur de niveau
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Bottom) {
+                        ArtistPanel(selected, backdrop, model, level, onTap, onRefresh, onReportLongPress, Modifier.fillMaxWidth())
+                        CaptionBar(backdrop)
+                    }
+                    SideArcPicker(items, selectedId, model.portraits, onTap, Modifier.width(150.dp).fillMaxHeight())
+                    VerticalDetailSlider(shown, maxLevel, Modifier.width(38.dp).fillMaxHeight()) { onLevel(it) }
+                }
+            }
         }
     }
 }
@@ -475,5 +490,89 @@ internal fun DetailSlider(level: Int, max: Int, onLevel: (Int) -> Unit) {
             when (level) { 1 -> "Nom et dates"; 2 -> "Détails"; else -> "Contenu étendu" },
             style = TextStyle(color = Color(0xB3FFFFFF), fontSize = 10.sp),
         )
+    }
+}
+
+/**
+ * Portrait : les portraits sur un DEMI-CERCLE le long du bord droit (le portrait central, le plus grand, est le plus à gauche ; les autres s'écartent
+ * vers la droite). Glisser verticalement les fait défiler ; toucher un portrait le sélectionne et le ramène au centre.
+ */
+@Composable
+private fun SideArcPicker(items: List<Artist>, selectedId: String?, portraits: Map<String, String>, onTap: (Artist) -> Unit, modifier: Modifier = Modifier) {
+    val scope = rememberCoroutineScope()
+    val pos = remember { Animatable(0f) }
+    val selectedIndex = items.indexOfFirst { it.id == selectedId }
+    LaunchedEffect(selectedIndex, items.size) { if (selectedIndex >= 0) pos.animateTo(selectedIndex.toFloat(), tween(350)) }
+    val density = LocalDensity.current
+    val chip = 52.dp
+    val chipPx = with(density) { chip.toPx() }
+    val radiusPx = with(density) { 200.dp.toPx() }
+    val step = (chipPx * 1.2f) / radiusPx
+    val maxTheta = 0.95f
+    val arcLenPx = radiusPx * step
+    BoxWithConstraints(modifier) {
+        val hPx = with(density) { maxHeight.toPx() }
+        Box(
+            Modifier.fillMaxSize().pointerInput(items.size) {
+                detectVerticalDragGestures(
+                    onDragEnd = { scope.launch { pos.animateTo(pos.value.roundToInt().coerceIn(0, (items.size - 1).coerceAtLeast(0)).toFloat(), tween(250)) } },
+                    onVerticalDrag = { change, dy ->
+                        change.consume()
+                        scope.launch { pos.snapTo((pos.value - dy / arcLenPx).coerceIn(-0.4f, items.size - 0.6f)) }
+                    },
+                )
+            },
+        ) {
+            items.forEachIndexed { i, artist ->
+                val rel = i - pos.value
+                val theta = rel * step
+                if (abs(theta) <= maxTheta + step * 0.5f) {
+                    val cx = chipPx * 0.4f + radiusPx * (1f - cos(theta))
+                    val cy = hPx / 2f + radiusPx * sin(theta)
+                    val scale = (1.3f - 0.42f * abs(theta) / maxTheta).coerceAtLeast(0.8f)
+                    val on = artist.id == selectedId
+                    Column(
+                        Modifier
+                            .offset { IntOffset(cx.roundToInt(), (cy - chipPx / 2f).roundToInt()) }
+                            .graphicsLayer { scaleX = scale; scaleY = scale; alpha = (1.1f - abs(theta) / (maxTheta + step)).coerceIn(0.35f, 1f) },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        PortraitChip(artist, on, portraits[artist.id], chip, onTap = { onTap(artist) })
+                        BasicText(
+                            artist.name.substringAfterLast(' '), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(color = if (on) Gold else Color.White, fontSize = 9.sp, textAlign = TextAlign.Center),
+                            modifier = Modifier.width(chip + 6.dp).padding(top = 1.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Curseur de niveau vertical (portrait), transparent : niveau 1 en haut, 3 en bas ; toucher ou glisser. */
+@Composable
+internal fun VerticalDetailSlider(level: Int, max: Int, modifier: Modifier = Modifier, onLevel: (Int) -> Unit) {
+    val currentLevel by rememberUpdatedState(onLevel)
+    val heightDp = 170.dp
+    val heightPx = with(LocalDensity.current) { heightDp.toPx() }
+    fun levelAt(y: Float) = (((y / heightPx) * 3f).toInt() + 1).coerceIn(1, max)
+    Column(modifier, verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        BasicText("Niv.", style = TextStyle(color = Color(0xB3FFFFFF), fontSize = 9.sp))
+        Box(
+            Modifier.width(34.dp).height(heightDp)
+                .pointerInput(max) { detectTapGestures(onTap = { currentLevel(levelAt(it.y)) }) }
+                .pointerInput(max) { detectVerticalDragGestures(onVerticalDrag = { change, _ -> change.consume(); currentLevel(levelAt(change.position.y)) }) },
+        ) {
+            Canvas(Modifier.fillMaxSize()) {
+                val x = size.width / 2f
+                val ys = listOf(0.1667f, 0.5f, 0.8333f).map { it * size.height }
+                drawLine(Color(0x55FFFFFF), Offset(x, ys[0]), Offset(x, ys[2]), strokeWidth = 3f, cap = StrokeCap.Round)
+                ys.forEachIndexed { i, y -> drawCircle(if (i + 1 <= max) Color(0x99FFFFFF) else Color(0x33FFFFFF), radius = 5f, center = Offset(x, y)) }
+                drawCircle(Color(0xCCF0D58A), radius = 12f, center = Offset(x, ys[level - 1]))
+                drawCircle(Color(0x66FFFFFF), radius = 12f, center = Offset(x, ys[level - 1]), style = Stroke(width = 2f))
+            }
+        }
+        BasicText(level.toString(), style = TextStyle(color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold))
     }
 }

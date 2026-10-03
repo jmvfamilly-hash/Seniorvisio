@@ -417,3 +417,7 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 - **Filtres** dans la frise (ligne « Filtres », repliée par défaut) : sujet, technique, couleur / N&B, couleur dominante ; choix cumulables, second toucher = retrait. Les filtres de couleur ne retiennent que les œuvres déjà analysées (progression affichée).
 - Niveau 3 de la vue détaillée : ligne « Style » (sujet · technique · couleur · dominantes).
 - Limites : titres sans mot-clé → « autre sujet » ; matière absente → « autre technique » ; l'analyse de couleur est faite sur des vignettes (cadre et fond compris).
+
+## Rev45 — portrait : demi-cercle et curseur à droite, fiche à gauche
+
+- En **portrait** : la fiche de l'artiste à gauche ; à droite, les portraits sur un demi-cercle le long du bord (glisser verticalement) et, tout à droite, le curseur de niveau vertical (1 en haut, 3 en bas). En **paysage** : inchangé (demi-cercle centré en bas, curseur au centre).
