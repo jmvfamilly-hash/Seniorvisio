@@ -9,6 +9,16 @@ on:
     paths-ignore:
       - 'papyrus/**'
       - '.github/workflows/build-papyrus-apk.yml'
+      # Les visionneuses IIIF (Android et web) sont des projets autonomes, sans rapport
+      # avec Senior Visio : même raison que pour le banc d'essai ci-dessus.
+      - 'vangogh-timeline/**'
+      - 'style-index-demo/**'
+      - '.github/workflows/style-index-demo.yml'
+      - '.github/workflows/build-vangogh-timeline-apk.yml'
+      - 'iiif-viewer/**'
+      - 'iiif-viewer-web/**'
+      - '.github/workflows/build-iiif-viewer-apk.yml'
+      - '.github/workflows/deploy-iiif-viewer-web.yml'
   workflow_dispatch:
 
 permissions:

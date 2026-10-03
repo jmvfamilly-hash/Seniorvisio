@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fond posé aussi côté fenêtre : pas d'éclair blanc avant le premier rendu Compose. -->
+    <style name="Theme.VanGoghTimeline" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/background</item>
+    </style>
+    <color name="background">#0F1114</color>
+</resources>

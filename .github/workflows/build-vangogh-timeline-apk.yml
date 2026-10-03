@@ -1,0 +1,73 @@
+# Frise chronologique des œuvres de Van Gogh (voir vangogh-timeline/), projet Gradle autonome.
+# Même schéma que build-papyrus-apk.yml : aucune demande de mise à jour à
+# distance (la tablette de Jean n'en reçoit pas) et aucun secret.
+name: Build Van Gogh Timeline APK
+
+on:
+  push:
+    paths:
+      - 'vangogh-timeline/**'
+      - 'iiif-viewer/library/**'   # la frise l'embarque
+      - '.github/workflows/build-vangogh-timeline-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Android SDK platform & build-tools
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      # Images de fond du menu : téléchargées ICI (le bac à sable de développement n'atteint pas les musées) et embarquées dans l'APK, donc
+      # chargées en local sur la tablette. Tolérant : une image qui échoue laisse l'appli retomber sur l'adresse distante puis sur un dégradé.
+      - name: Télécharger les images de fond du menu (embarquées dans l'APK)
+        continue-on-error: true
+        run: |
+          pip install --quiet opencv-python-headless || true
+          python3 vangogh-timeline/tools/fetch_backdrops.py vangogh-timeline/app/src/main/assets/backdrops
+          ls -la vangogh-timeline/app/src/main/assets/backdrops
+
+      # Avant l'APK : le calcul de tuiles et le cache se vérifient en quelques
+      # secondes, sans émulateur.
+      - name: Essais unitaires (calendrier, échelle du temps, couloirs, manifestes IIIF)
+        working-directory: vangogh-timeline
+        run: gradle testDebugUnitTest --stacktrace
+
+      - name: Build debug APK
+        working-directory: vangogh-timeline
+        run: gradle assembleDebug --stacktrace "-PbuildRev=rev${{ github.run_number }}"
+
+      - name: Rename APK with revision number
+        run: |
+          apk_name="vangogh-timeline-rev${{ github.run_number }}.apk"
+          echo "APK_NAME=$apk_name" >> "$GITHUB_ENV"
+          cp vangogh-timeline/app/build/outputs/apk/debug/app-debug.apk "vangogh-timeline/app/build/outputs/apk/debug/$apk_name"
+
+      - name: Publish APK as GitHub Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="vangogh-timeline-apk-${{ github.run_id }}"
+          gh release create "$tag" "vangogh-timeline/app/build/outputs/apk/debug/${{ env.APK_NAME }}" \
+            --title "Van Gogh Timeline debug APK (run ${{ github.run_number }})" \
+            --notes "Frise chronologique Van Gogh, commit ${{ github.sha }}. Indépendant de Senior Visio." \
+            --target "${{ github.sha }}"

@@ -9,3 +9,8 @@
 .cxx
 app/build/
 __pycache__/
+# Projets Gradle autonomes (papyrus/, hello-test/, iiif-viewer/)
+**/build/
+.kotlin/
+local.properties
+*.apk

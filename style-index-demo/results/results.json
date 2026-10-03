@@ -1,0 +1,1046 @@
+{
+ "images": [
+  {
+   "id": "vision",
+   "file": "vision.jpg",
+   "title": "La vision après le sermon (Paul Gauguin).jpg",
+   "expected": "huile sur toile (synthétisme, Pont-Aven)",
+   "page": "https://commons.wikimedia.org/wiki/File%3ALa_vision_apr%C3%A8s_le_sermon_%28Paul_Gauguin%29.jpg",
+   "license": "Public domain",
+   "size": [
+    640,
+    501
+   ],
+   "siglip": {
+    "technique": {
+     "Huile sur toile": 0.9775,
+     "Aquarelle": 0.0078,
+     "Fusain": 0.0003,
+     "Crayon / graphite": 0.0,
+     "Encre à la plume": 0.0001,
+     "Pastel": 0.0108,
+     "Gravure sur bois": 0.0013,
+     "Lithographie": 0.0017,
+     "Sculpture ou céramique": 0.0005
+    },
+    "sujet": {
+     "Portrait": 0.0,
+     "Paysage": 0.0045,
+     "Nature morte": 0.0037,
+     "Scène à plusieurs personnages": 0.9238,
+     "Nu": 0.0,
+     "Scène religieuse": 0.068
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.8776,
+     "Tons sourds et terreux": 0.1211,
+     "Noir et blanc": 0.0012
+    }
+   },
+   "openclip": {
+    "technique": {
+     "Huile sur toile": 0.9612,
+     "Aquarelle": 0.0001,
+     "Fusain": 0.0,
+     "Crayon / graphite": 0.0,
+     "Encre à la plume": 0.0,
+     "Pastel": 0.0001,
+     "Gravure sur bois": 0.0075,
+     "Lithographie": 0.0291,
+     "Sculpture ou céramique": 0.0021
+    },
+    "sujet": {
+     "Portrait": 0.0002,
+     "Paysage": 0.0178,
+     "Nature morte": 0.0148,
+     "Scène à plusieurs personnages": 0.891,
+     "Nu": 0.0131,
+     "Scène religieuse": 0.0632
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.9684,
+     "Tons sourds et terreux": 0.0315,
+     "Noir et blanc": 0.0001
+    }
+   },
+   "vlm": {
+    "json": {
+     "medium": "oil on canvas",
+     "subject": "figures",
+     "dominant_colors": [
+      "red",
+      "blue",
+      "white",
+      "green",
+      "brown"
+     ],
+     "brushwork": "broken strokes",
+     "texture_and_transparency": "canvas weave",
+     "impasto": true,
+     "style_or_movement": "post-impressionism",
+     "description_fr": "Cette œuvre en huile sur toile représente des personnages en train de prier dans un paysage rouge vif. Les couleurs vives et les traits bruts caractérisent le style post-impressionniste de l'artiste."
+    },
+    "raw": "```json\n{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"figures\",\n  \"dominant_colors\": [\"red\", \"blue\", \"white\", \"green\", \"brown\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"canvas weave\",\n  \"impasto\": true,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Cette œuvre en huile sur toile représente des personnages en train de prier dans un paysage rouge vif. Les couleurs vives et les traits bruts caractérisent le style post-impressionniste de l'artiste.\"\n}\n```",
+    "seconds": 180.1
+   }
+  },
+  {
+   "id": "vairumati",
+   "file": "vairumati.jpg",
+   "title": "Paul Gauguin 135.jpg",
+   "expected": "huile sur toile (Tahiti)",
+   "page": "https://commons.wikimedia.org/wiki/File%3APaul_Gauguin_135.jpg",
+   "license": "Public domain",
+   "size": [
+    640,
+    505
+   ],
+   "siglip": {
+    "technique": {
+     "Huile sur toile": 0.8617,
+     "Aquarelle": 0.0112,
+     "Fusain": 0.0021,
+     "Crayon / graphite": 0.0003,
+     "Encre à la plume": 0.0009,
+     "Pastel": 0.1139,
+     "Gravure sur bois": 0.0032,
+     "Lithographie": 0.0065,
+     "Sculpture ou céramique": 0.0001
+    },
+    "sujet": {
+     "Portrait": 0.0001,
+     "Paysage": 0.0007,
+     "Nature morte": 0.0016,
+     "Scène à plusieurs personnages": 0.5124,
+     "Nu": 0.4849,
+     "Scène religieuse": 0.0003
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.5369,
+     "Tons sourds et terreux": 0.4594,
+     "Noir et blanc": 0.0036
+    }
+   },
+   "openclip": {
+    "technique": {
+     "Huile sur toile": 0.745,
+     "Aquarelle": 0.0031,
+     "Fusain": 0.0001,
+     "Crayon / graphite": 0.0,
+     "Encre à la plume": 0.0001,
+     "Pastel": 0.0241,
+     "Gravure sur bois": 0.0673,
+     "Lithographie": 0.1589,
+     "Sculpture ou céramique": 0.0015
+    },
+    "sujet": {
+     "Portrait": 0.0002,
+     "Paysage": 0.0003,
+     "Nature morte": 0.0,
+     "Scène à plusieurs personnages": 0.0002,
+     "Nu": 0.9984,
+     "Scène religieuse": 0.0008
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.0667,
+     "Tons sourds et terreux": 0.9332,
+     "Noir et blanc": 0.0001
+    }
+   },
+   "vlm": {
+    "json": {
+     "medium": "oil on canvas",
+     "subject": "figures",
+     "dominant_colors": [
+      "red",
+      "yellow",
+      "green",
+      "brown"
+     ],
+     "brushwork": "broken strokes",
+     "texture_and_transparency": "canvas weave",
+     "impasto": true,
+     "style_or_movement": "post-impressionism",
+     "description_fr": "Cette œuvre en huile sur toile représente des figures féminines dans un contexte tropical, avec des couleurs vives et des lignes brisées qui donnent une texture rugueuse. Le style post-impressionniste est caractérisé par ces éléments."
+    },
+    "raw": "```json\n{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"figures\",\n  \"dominant_colors\": [\"red\", \"yellow\", \"green\", \"brown\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"canvas weave\",\n  \"impasto\": true,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Cette œuvre en huile sur toile représente des figures féminines dans un contexte tropical, avec des couleurs vives et des lignes brisées qui donnent une texture rugueuse. Le style post-impressionniste est caractérisé par ces éléments.\"\n}\n```",
+    "seconds": 181.5
+   }
+  },
+  {
+   "id": "woodcut",
+   "file": "woodcut.jpg",
+   "title": "Paul Gauguin - Nave Nave Fenua from the Noa Noa Series - Google Art Project.jpg",
+   "expected": "gravure sur bois",
+   "page": "https://commons.wikimedia.org/wiki/File%3APaul_Gauguin_-_Nave_Nave_Fenua_from_the_Noa_Noa_Series_-_Google_Art_Project.jpg",
+   "license": "Public domain",
+   "size": [
+    371,
+    640
+   ],
+   "siglip": {
+    "technique": {
+     "Huile sur toile": 0.0,
+     "Aquarelle": 0.0,
+     "Fusain": 0.0,
+     "Crayon / graphite": 0.0,
+     "Encre à la plume": 0.0004,
+     "Pastel": 0.0001,
+     "Gravure sur bois": 0.9688,
+     "Lithographie": 0.0306,
+     "Sculpture ou céramique": 0.0
+    },
+    "sujet": {
+     "Portrait": 0.0005,
+     "Paysage": 0.1602,
+     "Nature morte": 0.0262,
+     "Scène à plusieurs personnages": 0.8091,
+     "Nu": 0.0028,
+     "Scène religieuse": 0.0012
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.5304,
+     "Tons sourds et terreux": 0.4385,
+     "Noir et blanc": 0.0312
+    }
+   },
+   "openclip": {
+    "technique": {
+     "Huile sur toile": 0.0,
+     "Aquarelle": 0.0,
+     "Fusain": 0.0,
+     "Crayon / graphite": 0.0,
+     "Encre à la plume": 0.0,
+     "Pastel": 0.0,
+     "Gravure sur bois": 0.9832,
+     "Lithographie": 0.0168,
+     "Sculpture ou céramique": 0.0
+    },
+    "sujet": {
+     "Portrait": 0.0026,
+     "Paysage": 0.5746,
+     "Nature morte": 0.0044,
+     "Scène à plusieurs personnages": 0.0357,
+     "Nu": 0.304,
+     "Scène religieuse": 0.0787
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.0186,
+     "Tons sourds et terreux": 0.427,
+     "Noir et blanc": 0.5544
+    }
+   },
+   "vlm": {
+    "json": {
+     "medium": {
+      "technique": "woodcut",
+      "support": "paper"
+     },
+     "subject": "figures",
+     "dominant_colors": [
+      "black",
+      "red",
+      "yellow",
+      "brown"
+     ],
+     "brushwork": "broken strokes",
+     "texture_and_transparency": "paper grain",
+     "impasto": false,
+     "style_or_movement": "post-impressionism",
+     "description_fr": "Ce travail en bois gravé représente deux personnages dans une scène de paysage. Les couleurs dominantes sont le noir, le rouge et le jaune, avec des touches de brun. Le style est caractéristique du post-impressionnisme avec des lignes brisées et des détails précis."
+    },
+    "raw": "{\n  \"medium\": {\n    \"technique\": \"woodcut\",\n    \"support\": \"paper\"\n  },\n  \"subject\": \"figures\",\n  \"dominant_colors\": [\"black\", \"red\", \"yellow\", \"brown\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"paper grain\",\n  \"impasto\": false,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Ce travail en bois gravé représente deux personnages dans une scène de paysage. Les couleurs dominantes sont le noir, le rouge et le jaune, avec des touches de brun. Le style est caractéristique du post-impressionnisme avec des lignes brisées et des détails précis.\"\n}",
+    "seconds": 162.9
+   }
+  },
+  {
+   "id": "watercolor",
+   "file": "watercolor.jpg",
+   "title": "Gauguin 1890 Ève exotique.jpg",
+   "expected": "aquarelle",
+   "page": "https://commons.wikimedia.org/wiki/File%3AGauguin_1890_%C3%88ve_exotique.jpg",
+   "license": "Public domain",
+   "size": [
+    369,
+    640
+   ],
+   "siglip": {
+    "technique": {
+     "Huile sur toile": 0.6349,
+     "Aquarelle": 0.1162,
+     "Fusain": 0.0038,
+     "Crayon / graphite": 0.0006,
+     "Encre à la plume": 0.0026,
+     "Pastel": 0.1583,
+     "Gravure sur bois": 0.0323,
+     "Lithographie": 0.0499,
+     "Sculpture ou céramique": 0.0014
+    },
+    "sujet": {
+     "Portrait": 0.0001,
+     "Paysage": 0.0211,
+     "Nature morte": 0.013,
+     "Scène à plusieurs personnages": 0.0257,
+     "Nu": 0.9399,
+     "Scène religieuse": 0.0001
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.5872,
+     "Tons sourds et terreux": 0.4094,
+     "Noir et blanc": 0.0033
+    }
+   },
+   "openclip": {
+    "technique": {
+     "Huile sur toile": 0.2645,
+     "Aquarelle": 0.0039,
+     "Fusain": 0.0,
+     "Crayon / graphite": 0.0,
+     "Encre à la plume": 0.0001,
+     "Pastel": 0.0032,
+     "Gravure sur bois": 0.323,
+     "Lithographie": 0.4031,
+     "Sculpture ou céramique": 0.0021
+    },
+    "sujet": {
+     "Portrait": 0.0001,
+     "Paysage": 0.0227,
+     "Nature morte": 0.0005,
+     "Scène à plusieurs personnages": 0.0046,
+     "Nu": 0.9714,
+     "Scène religieuse": 0.0007
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.0107,
+     "Tons sourds et terreux": 0.9877,
+     "Noir et blanc": 0.0015
+    }
+   },
+   "vlm": {
+    "json": {
+     "medium": "oil on canvas",
+     "subject": "figures",
+     "dominant_colors": [
+      "green",
+      "yellow",
+      "orange",
+      "red",
+      "black"
+     ],
+     "brushwork": "broken strokes",
+     "texture_and_transparency": "canvas weave",
+     "impasto": true,
+     "style_or_movement": "post-impressionism",
+     "description_fr": "Cette peinture en huile sur toile représente une femme nue debout dans un jardin luxuriant, entourée de plantes et d'oiseaux. Les couleurs vives et les lignes brisées donnent une impression dynamique et expressif."
+    },
+    "raw": "```json\n{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"figures\",\n  \"dominant_colors\": [\"green\", \"yellow\", \"orange\", \"red\", \"black\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"canvas weave\",\n  \"impasto\": true,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Cette peinture en huile sur toile représente une femme nue debout dans un jardin luxuriant, entourée de plantes et d'oiseaux. Les couleurs vives et les lignes brisées donnent une impression dynamique et expressif.\"\n}\n```",
+    "seconds": 158.0
+   }
+  },
+  {
+   "id": "charcoal",
+   "file": "charcoal.jpg",
+   "title": "Paul Gauguin - Skisser. Blad 32 recto i skissbok om 36 blad - NMH 32-1936 recto - Nationalmuseum.jpg",
+   "expected": "fusain / dessin",
+   "page": "https://commons.wikimedia.org/wiki/File%3APaul_Gauguin_-_Skisser._Blad_32_recto_i_skissbok_om_36_blad_-_NMH_32-1936_recto_-_Nationalmuseum.jpg",
+   "license": "Public domain",
+   "size": [
+    479,
+    640
+   ],
+   "siglip": {
+    "technique": {
+     "Huile sur toile": 0.0001,
+     "Aquarelle": 0.0035,
+     "Fusain": 0.3011,
+     "Crayon / graphite": 0.3721,
+     "Encre à la plume": 0.3211,
+     "Pastel": 0.0017,
+     "Gravure sur bois": 0.0002,
+     "Lithographie": 0.0002,
+     "Sculpture ou céramique": 0.0001
+    },
+    "sujet": {
+     "Portrait": 0.0316,
+     "Paysage": 0.4818,
+     "Nature morte": 0.3798,
+     "Scène à plusieurs personnages": 0.1014,
+     "Nu": 0.0035,
+     "Scène religieuse": 0.0019
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.0,
+     "Tons sourds et terreux": 0.0007,
+     "Noir et blanc": 0.9992
+    }
+   },
+   "openclip": {
+    "technique": {
+     "Huile sur toile": 0.0,
+     "Aquarelle": 0.0006,
+     "Fusain": 0.044,
+     "Crayon / graphite": 0.8839,
+     "Encre à la plume": 0.0683,
+     "Pastel": 0.0,
+     "Gravure sur bois": 0.0002,
+     "Lithographie": 0.003,
+     "Sculpture ou céramique": 0.0
+    },
+    "sujet": {
+     "Portrait": 0.7737,
+     "Paysage": 0.0711,
+     "Nature morte": 0.0,
+     "Scène à plusieurs personnages": 0.1194,
+     "Nu": 0.0332,
+     "Scène religieuse": 0.0026
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.0,
+     "Tons sourds et terreux": 0.0,
+     "Noir et blanc": 1.0
+    }
+   },
+   "vlm": {
+    "json": {
+     "medium": "charcoal on paper",
+     "subject": "portrait",
+     "dominant_colors": [
+      "black",
+      "white"
+     ],
+     "brushwork": "broken strokes",
+     "texture_and_transparency": "paper grain",
+     "impasto": false,
+     "style_or_movement": "realism",
+     "description_fr": "Ce portrait en noir et blanc est réalisé à la craie sur papier. La figure est représentée de profil, avec une coiffure simple. Le dessin est détaillé, mettant l'accent sur les traits du visage et le drapé de la robe. L'utilisation de la craie crée des contrastes nets entre les zones sombres et claires."
+    },
+    "raw": "{\n  \"medium\": \"charcoal on paper\",\n  \"subject\": \"portrait\",\n  \"dominant_colors\": [\"black\", \"white\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"paper grain\",\n  \"impasto\": false,\n  \"style_or_movement\": \"realism\",\n  \"description_fr\": \"Ce portrait en noir et blanc est réalisé à la craie sur papier. La figure est représentée de profil, avec une coiffure simple. Le dessin est détaillé, mettant l'accent sur les traits du visage et le drapé de la robe. L'utilisation de la craie crée des contrastes nets entre les zones sombres et claires.\"\n}",
+    "seconds": 190.1
+   }
+  },
+  {
+   "id": "lithograph",
+   "file": "lithograph.jpg",
+   "title": "Paul Gauguin - Copy of Manet's Olympia.jpg",
+   "expected": "lithographie",
+   "page": "https://commons.wikimedia.org/wiki/File%3APaul_Gauguin_-_Copy_of_Manet%27s_Olympia.jpg",
+   "license": "Public domain",
+   "size": [
+    640,
+    435
+   ],
+   "siglip": {
+    "technique": {
+     "Huile sur toile": 0.7437,
+     "Aquarelle": 0.0275,
+     "Fusain": 0.0025,
+     "Crayon / graphite": 0.0002,
+     "Encre à la plume": 0.0008,
+     "Pastel": 0.1914,
+     "Gravure sur bois": 0.0125,
+     "Lithographie": 0.0205,
+     "Sculpture ou céramique": 0.0008
+    },
+    "sujet": {
+     "Portrait": 0.0002,
+     "Paysage": 0.0002,
+     "Nature morte": 0.0384,
+     "Scène à plusieurs personnages": 0.1784,
+     "Nu": 0.7813,
+     "Scène religieuse": 0.0016
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.158,
+     "Tons sourds et terreux": 0.8409,
+     "Noir et blanc": 0.0011
+    }
+   },
+   "openclip": {
+    "technique": {
+     "Huile sur toile": 0.9455,
+     "Aquarelle": 0.0049,
+     "Fusain": 0.0002,
+     "Crayon / graphite": 0.0,
+     "Encre à la plume": 0.0001,
+     "Pastel": 0.0047,
+     "Gravure sur bois": 0.0015,
+     "Lithographie": 0.0429,
+     "Sculpture ou céramique": 0.0003
+    },
+    "sujet": {
+     "Portrait": 0.0008,
+     "Paysage": 0.0,
+     "Nature morte": 0.0034,
+     "Scène à plusieurs personnages": 0.0012,
+     "Nu": 0.9918,
+     "Scène religieuse": 0.0027
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.0079,
+     "Tons sourds et terreux": 0.9911,
+     "Noir et blanc": 0.001
+    }
+   },
+   "vlm": {
+    "json": {
+     "medium": "oil on canvas",
+     "subject": "figures",
+     "dominant_colors": [
+      "white",
+      "pink",
+      "blue",
+      "yellow",
+      "brown"
+     ],
+     "brushwork": "broken strokes",
+     "texture_and_transparency": "canvas weave",
+     "impasto": true,
+     "style_or_movement": "post-impressionism",
+     "description_fr": "Cette peinture en huile sur toile représente deux personnages féminins dans une scène intime. L'une est nue et allongée sur un lit, tandis que l'autre, vêtue d'une robe blanche, tient des fleurs. Le style impressionniste est marqué par les touches de couleur vives et la texture du toile. Les lignes sont brisées, créant une impression de mouvement et de profondeur."
+    },
+    "raw": "```json\n{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"figures\",\n  \"dominant_colors\": [\"white\", \"pink\", \"blue\", \"yellow\", \"brown\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"canvas weave\",\n  \"impasto\": true,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Cette peinture en huile sur toile représente deux personnages féminins dans une scène intime. L'une est nue et allongée sur un lit, tandis que l'autre, vêtue d'une robe blanche, tient des fleurs. Le style impressionniste est marqué par les touches de couleur vives et la texture du toile. Les lignes sont brisées, créant une impression de mouvement et de profondeur.\"\n}\n```",
+    "seconds": 191.2
+   }
+  },
+  {
+   "id": "stilllife",
+   "file": "stilllife.jpg",
+   "title": "Paul Gauguin 121.jpg",
+   "expected": "nature morte",
+   "page": "https://commons.wikimedia.org/wiki/File%3APaul_Gauguin_121.jpg",
+   "license": "Public domain",
+   "size": [
+    640,
+    505
+   ],
+   "siglip": {
+    "technique": {
+     "Huile sur toile": 0.6694,
+     "Aquarelle": 0.0938,
+     "Fusain": 0.0003,
+     "Crayon / graphite": 0.0001,
+     "Encre à la plume": 0.0012,
+     "Pastel": 0.0714,
+     "Gravure sur bois": 0.0102,
+     "Lithographie": 0.1509,
+     "Sculpture ou céramique": 0.0028
+    },
+    "sujet": {
+     "Portrait": 0.0,
+     "Paysage": 0.0001,
+     "Nature morte": 0.9999,
+     "Scène à plusieurs personnages": 0.0,
+     "Nu": 0.0,
+     "Scène religieuse": 0.0
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.3556,
+     "Tons sourds et terreux": 0.6443,
+     "Noir et blanc": 0.0
+    }
+   },
+   "openclip": {
+    "technique": {
+     "Huile sur toile": 0.9718,
+     "Aquarelle": 0.0008,
+     "Fusain": 0.0,
+     "Crayon / graphite": 0.0,
+     "Encre à la plume": 0.0,
+     "Pastel": 0.0006,
+     "Gravure sur bois": 0.0011,
+     "Lithographie": 0.025,
+     "Sculpture ou céramique": 0.0006
+    },
+    "sujet": {
+     "Portrait": 0.0,
+     "Paysage": 0.0,
+     "Nature morte": 1.0,
+     "Scène à plusieurs personnages": 0.0,
+     "Nu": 0.0,
+     "Scène religieuse": 0.0
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.262,
+     "Tons sourds et terreux": 0.7377,
+     "Noir et blanc": 0.0003
+    }
+   },
+   "vlm": {
+    "json": {
+     "medium": "oil on canvas",
+     "subject": "still life",
+     "dominant_colors": [
+      "yellow",
+      "pink",
+      "purple",
+      "green"
+     ],
+     "brushwork": "broken strokes",
+     "texture_and_transparency": "paper grain",
+     "impasto": true,
+     "style_or_movement": "post-impressionism",
+     "description_fr": "Cette œuvre en huile sur toile représente une composition de fleurs dans des vases, avec un fond jaune et rose. Le style post-impressionniste est marqué par les touches brisées et l'effet d'impasto, donnant une texture rugueuse à la peinture."
+    },
+    "raw": "```json\n{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"still life\",\n  \"dominant_colors\": [\"yellow\", \"pink\", \"purple\", \"green\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"paper grain\",\n  \"impasto\": true,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Cette œuvre en huile sur toile représente une composition de fleurs dans des vases, avec un fond jaune et rose. Le style post-impressionniste est marqué par les touches brisées et l'effet d'impasto, donnant une texture rugueuse à la peinture.\"\n}\n```",
+    "seconds": 183.5
+   }
+  },
+  {
+   "id": "pastel",
+   "file": "pastel.jpg",
+   "title": "Gauguin - Mademoiselle Manthey, 1884.jpg",
+   "expected": "pastel",
+   "page": "https://commons.wikimedia.org/wiki/File%3AGauguin_-_Mademoiselle_Manthey%2C_1884.jpg",
+   "license": "Public domain",
+   "size": [
+    515,
+    640
+   ],
+   "siglip": {
+    "technique": {
+     "Huile sur toile": 0.0001,
+     "Aquarelle": 0.0001,
+     "Fusain": 0.0161,
+     "Crayon / graphite": 0.0023,
+     "Encre à la plume": 0.0003,
+     "Pastel": 0.9808,
+     "Gravure sur bois": 0.0,
+     "Lithographie": 0.0003,
+     "Sculpture ou céramique": 0.0
+    },
+    "sujet": {
+     "Portrait": 0.9997,
+     "Paysage": 0.0,
+     "Nature morte": 0.0003,
+     "Scène à plusieurs personnages": 0.0,
+     "Nu": 0.0,
+     "Scène religieuse": 0.0
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.3008,
+     "Tons sourds et terreux": 0.6678,
+     "Noir et blanc": 0.0314
+    }
+   },
+   "openclip": {
+    "technique": {
+     "Huile sur toile": 0.0221,
+     "Aquarelle": 0.0018,
+     "Fusain": 0.0008,
+     "Crayon / graphite": 0.0004,
+     "Encre à la plume": 0.0,
+     "Pastel": 0.974,
+     "Gravure sur bois": 0.0,
+     "Lithographie": 0.0009,
+     "Sculpture ou céramique": 0.0
+    },
+    "sujet": {
+     "Portrait": 1.0,
+     "Paysage": 0.0,
+     "Nature morte": 0.0,
+     "Scène à plusieurs personnages": 0.0,
+     "Nu": 0.0,
+     "Scène religieuse": 0.0
+    },
+    "couleur": {
+     "Couleurs vives et aplats": 0.1507,
+     "Tons sourds et terreux": 0.8102,
+     "Noir et blanc": 0.0391
+    }
+   },
+   "vlm": {
+    "json": {
+     "medium": "pastel on paper",
+     "subject": "portrait",
+     "dominant_colors": [
+      "red",
+      "black",
+      "green",
+      "white"
+     ],
+     "brushwork": "broken strokes",
+     "texture_and_transparency": "paper grain",
+     "impasto": false,
+     "style_or_movement": "post-impressionism",
+     "description_fr": "Ce portrait en pastel montre une femme portant un chapeau coloré sur un fond rouge vif. Les traits sont dessinés avec des touches de couleur claire et sombre, créant un contraste vibrant. Le style est caractéristique du post-impressionnisme avec ses couleurs vives et sa texture papier."
+    },
+    "raw": "{\n  \"medium\": \"pastel on paper\",\n  \"subject\": \"portrait\",\n  \"dominant_colors\": [\"red\", \"black\", \"green\", \"white\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"paper grain\",\n  \"impasto\": false,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Ce portrait en pastel montre une femme portant un chapeau coloré sur un fond rouge vif. Les traits sont dessinés avec des touches de couleur claire et sombre, créant un contraste vibrant. Le style est caractéristique du post-impressionnisme avec ses couleurs vives et sa texture papier.\"\n}",
+    "seconds": 184.0
+   }
+  }
+ ],
+ "models": {
+  "siglip": {
+   "id": "google/siglip-base-patch16-224",
+   "params_m": 203,
+   "load_seconds": 7.5,
+   "image_seconds_per_image": 0.256
+  },
+  "openclip": {
+   "id": "ViT-B-32 / laion2b_s34b_b79k",
+   "params_m": 151,
+   "load_seconds": 4.4,
+   "image_seconds_per_image": 0.065
+  },
+  "vlm": {
+   "id": "Qwen/Qwen2.5-VL-3B-Instruct",
+   "params_m": 3755,
+   "load_seconds": 25.2,
+   "dtype": "bfloat16",
+   "device": "cpu"
+  }
+ },
+ "errors": {},
+ "queries": {
+  "Portrait à l'aquarelle": {
+   "siglip": [
+    {
+     "id": "pastel",
+     "score": 0.0624
+    },
+    {
+     "id": "lithograph",
+     "score": 0.0258
+    },
+    {
+     "id": "charcoal",
+     "score": 0.0247
+    },
+    {
+     "id": "vairumati",
+     "score": 0.0197
+    },
+    {
+     "id": "watercolor",
+     "score": 0.0041
+    },
+    {
+     "id": "vision",
+     "score": 0.0032
+    },
+    {
+     "id": "stilllife",
+     "score": -0.0004
+    },
+    {
+     "id": "woodcut",
+     "score": -0.0175
+    }
+   ],
+   "openclip": [
+    {
+     "id": "pastel",
+     "score": 0.2334
+    },
+    {
+     "id": "charcoal",
+     "score": 0.1696
+    },
+    {
+     "id": "lithograph",
+     "score": 0.1495
+    },
+    {
+     "id": "stilllife",
+     "score": 0.1133
+    },
+    {
+     "id": "vairumati",
+     "score": 0.1084
+    },
+    {
+     "id": "watercolor",
+     "score": 0.096
+    },
+    {
+     "id": "woodcut",
+     "score": 0.0838
+    },
+    {
+     "id": "vision",
+     "score": 0.0447
+    }
+   ]
+  },
+  "Étude au fusain": {
+   "siglip": [
+    {
+     "id": "pastel",
+     "score": 0.0714
+    },
+    {
+     "id": "charcoal",
+     "score": 0.0663
+    },
+    {
+     "id": "lithograph",
+     "score": 0.0156
+    },
+    {
+     "id": "vairumati",
+     "score": 0.0096
+    },
+    {
+     "id": "vision",
+     "score": -0.0019
+    },
+    {
+     "id": "watercolor",
+     "score": -0.0036
+    },
+    {
+     "id": "stilllife",
+     "score": -0.013
+    },
+    {
+     "id": "woodcut",
+     "score": -0.0132
+    }
+   ],
+   "openclip": [
+    {
+     "id": "charcoal",
+     "score": 0.2405
+    },
+    {
+     "id": "pastel",
+     "score": 0.1806
+    },
+    {
+     "id": "lithograph",
+     "score": 0.1426
+    },
+    {
+     "id": "woodcut",
+     "score": 0.1398
+    },
+    {
+     "id": "vairumati",
+     "score": 0.1019
+    },
+    {
+     "id": "stilllife",
+     "score": 0.0988
+    },
+    {
+     "id": "watercolor",
+     "score": 0.0978
+    },
+    {
+     "id": "vision",
+     "score": 0.0871
+    }
+   ]
+  },
+  "Huile sur toile, paysage coloré": {
+   "siglip": [
+    {
+     "id": "vision",
+     "score": 0.0606
+    },
+    {
+     "id": "watercolor",
+     "score": 0.0511
+    },
+    {
+     "id": "vairumati",
+     "score": 0.0422
+    },
+    {
+     "id": "stilllife",
+     "score": 0.0388
+    },
+    {
+     "id": "woodcut",
+     "score": 0.0297
+    },
+    {
+     "id": "lithograph",
+     "score": 0.0091
+    },
+    {
+     "id": "charcoal",
+     "score": -0.0073
+    },
+    {
+     "id": "pastel",
+     "score": -0.0188
+    }
+   ],
+   "openclip": [
+    {
+     "id": "stilllife",
+     "score": 0.1776
+    },
+    {
+     "id": "vision",
+     "score": 0.1737
+    },
+    {
+     "id": "watercolor",
+     "score": 0.1611
+    },
+    {
+     "id": "pastel",
+     "score": 0.1431
+    },
+    {
+     "id": "vairumati",
+     "score": 0.1383
+    },
+    {
+     "id": "woodcut",
+     "score": 0.1343
+    },
+    {
+     "id": "lithograph",
+     "score": 0.1049
+    },
+    {
+     "id": "charcoal",
+     "score": 0.0625
+    }
+   ]
+  },
+  "Estampe en noir et blanc": {
+   "siglip": [
+    {
+     "id": "woodcut",
+     "score": 0.1099
+    },
+    {
+     "id": "charcoal",
+     "score": 0.0594
+    },
+    {
+     "id": "vairumati",
+     "score": 0.0245
+    },
+    {
+     "id": "lithograph",
+     "score": 0.0197
+    },
+    {
+     "id": "watercolor",
+     "score": 0.0173
+    },
+    {
+     "id": "vision",
+     "score": 0.0163
+    },
+    {
+     "id": "pastel",
+     "score": -0.0022
+    },
+    {
+     "id": "stilllife",
+     "score": -0.0023
+    }
+   ],
+   "openclip": [
+    {
+     "id": "woodcut",
+     "score": 0.2883
+    },
+    {
+     "id": "charcoal",
+     "score": 0.2218
+    },
+    {
+     "id": "watercolor",
+     "score": 0.1694
+    },
+    {
+     "id": "lithograph",
+     "score": 0.1375
+    },
+    {
+     "id": "vision",
+     "score": 0.1346
+    },
+    {
+     "id": "vairumati",
+     "score": 0.1333
+    },
+    {
+     "id": "stilllife",
+     "score": 0.1283
+    },
+    {
+     "id": "pastel",
+     "score": 0.1199
+    }
+   ]
+  },
+  "Nature morte aux fleurs": {
+   "siglip": [
+    {
+     "id": "stilllife",
+     "score": 0.1011
+    },
+    {
+     "id": "lithograph",
+     "score": 0.0547
+    },
+    {
+     "id": "watercolor",
+     "score": 0.0484
+    },
+    {
+     "id": "charcoal",
+     "score": 0.0393
+    },
+    {
+     "id": "vision",
+     "score": 0.0352
+    },
+    {
+     "id": "vairumati",
+     "score": 0.034
+    },
+    {
+     "id": "pastel",
+     "score": 0.0099
+    },
+    {
+     "id": "woodcut",
+     "score": 0.0048
+    }
+   ],
+   "openclip": [
+    {
+     "id": "stilllife",
+     "score": 0.2975
+    },
+    {
+     "id": "lithograph",
+     "score": 0.2157
+    },
+    {
+     "id": "vision",
+     "score": 0.2034
+    },
+    {
+     "id": "watercolor",
+     "score": 0.1979
+    },
+    {
+     "id": "woodcut",
+     "score": 0.1667
+    },
+    {
+     "id": "vairumati",
+     "score": 0.1644
+    },
+    {
+     "id": "charcoal",
+     "score": 0.1568
+    },
+    {
+     "id": "pastel",
+     "score": 0.137
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,21 @@
+// Projet Gradle autonome, comme papyrus/ et iiif-viewer/ : il n'a rien à voir avec Senior Visio.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = "VanGoghTimeline"
+include ':app'
+
+// Le visualiseur IIIF est une bibliothèque partagée (iiif-viewer/library) : la frise ouvre une œuvre dedans, sans copie de code.
+include ':iiif-viewer-lib'
+project(':iiif-viewer-lib').projectDir = new File(settingsDir, '../iiif-viewer/library')
