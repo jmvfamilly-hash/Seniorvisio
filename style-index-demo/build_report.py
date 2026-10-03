@@ -23,15 +23,18 @@ def bars(scores, top=3):
     return "".join(f'<div class="bar"><span>{esc(k)}</span><i style="width:{v*100:.0f}%"></i><b>{v*100:.0f} %</b></div>' for k, v in items)
 
 
-def vlm_block(i):
-    v = i.get("vlm")
+def vlm_block(i, key="vlm"):
+    v = i.get(key)
     if not v:
         return '<p class="na">non exécuté</p>'
     j = v.get("json")
     if not j:
+        if v.get("error"):
+            return f'<p class="na">échec : {esc(v["error"][:200])}</p>'
         return f'<p class="na">réponse non structurée ({v.get("seconds","?")} s)</p><pre>{esc(v.get("raw",""))}</pre>'
     rows = "".join(f"<tr><th>{esc(str(k))}</th><td>{esc(', '.join(map(str, val)) if isinstance(val, list) else str(val))}</td></tr>" for k, val in j.items())
-    return f'<table>{rows}</table><p class="t">{v.get("seconds","?")} s sur CPU</p>'
+    how = {"json": "JSON demandé en une fois", "questions": "JSON illisible : une question courte par champ"}.get(v.get("mode"), "")
+    return f'<table>{rows}</table><p class="t">{v.get("seconds","?")} s sur CPU{" · " + how if how else ""}</p>'
 
 
 cards = ""
@@ -41,7 +44,7 @@ for i in d["images"]:
         s = i.get(name, {})
         cols += f'<div class="col"><h4>{label}</h4>' + "".join(f"<h5>{esc(g)}</h5>{bars(s.get(g))}" for g in GROUPS) + "</div>"
     cards += f"""<section class="card"><div class="pic"><img src="{b64(i['file'])}" alt="{esc(i['title'])}"><p>Recherche : <b>{esc(i['expected'])}</b><br><a href="{esc(i['page'])}">{esc(i['title'])}</a><br>{esc(i.get('license',''))}</p></div>
-<div class="cols">{cols}<div class="col wide"><h4>Modèle de vision-langage</h4>{vlm_block(i)}</div></div></section>"""
+<div class="cols">{cols}<div class="col wide"><h4>Qwen2.5-VL-3B</h4>{vlm_block(i, "vlm")}</div><div class="col wide"><h4>Moondream2</h4>{vlm_block(i, "moondream")}</div></div></section>"""
 
 qhtml = ""
 for fr, _ in QUERIES:
@@ -76,11 +79,12 @@ table{{border-collapse:collapse;font-size:13px}} th{{text-align:left;color:var(-
 .scroll{{overflow-x:auto}}
 @media (max-width:640px){{.card{{grid-template-columns:minmax(0,1fr)}}}}
 </style>
-<h1>Gauguin : indexer le style par SigLIP, OpenCLIP et un modèle de vision-langage</h1>
+<h1>Gauguin : indexer le style par SigLIP, OpenCLIP, Qwen2.5-VL et Moondream2</h1>
 <p class="na">Résultats réels d'une exécution sur CPU (GitHub Actions) ; œuvres téléchargées depuis Wikimedia Commons. « Recherche » = ce que j'ai demandé à Commons, pas une vérité : le titre du fichier fait foi, et aucun modèle ne reçoit cette indication.</p>
 <h2>1. Classification par œuvre</h2>{cards}
 <h2>2. Recherche libre par le texte (les 3 œuvres les plus proches)</h2>{qhtml}
 <h2>3. Modèles et durées mesurées</h2>
+<p class="t">Qwen2.5-VL et Moondream2 : durée par œuvre affichée sous chaque annotation (chargement à part).</p>
 <div class="scroll"><table><tr><th>étape</th><th>modèle</th><th>paramètres</th><th>chargement</th><th>s / image</th></tr>{mrows}</table></div>
 {('<h3>Erreurs</h3><ul>' + errs + '</ul>') if errs else ''}
 """

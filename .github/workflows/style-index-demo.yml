@@ -46,6 +46,11 @@ jobs:
         timeout-minutes: 60
         run: python style-index-demo/run_demo.py vlm
 
+      - name: Moondream2 (même échantillon, mêmes consignes)
+        continue-on-error: true
+        timeout-minutes: 60
+        run: python style-index-demo/run_demo.py moondream
+
       - name: Enregistrer les résultats dans le dépôt
         run: |
           git config user.name "github-actions[bot]"

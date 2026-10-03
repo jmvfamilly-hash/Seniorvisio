@@ -40,10 +40,18 @@ def get(url, tries=4):
     raise RuntimeError(f"{url} : {last}")
 
 
+def done(d, key):
+    """Vrai si l'étape a déjà produit ses résultats pour toutes les œuvres (on garde le même échantillon ; REDO=1 force)."""
+    return os.environ.get("REDO") != "1" and d["images"] and all(i.get(key) for i in d["images"])
+
+
 def fetch():
     from PIL import Image
     import io
     d = load()
+    if d["images"] and os.environ.get("REDO") != "1":
+        print("échantillon déjà présent :", len(d["images"]), "œuvres (REDO=1 pour le remplacer)")
+        return
     d["images"] = []
     os.makedirs(IMG, exist_ok=True)
     used = set()
@@ -98,6 +106,9 @@ def clip_stage():
     import torch
     from PIL import Image
     d = load()
+    if done(d, "siglip") and done(d, "openclip"):
+        print("SigLIP / OpenCLIP déjà faits")
+        return
     d["errors"].pop("siglip", None); d["errors"].pop("openclip", None)
     images = [Image.open(os.path.join(IMG, i["file"])).convert("RGB") for i in d["images"]]
     labels = {g: [p for _, p in items] for g, items in GROUPS.items()}
@@ -206,6 +217,9 @@ def vlm_stage():
     import torch
     from PIL import Image
     d = load()
+    if done(d, "vlm"):
+        print("Qwen2.5-VL déjà fait")
+        return
     limit = int(os.environ.get("VLM_MAX", "8"))
     imgs = d["images"][:limit]
     out = {}
@@ -255,5 +269,63 @@ def vlm_stage():
     save(d)
 
 
+# Moondream2 suit mal les longues consignes : si sa réponse JSON n'est pas lisible, on pose une question courte par champ.
+FIELD_QUESTIONS = {
+    "medium": "What is the medium and support of this artwork (for example oil on canvas, watercolor, charcoal, woodcut, pastel)? Answer in a few words.",
+    "subject": "What is the subject of this artwork: portrait, landscape, still life, figures or other? Answer in a few words.",
+    "dominant_colors": "List the 3 to 5 dominant colors of this image, separated by commas.",
+    "brushwork": "Describe the brushwork or line work in one short sentence.",
+    "texture_and_transparency": "Describe the visible texture (paper grain, canvas, transparency of washes) in one short sentence.",
+    "style_or_movement": "Which art movement or style does this work belong to? Answer in a few words.",
+    "description": "Describe this artwork and its technique in two sentences.",
+}
+
+
+def moondream_stage():
+    import torch  # noqa: F401
+    from PIL import Image
+    d = load()
+    if done(d, "moondream"):
+        print("Moondream2 déjà fait")
+        return
+    from transformers import AutoModelForCausalLM
+    model = None
+    for rev in ("2025-06-21", "2025-04-14", "2025-01-09"):
+        try:
+            t0 = time.time()
+            model = AutoModelForCausalLM.from_pretrained("vikhyatk/moondream2", revision=rev, trust_remote_code=True).eval()
+            d["models"]["moondream"] = {"id": f"vikhyatk/moondream2 ({rev})", "params_m": round(sum(p.numel() for p in model.parameters()) / 1e6), "load_seconds": round(time.time() - t0, 1), "dtype": "float32", "device": "cpu"}
+            d["errors"].pop("moondream", None)
+            break
+        except Exception as e:  # noqa: BLE001
+            d["errors"]["moondream"] = f"{rev} : {e!r}"
+            print("Moondream2", rev, "échec :", e)
+    if model is None:
+        save(d)
+        return
+
+    def ask(im, q):
+        return str(model.query(im, q)["answer"]).strip()
+
+    for i in d["images"]:
+        im = Image.open(os.path.join(IMG, i["file"])).convert("RGB")
+        t0 = time.time()
+        try:
+            raw = ask(im, PROMPT)
+            j = parse_json(raw)
+            mode = "json"
+            if not j:
+                mode = "questions"
+                j = {k: ask(im, q) for k, q in FIELD_QUESTIONS.items()}
+                if isinstance(j.get("dominant_colors"), str):
+                    j["dominant_colors"] = [c.strip() for c in j["dominant_colors"].split(",") if c.strip()]
+            i["moondream"] = {"json": j, "raw": raw[:1500], "mode": mode, "seconds": round(time.time() - t0, 1)}
+            print(i["id"], mode, i["moondream"]["seconds"], "s")
+        except Exception as e:  # noqa: BLE001
+            i["moondream"] = {"json": None, "raw": "", "error": repr(e), "seconds": round(time.time() - t0, 1)}
+            print(i["id"], "échec", e)
+        save(d)
+
+
 if __name__ == "__main__":
-    {"fetch": fetch, "clip": clip_stage, "vlm": vlm_stage}[sys.argv[1]]()
+    {"fetch": fetch, "clip": clip_stage, "vlm": vlm_stage, "moondream": moondream_stage}[sys.argv[1]]()
