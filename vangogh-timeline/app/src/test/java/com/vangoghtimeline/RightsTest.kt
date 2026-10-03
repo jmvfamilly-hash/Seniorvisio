@@ -230,6 +230,6 @@ class RightsTest {
         assertEquals("Berthe_Morisot", artist("berthe-morisot").sources.first { it.sourceId == "wikimedia" }.term)
         assertEquals("Monet, Claude", artist("claude-monet").sources.first { it.sourceId == "rijks" }.term)
         assertEquals("Gauguin, Paul", artist("paul-gauguin").sources.first { it.sourceId == "rijks" }.term)
-        assertTrue(catalog.filter { it.hasUniverse }.map { it.id }.toSet() == setOf("vincent-van-gogh", "john-singer-sargent", "joaquin-sorolla", "pierre-auguste-renoir", "berthe-morisot", "claude-monet", "paul-gauguin"))
+        assertTrue(catalog.all { it.hasUniverse })
     }
 }

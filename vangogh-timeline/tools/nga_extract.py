@@ -17,6 +17,16 @@ ARTISTS = {
     "joaquin-sorolla": 42403,
     "claude-monet": 1726,
     "paul-gauguin": 1330,
+    # univers de tous les artistes de la frise (identifiants lus dans constituents.csv ; sans œuvre ouverte, le fichier est simplement vide)
+    "gustave-courbet": 1174,
+    "camille-corot": 1169,
+    "j-m-w-turner": 1939,
+    "winslow-homer": 1401,
+    "mary-cassatt": 1107,
+    "camille-pissarro": 1791,
+    "georges-seurat": 1870,
+    "edvard-munch": 5058,
+    "giovanni-fattori": 37534,
 }
 CLASSIFICATIONS = {"Painting", "Drawing", "Print", "Sculpture", "Photograph"}
 

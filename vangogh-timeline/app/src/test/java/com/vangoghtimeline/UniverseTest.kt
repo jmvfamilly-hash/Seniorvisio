@@ -54,16 +54,12 @@ class UniverseTest {
         assertEquals(null to null, ArtistCatalog.parsePeriod("inconnue"))
     }
 
-    @Test fun onlyConfiguredArtistsHaveAUniverseTheOthersAreGrayed() {
-        val byId = catalog().associateBy { it.id }
-        assertTrue(byId.getValue("vincent-van-gogh").hasUniverse)
-        assertTrue(byId.getValue("john-singer-sargent").hasUniverse)
-        assertTrue(byId.getValue("joaquin-sorolla").hasUniverse)
-        assertTrue(byId.getValue("pierre-auguste-renoir").hasUniverse)
-        assertFalse(byId.getValue("gustave-courbet").hasUniverse)
-        assertTrue(byId.getValue("claude-monet").hasUniverse)
-        assertTrue(byId.getValue("paul-gauguin").hasUniverse)
-        assertFalse(byId.getValue("paul-cezanne").hasUniverse)
+    @Test fun everyArtistOfTheCatalogHasAUniverse() {
+        val all = catalog()
+        assertEquals(20, all.size)
+        assertTrue(all.filter { !it.hasUniverse }.map { it.name }.toString(), all.all { it.hasUniverse })
+        // le terme de recherche du Rijksmuseum est donné pour chacun (« Nom, Prénom »)
+        assertTrue(all.all { a -> a.sources.first { it.sourceId == "rijks" }.term?.contains(", ") == true })
     }
 
     @Test fun artistFieldsAndSources() {

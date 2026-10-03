@@ -83,6 +83,5 @@ class NgaTest {
 
     @Test fun everyArtistWithAUniverseHasTheNgaSource() {
         assertTrue(catalog.filter { it.hasUniverse }.all { a -> a.sources.any { it.sourceId == "nga" } })
-        assertFalse(catalog.filter { !it.hasUniverse }.any { it.sources.isNotEmpty() })
     }
 }
