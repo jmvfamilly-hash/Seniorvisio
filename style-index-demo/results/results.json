@@ -82,6 +82,25 @@
     },
     "raw": "```json\n{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"figures\",\n  \"dominant_colors\": [\"red\", \"blue\", \"white\", \"green\", \"brown\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"canvas weave\",\n  \"impasto\": true,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Cette œuvre en huile sur toile représente des personnages en train de prier dans un paysage rouge vif. Les couleurs vives et les traits bruts caractérisent le style post-impressionniste de l'artiste.\"\n}\n```",
     "seconds": 180.1
+   },
+   "moondream": {
+    "json": {
+     "medium": "oil on canvas",
+     "subject": "figures",
+     "dominant_colors": [
+      "red",
+      "orange",
+      "yellow"
+     ],
+     "brushwork": "flat areas",
+     "brushwork_transparency": "transparency of washes",
+     "impasto": "true",
+     "style_or_movement": "post-impressionism",
+     "description_fr": "two sentences in French describing the artwork and its technique"
+    },
+    "raw": "{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"figures\",\n  \"dominant_colors\": [\n    \"red\",\n    \"orange\",\n    \"yellow\"\n  ],\n  \"brushwork\": \"flat areas\",\n  \"brushwork_transparency\": \"transparency of washes\",\n  \"impasto\": \"true\",\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"two sentences in French describing the artwork and its technique\"\n}",
+    "mode": "json",
+    "seconds": 392.9
    }
   },
   {
@@ -165,6 +184,25 @@
     },
     "raw": "```json\n{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"figures\",\n  \"dominant_colors\": [\"red\", \"yellow\", \"green\", \"brown\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"canvas weave\",\n  \"impasto\": true,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Cette œuvre en huile sur toile représente des figures féminines dans un contexte tropical, avec des couleurs vives et des lignes brisées qui donnent une texture rugueuse. Le style post-impressionniste est caractérisé par ces éléments.\"\n}\n```",
     "seconds": 181.5
+   },
+   "moondream": {
+    "json": {
+     "medium": "oil on canvas",
+     "subject": "woman",
+     "dominant_colors": [
+      "yellow",
+      "red",
+      "green"
+     ],
+     "brushwork": "flat areas",
+     "brushwork_transparency": "transparency of washes",
+     "impasto": true,
+     "style_or_movement": "post-impressionism",
+     "description_fr": "two sentences in French describing the work and its technique"
+    },
+    "raw": "{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"woman\",\n  \"dominant_colors\": [\n    \"yellow\",\n    \"red\",\n    \"green\"\n  ],\n  \"brushwork\": \"flat areas\",\n  \"brushwork_transparency\": \"transparency of washes\",\n  \"impasto\": true,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"two sentences in French describing the work and its technique\"\n}",
+    "mode": "json",
+    "seconds": 393.2
    }
   },
   {
@@ -251,6 +289,25 @@
     },
     "raw": "{\n  \"medium\": {\n    \"technique\": \"woodcut\",\n    \"support\": \"paper\"\n  },\n  \"subject\": \"figures\",\n  \"dominant_colors\": [\"black\", \"red\", \"yellow\", \"brown\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"paper grain\",\n  \"impasto\": false,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Ce travail en bois gravé représente deux personnages dans une scène de paysage. Les couleurs dominantes sont le noir, le rouge et le jaune, avec des touches de brun. Le style est caractéristique du post-impressionnisme avec des lignes brisées et des détails précis.\"\n}",
     "seconds": 162.9
+   },
+   "moondream": {
+    "json": {
+     "medium": "woodcut",
+     "subject": "Portrait",
+     "dominant_colors": [
+      "Orange",
+      "Black",
+      "Yellow"
+     ],
+     "brushwork": "Broken strokes",
+     "texture_and_transparency": "Transparency of washes",
+     "impasto": "True",
+     "style_or_movement": "Synthetism",
+     "description_fr": "Narrative scene with a woman, tropical landscape, and figures"
+    },
+    "raw": "{\n  \"medium\": \"woodcut\",\n  \"subject\": \"Portrait\",\n  \"dominant_colors\": [\n    \"Orange\",\n    \"Black\",\n    \"Yellow\"\n  ],\n  \"brushwork\": \"Broken strokes\",\n  \"texture_and_transparency\": \"Transparency of washes\",\n  \"impasto\": \"True\",\n  \"style_or_movement\": \"Synthetism\",\n  \"description_fr\": \"Narrative scene with a woman, tropical landscape, and figures\"\n}",
+    "mode": "json",
+    "seconds": 186.2
    }
   },
   {
@@ -335,6 +392,25 @@
     },
     "raw": "```json\n{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"figures\",\n  \"dominant_colors\": [\"green\", \"yellow\", \"orange\", \"red\", \"black\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"canvas weave\",\n  \"impasto\": true,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Cette peinture en huile sur toile représente une femme nue debout dans un jardin luxuriant, entourée de plantes et d'oiseaux. Les couleurs vives et les lignes brisées donnent une impression dynamique et expressif.\"\n}\n```",
     "seconds": 158.0
+   },
+   "moondream": {
+    "json": {
+     "medium": "oil on canvas",
+     "subject": "woman",
+     "dominant_colors": [
+      "green",
+      "yellow",
+      "orange"
+     ],
+     "brushwork": "flat areas",
+     "brushwork_transparency": "transparency of washes",
+     "impasto": "true",
+     "style_or_movement": "post-impressionism",
+     "description_fr": "two sentences in French describing the work and its technique"
+    },
+    "raw": "{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"woman\",\n  \"dominant_colors\": [\n    \"green\",\n    \"yellow\",\n    \"orange\"\n  ],\n  \"brushwork\": \"flat areas\",\n  \"brushwork_transparency\": \"transparency of washes\",\n  \"impasto\": \"true\",\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"two sentences in French describing the work and its technique\"\n}",
+    "mode": "json",
+    "seconds": 186.4
    }
   },
   {
@@ -416,6 +492,23 @@
     },
     "raw": "{\n  \"medium\": \"charcoal on paper\",\n  \"subject\": \"portrait\",\n  \"dominant_colors\": [\"black\", \"white\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"paper grain\",\n  \"impasto\": false,\n  \"style_or_movement\": \"realism\",\n  \"description_fr\": \"Ce portrait en noir et blanc est réalisé à la craie sur papier. La figure est représentée de profil, avec une coiffure simple. Le dessin est détaillé, mettant l'accent sur les traits du visage et le drapé de la robe. L'utilisation de la craie crée des contrastes nets entre les zones sombres et claires.\"\n}",
     "seconds": 190.1
+   },
+   "moondream": {
+    "json": {
+     "medium": "pencil",
+     "subject": "portrait",
+     "dominant_colors": [
+      "flat areas",
+      "hatching",
+      "broken strokes"
+     ],
+     "brushwork": "pencil",
+     "style_or_movement": "synthetism",
+     "description_fr": "two sentences in French describing the work and its technique"
+    },
+    "raw": "{\n  \"medium\": \"pencil\",\n  \"subject\": \"portrait\",\n  \"dominant_colors\": [\n    \"flat areas\",\n    \"hatching\",\n    \"broken strokes\"\n  ],\n  \"brushwork\": \"pencil\",\n  \"style_or_movement\": \"synthetism\",\n  \"description_fr\": \"two sentences in French describing the work and its technique\"\n}",
+    "mode": "json",
+    "seconds": 388.1
    }
   },
   {
@@ -500,6 +593,25 @@
     },
     "raw": "```json\n{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"figures\",\n  \"dominant_colors\": [\"white\", \"pink\", \"blue\", \"yellow\", \"brown\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"canvas weave\",\n  \"impasto\": true,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Cette peinture en huile sur toile représente deux personnages féminins dans une scène intime. L'une est nue et allongée sur un lit, tandis que l'autre, vêtue d'une robe blanche, tient des fleurs. Le style impressionniste est marqué par les touches de couleur vives et la texture du toile. Les lignes sont brisées, créant une impression de mouvement et de profondeur.\"\n}\n```",
     "seconds": 191.2
+   },
+   "moondream": {
+    "json": {
+     "medium": "oil on canvas",
+     "subject": "woman nude",
+     "dominant_colors": [
+      "light yellow",
+      "pink",
+      "white"
+     ],
+     "brushwork": "flat areas",
+     "brushwork_description": "broken strokes",
+     "impasto": true,
+     "style_or_movement": "post-impressionism",
+     "description_fr": "two sentences in French describing the artwork and its technique"
+    },
+    "raw": "{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"woman nude\",\n  \"dominant_colors\": [\n    \"light yellow\",\n    \"pink\",\n    \"white\"\n  ],\n  \"brushwork\": \"flat areas\",\n  \"brushwork_description\": \"broken strokes\",\n  \"impasto\": true,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"two sentences in French describing the artwork and its technique\"\n}",
+    "mode": "json",
+    "seconds": 391.6
    }
   },
   {
@@ -583,6 +695,25 @@
     },
     "raw": "```json\n{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"still life\",\n  \"dominant_colors\": [\"yellow\", \"pink\", \"purple\", \"green\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"paper grain\",\n  \"impasto\": true,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Cette œuvre en huile sur toile représente une composition de fleurs dans des vases, avec un fond jaune et rose. Le style post-impressionniste est marqué par les touches brisées et l'effet d'impasto, donnant une texture rugueuse à la peinture.\"\n}\n```",
     "seconds": 183.5
+   },
+   "moondream": {
+    "json": {
+     "medium": "oil on canvas",
+     "subject": "portrait",
+     "dominant_colors": [
+      "pink",
+      "white",
+      "orange"
+     ],
+     "brushwork": "flat areas",
+     "brushwork_description": "broken strokes",
+     "impasto": true,
+     "style_or_movement": "post-impressionism",
+     "description_fr": "two sentences in French describing the work and its technique"
+    },
+    "raw": "{\n  \"medium\": \"oil on canvas\",\n  \"subject\": \"portrait\",\n  \"dominant_colors\": [\n    \"pink\",\n    \"white\",\n    \"orange\"\n  ],\n  \"brushwork\": \"flat areas\",\n  \"brushwork_description\": \"broken strokes\",\n  \"impasto\": true,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"two sentences in French describing the work and its technique\"\n}",
+    "mode": "json",
+    "seconds": 390.5
    }
   },
   {
@@ -666,6 +797,25 @@
     },
     "raw": "{\n  \"medium\": \"pastel on paper\",\n  \"subject\": \"portrait\",\n  \"dominant_colors\": [\"red\", \"black\", \"green\", \"white\"],\n  \"brushwork\": \"broken strokes\",\n  \"texture_and_transparency\": \"paper grain\",\n  \"impasto\": false,\n  \"style_or_movement\": \"post-impressionism\",\n  \"description_fr\": \"Ce portrait en pastel montre une femme portant un chapeau coloré sur un fond rouge vif. Les traits sont dessinés avec des touches de couleur claire et sombre, créant un contraste vibrant. Le style est caractéristique du post-impressionnisme avec ses couleurs vives et sa texture papier.\"\n}",
     "seconds": 184.0
+   },
+   "moondream": {
+    "json": {
+     "medium": "Pastel",
+     "subject": "Woman",
+     "dominant_colors": [
+      "Red",
+      "Green",
+      "Blue"
+     ],
+     "brushwork": "Flat areas",
+     "brushwork_description": "Smooth lines",
+     "impasto": "Transparency",
+     "style_or_movement": "Post-Impressionism",
+     "description_fr": "Portrait, soft focus, delicate details"
+    },
+    "raw": "{\n  \"medium\": \"Pastel\",\n  \"subject\": \"Woman\",\n  \"dominant_colors\": [\n    \"Red\",\n    \"Green\",\n    \"Blue\"\n  ],\n  \"brushwork\": \"Flat areas\",\n  \"brushwork_description\": \"Smooth lines\",\n  \"impasto\": \"Transparency\",\n  \"style_or_movement\": \"Post-Impressionism\",\n  \"description_fr\": \"Portrait, soft focus, delicate details\"\n}",
+    "mode": "json",
+    "seconds": 420.0
    }
   }
  ],
@@ -688,11 +838,16 @@
    "load_seconds": 25.2,
    "dtype": "bfloat16",
    "device": "cpu"
+  },
+  "moondream": {
+   "id": "vikhyatk/moondream2 (2025-06-21)",
+   "params_m": 1927,
+   "load_seconds": 17.3,
+   "dtype": "float32",
+   "device": "cpu"
   }
  },
- "errors": {
-  "moondream": "2025-01-09 : ImportError('This modeling file requires the following packages that were not found in your environment: pyvips. Run `pip install pyvips`') | 2025-06-21 : AttributeError(\"'HfMoondream' object has no attribute 'all_tied_weights_keys'\") | 2025-04-14 : AttributeError(\"'HfMoondream' object has no attribute 'all_tied_weights_keys'\") | 2025-01-09 : AttributeError(\"'HfMoondream' object has no attribute 'all_tied_weights_keys'\")"
- },
+ "errors": {},
  "queries": {
   "Portrait à l'aquarelle": {
    "siglip": [
@@ -1044,5 +1199,8 @@
     }
    ]
   }
+ },
+ "env": {
+  "moondream_transformers": "4.51.3"
  }
 }
