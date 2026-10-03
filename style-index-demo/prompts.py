@@ -41,9 +41,9 @@ WORKS = [
     ("vision", "Gauguin Vision after the Sermon Jacob wrestling with the angel", "huile sur toile (synthétisme, Pont-Aven)"),
     ("vairumati", "Gauguin Vairumati", "huile sur toile (Tahiti)"),
     ("woodcut", "Gauguin woodcut Noa Noa", "gravure sur bois"),
-    ("watercolor", "Gauguin watercolor", "aquarelle"),
-    ("charcoal", "Gauguin charcoal drawing sketch", "fusain / dessin"),
-    ("lithograph", "Gauguin lithograph zincograph", "lithographie"),
+    ("watercolor", "Gauguin watercolor|Gauguin aquarelle|Gauguin gouache", "aquarelle"),
+    ("charcoal", "Paul Gauguin drawing|Gauguin sketch pencil|Gauguin dessin|Gauguin charcoal", "fusain / dessin"),
+    ("lithograph", "Gauguin lithograph|Gauguin zincograph|Gauguin Volpini|Gauguin print Te Atua", "lithographie"),
     ("stilllife", "Gauguin still life flowers", "nature morte"),
-    ("pastel", "Gauguin pastel study heads", "pastel"),
+    ("pastel", "Gauguin pastel|Gauguin study heads|Gauguin Tahitian women drawing|Paul Gauguin Tahiti drawing", "pastel"),
 ]

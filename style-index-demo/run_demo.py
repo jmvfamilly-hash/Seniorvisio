@@ -49,16 +49,20 @@ def fetch():
     used = set()
     for wid, query, expected in WORKS:
         try:
-            api = ("https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6&gsrlimit=12&prop=imageinfo"
-                   "&iiprop=url|size|mime|extmetadata&iiurlwidth=960&gsrsearch=" + urllib.parse.quote(query))
-            pages = sorted(json.loads(get(api)).get("query", {}).get("pages", {}).values(), key=lambda p: p.get("index", 99))
             pick = None
-            for p in pages:
-                ii = (p.get("imageinfo") or [{}])[0]
-                title = p.get("title", "")
-                if ii.get("mime") == "image/jpeg" and ii.get("width", 0) >= 500 and "gauguin" in title.lower() and title not in used and ii.get("thumburl"):
-                    pick = (p, ii)
+            for q in query.split("|"):        # plusieurs recherches de secours, dans l'ordre
+                api = ("https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6&gsrlimit=20&prop=imageinfo"
+                       "&iiprop=url|size|mime|extmetadata&iiurlwidth=960&gsrsearch=" + urllib.parse.quote(q))
+                pages = sorted(json.loads(get(api)).get("query", {}).get("pages", {}).values(), key=lambda p: p.get("index", 99))
+                for p in pages:
+                    ii = (p.get("imageinfo") or [{}])[0]
+                    title = p.get("title", "")
+                    if ii.get("mime") == "image/jpeg" and ii.get("width", 0) >= 500 and "gauguin" in title.lower() and title not in used and ii.get("thumburl"):
+                        pick = (p, ii)
+                        break
+                if pick:
                     break
+                time.sleep(1)
             if not pick:
                 print(wid, ": rien trouvé pour", query)
                 continue
@@ -132,13 +136,16 @@ def clip_stage():
         scale = model.logit_scale.exp().item()
         bias = model.logit_bias.item()
 
+        def vec(o):   # selon la version de transformers : un tenseur, ou un objet dont `pooler_output` est le vecteur
+            return o if hasattr(o, "norm") else o.pooler_output
+
         def enc_i(ims):
             with torch.no_grad():
-                return model.get_image_features(**proc(images=ims, return_tensors="pt"))
+                return vec(model.get_image_features(**proc(images=ims, return_tensors="pt")))
 
         def enc_t(ts):
             with torch.no_grad():
-                return model.get_text_features(**proc(text=ts, padding="max_length", max_length=64, return_tensors="pt"))
+                return vec(model.get_text_features(**proc(text=ts, padding="max_length", max_length=64, return_tensors="pt")))
         run("siglip", enc_i, enc_t, lambda s: s * scale + bias)
         del model
     except Exception as e:  # noqa: BLE001
