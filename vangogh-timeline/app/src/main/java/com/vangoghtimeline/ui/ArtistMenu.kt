@@ -23,6 +23,7 @@ import coil.size.Size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -121,6 +122,10 @@ fun ArtistMenuScreen(
     /** Niveau de détail (1 nom et dates, 2 détails, 3 contenu étendu), partagé avec la vue détaillée d'une œuvre. */
     level: Int = 1,
     onLevel: (Int) -> Unit = {},
+    /** Recherches transversales conservées (les plus récentes d'abord), lancement d'une recherche dans les œuvres de tous les peintres, oubli d'une recherche. */
+    history: List<String> = emptyList(),
+    onSearchWorks: (String) -> Unit = {},
+    onForgetSearch: (String) -> Unit = {},
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     val sort = SortMode.PERIOD
@@ -150,7 +155,8 @@ fun ArtistMenuScreen(
         }
 
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp)) {
-            SearchBar(query) { query = it }
+            SearchBar(query, onSubmit = { onSearchWorks(query) }) { query = it }
+            if (history.isNotEmpty()) HistoryRow(history, onSearchWorks, onForgetSearch)
             Spacer(Modifier.height(8.dp))
             // le niveau 3 n'existe que si l'artiste a un univers
             val maxLevel = if (selected?.hasUniverse == true) 3 else 2
@@ -181,7 +187,8 @@ fun ArtistMenuScreen(
 // ── recherche et tri ─────────────────────────────────────────────────────────────
 
 @Composable
-private fun SearchBar(query: String, onChange: (String) -> Unit) {
+private fun SearchBar(query: String, onSubmit: () -> Unit, onChange: (String) -> Unit) {
+    val currentSubmit by rememberUpdatedState(onSubmit)
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Glass).border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -198,11 +205,43 @@ private fun SearchBar(query: String, onChange: (String) -> Unit) {
             singleLine = true,
             textStyle = TextStyle(color = Color.White, fontSize = 17.sp),
             cursorBrush = SolidColor(Color.White),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { currentSubmit() }),
             modifier = Modifier.weight(1f),
             decorationBox = { inner ->
-                Box { if (query.isEmpty()) BasicText("Rechercher un artiste, un pays, un style…", style = TextStyle(color = Color(0xFF8E96A1), fontSize = 17.sp)); inner() }
+                Box { if (query.isEmpty()) BasicText("Artiste, pays, style — ou une œuvre…", style = TextStyle(color = Color(0xFF8E96A1), fontSize = 17.sp)); inner() }
             },
         )
+        // lance la recherche dans les ŒUVRES de tous les peintres (résultat : une frise)
+        BasicText(
+            "Œuvres ›",
+            style = TextStyle(color = if (query.isBlank()) Color(0xFF8E96A1) else Gold, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+            modifier = Modifier.pointerInput(query) { detectTapGestures(onTap = { if (query.isNotBlank()) currentSubmit() }) }.padding(start = 8.dp, top = 4.dp, bottom = 4.dp),
+        )
+    }
+}
+
+/** Recherches conservées : un toucher la relance, ✕ l'oublie. */
+@Composable
+private fun HistoryRow(history: List<String>, onRun: (String) -> Unit, onForget: (String) -> Unit) {
+    val run by rememberUpdatedState(onRun)
+    val forget by rememberUpdatedState(onForget)
+    Row(
+        Modifier.fillMaxWidth().padding(top = 6.dp).horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicText("Récentes :", style = TextStyle(color = Muted, fontSize = 11.sp))
+        for (q in history) {
+            Row(
+                Modifier.clip(RoundedCornerShape(12.dp)).background(Glass).border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BasicText(q, maxLines = 1, style = TextStyle(color = Color.White, fontSize = 12.sp),
+                    modifier = Modifier.pointerInput(q) { detectTapGestures(onTap = { run(q) }) }.padding(start = 10.dp, end = 4.dp, top = 5.dp, bottom = 5.dp))
+                BasicText("✕", style = TextStyle(color = Muted, fontSize = 12.sp),
+                    modifier = Modifier.pointerInput(q) { detectTapGestures(onTap = { forget(q) }) }.padding(start = 4.dp, end = 10.dp, top = 5.dp, bottom = 5.dp))
+            }
+        }
     }
 }
 

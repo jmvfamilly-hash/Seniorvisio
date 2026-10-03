@@ -28,6 +28,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vangoghtimeline.iiif.Diag
 import com.vangoghtimeline.model.Artist
+import com.vangoghtimeline.model.SearchHistory
+import com.vangoghtimeline.model.WorkSearch
+import androidx.compose.runtime.remember
+import androidx.compose.ui.input.pointer.pointerInput
 
 /**
  * Racine : le menu des artistes, puis la frise de l'artiste choisi.
@@ -52,10 +56,44 @@ fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: () -> String =
     var openedId by rememberSaveable { mutableStateOf<String?>(null) }
     var level by rememberSaveable { mutableStateOf(1) }          // niveau de détail, partagé entre le menu et la vue détaillée
 
-    LaunchedEffect(artists) { model.loadPortraits(artists) }
+    LaunchedEffect(artists) { model.loadPortraits(artists); model.loadStored(artists) }
+
+    // ── recherche transversale : recherches conservées sur l'appareil (searches.json) ──
+    val searchFile = remember { java.io.File(context.filesDir, "searches.json") }
+    var history by remember { mutableStateOf(SearchHistory.decode(runCatching { searchFile.readText() }.getOrNull())) }
+    fun saveHistory(h: List<String>) { history = h; runCatching { searchFile.writeText(SearchHistory.encode(h)) } }
+    var resultsQuery by rememberSaveable { mutableStateOf<String?>(null) }
 
     val opened = artists.firstOrNull { it.id == openedId }
-    if (opened == null) {
+    val searching = resultsQuery
+    if (opened == null && searching != null) {
+        BackHandler { resultsQuery = null }
+        // relu à chaque œuvre qui arrive (les univers chargés ou lus sur disque)
+        val known = model.knownWorks(artists)
+        val hits = remember(searching, known.values.sumOf { it.size }) { WorkSearch.search(searching, known) }
+        val artistById = remember(hits) { hits.associate { it.artwork.id to it.artist } }
+        val missingCount = model.missing(artists).size
+        var loadingMissing by remember { mutableStateOf(false) }
+        Box(Modifier.fillMaxSize().background(Color(0xFF0F1114))) {
+            if (hits.isEmpty()) Message("Aucune œuvre pour « $searching ».\n(${artists.count { it.hasUniverse } - missingCount} artistes sur ${artists.count { it.hasUniverse }} consultés)\n\n(retour : geste système)")
+            else key(searching) {
+                TimelineHost(
+                    hits.map { it.artwork }, credit = null, title = "Recherche : « $searching » · ${hits.size} œuvres · ${hits.map { it.artist.id }.toSet().size} peintres",
+                    artistFor = { artistById[it.id] }, level = level, onLevel = { level = it },
+                )
+            }
+            if (missingCount > 0) {
+                BasicText(
+                    if (loadingMissing) "Chargement des $missingCount artistes manquants…" else "$missingCount artistes pas encore chargés — toucher pour les ajouter à la recherche",
+                    style = TextStyle(color = Color(0xFFF0D58A), fontSize = 12.sp),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 40.dp, end = 10.dp)
+                        .background(Color(0xCC000000), androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                        .pointerInput(missingCount) { androidx.compose.foundation.gestures.detectTapGestures(onTap = { if (!loadingMissing) { loadingMissing = true; model.loadMissing(artists) { } } }) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+            }
+        }
+    } else if (opened == null) {
         ArtistMenuScreen(
             artists = artists,
             selectedId = selectedId,
@@ -63,6 +101,9 @@ fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: () -> String =
             onReportLongPress = copyReport,
             onRefresh = { model.refresh(it) },
             level = level, onLevel = { level = it },
+            history = history,
+            onSearchWorks = { q -> if (q.isNotBlank()) { saveHistory(SearchHistory.add(history, q)); resultsQuery = q.trim() } },
+            onForgetSearch = { saveHistory(SearchHistory.remove(history, it)) },
             onTap = { artist ->
                 if (selectedId == artist.id && artist.hasUniverse) {
                     model.prepare(artist)

@@ -100,6 +100,10 @@ fun TimelineHost(
     artistLife: String? = null,
     /** L'artiste (fond de la frise, niveau 3 de la vue détaillée) et le niveau de détail partagé avec le menu. */
     artist: Artist? = null,
+    /** Recherche transversale : l'artiste de chaque œuvre (nom sur les cartes, fiche de l'artiste dans la vue détaillée). */
+    artistFor: ((Artwork) -> Artist?)? = null,
+    /** Remplace l'en-tête (ex. « Recherche : … »). */
+    title: String? = null,
     level: Int = 1,
     onLevel: (Int) -> Unit = {},
 ) {
@@ -173,7 +177,7 @@ fun TimelineHost(
     BackHandler(enabled = request != null && !closing) { close() }
 
     Box(modifier.fillMaxSize().onSizeChanged { rootSize = it }) {
-        TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, backdropArtistId = artist?.id, level = level, onLevel = onLevel, title = artistName?.let { n -> artistLife?.let { "$n · $it" } ?: n })
+        TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, backdropArtistId = artist?.id, level = level, onLevel = onLevel, artistNameOf = artistFor?.let { f -> { a: Artwork -> f(a)?.name } }, title = title ?: artistName?.let { n -> artistLife?.let { "$n · $it" } ?: n })
 
         credit?.let {
             BasicText(
@@ -229,7 +233,7 @@ fun TimelineHost(
                     }
                     // pendant le dézoom de sortie, les doigts sont absorbés : on ne relance pas un zoom en plein retour
                     // licence et conditions de l'œuvre ouverte (un toucher sur la barre déplie le détail)
-                    if (viewerTop && !closing) RightsBar(req.artwork, artist, artistName, level, onLevel, Modifier.align(Alignment.BottomStart))
+                    if (viewerTop && !closing) RightsBar(req.artwork, artistFor?.invoke(req.artwork) ?: artist, artistFor?.invoke(req.artwork)?.name ?: artistName, level, onLevel, Modifier.align(Alignment.BottomStart))
                     if (closing) Box(Modifier.fillMaxSize().pointerInput(Unit) {
                         awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
                     })

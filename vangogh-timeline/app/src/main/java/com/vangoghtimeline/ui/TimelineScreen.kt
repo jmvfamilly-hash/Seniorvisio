@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.imageLoader
 import com.vangoghtimeline.model.Artwork
+import com.vangoghtimeline.model.ChronoTour
+import com.vangoghtimeline.model.formatFr
 import com.vangoghtimeline.model.ColorMode
 import com.vangoghtimeline.model.MetaTagger
 import com.vangoghtimeline.model.NamedColor
@@ -66,6 +69,8 @@ fun TimelineScreen(
     /** Niveau de détail partagé : 1 zoom actuel ; 2 cartes deux fois plus grandes avec lieu et origine ; 3 + commentaire. */
     level: Int = 1,
     onLevel: (Int) -> Unit = {},
+    /** Recherche transversale : le nom de l'artiste de chaque œuvre, écrit sur sa carte. */
+    artistNameOf: ((Artwork) -> String?)? = null,
 ) {
     val density = LocalDensity.current
     val state = rememberTimelineScrollState()
@@ -95,6 +100,36 @@ fun TimelineScreen(
     val margin = with(density) { 40.dp.toPx() }
     // La mise en page ne dépend que des œuvres, de l'échelle et de la taille des cartes : pas du défilement.
     val plan = remember(artworks, daysPerPixel, card, margin) { TimelineEngine.layout(artworks, daysPerPixel, card, margin) }
+
+    // ── parcours chronologique : œuvre par œuvre dans l'ordre du temps, le cadre doré suit ──
+    val tourOrder = remember(artworks) { ChronoTour.order(artworks) }
+    val placedById = remember(plan) { plan.items.associateBy { it.artwork.id } }
+    var tour by rememberSaveable { mutableStateOf(-1) }
+    var playing by remember { mutableStateOf(false) }
+    val tourIdx = if (tour in tourOrder.indices) tour else -1       // un filtre qui retire des œuvres peut invalider l'indice
+    val tourId = tourOrder.getOrNull(tourIdx)?.id
+    fun startIndex(): Int {
+        val cx = state.scrollX + state.viewportWidth / 2f
+        val i = tourOrder.indexOfFirst { a -> placedById[a.id]?.let { it.x + it.width / 2f >= cx } == true }
+        return if (i < 0) tourOrder.size - 1 else i
+    }
+    LaunchedEffect(tourId, plan) {
+        val item = tourId?.let { placedById[it] } ?: return@LaunchedEffect
+        val sx = state.scrollX
+        val sy = state.scrollY
+        val tx = (item.x + item.width / 2f - state.viewportWidth / 2f).coerceIn(0f, state.maxScrollX)
+        val ty = (item.y + item.height / 2f - state.viewportHeight / 2f).coerceIn(0f, state.maxScrollY)
+        state.stopFling()
+        androidx.compose.animation.core.animate(0f, 1f, animationSpec = androidx.compose.animation.core.tween(550)) { v, _ ->
+            state.scrollToUnclamped(sx + (tx - sx) * v, sy + (ty - sy) * v)
+        }
+    }
+    LaunchedEffect(playing, tourIdx) {
+        if (!playing) return@LaunchedEffect
+        delay(2600)
+        val n = ChronoTour.next(tourIdx, tourOrder.size, startIndex())
+        if (n == tourIdx) playing = false else tour = n
+    }
 
     if (prefetcher != null) {
         // Anticipation : sommet du rouleau → image entière préchauffée ; prochain défilement → vignettes (voir TimelinePrefetcher).
@@ -173,6 +208,8 @@ fun TimelineScreen(
                     widthPx = placed.width.roundToInt(),
                     heightPx = placed.height.roundToInt(),
                     level = level,
+                    artistName = artistNameOf?.invoke(placed.artwork),
+                    highlighted = placed.artwork.id == tourId,
                     onTap = onArtworkTap?.let { open -> { request: OpenRequest -> if (!state.tapSuppressed) open(request) } },
                 )
             }
@@ -187,7 +224,52 @@ fun TimelineScreen(
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth(0.38f).padding(10.dp),
             )
             Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp)) { DetailSlider(level, 3, onLevel) }
+            TourBar(
+                position = tourIdx, total = tourOrder.size, label = tourOrder.getOrNull(tourIdx)?.date?.formatFr(), playing = playing,
+                onPrevious = { tour = ChronoTour.previous(tourIdx, tourOrder.size, startIndex()) },
+                onNext = { tour = ChronoTour.next(tourIdx, tourOrder.size, startIndex()) },
+                onPlay = { playing = !playing; if (playing && tourIdx < 0) tour = startIndex() },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp),
+            )
         }
     }
     }
 }
+
+/** Parcours chronologique : œuvre précédente / suivante dans l'ordre du temps, et lecture automatique (une œuvre toutes les ~2,6 s). */
+@Composable
+private fun TourBar(position: Int, total: Int, label: String?, playing: Boolean, onPrevious: () -> Unit, onNext: () -> Unit, onPlay: () -> Unit, modifier: Modifier = Modifier) {
+    if (total == 0) return
+    val prev by androidx.compose.runtime.rememberUpdatedState(onPrevious)
+    val next by androidx.compose.runtime.rememberUpdatedState(onNext)
+    val play by androidx.compose.runtime.rememberUpdatedState(onPlay)
+    androidx.compose.foundation.layout.Row(
+        modifier.background(Color(0xB3000000), androidx.compose.foundation.shape.RoundedCornerShape(20.dp)).padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TourButton("◀") { prev() }
+        BasicText(
+            if (position < 0) "Parcours" else "${position + 1} / $total" + (label?.let { " · $it" } ?: ""),
+            maxLines = 1,
+            style = TextStyle(color = Color(0xFFE6E9ED), fontSize = 12.sp),
+            modifier = Modifier.padding(horizontal = 6.dp),
+        )
+        TourButton("▶") { next() }
+        TourButton(if (playing) "❚❚" else "▷ Lecture") { play() }
+    }
+}
+
+@Composable
+private fun TourButton(text: String, onTap: () -> Unit) {
+    val tap by androidx.compose.runtime.rememberUpdatedState(onTap)
+    BasicText(
+        text,
+        style = TextStyle(color = Color(0xFFF0D58A), fontSize = 14.sp, fontWeight = FontWeight.Bold),
+        modifier = Modifier
+            .androidx_pointerTap { tap() }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    )
+}
+
+private fun Modifier.androidx_pointerTap(onTap: () -> Unit): Modifier =
+    this.pointerInput(Unit) { androidx.compose.foundation.gestures.detectTapGestures(onTap = { onTap() }) }

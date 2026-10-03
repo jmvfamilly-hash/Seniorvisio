@@ -72,6 +72,18 @@ class UniverseLoader(
 
     private class Outcome(val report: SourceReport, val artworks: List<Artwork>, val fetchedAt: Long)
 
+    /** Les œuvres déjà enregistrées pour cet artiste (sans réseau, mêmes règles de fusion que [load]) ; vide s'il n'a jamais été chargé. */
+    suspend fun storedArtworks(artist: Artist): List<Artwork> {
+        val stored = withContext(Dispatchers.IO) { UniverseStore.read(cacheDir, artist.id) }?.sources ?: return emptyList()
+        val aggregators = setOf("europeana", "wikimedia")
+        val connected = artist.sources.filter { stored[it.sourceId]?.state?.connected == true }
+        val directKeywords = connected.filter { it.sourceId !in aggregators }.mapNotNull { sources[it.sourceId]?.europeanaKeyword }
+        return ArtworkMerge.merge(connected.map { spec ->
+            val list = stored.getValue(spec.sourceId).artworks
+            if (spec.sourceId in aggregators) list.filterNot { a -> directKeywords.any { a.provider.lowercase().contains(it) } } else list
+        })
+    }
+
     suspend fun load(artist: Artist, force: Boolean = false, onUpdate: (UniverseState) -> Unit): UniverseState = coroutineScope {
         val query = ArtworkQuery.of(artist)
         val reports = LinkedHashMap<String, SourceReport>()

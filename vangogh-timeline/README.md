@@ -431,3 +431,10 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 ## Rev47 — dispositions échangées
 
 - **Portrait** : demi-cercle centré en bas, curseur de niveau au centre. **Paysage** : fiche à gauche, demi-cercle de portraits à droite, curseur vertical tout à droite.
+
+## Rev48 — recherche transversale et parcours chronologique
+
+- **Recherche transversale** : dans la barre de recherche du menu, « Œuvres › » (ou la touche Rechercher du clavier) cherche dans les ŒUVRES de tous les peintres (tous les mots, sans accents ni casse : artiste, titre, année, lieu, matière, musée, détails, sujet et technique déduits) et affiche le résultat dans une frise, avec le nom de l'artiste sur chaque carte et dans la vue détaillée. La recherche filtre toujours aussi les portraits du menu.
+- Elle s'appuie sur ce que l'appareil connaît déjà (univers chargés + magasin local lu au démarrage, sans réseau). Un bandeau signale les artistes pas encore chargés et propose de les charger **un par un** (les musées bloquent les rafales) ; les résultats s'élargissent à mesure.
+- **Recherches conservées** (`searches.json`, 20 au plus, sans doublon) : puces « Récentes » sous la barre ; toucher relance, ✕ oublie.
+- **Parcours chronologique** dans toute frise : ◀ ▶ (œuvre précédente / suivante dans l'ordre du temps, cadre doré, la frise se recentre) et « ▷ Lecture » (une œuvre toutes les ~2,6 s). Il respecte les filtres. Le premier pas part de l'œuvre au centre de l'écran.

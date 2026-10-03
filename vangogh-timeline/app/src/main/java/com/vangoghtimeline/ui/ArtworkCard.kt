@@ -1,6 +1,7 @@
 package com.vangoghtimeline.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -131,6 +132,10 @@ fun ArtworkCard(
     modifier: Modifier = Modifier,
     /** Niveau de détail : 1 titre et date ; 2 + lieu et origine (la carte est alors deux fois plus grande) ; 3 + commentaire. */
     level: Int = 1,
+    /** Recherche transversale : le nom de l'artiste, en tête de la carte. */
+    artistName: String? = null,
+    /** Œuvre courante du parcours chronologique : cadre doré. */
+    highlighted: Boolean = false,
     onTap: ((OpenRequest) -> Unit)? = null,
 ) {
     val description = remember(artwork) { "${artwork.title}, ${artwork.date.formatFr()}" }
@@ -143,6 +148,7 @@ fun ArtworkCard(
         modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(8.dp))
+            .then(if (highlighted) Modifier.border(3.dp, Color(0xFFF0D58A), RoundedCornerShape(8.dp)) else Modifier)
             .onGloballyPositioned { coordinates[0] = it }
             .semantics { contentDescription = description }
             .pointerInput(artwork, widthPx, heightPx, onTap != null) {
@@ -164,6 +170,7 @@ fun ArtworkCard(
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC000000))))
                 .padding(horizontal = 8.dp, vertical = 6.dp),
         ) {
+            if (artistName != null) BasicText(artistName, maxLines = 1, overflow = TextOverflow.Ellipsis, style = TextStyle(color = Color(0xFFF0D58A), fontSize = 10.sp))
             BasicText(
                 artwork.title,
                 maxLines = 1,

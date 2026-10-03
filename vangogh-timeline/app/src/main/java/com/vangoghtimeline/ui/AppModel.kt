@@ -39,6 +39,9 @@ class AppModel(
     val universes = mutableStateMapOf<String, UniverseState>()
     val portraits = mutableStateMapOf<String, String>()
 
+    /** Œuvres déjà enregistrées sur l'appareil (lues sans réseau au démarrage) : la recherche transversale s'y appuie pour les artistes pas encore ouverts. */
+    val stored = mutableStateMapOf<String, List<com.vangoghtimeline.model.Artwork>>()
+
     private val started = HashSet<String>()
     /** Artistes dont un chargement est EN COURS : un deuxième (appuis répétés sur « Actualiser ») multiplierait les requêtes et ferait bloquer les musées. */
     private val loading = HashSet<String>()
@@ -74,6 +77,41 @@ class AppModel(
                 Diag.error("magasin", "chargement de l'univers en échec : ${e.message ?: e.javaClass.simpleName}", artistId = artist.id)
             } finally {
                 loading.remove(artist.id)
+            }
+        }
+    }
+
+    /** Lit sur disque (sans réseau) les œuvres déjà enregistrées de chaque artiste. */
+    fun loadStored(artists: List<Artist>) {
+        for (artist in artists) {
+            if (!artist.hasUniverse || stored.containsKey(artist.id)) continue
+            scope.launch {
+                val list = runCatching { loader.storedArtworks(artist) }.getOrDefault(emptyList())
+                stored[artist.id] = list
+            }
+        }
+    }
+
+    /** Les œuvres connues de chaque artiste : l'univers chargé s'il existe, sinon ce qui est enregistré. */
+    fun knownWorks(artists: List<Artist>): Map<Artist, List<com.vangoghtimeline.model.Artwork>> =
+        artists.filter { it.hasUniverse }.associateWith { universes[it.id]?.artworks ?: stored[it.id].orEmpty() }
+
+    /** Artistes pour lesquels on ne connaît encore aucune œuvre (jamais chargés). */
+    fun missing(artists: List<Artist>): List<Artist> = artists.filter { it.hasUniverse && knownWorks(listOf(it)).getValue(it).isEmpty() }
+
+    /**
+     * Charge, UN artiste après l'autre (les musées bloquent les rafales), ceux dont on ne connaît encore aucune œuvre : la recherche transversale
+     * s'élargit à mesure. Chaque chargement a au plus [perArtistMs] ; `onProgress` est appelé à chaque artiste terminé.
+     */
+    fun loadMissing(artists: List<Artist>, perArtistMs: Long = 120_000, onProgress: () -> Unit = {}) {
+        val todo = missing(artists)
+        if (todo.isEmpty()) return
+        scope.launch {
+            for (artist in todo) {
+                prepare(artist)
+                val deadline = System.currentTimeMillis() + perArtistMs
+                while (System.currentTimeMillis() < deadline && universes[artist.id]?.done != true) kotlinx.coroutines.delay(500)
+                onProgress()
             }
         }
     }
