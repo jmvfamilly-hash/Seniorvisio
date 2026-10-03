@@ -55,6 +55,30 @@ for fr, _ in QUERIES:
         cells += f"<div><h5>{label}</h5>" + "".join(f'<figure><img src="{b64(byid[r["id"]]["file"])}"><figcaption>{r["score"]:.3f}</figcaption></figure>' for r in ranked if r["id"] in byid) + "</div>"
     qhtml += f'<div class="q"><h4>« {esc(fr)} »</h4><div class="qr">{cells}</div></div>'
 
+def top(i, key, g):
+    s = i.get(key, {}).get(g)
+    return max(s, key=s.get) if s else "—"
+
+
+def vf(i, key, f):
+    j = (i.get(key) or {}).get("json") or {}
+    v = j.get(f, "—")
+    return ", ".join(map(str, v)) if isinstance(v, list) else str(v)
+
+
+def secs(i, key):
+    return (i.get(key) or {}).get("seconds", "—")
+
+
+srows = "".join(
+    f"<tr><td>{esc(i['expected'])}</td><td>{esc(top(i,'siglip','technique'))}</td><td>{esc(top(i,'openclip','technique'))}</td>"
+    f"<td>{esc(vf(i,'vlm','medium'))}</td><td>{esc(vf(i,'moondream','medium'))}</td><td>{esc(vf(i,'vlm','subject'))}</td><td>{esc(vf(i,'moondream','subject'))}</td>"
+    f"<td class='num'>{secs(i,'vlm')}</td><td class='num'>{secs(i,'moondream')}</td></tr>"
+    for i in d["images"]
+)
+summary = ("<div class='scroll'><table><tr><th>recherche</th><th>SigLIP</th><th>OpenCLIP</th><th>Qwen : technique</th><th>Moondream : technique</th>"
+           "<th>Qwen : sujet</th><th>Moondream : sujet</th><th>Qwen s</th><th>Moondream s</th></tr>" + srows + "</table></div>")
+
 m = d.get("models", {})
 mrows = "".join(
     f"<tr><td>{esc(k)}</td><td>{esc(v.get('id',''))}</td><td>{v.get('params_m','?')} M</td><td>{v.get('load_seconds','?')} s</td><td>{v.get('image_seconds_per_image','')}</td></tr>"
@@ -76,11 +100,12 @@ h1{{font:600 24px Georgia,serif;margin:0 0 6px;text-wrap:balance}} h2{{margin:28
 table{{border-collapse:collapse;font-size:13px}} th{{text-align:left;color:var(--mut);padding:2px 10px 2px 0;vertical-align:top;white-space:nowrap}} td{{padding:2px 0;overflow-wrap:anywhere}}
 .na{{color:var(--mut);font-style:italic}} .t{{color:var(--mut);font-size:12px}} pre{{white-space:pre-wrap;font-size:11px}}
 .q{{margin:10px 0}} .qr{{display:flex;gap:24px;flex-wrap:wrap}} figure{{display:inline-block;margin:0 8px 0 0;text-align:center;font-size:11px;color:var(--mut)}} figure img{{height:110px;border-radius:6px;display:block}}
-.scroll{{overflow-x:auto}}
+.scroll{{overflow-x:auto}} .num{{font-variant-numeric:tabular-nums;text-align:right;padding-left:10px}} td{{padding-right:12px}}
 @media (max-width:640px){{.card{{grid-template-columns:minmax(0,1fr)}}}}
 </style>
 <h1>Gauguin : indexer le style par SigLIP, OpenCLIP, Qwen2.5-VL et Moondream2</h1>
 <p class="na">Résultats réels d'une exécution sur CPU (GitHub Actions) ; œuvres téléchargées depuis Wikimedia Commons. « Recherche » = ce que j'ai demandé à Commons, pas une vérité : le titre du fichier fait foi, et aucun modèle ne reçoit cette indication.</p>
+<h2>Synthèse : technique et sujet selon chaque modèle</h2>{summary}
 <h2>1. Classification par œuvre</h2>{cards}
 <h2>2. Recherche libre par le texte (les 3 œuvres les plus proches)</h2>{qhtml}
 <h2>3. Modèles et durées mesurées</h2>
