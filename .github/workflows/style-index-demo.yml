@@ -1,0 +1,58 @@
+# Maquette à part : démonstration SigLIP / OpenCLIP / modèle de vision-langage sur des œuvres de Gauguin (voir style-index-demo/).
+# Aucun rapport avec Senior Visio ni avec l'APK : calcul sur CPU, résultats enregistrés dans style-index-demo/results/.
+name: Style index demo
+
+on:
+  push:
+    paths:
+      - 'style-index-demo/**'
+      - '!style-index-demo/results/**'
+      - '.github/workflows/style-index-demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Libérer de la place disque (les modèles pèsent plusieurs Go)
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Installer les dépendances (PyTorch CPU)
+        run: |
+          pip install --quiet torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install --quiet -r style-index-demo/requirements.txt
+
+      - name: Télécharger les œuvres de Gauguin (Wikimedia Commons)
+        run: python style-index-demo/run_demo.py fetch
+
+      - name: SigLIP et OpenCLIP (classification et recherche par le texte)
+        continue-on-error: true
+        run: python style-index-demo/run_demo.py clip
+
+      - name: Modèle de vision-langage (annotations riches en JSON)
+        continue-on-error: true
+        timeout-minutes: 60
+        run: python style-index-demo/run_demo.py vlm
+
+      - name: Enregistrer les résultats dans le dépôt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add style-index-demo/results
+          git commit -m "Résultats de la démo SigLIP / OpenCLIP / VLM [skip ci]" || exit 0
+          for i in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            sleep 5
+          done

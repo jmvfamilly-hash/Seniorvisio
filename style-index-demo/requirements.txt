@@ -1,0 +1,9 @@
+transformers>=4.49
+accelerate
+open_clip_torch
+pillow
+numpy
+sentencepiece
+protobuf
+einops
+timm
