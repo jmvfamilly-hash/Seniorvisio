@@ -690,9 +690,7 @@
    "device": "cpu"
   }
  },
- "errors": {
-  "siglip": "AttributeError(\"'BaseModelOutputWithPooling' object has no attribute 'norm'\")"
- },
+ "errors": {},
  "queries": {
   "Portrait à l'aquarelle": {
    "siglip": [

@@ -40,7 +40,7 @@ for i in d["images"]:
     for name, label in (("siglip", "SigLIP"), ("openclip", "OpenCLIP")):
         s = i.get(name, {})
         cols += f'<div class="col"><h4>{label}</h4>' + "".join(f"<h5>{esc(g)}</h5>{bars(s.get(g))}" for g in GROUPS) + "</div>"
-    cards += f"""<section class="card"><div class="pic"><img src="{b64(i['file'])}" alt="{esc(i['title'])}"><p><b>{esc(i['expected'])}</b><br><a href="{esc(i['page'])}">{esc(i['title'])}</a><br>{esc(i.get('license',''))}</p></div>
+    cards += f"""<section class="card"><div class="pic"><img src="{b64(i['file'])}" alt="{esc(i['title'])}"><p>Recherche : <b>{esc(i['expected'])}</b><br><a href="{esc(i['page'])}">{esc(i['title'])}</a><br>{esc(i.get('license',''))}</p></div>
 <div class="cols">{cols}<div class="col wide"><h4>Modèle de vision-langage</h4>{vlm_block(i)}</div></div></section>"""
 
 qhtml = ""
@@ -75,7 +75,7 @@ table{{border-collapse:collapse;font-size:13px}} th{{text-align:left;color:var(-
 @media (max-width:640px){{.card{{grid-template-columns:1fr}}}}
 </style></head><body>
 <h1>Gauguin : indexer le style par SigLIP, OpenCLIP et un modèle de vision-langage</h1>
-<p class="na">Résultats réels d'une exécution sur CPU (GitHub Actions) ; œuvres téléchargées depuis Wikimedia Commons. La technique « attendue » n'est jamais donnée aux modèles : elle sert seulement à comparer.</p>
+<p class="na">Résultats réels d'une exécution sur CPU (GitHub Actions) ; œuvres téléchargées depuis Wikimedia Commons. « Recherche » = ce que j'ai demandé à Commons, pas une vérité : le titre du fichier fait foi, et aucun modèle ne reçoit cette indication.</p>
 <h2>1. Classification par œuvre</h2>{cards}
 <h2>2. Recherche libre par le texte (les 3 œuvres les plus proches)</h2>{qhtml}
 <h2>3. Modèles et durées mesurées</h2>

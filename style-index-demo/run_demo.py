@@ -98,6 +98,7 @@ def clip_stage():
     import torch
     from PIL import Image
     d = load()
+    d["errors"].pop("siglip", None); d["errors"].pop("openclip", None)
     images = [Image.open(os.path.join(IMG, i["file"])).convert("RGB") for i in d["images"]]
     labels = {g: [p for _, p in items] for g, items in GROUPS.items()}
     qtexts = [q for _, q in QUERIES]
