@@ -298,7 +298,7 @@ def moondream_stage():
             d["errors"].pop("moondream", None)
             break
         except Exception as e:  # noqa: BLE001
-            d["errors"]["moondream"] = f"{rev} : {e!r}"
+            d["errors"]["moondream"] = (d["errors"].get("moondream", "") + f" | {rev} : {e!r}")[-1200:]
             print("Moondream2", rev, "échec :", e)
     if model is None:
         save(d)

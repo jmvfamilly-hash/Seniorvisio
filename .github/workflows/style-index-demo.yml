@@ -33,6 +33,9 @@ jobs:
         run: |
           pip install --quiet torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install --quiet -r style-index-demo/requirements.txt
+          # Moondream2 lit les images avec libvips
+          sudo apt-get install -y -qq libvips42 > /dev/null
+          pip install --quiet pyvips
 
       - name: Télécharger les œuvres de Gauguin (Wikimedia Commons)
         run: python style-index-demo/run_demo.py fetch
