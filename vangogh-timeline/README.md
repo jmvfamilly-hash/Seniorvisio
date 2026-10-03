@@ -409,3 +409,11 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 
 - **Curseur dans la frise** (centre bas), niveau partagé : 1 = zoom actuel (« 1 px = … j ») ; 2 = cartes **deux fois plus grandes** avec lieu et origine (musée) ; 3 = + commentaire (texte du musée s'il existe — « Description », « Inscriptions » —, sinon les seuls faits connus : technique, dimensions, crédit ; rien d'inventé).
 - **Fonds** : Sargent = « En route pour la pêche » (NGA, CC0), Gauguin = « Vairumati » et Sorolla = « Sewing the Sail » (Wikidata/Commons, licence lue sur Commons au build et inscrite dans le crédit). Mode `fit: focus` : cadrage fixe, le point est le centre du cadre, sans zoom supplémentaire ; même point dans les deux orientations. Les points sont estimés d'après les captures de l'utilisateur.
+
+## Rev44 — indexation automatique du style et filtres de la frise (sur l'appareil)
+
+- **Sujet** (portrait / paysage / nature morte / autre) déduit du titre en plusieurs langues, **technique** (huile / aquarelle / encre / dessin / autre) déduite de la matière du musée : `MetaTagger`, immédiat, sans image. Un portrait dans un jardin reste un portrait ; des fleurs près d'une rivière restent une nature morte.
+- **Couleur ou noir et blanc** et **couleurs dominantes** (3 au plus, palette de 11 noms) : `PixelTagger`, calculé sur une vignette 120 px téléchargée par Coil (`StyleIndex`, 3 en parallèle, persisté dans `style_index.txt` : une œuvre n'est analysée qu'une fois). Un sépia franc (saturation moyenne > 12 %) compte comme couleur.
+- **Filtres** dans la frise (ligne « Filtres », repliée par défaut) : sujet, technique, couleur / N&B, couleur dominante ; choix cumulables, second toucher = retrait. Les filtres de couleur ne retiennent que les œuvres déjà analysées (progression affichée).
+- Niveau 3 de la vue détaillée : ligne « Style » (sujet · technique · couleur · dominantes).
+- Limites : titres sans mot-clé → « autre sujet » ; matière absente → « autre technique » ; l'analyse de couleur est faite sur des vignettes (cadre et fond compris).

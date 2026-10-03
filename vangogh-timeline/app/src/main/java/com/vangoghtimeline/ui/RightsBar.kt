@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vangoghtimeline.model.Artist
 import com.vangoghtimeline.model.Artwork
+import com.vangoghtimeline.model.MetaTagger
 import com.vangoghtimeline.model.careerLines
 import com.vangoghtimeline.model.RightsKind
 import com.vangoghtimeline.model.formatFr
@@ -108,6 +109,11 @@ internal fun RightsBar(artwork: Artwork, artist: Artist?, artistName: String?, l
                     rights.attribution?.let { Line("Attribution à citer : $it") }
                     Line("Conditions : ${rights.conditions}")
                     rights.url?.let { Line("Licence : $it") }
+                }
+                if (level >= 3) {
+                    val meta = remember(artwork) { MetaTagger.tag(artwork) }
+                    val px = StyleIndex.get(artwork.id)
+                    Line("Style : " + listOfNotNull(meta.subject.label, meta.technique.label, px?.mode?.label, px?.dominant?.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.label.lowercase() }).joinToString(" · "))
                 }
                 if (level >= 3 && artist != null) {
                     // niveau 3 : l'artiste et son parcours
