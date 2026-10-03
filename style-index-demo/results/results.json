@@ -691,7 +691,7 @@
   }
  },
  "errors": {
-  "moondream": "2025-01-09 : ImportError('This modeling file requires the following packages that were not found in your environment: pyvips. Run `pip install pyvips`')"
+  "moondream": "2025-01-09 : ImportError('This modeling file requires the following packages that were not found in your environment: pyvips. Run `pip install pyvips`') | 2025-06-21 : AttributeError(\"'HfMoondream' object has no attribute 'all_tied_weights_keys'\") | 2025-04-14 : AttributeError(\"'HfMoondream' object has no attribute 'all_tied_weights_keys'\") | 2025-01-09 : AttributeError(\"'HfMoondream' object has no attribute 'all_tied_weights_keys'\")"
  },
  "queries": {
   "Portrait à l'aquarelle": {
