@@ -13,6 +13,9 @@ import kotlinx.serialization.json.jsonPrimitive
 /** Ce que le point d'intérêt désigne : un regard ou un visage, un arbre, ou (faute de mieux) le centre. */
 enum class PoiKind { FACE, TREE, CENTER }
 
+/** THIRDS : le point d'intérêt sur une ligne des tiers (zoom si besoin). FOCUS : cadrage fixe — le point est le CENTRE du cadre, à l'échelle qui couvre l'écran, sans zoom en plus. */
+enum class FitMode { THIRDS, FOCUS }
+
 /**
  * Le fond du menu d'un artiste : UN tableau majeur, son image embarquée dans l'APK (`assets/backdrops/{artistId}.jpg`, téléchargée au build par
  * `tools/fetch_backdrops.py`) et son point d'intérêt, en fractions de l'image. [width] / [height] sont ceux de l'image embarquée (0 = image
@@ -28,10 +31,16 @@ data class Backdrop(
     val poiX: Float,
     val poiY: Float,
     val kind: PoiKind,
+    val fit: FitMode = FitMode.THIRDS,
     /** Adresse de secours, utilisée seulement si l'image n'a pas pu être embarquée au build. */
     val remoteUrl: String,
 ) {
     val usable: Boolean get() = width > 0 && height > 0
+
+    /** Placement de l'image pour un écran de [screenW] × [screenH] pixels, selon [fit]. */
+    fun place(screenW: Float, screenH: Float): ThirdsPlacement =
+        if (fit == FitMode.FOCUS) ThirdsFit.focus(width, height, screenW, screenH, poiX, poiY)
+        else ThirdsFit.fit(width, height, screenW, screenH, poiX, poiY, kind)
     val assetUri: String get() = "file:///android_asset/backdrops/$artistId.jpg"
 }
 
@@ -50,6 +59,7 @@ object BackdropIndex {
             poiX = (o["poiX"]?.jsonPrimitive?.doubleOrNull ?: 0.5).toFloat().coerceIn(0f, 1f),
             poiY = (o["poiY"]?.jsonPrimitive?.doubleOrNull ?: 0.5).toFloat().coerceIn(0f, 1f),
             kind = when (str("kind")) { "face" -> PoiKind.FACE; "tree" -> PoiKind.TREE; else -> PoiKind.CENTER },
+            fit = if (str("fit") == "focus") FitMode.FOCUS else FitMode.THIRDS,
             remoteUrl = str("remoteUrl"),
         )
     }
@@ -84,5 +94,15 @@ object ThirdsFit {
         val oy = (ty * screenH - poiY * h).coerceIn(screenH - h, 0f)
         val exact = kotlin.math.abs(ox + poiX * w - tx * screenW) < 1f && kotlin.math.abs(oy + poiY * h - ty * screenH) < 1f
         return ThirdsPlacement(w, h, ox, oy, exact)
+    }
+
+    /** Cadrage fixe : l'image couvre l'écran à l'échelle minimale, le point ([cx], [cy], fractions de l'image) au centre autant que les bords le permettent. */
+    fun focus(imgW: Int, imgH: Int, screenW: Float, screenH: Float, cx: Float, cy: Float): ThirdsPlacement {
+        val s = maxOf(screenW / imgW, screenH / imgH)
+        val w = imgW * s
+        val h = imgH * s
+        val ox = (screenW / 2f - cx * w).coerceIn(screenW - w, 0f)
+        val oy = (screenH / 2f - cy * h).coerceIn(screenH - h, 0f)
+        return ThirdsPlacement(w, h, ox, oy, true)
     }
 }

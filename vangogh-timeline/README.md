@@ -404,3 +404,8 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 - Vue détaillée : niveau 1 = « artiste — titre, date » et licence ; niveau 2 = fiche de l'œuvre (lieu, technique, dimensions, crédit, lien, attribution, conditions) ; niveau 3 = en plus l'artiste (origine, mouvement, style, œuvre emblématique) et son **parcours** lieu par lieu. Le toucher sur la barre ne déplie plus : c'est le curseur.
 - Menu niveau 3 : ajoute le parcours de l'artiste.
 - L'**image de fond** de l'artiste (`BackdropLayer.kt`, partagée avec le menu) reste derrière la frise chronologique, sous un voile sombre.
+
+## Rev43 — curseur dans la frise, fonds Gauguin / Sorolla / Sargent cadrés
+
+- **Curseur dans la frise** (centre bas), niveau partagé : 1 = zoom actuel (« 1 px = … j ») ; 2 = cartes **deux fois plus grandes** avec lieu et origine (musée) ; 3 = + commentaire (texte du musée s'il existe — « Description », « Inscriptions » —, sinon les seuls faits connus : technique, dimensions, crédit ; rien d'inventé).
+- **Fonds** : Sargent = « En route pour la pêche » (NGA, CC0), Gauguin = « Vairumati » et Sorolla = « Sewing the Sail » (Wikidata/Commons, licence lue sur Commons au build et inscrite dans le crédit). Mode `fit: focus` : cadrage fixe, le point est le centre du cadre, sans zoom supplémentaire ; même point dans les deux orientations. Les points sont estimés d'après les captures de l'utilisateur.

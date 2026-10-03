@@ -66,7 +66,7 @@ class MenuTest {
         // identifiant et taille de chaque fond NGA : ils doivent figurer, tels quels, dans les données NGA extraites (pas de valeur inventée)
         val all = File("src/main/assets/nga").listFiles()!!.joinToString("\n") { it.readText() }
         val nga = index.values.filter { it.remoteUrl.startsWith("https://api.nga.gov/iiif/") }
-        assertTrue(nga.size >= 14)
+        assertTrue(nga.size >= 12)
         for (b in nga) {
             val uuid = b.remoteUrl.removePrefix("https://api.nga.gov/iiif/").substringBefore('/')
             assertTrue("${b.artistId} : taille ou identifiant", all.contains("\"image\":\"$uuid\"") || b.artistId !in listOf("vincent-van-gogh", "claude-monet", "pierre-auguste-renoir", "berthe-morisot", "paul-gauguin", "john-singer-sargent", "joaquin-sorolla"))
@@ -120,5 +120,24 @@ class MenuTest {
         val lines = com.vangoghtimeline.model.careerLines(vg)
         assertEquals(vg.locations.size, lines.size)
         assertTrue(lines.toString(), lines.all { it.isNotBlank() } && lines.any { it.contains("Arles") })
+    }
+
+    @Test fun focusFitCoversTheScreenAndCentersThePointWhenPossibleInBothOrientations() {
+        for ((w, h) in listOf(1080f to 2340f, 2340f to 1080f)) {
+            val p = ThirdsFit.focus(30000, 20000, w, h, 0.42f, 0.45f)
+            assertTrue(p.offsetX <= 0.5f && p.offsetY <= 0.5f && p.offsetX + p.imageW >= w - 0.5f && p.offsetY + p.imageH >= h - 0.5f)
+            val cx = (p.offsetX + 0.42f * p.imageW) / w
+            val cy = (p.offsetY + 0.45f * p.imageH) / h
+            assertEquals(0.5f, cx, 0.2f); assertEquals(0.5f, cy, 0.2f)
+        }
+        // le fond de Sargent, Gauguin et Sorolla est en cadrage fixe
+        for (id in listOf("john-singer-sargent", "paul-gauguin", "joaquin-sorolla")) assertEquals(id, com.vangoghtimeline.model.FitMode.FOCUS, index[id]!!.fit)
+    }
+
+    @Test fun theCommentUsesTheMuseumTextOrOnlyKnownFacts() {
+        val base = com.vangoghtimeline.model.Artwork("x", "T", com.vangoghtimeline.model.ArtworkDate.year(1890), iiif = com.vangoghtimeline.model.IiifRef(""))
+        assertEquals("", com.vangoghtimeline.model.commentOf(base))
+        assertEquals("Un texte", com.vangoghtimeline.model.commentOf(base.copy(details = listOf("Description" to "Un texte"))))
+        assertEquals("Huile sur toile. 73 × 92 cm.", com.vangoghtimeline.model.commentOf(base.copy(medium = "Huile sur toile", details = listOf("Dimensions" to "73 × 92 cm"))))
     }
 }

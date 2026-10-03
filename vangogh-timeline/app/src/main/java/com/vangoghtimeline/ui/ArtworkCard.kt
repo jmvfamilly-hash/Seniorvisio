@@ -41,6 +41,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.vangoghtimeline.iiif.Diag
 import com.vangoghtimeline.model.Artwork
+import com.vangoghtimeline.model.commentOf
 import com.vangoghtimeline.model.formatFr
 
 /** Ce que la frise sait au moment d'un toucher : l'œuvre, et où est sa carte à l'écran (pour animer à partir d'elle). */
@@ -128,6 +129,8 @@ fun ArtworkCard(
     widthPx: Int,
     heightPx: Int,
     modifier: Modifier = Modifier,
+    /** Niveau de détail : 1 titre et date ; 2 + lieu et origine (la carte est alors deux fois plus grande) ; 3 + commentaire. */
+    level: Int = 1,
     onTap: ((OpenRequest) -> Unit)? = null,
 ) {
     val description = remember(artwork) { "${artwork.title}, ${artwork.date.formatFr()}" }
@@ -165,14 +168,24 @@ fun ArtworkCard(
                 artwork.title,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                style = TextStyle(color = Color.White, fontSize = 12.sp),
+                style = TextStyle(color = Color.White, fontSize = if (level >= 2) 15.sp else 12.sp, fontWeight = if (level >= 2) androidx.compose.ui.text.font.FontWeight.SemiBold else null),
             )
-            BasicText(
-                artwork.date.formatFr() + (artwork.place?.let { " · $it" } ?: ""),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(color = Color(0xFFD9D3BF), fontSize = 10.sp),
-            )
+            if (level >= 2) {
+                BasicText(artwork.date.formatFr(), maxLines = 1, style = TextStyle(color = Color(0xFFD9D3BF), fontSize = 12.sp))
+                artwork.place?.let { BasicText("Lieu : $it", maxLines = 1, overflow = TextOverflow.Ellipsis, style = TextStyle(color = Color(0xFFD9D3BF), fontSize = 12.sp)) }
+                if (artwork.provider.isNotEmpty()) BasicText("Origine : ${artwork.provider}", maxLines = 1, overflow = TextOverflow.Ellipsis, style = TextStyle(color = Color(0xFFD9D3BF), fontSize = 12.sp))
+                if (level >= 3) {
+                    val comment = remember(artwork) { commentOf(artwork) }
+                    if (comment.isNotEmpty()) BasicText(comment, maxLines = 4, overflow = TextOverflow.Ellipsis, style = TextStyle(color = Color.White, fontSize = 11.sp), modifier = Modifier.padding(top = 3.dp))
+                }
+            } else {
+                BasicText(
+                    artwork.date.formatFr() + (artwork.place?.let { " · $it" } ?: ""),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(color = Color(0xFFD9D3BF), fontSize = 10.sp),
+                )
+            }
         }
     }
 }

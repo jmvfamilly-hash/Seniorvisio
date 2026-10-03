@@ -173,7 +173,7 @@ fun TimelineHost(
     BackHandler(enabled = request != null && !closing) { close() }
 
     Box(modifier.fillMaxSize().onSizeChanged { rootSize = it }) {
-        TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, backdropArtistId = artist?.id, title = artistName?.let { n -> artistLife?.let { "$n · $it" } ?: n })
+        TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, backdropArtistId = artist?.id, level = level, onLevel = onLevel, title = artistName?.let { n -> artistLife?.let { "$n · $it" } ?: n })
 
         credit?.let {
             BasicText(

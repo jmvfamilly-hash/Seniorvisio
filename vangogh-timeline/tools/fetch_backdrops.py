@@ -59,6 +59,38 @@ def wikidata_work(name):
     return None
 
 
+def named_work(search, match):
+    """(titre, année, fichier Commons) du tableau précis `search` dont la description cite `match`, ou None."""
+    s = json.loads(get("https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&type=item&limit=8&search=" + urllib.parse.quote(search)))
+    for r in s.get("search", []):
+        if not re.search(match, r.get("description", "") + " " + r.get("label", ""), re.I):
+            continue
+        ent = json.loads(get("https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=claims|labels&languages=fr|en&ids=" + r["id"]))["entities"][r["id"]]
+        claims = ent.get("claims", {})
+        p18 = claims.get("P18")
+        if not p18:
+            continue
+        label = (ent.get("labels", {}).get("fr") or ent.get("labels", {}).get("en") or {}).get("value", r.get("label", search))
+        year = ""
+        try:
+            year = claims["P571"][0]["mainsnak"]["datavalue"]["value"]["time"][1:5].lstrip("0")
+        except Exception:  # noqa: BLE001
+            pass
+        return label, year, p18[0]["mainsnak"]["datavalue"]["value"]
+    return None
+
+
+def commons_license(fname):
+    """Licence courte de la page Commons (ex. « CC BY-SA 4.0 », « Public domain »), ou ''."""
+    try:
+        r = json.loads(get("https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&iiprop=extmetadata&titles=File:" + urllib.parse.quote(fname)))
+        for page in r["query"]["pages"].values():
+            return page["imageinfo"][0]["extmetadata"]["LicenseShortName"]["value"]
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
 def face_poi(path):
     """Centre des yeux du plus grand visage (fraction de l'image), ou None. OpenCV facultatif."""
     try:
@@ -85,7 +117,7 @@ def main(out):
         path = os.path.join(out, e["artistId"] + ".jpg")
         try:
             if e["source"] == "wikidata":
-                work = wikidata_work(e["searchName"])
+                work = (named_work(e["workSearch"], e.get("workMatch", ".")) if e.get("workSearch") else None) or wikidata_work(e["searchName"])
                 if not work:
                     print(e["artistId"], ": aucun tableau trouvé sur Wikidata")
                     continue
@@ -93,7 +125,8 @@ def main(out):
                 url = "https://commons.wikimedia.org/wiki/Special:FilePath/" + urllib.parse.quote(fname) + "?width=1280"
                 data = get(url)
                 e["title"], e["date"] = title, year
-                e["credit"] = f"{title}{', ' + year if year else ''} — Wikimedia Commons (domaine public)"
+                lic = commons_license(fname) or "domaine public"
+                e["credit"] = f"{title}{', ' + year if year else ''} — Wikimedia Commons ({lic})"
                 e["remoteUrl"] = url
             else:
                 data = get(e["remoteUrl"])
@@ -103,7 +136,7 @@ def main(out):
                 continue
             open(path, "wb").write(data)
             e["width"], e["height"] = size
-            poi = face_poi(path) if e["kind"] != "tree" else None   # un paysage garde son arbre
+            poi = face_poi(path) if e["kind"] != "tree" and e.get("fit") != "focus" else None   # un paysage garde son arbre
             if poi:
                 e["poiX"], e["poiY"], e["kind"] = poi[0], poi[1], "face"
             ok += 1

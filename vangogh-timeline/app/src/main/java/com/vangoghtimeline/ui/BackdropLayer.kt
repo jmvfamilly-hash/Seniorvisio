@@ -18,7 +18,6 @@ import coil.request.ImageRequest
 import coil.size.Size
 import com.vangoghtimeline.model.Backdrop
 import com.vangoghtimeline.model.BackdropIndex
-import com.vangoghtimeline.model.ThirdsFit
 import kotlin.math.roundToInt
 
 /** Les fonds d'artistes (`assets/backdrops/index.json`) et la liste des images embarquées. */
@@ -47,7 +46,7 @@ internal fun BackdropImage(backdrop: Backdrop?, embedded: Set<String>, screenW: 
     val density = LocalDensity.current
     Box(modifier.fillMaxSize().clipToBounds(), contentAlignment = Alignment.TopStart) {
         if (backdrop != null && screenW > 0f && screenH > 0f) {
-            val p = ThirdsFit.fit(backdrop.width, backdrop.height, screenW, screenH, backdrop.poiX, backdrop.poiY, backdrop.kind)
+            val p = backdrop.place(screenW, screenH)
             val data: Any = if ("${backdrop.artistId}.jpg" in embedded) backdrop.assetUri else backdrop.remoteUrl
             AsyncImage(
                 model = ImageRequest.Builder(context).data(data).size(Size.ORIGINAL).crossfade(true).build(),

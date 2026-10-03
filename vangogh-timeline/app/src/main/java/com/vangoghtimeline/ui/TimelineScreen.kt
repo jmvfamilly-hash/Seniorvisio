@@ -56,13 +56,17 @@ fun TimelineScreen(
     title: String? = null,
     /** Artiste dont l'image de fond (celle du menu) reste derrière la frise. */
     backdropArtistId: String? = null,
+    /** Niveau de détail partagé : 1 zoom actuel ; 2 cartes deux fois plus grandes avec lieu et origine ; 3 + commentaire. */
+    level: Int = 1,
+    onLevel: (Int) -> Unit = {},
 ) {
     val density = LocalDensity.current
     val state = rememberTimelineScrollState()
     var daysPerPixel by rememberSaveable { mutableStateOf(initialDaysPerPixel) }
 
-    val card = remember(density) {
-        with(density) { CardSpec(width = 172.dp.toPx(), height = 150.dp.toPx(), gapX = 10.dp.toPx(), gapY = 10.dp.toPx()) }
+    val cardScale = if (level >= 2) 2f else 1f
+    val card = remember(density, cardScale) {
+        with(density) { CardSpec(width = 172.dp.toPx() * cardScale, height = 150.dp.toPx() * cardScale, gapX = 10.dp.toPx(), gapY = 10.dp.toPx()) }
     }
     val margin = with(density) { 40.dp.toPx() }
     // La mise en page ne dépend que des œuvres, de l'échelle et de la taille des cartes : pas du défilement.
@@ -140,14 +144,17 @@ fun TimelineScreen(
                     artwork = placed.artwork,
                     widthPx = placed.width.roundToInt(),
                     heightPx = placed.height.roundToInt(),
+                    level = level,
                     onTap = onArtworkTap?.let { open -> { request: OpenRequest -> if (!state.tapSuppressed) open(request) } },
                 )
             }
-            BasicText(
+            // niveau 1 : le zoom actuel
+            if (level <= 1) BasicText(
                 text = "1 px = ${"%.1f".format(daysPerPixel)} j · ${artworks.size} œuvres · ${plan.laneCount} couloirs",
                 style = TextStyle(color = Color(0xFF8B96A3), fontSize = 11.sp),
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth(0.38f).padding(10.dp),
             )
+            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp)) { DetailSlider(level, 3, onLevel) }
         }
     }
     }
