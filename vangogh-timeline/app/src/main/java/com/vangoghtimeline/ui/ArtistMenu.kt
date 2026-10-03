@@ -155,8 +155,8 @@ fun ArtistMenuScreen(
             // le niveau 3 n'existe que si l'artiste a un univers
             val maxLevel = if (selected?.hasUniverse == true) 3 else 2
             val shown = level.coerceAtMost(maxLevel)
-            if (landscape) {
-                // paysage : fiche au milieu ; demi-cercle centré en bas, curseur au centre du cercle
+            if (!landscape) {
+                // portrait : fiche au milieu ; demi-cercle centré en bas, curseur au centre du cercle
                 Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Bottom, horizontalAlignment = Alignment.CenterHorizontally) {
                     ArtistPanel(selected, backdrop, model, level, onTap, onRefresh, onReportLongPress, Modifier.widthIn(max = 560.dp))
                 }
@@ -164,7 +164,7 @@ fun ArtistMenuScreen(
                 ArcPicker(items, selectedId, model.portraits, onTap, landscape, maxW, Modifier.fillMaxWidth())
                 DetailSlider(shown, maxLevel) { onLevel(it) }
             } else {
-                // portrait : la fiche à gauche ; à droite le demi-cercle de portraits et, tout à droite, le curseur de niveau
+                // paysage : la fiche à gauche ; à droite le demi-cercle de portraits et, tout à droite, le curseur de niveau
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Bottom) {
                         ArtistPanel(selected, backdrop, model, level, onTap, onRefresh, onReportLongPress, Modifier.fillMaxWidth())

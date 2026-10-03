@@ -420,10 +420,14 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 
 ## Rev45 — portrait : demi-cercle et curseur à droite, fiche à gauche
 
-- En **portrait** : la fiche de l'artiste à gauche ; à droite, les portraits sur un demi-cercle le long du bord (glisser verticalement) et, tout à droite, le curseur de niveau vertical (1 en haut, 3 en bas). En **paysage** : inchangé (demi-cercle centré en bas, curseur au centre).
+- Disposition corrigée en Rev47 : **portrait** = demi-cercle centré en bas, curseur au centre ; **paysage** = fiche à gauche, demi-cercle de portraits à droite et curseur vertical tout à droite.
 
 ## Rev46 — un univers pour les 20 artistes
 
 - Les 13 artistes restants (Courbet, Corot, Turner, Fattori, Homer, Cassatt, Gonzalès, Breslau, Pissarro, Cézanne, Munch, Boch, Seurat) reçoivent la même liste de sources que les autres (AIC, Rijksmuseum, Cleveland, Met, SMK, NGA, Getty, MFA, Europeana, Wikimedia). Chaque source reste validée à la connexion : un artiste sans œuvre trouvée l'affiche (« Aucune source validée »).
 - NGA : données ouvertes extraites pour Courbet (11), Corot (103), Turner (124), Homer (156), Cassatt (124), Pissarro (71), Seurat (17), Fattori (22), Munch (2 en open access sur 296). Cézanne : aucune œuvre sous l'identifiant NGA connu.
 - Prévisible : Boch, Gonzalès et Breslau n'ont presque rien dans les musées interrogés ; leurs œuvres viendront surtout de Wikimedia/Europeana.
+
+## Rev47 — dispositions échangées
+
+- **Portrait** : demi-cercle centré en bas, curseur de niveau au centre. **Paysage** : fiche à gauche, demi-cercle de portraits à droite, curseur vertical tout à droite.
