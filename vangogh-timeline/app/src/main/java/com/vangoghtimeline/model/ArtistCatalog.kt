@@ -105,6 +105,13 @@ object ArtistExtras {
         "edvard-munch" to Extras(1863, 1944, "Edvard_Munch", allSources("Munch, Edvard")),
         "anna-boch" to Extras(1848, 1936, "Anna_Boch", allSources("Boch, Anna")),
         "georges-seurat" to Extras(1859, 1891, "Georges_Seurat", allSources("Seurat, Georges")),
+        "eugene-boudin" to Extras(1824, 1898, "Eug%C3%A8ne_Boudin", allSources("Boudin, Eugène")),
+        "edgar-degas" to Extras(1834, 1917, "Edgar_Degas", allSources("Degas, Edgar")),
+        "alfred-sisley" to Extras(1839, 1899, "Alfred_Sisley", allSources("Sisley, Alfred")),
+        "gustave-caillebotte" to Extras(1848, 1894, "Gustave_Caillebotte", allSources("Caillebotte, Gustave")),
+        "henri-de-toulouse-lautrec" to Extras(1864, 1901, "Henri_de_Toulouse-Lautrec", allSources("Toulouse-Lautrec, Henri de")),
+        "paul-signac" to Extras(1863, 1935, "Paul_Signac", allSources("Signac, Paul")),
+        "pierre-bonnard" to Extras(1867, 1947, "Pierre_Bonnard", allSources("Bonnard, Pierre")),
         "henri-matisse" to Extras(1869, 1954, "Henri_Matisse", allSources("Matisse, Henri")),
         "paul-gauguin" to Extras(1848, 1903, "Paul_Gauguin", allSources("Gauguin, Paul")),
     )

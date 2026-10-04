@@ -127,6 +127,26 @@
               "presence_period": "1882"
             }
           ]
+        },
+        {
+          "name": "Eugène Boudin",
+          "origin": "France",
+          "active_period": "1850s-1898",
+          "main_style": "Paysage de plein air, précurseur de l'impressionnisme",
+          "emblematic_work": "Scène de plage à Trouville",
+          "work_type": "Peinture à l'huile (plages, ports, ciels)",
+          "key_locations": [
+            {
+              "location": "Le Havre, France",
+              "work_type": "Enseigne la peinture en plein air au jeune Monet",
+              "presence_period": "Vers 1856-1858"
+            },
+            {
+              "location": "Trouville et Deauville, France",
+              "work_type": "Plages de la haute société",
+              "presence_period": "Étés, 1862-1890s"
+            }
+          ]
         }
       ]
     },
@@ -322,6 +342,66 @@
               "presence_period": "Production urbaine tardive, 1893-1897"
             }
           ]
+        },
+        {
+          "name": "Edgar Degas",
+          "origin": "France",
+          "active_period": "1850s-1912",
+          "main_style": "Impressionnisme, réalisme de la vie moderne",
+          "emblematic_work": "La Classe de danse",
+          "work_type": "Peinture à l'huile, pastel, sculpture (danseuses, courses, cafés)",
+          "key_locations": [
+            {
+              "location": "Paris, France",
+              "work_type": "Opéra, coulisses, cafés, champs de courses",
+              "presence_period": "Toute sa carrière, 1855-1912"
+            },
+            {
+              "location": "La Nouvelle-Orléans, États-Unis",
+              "work_type": "Le Bureau de coton",
+              "presence_period": "1872-1873"
+            }
+          ]
+        },
+        {
+          "name": "Alfred Sisley",
+          "origin": "France / Royaume-Uni",
+          "active_period": "1860s-1899",
+          "main_style": "Impressionnisme (paysage)",
+          "emblematic_work": "L'Inondation à Port-Marly",
+          "work_type": "Peinture à l'huile (paysages de l'Île-de-France)",
+          "key_locations": [
+            {
+              "location": "Louveciennes et Marly-le-Roi, France",
+              "work_type": "Inondations, routes, villages",
+              "presence_period": "1870-1877"
+            },
+            {
+              "location": "Moret-sur-Loing, France",
+              "work_type": "Série de l'église et du pont",
+              "presence_period": "1880-1899"
+            }
+          ]
+        },
+        {
+          "name": "Gustave Caillebotte",
+          "origin": "France",
+          "active_period": "1870s-1894",
+          "main_style": "Impressionnisme, réalisme urbain",
+          "emblematic_work": "Rue de Paris, temps de pluie",
+          "work_type": "Peinture à l'huile (Paris moderne, canotage, jardins)",
+          "key_locations": [
+            {
+              "location": "Paris, France",
+              "work_type": "Boulevards haussmanniens, intérieurs",
+              "presence_period": "1875-1880"
+            },
+            {
+              "location": "Yerres et Petit-Gennevilliers, France",
+              "work_type": "Canotiers, jardins",
+              "presence_period": "1875-1894"
+            }
+          ]
         }
       ]
     },
@@ -465,6 +545,61 @@
               "location": "Nice, France",
               "work_type": "Odalisques, intérieurs, papiers découpés",
               "presence_period": "1917-1954"
+            }
+          ]
+        },
+        {
+          "name": "Henri de Toulouse-Lautrec",
+          "origin": "France",
+          "active_period": "1880s-1901",
+          "main_style": "Post-impressionnisme, affiche",
+          "emblematic_work": "Au Moulin Rouge",
+          "work_type": "Peinture, lithographie et affiches (Montmartre, cabarets)",
+          "key_locations": [
+            {
+              "location": "Montmartre, Paris, France",
+              "work_type": "Moulin Rouge, cabarets, maisons closes",
+              "presence_period": "1884-1901"
+            }
+          ]
+        },
+        {
+          "name": "Paul Signac",
+          "origin": "France",
+          "active_period": "1880s-1935",
+          "main_style": "Néo-impressionnisme (pointillisme, divisionnisme)",
+          "emblematic_work": "Portrait de Félix Fénéon",
+          "work_type": "Peinture à l'huile et aquarelle (ports, marines)",
+          "key_locations": [
+            {
+              "location": "Paris et Asnières, France",
+              "work_type": "Avec Seurat, naissance du pointillisme",
+              "presence_period": "1884-1891"
+            },
+            {
+              "location": "Saint-Tropez, France",
+              "work_type": "Ports et lumière du Midi",
+              "presence_period": "1892-1913"
+            }
+          ]
+        },
+        {
+          "name": "Pierre Bonnard",
+          "origin": "France",
+          "active_period": "1890s-1947",
+          "main_style": "Nabis, puis couleur intimiste",
+          "emblematic_work": "La Partie de croquet",
+          "work_type": "Peinture à l'huile (intérieurs, jardins, nus), affiches",
+          "key_locations": [
+            {
+              "location": "Paris, France",
+              "work_type": "Les Nabis, scènes de rue",
+              "presence_period": "1888-1910"
+            },
+            {
+              "location": "Le Cannet, France",
+              "work_type": "Intérieurs et jardins baignés de couleur",
+              "presence_period": "1926-1947"
             }
           ]
         }

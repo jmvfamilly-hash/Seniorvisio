@@ -447,3 +447,9 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 
 - 22e artiste, dans « Après l'impressionnisme » : univers avec toutes les sources. NGA : 111 œuvres, aucune en open access (droits encore protégés aux États-Unis pour une partie de l'œuvre) — affichées en consultation privée « © » ; les œuvres libres viendront surtout d'autres musées et de Wikimedia (Matisse, mort en 1954, est dans le domaine public en France depuis 2025).
 - Fond du menu : « La Femme au chapeau » (1905) cherchée sur Wikidata/Commons au build, licence lue sur Commons.
+
+## Rev53 — première vague européenne : Boudin, Degas, Sisley, Caillebotte, Toulouse-Lautrec, Signac, Bonnard
+
+- 29 artistes. Boudin dans « Avant l'impressionnisme » ; Degas, Sisley, Caillebotte dans « Impressionnisme » ; Toulouse-Lautrec, Signac, Bonnard dans « Après l'impressionnisme ». Toutes les sources pour chacun.
+- NGA (open access / total) : Degas 154/163, Sisley 13/13, Caillebotte 2/2, Toulouse-Lautrec 313/313, Boudin 62/62, Signac 16/21 (aucune peinture libre), Bonnard 0/320 (© aux États-Unis, consultation privée).
+- Fonds du menu (point d'intérêt placé à l'œil sur l'image) : « Quatre Danseuses » (Degas), « L'Inondation à Port-Marly » (Sisley), « Les Périssoires » (Caillebotte), « Quadrille au Moulin Rouge » (Toulouse-Lautrec), « Heure du bain à Deauville » (Boudin) ; Signac et Bonnard via Wikidata/Commons au build.

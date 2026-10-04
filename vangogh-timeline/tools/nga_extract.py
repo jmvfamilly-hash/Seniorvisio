@@ -29,6 +29,14 @@ ARTISTS = {
     "giovanni-fattori": 37534,
     "edouard-manet": 1506,
     "henri-matisse": 1706,
+    # première vague européenne
+    "edgar-degas": 1219,
+    "alfred-sisley": 1877,
+    "gustave-caillebotte": 5987,
+    "henri-de-toulouse-lautrec": 1935,
+    "paul-signac": 2750,
+    "pierre-bonnard": 979,
+    "eugene-boudin": 1002,
 }
 CLASSIFICATIONS = {"Painting", "Drawing", "Print", "Sculpture", "Photograph"}
 
