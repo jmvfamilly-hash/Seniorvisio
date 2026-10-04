@@ -39,6 +39,10 @@ jobs:
           /tmp/md/bin/pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
           /tmp/md/bin/pip install --quiet "transformers==4.51.3" accelerate einops pillow pyvips numpy
 
+      - name: Maquette de parcours (images NGA, détails en zoom profond)
+        continue-on-error: true
+        run: python style-index-demo/parcours/fetch.py
+
       - name: Télécharger les œuvres de Gauguin (Wikimedia Commons)
         run: python style-index-demo/run_demo.py fetch
 
@@ -60,7 +64,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add style-index-demo/results
+          git add style-index-demo/results style-index-demo/parcours/images
           git commit -m "Résultats de la démo SigLIP / OpenCLIP / VLM [skip ci]" || exit 0
           for i in 1 2 3; do
             git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break

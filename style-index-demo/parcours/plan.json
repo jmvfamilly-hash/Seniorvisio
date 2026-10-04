@@ -1,0 +1,13 @@
+{
+ "works": [
+  {"id": "parasol", "artist": "Claude Monet", "title": "La Femme à l'ombrelle", "date": "1875", "uuid": "99758d9d-c10b-4d02-a198-7e49afb1f3a6", "w": 12666, "h": 15698},
+  {"id": "rouen", "artist": "Claude Monet", "title": "La Cathédrale de Rouen, plein soleil", "date": "1894", "uuid": "b9b6782a-cbf0-4e36-84da-98af87891775", "w": 6030, "h": 9204},
+  {"id": "footbridge", "artist": "Claude Monet", "title": "Le Pont japonais", "date": "1899", "uuid": "0b9cefb5-1ee4-401a-8154-8d4039191a28", "w": 29700, "h": 23942},
+  {"id": "parliament", "artist": "Claude Monet", "title": "Le Parlement de Londres, coucher de soleil", "date": "1903", "uuid": "9eae6258-ec1c-442f-b353-a89cff510113", "w": 17031, "h": 15043},
+  {"id": "haystacks", "artist": "Paul Gauguin", "title": "Meules en Bretagne", "date": "1890", "uuid": "9f7943f8-f2c8-4e4e-9c46-78fff42696d8", "w": 25643, "h": 20436},
+  {"id": "selfportrait", "artist": "Paul Gauguin", "title": "Autoportrait", "date": "1889", "uuid": "1e92536c-e274-4c31-bbe9-cdb6aba6c162", "w": 6852, "h": 10663},
+  {"id": "fatata", "artist": "Paul Gauguin", "title": "Fatata te Miti (Au bord de la mer)", "date": "1892", "uuid": "4f9268d4-c250-4dd8-9bee-d08d8942b8d1", "w": 12545, "h": 9282},
+  {"id": "bathers", "artist": "Paul Gauguin", "title": "Les Baigneuses", "date": "1897", "uuid": "5fc5c211-bd9f-452e-856f-a5832fbb6f62", "w": 35660, "h": 22808}
+ ],
+ "crops": []
+}
