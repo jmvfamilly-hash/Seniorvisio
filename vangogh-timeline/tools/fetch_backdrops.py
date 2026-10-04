@@ -46,7 +46,7 @@ def jpeg_size(data):
 def wikidata_work(name):
     """(titre, année, nom de fichier Commons) du tableau le plus connu de l'artiste, ou None."""
     s = json.loads(get("https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&type=item&limit=5&search=" + urllib.parse.quote(name)))
-    qid = next((r["id"] for r in s.get("search", []) if re.search(r"painter|peintre|pittore|schilder|maler", r.get("description", ""), re.I)), None)
+    qid = next((r["id"] for r in s.get("search", []) if re.search(r"painter|peintre|pittore|schilder|maler|artist|artiste", r.get("description", ""), re.I)), None)
     if not qid:
         return None
     q = ("SELECT ?img ?l ?y WHERE { ?p wdt:P170 wd:%s ; wdt:P18 ?img ; wikibase:sitelinks ?sl . "
