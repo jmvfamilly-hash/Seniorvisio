@@ -57,7 +57,7 @@ header h1{font-family:var(--display);font-weight:500;font-size:20px;margin:0;tex
 main{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,400px);min-height:0}
 .stage{position:relative;overflow:hidden;background:#0b0a09;min-height:0}
 .layer{position:absolute;inset:0;transition:opacity .7s ease, transform .9s cubic-bezier(.2,.7,.2,1)}
-.wrap{position:absolute;transform-origin:0 0;transition:transform 1.25s cubic-bezier(.25,.8,.25,1);will-change:transform}
+.wrap{position:absolute;transform-origin:0 0;transition:transform 1.25s cubic-bezier(.25,.8,.25,1)}
 .wrap img{position:absolute;display:block;user-select:none;-webkit-user-drag:none}
 .wrap img.full{inset:0;width:100%;height:100%}
 .wrap img.crop{opacity:0;transition:opacity .5s ease .9s}
@@ -104,8 +104,12 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 .log .sum{padding:10px 0;color:var(--brass)}
 .note{font-size:12px;color:var(--mute);padding:0 16px 10px}
 @media (max-width:820px){
-  main{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(240px,52vh) minmax(0,1fr)}
+  .app{height:auto;min-height:100%}
+  main{grid-template-columns:minmax(0,1fr);grid-template-rows:min(60vh,520px) auto}
   aside{border-left:0;border-top:1px solid var(--line)}
+  .text{overflow:visible}
+  header .btn{padding:6px 10px;font-size:13px}
+  .tools{margin-left:0}
   .cmp{grid-template-columns:minmax(0,1fr)}
 }
 @media (prefers-reduced-motion:reduce){.wrap,.layer,.wrap img.crop{transition:none!important}}
