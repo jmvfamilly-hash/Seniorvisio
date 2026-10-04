@@ -102,6 +102,31 @@
               "presence_period": "Voyages de production en aquarelle, 1884-1904"
             }
           ]
+        },
+        {
+          "name": "Édouard Manet",
+          "origin": "France",
+          "active_period": "1850s-1883",
+          "main_style": "Réalisme, précurseur de l'impressionnisme",
+          "emblematic_work": "Le Déjeuner sur l'herbe",
+          "work_type": "Peinture à l'huile (vie moderne, portraits, natures mortes)",
+          "key_locations": [
+            {
+              "location": "Paris, France",
+              "work_type": "Atelier, scènes de la vie moderne et portraits",
+              "presence_period": "Toute sa carrière, 1850-1883"
+            },
+            {
+              "location": "Argenteuil, France",
+              "work_type": "Peinture en plein air aux côtés de Monet",
+              "presence_period": "Été 1874"
+            },
+            {
+              "location": "Rueil, France",
+              "work_type": "Jardins et dernières natures mortes",
+              "presence_period": "1882"
+            }
+          ]
         }
       ]
     },

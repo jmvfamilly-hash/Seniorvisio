@@ -27,6 +27,7 @@ ARTISTS = {
     "georges-seurat": 1870,
     "edvard-munch": 5058,
     "giovanni-fattori": 37534,
+    "edouard-manet": 1506,
 }
 CLASSIFICATIONS = {"Painting", "Drawing", "Print", "Sculpture", "Photograph"}
 

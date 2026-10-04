@@ -86,6 +86,7 @@ object ArtistExtras {
 
     private val all: Map<String, Extras> = mapOf(
         "gustave-courbet" to Extras(1819, 1877, "Gustave_Courbet", allSources("Courbet, Gustave")),
+        "edouard-manet" to Extras(1832, 1883, "%C3%89douard_Manet", allSources("Manet, Édouard")),
         "camille-corot" to Extras(1796, 1875, "Jean-Baptiste-Camille_Corot", allSources("Corot, Jean-Baptiste Camille")),
         "j-m-w-turner" to Extras(1775, 1851, "J._M._W._Turner", allSources("Turner, Joseph Mallord William")),
         "giovanni-fattori" to Extras(1825, 1908, "Giovanni_Fattori", allSources("Fattori, Giovanni")),

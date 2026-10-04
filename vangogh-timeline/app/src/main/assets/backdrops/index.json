@@ -287,6 +287,20 @@
    "poiX": 0.5,
    "poiY": 0.5,
    "kind": "center"
+  },
+  {
+   "artistId": "edouard-manet",
+   "title": "Le Chemin de fer",
+   "date": "1873",
+   "credit": "Le Chemin de fer, 1873 — National Gallery of Art, Washington (CC0)",
+   "source": "nga",
+   "iiif": "https://api.nga.gov/iiif/57b84473-f6f3-4bab-ad88-344bb4d56fb7",
+   "remoteUrl": "https://api.nga.gov/iiif/57b84473-f6f3-4bab-ad88-344bb4d56fb7/full/!1600,1600/0/default.jpg",
+   "width": 32954,
+   "height": 26753,
+   "poiX": 0.25,
+   "poiY": 0.25,
+   "kind": "face"
   }
  ]
 }

@@ -438,3 +438,7 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 - Elle s'appuie sur ce que l'appareil connaît déjà (univers chargés + magasin local lu au démarrage, sans réseau). Un bandeau signale les artistes pas encore chargés et propose de les charger **un par un** (les musées bloquent les rafales) ; les résultats s'élargissent à mesure.
 - **Recherches conservées** (`searches.json`, 20 au plus, sans doublon) : puces « Récentes » sous la barre ; toucher relance, ✕ oublie.
 - **Parcours chronologique** dans toute frise : ◀ ▶ (œuvre précédente / suivante dans l'ordre du temps, cadre doré, la frise se recentre) et « ▷ Lecture » (une œuvre toutes les ~2,6 s). Il respecte les filtres. Le premier pas part de l'œuvre au centre de l'écran.
+
+## Rev50 — Édouard Manet
+
+- 21e artiste, dans « Avant l'impressionnisme » : univers avec toutes les sources, 67 œuvres en open access du National Gallery of Art (extraites par `tools/nga_extract.py`, constituant 1506), fond du menu « Le Chemin de fer » (1873), regard de Victorine Meurent sur la règle des tiers.
