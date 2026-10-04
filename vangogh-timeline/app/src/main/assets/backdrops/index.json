@@ -301,6 +301,22 @@
    "poiX": 0.25,
    "poiY": 0.25,
    "kind": "face"
+  },
+  {
+   "artistId": "henri-matisse",
+   "searchName": "Henri Matisse",
+   "workSearch": "Woman with a Hat Matisse|Matisse Femme au chapeau",
+   "workMatch": "Matisse",
+   "source": "wikidata",
+   "title": "",
+   "date": "",
+   "credit": "",
+   "remoteUrl": "",
+   "width": 0,
+   "height": 0,
+   "poiX": 0.5,
+   "poiY": 0.33,
+   "kind": "face"
   }
  ]
 }

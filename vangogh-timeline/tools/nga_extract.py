@@ -28,6 +28,7 @@ ARTISTS = {
     "edvard-munch": 5058,
     "giovanni-fattori": 37534,
     "edouard-manet": 1506,
+    "henri-matisse": 1706,
 }
 CLASSIFICATIONS = {"Painting", "Drawing", "Print", "Sculpture", "Photograph"}
 

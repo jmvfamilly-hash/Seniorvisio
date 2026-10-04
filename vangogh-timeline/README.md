@@ -442,3 +442,8 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 ## Rev50 — Édouard Manet
 
 - 21e artiste, dans « Avant l'impressionnisme » : univers avec toutes les sources, 67 œuvres en open access du National Gallery of Art (extraites par `tools/nga_extract.py`, constituant 1506), fond du menu « Le Chemin de fer » (1873), regard de Victorine Meurent sur la règle des tiers.
+
+## Rev51 — Henri Matisse
+
+- 22e artiste, dans « Après l'impressionnisme » : univers avec toutes les sources. NGA : 111 œuvres, aucune en open access (droits encore protégés aux États-Unis pour une partie de l'œuvre) — affichées en consultation privée « © » ; les œuvres libres viendront surtout d'autres musées et de Wikimedia (Matisse, mort en 1954, est dans le domaine public en France depuis 2025).
+- Fond du menu : « La Femme au chapeau » (1905) cherchée sur Wikidata/Commons au build, licence lue sur Commons.

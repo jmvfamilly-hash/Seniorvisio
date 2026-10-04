@@ -105,6 +105,7 @@ object ArtistExtras {
         "edvard-munch" to Extras(1863, 1944, "Edvard_Munch", allSources("Munch, Edvard")),
         "anna-boch" to Extras(1848, 1936, "Anna_Boch", allSources("Boch, Anna")),
         "georges-seurat" to Extras(1859, 1891, "Georges_Seurat", allSources("Seurat, Georges")),
+        "henri-matisse" to Extras(1869, 1954, "Henri_Matisse", allSources("Matisse, Henri")),
         "paul-gauguin" to Extras(1848, 1903, "Paul_Gauguin", allSources("Gauguin, Paul")),
     )
 

@@ -117,7 +117,7 @@ def main(out):
         path = os.path.join(out, e["artistId"] + ".jpg")
         try:
             if e["source"] == "wikidata":
-                work = (named_work(e["workSearch"], e.get("workMatch", ".")) if e.get("workSearch") else None) or wikidata_work(e["searchName"])
+                work = next((w for q in e.get("workSearch", "").split("|") if q for w in [named_work(q, e.get("workMatch", "."))] if w), None) or wikidata_work(e["searchName"])
                 if not work:
                     print(e["artistId"], ": aucun tableau trouvé sur Wikidata")
                     continue

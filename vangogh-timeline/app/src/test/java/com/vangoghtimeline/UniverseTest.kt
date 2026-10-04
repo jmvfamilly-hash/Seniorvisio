@@ -41,10 +41,10 @@ class UniverseTest {
     // ── Catalogue ─────────────────────────────────────────────────────────────────
     @Test fun catalogHasAllArtistsInThreeMovements() {
         val artists = catalog()
-        assertEquals(21, artists.size)
+        assertEquals(22, artists.size)
         assertEquals(6, artists.count { it.movement == Movement.PRE_IMPRESSIONISM })
         assertEquals(9, artists.count { it.movement == Movement.IMPRESSIONISM })
-        assertEquals(6, artists.count { it.movement == Movement.POST_IMPRESSIONISM })
+        assertEquals(7, artists.count { it.movement == Movement.POST_IMPRESSIONISM })
     }
 
     @Test fun periodsAreParsedIncludingDecades() {
@@ -56,7 +56,7 @@ class UniverseTest {
 
     @Test fun everyArtistOfTheCatalogHasAUniverse() {
         val all = catalog()
-        assertEquals(21, all.size)
+        assertEquals(22, all.size)
         assertTrue(all.filter { !it.hasUniverse }.map { it.name }.toString(), all.all { it.hasUniverse })
         // le terme de recherche du Rijksmuseum est donné pour chacun (« Nom, Prénom »)
         assertTrue(all.all { a -> a.sources.first { it.sourceId == "rijks" }.term?.contains(", ") == true })

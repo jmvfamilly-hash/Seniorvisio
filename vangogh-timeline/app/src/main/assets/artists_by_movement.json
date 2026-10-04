@@ -442,6 +442,31 @@
               "presence_period": "Production exotique, 1891-1893, 1895-1901"
             }
           ]
+        },
+        {
+          "name": "Henri Matisse",
+          "origin": "France",
+          "active_period": "1890s-1954",
+          "main_style": "Fauvisme, puis couleur pure et papiers découpés",
+          "emblematic_work": "La Danse",
+          "work_type": "Peinture à l'huile, dessin, papiers gouachés découpés",
+          "key_locations": [
+            {
+              "location": "Collioure, France",
+              "work_type": "Naissance du fauvisme avec Derain",
+              "presence_period": "Été 1905"
+            },
+            {
+              "location": "Paris et Issy-les-Moulineaux, France",
+              "work_type": "Grandes compositions, atelier",
+              "presence_period": "1905-1917"
+            },
+            {
+              "location": "Nice, France",
+              "work_type": "Odalisques, intérieurs, papiers découpés",
+              "presence_period": "1917-1954"
+            }
+          ]
         }
       ]
     }
