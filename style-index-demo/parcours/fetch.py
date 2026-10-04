@@ -40,3 +40,10 @@ for c in plan["crops"]:
     w = works[c["work"]]
     x, y, cw, ch = (round(c["x"] * w["w"]), round(c["y"] * w["h"]), round(c["w"] * w["w"]), round(c["h"] * w["h"]))
     save(os.path.join(OUT, f"{c['work']}-{c['id']}.jpg"), f"https://api.nga.gov/iiif/{w['uuid']}/{x},{y},{cw},{ch}/1200,/0/default.jpg")
+
+# aperçus (1000 px) pour choisir le point d'intérêt d'un fond de menu ; jamais inclus dans la maquette
+prev = os.path.join(HERE, "previews.json")
+if os.path.exists(prev):
+    os.makedirs(os.path.join(OUT, "previews"), exist_ok=True)
+    for p in json.load(open(prev, encoding="utf-8")):
+        save(os.path.join(OUT, "previews", p["id"] + ".jpg"), f"https://api.nga.gov/iiif/{p['uuid']}/full/!1000,1000/0/default.jpg")
