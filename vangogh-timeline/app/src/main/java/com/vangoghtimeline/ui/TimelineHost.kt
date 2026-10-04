@@ -16,6 +16,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -177,7 +178,12 @@ fun TimelineHost(
     BackHandler(enabled = request != null && !closing) { close() }
 
     Box(modifier.fillMaxSize().onSizeChanged { rootSize = it }) {
-        TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, backdropArtistId = artist?.id, level = level, onLevel = onLevel, artistNameOf = artistFor?.let { f -> { a: Artwork -> f(a)?.name } }, title = title ?: artistName?.let { n -> artistLife?.let { "$n · $it" } ?: n })
+        // deux vues des mêmes œuvres : la frise (le temps) ou la carte (le lieu de conservation) ; on bascule par l'en-tête
+        var mapMode by rememberSaveable { mutableStateOf(false) }
+        val header = title ?: artistName?.let { n -> artistLife?.let { "$n · $it" } ?: n }
+        val nameOf = artistFor?.let { f -> { a: Artwork -> f(a)?.name } }
+        if (mapMode) MapScreen(artworks, onArtworkTap = ::open, title = header, artistNameOf = nameOf, headerTrailing = { ViewModeToggle(true) { mapMode = it } })
+        else TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, backdropArtistId = artist?.id, level = level, onLevel = onLevel, artistNameOf = nameOf, title = header, headerTrailing = { ViewModeToggle(false) { mapMode = it } })
 
         credit?.let {
             BasicText(

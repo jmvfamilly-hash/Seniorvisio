@@ -72,6 +72,8 @@ fun TimelineScreen(
     onLevel: (Int) -> Unit = {},
     /** Recherche transversale : le nom de l'artiste de chaque œuvre, écrit sur sa carte. */
     artistNameOf: ((Artwork) -> String?)? = null,
+    /** À droite du titre (bascule Frise / Carte). */
+    headerTrailing: (@Composable () -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val state = rememberTimelineScrollState()
@@ -175,14 +177,20 @@ fun TimelineScreen(
             Box(Modifier.fillMaxSize().background(Color(0xB30F1114)))
         }
     Column(Modifier.fillMaxSize()) {
-        if (title != null) {
-            BasicText(
-                title,
-                modifier = Modifier.fillMaxWidth().background(Color(0xB314171B)).padding(horizontal = 12.dp, vertical = 6.dp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(color = Color(0xFFE6E9ED), fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-            )
+        if (title != null || headerTrailing != null) {
+            androidx.compose.foundation.layout.Row(
+                Modifier.fillMaxWidth().background(Color(0xB314171B)).padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BasicText(
+                    title.orEmpty(),
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(color = Color(0xFFE6E9ED), fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                )
+                headerTrailing?.invoke()
+            }
         }
         FilterBar(
             filter, { f -> fSubject = f.subject?.name; fTechnique = f.technique?.name; fMode = f.mode?.name; fHue = f.hue?.name },

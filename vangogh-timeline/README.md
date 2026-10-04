@@ -453,3 +453,10 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 - 29 artistes. Boudin dans « Avant l'impressionnisme » ; Degas, Sisley, Caillebotte dans « Impressionnisme » ; Toulouse-Lautrec, Signac, Bonnard dans « Après l'impressionnisme ». Toutes les sources pour chacun.
 - NGA (open access / total) : Degas 154/163, Sisley 13/13, Caillebotte 2/2, Toulouse-Lautrec 313/313, Boudin 62/62, Signac 16/21 (aucune peinture libre), Bonnard 0/320 (© aux États-Unis, consultation privée).
 - Fonds du menu (point d'intérêt placé à l'œil sur l'image) : « Quatre Danseuses » (Degas), « L'Inondation à Port-Marly » (Sisley), « Les Périssoires » (Caillebotte), « Quadrille au Moulin Rouge » (Toulouse-Lautrec), « Heure du bain à Deauville » (Boudin) ; Signac et Bonnard via Wikidata/Commons au build.
+
+## Rev54 — vue Carte (lieux de conservation)
+
+- Bascule **Frise / Carte** dans l'en-tête de la frise (artiste ou recherche transversale). La carte pose les œuvres au lieu où elles sont conservées : musée de la source (AIC, Rijksmuseum, Met, NGA…) ou collection indiquée dans la fiche (Wikimedia « Collection », Europeana « Fournisseur »).
+- Annuaire explicite de ~120 musées (`MuseumMap`, coordonnées approximatives) : un lieu absent n'est pas deviné, l'œuvre va dans « lieu inconnu » (puce en haut à gauche).
+- Fond de carte embarqué : Natural Earth 1:50m (domaine public), projection de Mercator, sans service en ligne. Pincer / glisser ; repères avec vignette, pile et nombre d'œuvres ; lieux proches regroupés (toucher = zoom) ; toucher un lieu ouvre sa fiche (bandeau de ses œuvres, ouverture dans la visionneuse comme depuis la frise).
+- Limites : les filtres de la frise ne s'appliquent pas à la carte ; le lieu indiqué est celui de la notice (prêts et dépôts non suivis).
