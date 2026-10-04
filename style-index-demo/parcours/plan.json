@@ -71,6 +71,24 @@
    "uuid": "5fc5c211-bd9f-452e-856f-a5832fbb6f62",
    "w": 35660,
    "h": 22808
+  },
+  {
+   "id": "railway",
+   "artist": "Édouard Manet",
+   "title": "Le Chemin de fer",
+   "date": "1873",
+   "uuid": "57b84473-f6f3-4bab-ad88-344bb4d56fb7",
+   "w": 32954,
+   "h": 26753
+  },
+  {
+   "id": "plum",
+   "artist": "Édouard Manet",
+   "title": "La Prune",
+   "date": "vers 1877",
+   "uuid": "034ec3ed-7a47-4f14-aa8a-ce48cb6e11a5",
+   "w": 10983,
+   "h": 16425
   }
  ],
  "crops": [
