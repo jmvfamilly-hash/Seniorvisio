@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -136,8 +137,11 @@ fun ArtworkCard(
     artistName: String? = null,
     /** Œuvre courante du parcours chronologique : cadre doré. */
     highlighted: Boolean = false,
+    /** Niveau 3 : le texte du détail À CÔTÉ de la vignette (écran en paysage) plutôt que dessous (portrait). */
+    textBeside: Boolean = false,
     onTap: ((OpenRequest) -> Unit)? = null,
 ) {
+    if (level >= 3) { DetailedCard(artwork, widthPx, heightPx, modifier, artistName, highlighted, textBeside, onTap); return }
     val description = remember(artwork) { "${artwork.title}, ${artwork.date.formatFr()}" }
     // Poignée sur la position à l'écran, lue seulement au double-tap : une référence ordinaire, pas un état (sinon la carte se
     // recomposerait à chaque image de défilement).
@@ -250,3 +254,54 @@ fun placeColor(place: String?): Color {
         else -> Color(0xFF6B6B6B)
     }
 }
+
+/**
+ * Niveau 3 de la frise : la vignette et, à côté (paysage) ou dessous (portrait), tout le texte du détail — titre, date, lieu, origine, commentaire,
+ * fiche du musée. On parcourt la frise du doigt comme aux autres niveaux ; un toucher sur la carte ouvre l'œuvre depuis sa vignette.
+ */
+@Composable
+private fun DetailedCard(
+    artwork: Artwork, widthPx: Int, heightPx: Int, modifier: Modifier, artistName: String?, highlighted: Boolean, textBeside: Boolean,
+    onTap: ((OpenRequest) -> Unit)?,
+) {
+    val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val currentTap by rememberUpdatedState(onTap)
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    // la vignette garde une forme de tableau ; le reste de la carte est pour le texte
+    val imgW = if (textBeside) (heightPx * 1.14f).toInt().coerceAtMost((widthPx * 0.55f).toInt()) else widthPx
+    val imgH = if (textBeside) heightPx else (widthPx * 0.876f).toInt().coerceAtMost((heightPx * 0.6f).toInt())
+    val text = remember(artwork) { detailText(artwork) }
+    val tapModifier = Modifier.pointerInput(artwork, imgW, imgH, onTap != null) {
+        if (onTap != null) detectTapGestures(onTap = {
+            val bounds = coordinates[0]?.takeIf { it.isAttached }?.boundsInRoot()
+            if (bounds != null) currentTap?.invoke(OpenRequest(artwork, bounds, imgW, imgH))
+        })
+    }
+    val image = @Composable {
+        Box(Modifier.size(with(density) { imgW.toDp() }, with(density) { imgH.toDp() }).onGloballyPositioned { coordinates[0] = it }) {
+            ArtworkImage(artwork, imgW, imgH)
+            artwork.rights?.let { RightsBadge(it.kind, Modifier.align(Alignment.TopEnd).padding(5.dp)) }
+        }
+    }
+    val body = @Composable { m: Modifier ->
+        Column(m.background(Color(0xE6181B20)).padding(horizontal = 10.dp, vertical = 8.dp)) {
+            if (artistName != null) BasicText(artistName, maxLines = 1, style = TextStyle(color = Color(0xFFF0D58A), fontSize = 11.sp))
+            BasicText(artwork.title, maxLines = 3, overflow = TextOverflow.Ellipsis, style = TextStyle(color = Color.White, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold))
+            BasicText(text, overflow = TextOverflow.Ellipsis, style = TextStyle(color = Color(0xFFD9D3BF), fontSize = 12.sp, lineHeight = 16.sp), modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+    val frame = modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))
+        .then(if (highlighted) Modifier.border(3.dp, Color(0xFFF0D58A), RoundedCornerShape(8.dp)) else Modifier)
+        .semantics { contentDescription = "${artwork.title}, ${artwork.date.formatFr()}" }
+        .then(tapModifier)
+    if (textBeside) androidx.compose.foundation.layout.Row(frame) { image(); body(Modifier.fillMaxSize()) }
+    else Column(frame) { image(); body(Modifier.fillMaxSize()) }
+}
+
+/** Le texte complet du détail d'une œuvre (niveau 3) : date, lieu, origine, commentaire puis les lignes de la fiche du musée. */
+internal fun detailText(a: Artwork): String = buildList {
+    add(a.date.formatFr() + (a.place?.let { " · $it" } ?: ""))
+    if (a.provider.isNotEmpty()) add("Origine : ${a.provider}")
+    commentOf(a).takeIf { it.isNotEmpty() }?.let { add(it) }
+    a.details.filter { (label, _) -> label !in setOf("Date", "Description", "Commentaire") }.forEach { (label, value) -> add("$label : $value") }
+}.joinToString("\n")

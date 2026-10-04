@@ -105,6 +105,7 @@ fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: () -> String =
             history = history,
             onSearchWorks = { q -> if (q.isNotBlank()) { saveHistory(SearchHistory.add(history, q)); resultsQuery = q.trim() } },
             onForgetSearch = { saveHistory(SearchHistory.remove(history, it)) },
+            onSelect = { artist -> if (selectedId != artist.id) { selectedId = artist.id; model.prepare(artist) } },
             onTap = { artist ->
                 if (selectedId == artist.id && artist.hasUniverse) {
                     model.prepare(artist)

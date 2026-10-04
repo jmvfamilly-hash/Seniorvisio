@@ -96,9 +96,19 @@ fun TimelineScreen(
     val subjectCounts = remember(metas) { metas.values.groupingBy { it.subject }.eachCount() }
     val techniqueCounts = remember(metas) { metas.values.groupingBy { it.technique }.eachCount() }
 
-    val cardScale = if (level >= 2) 2f else 1f
-    val card = remember(density, cardScale) {
-        with(density) { CardSpec(width = 172.dp.toPx() * cardScale, height = 150.dp.toPx() * cardScale, gapX = 10.dp.toPx(), gapY = 10.dp.toPx()) }
+    // niveau 3 : la carte porte le texte du détail, à côté de la vignette en paysage, dessous en portrait
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val textBeside = configuration.screenWidthDp > configuration.screenHeightDp
+    val card = remember(density, level, textBeside) {
+        with(density) {
+            val (w, h) = when {
+                level >= 3 && textBeside -> (258 + 250).dp to 226.dp
+                level >= 3 -> 258.dp to (226 + 200).dp
+                level == 2 -> 344.dp to 300.dp
+                else -> 172.dp to 150.dp
+            }
+            CardSpec(width = w.toPx(), height = h.toPx(), gapX = 10.dp.toPx(), gapY = 10.dp.toPx())
+        }
     }
     val margin = with(density) { 40.dp.toPx() }
     // La mise en page ne dépend que des œuvres, de l'échelle et de la taille des cartes : pas du défilement.
@@ -217,6 +227,7 @@ fun TimelineScreen(
                     widthPx = placed.width.roundToInt(),
                     heightPx = placed.height.roundToInt(),
                     level = level,
+                    textBeside = textBeside,
                     artistName = artistNameOf?.invoke(placed.artwork),
                     highlighted = placed.artwork.id == tourId,
                     onTap = onArtworkTap?.let { open -> { request: OpenRequest -> if (!state.tapSuppressed) open(request) } },

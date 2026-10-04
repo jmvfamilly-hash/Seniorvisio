@@ -126,6 +126,8 @@ fun ArtistMenuScreen(
     history: List<String> = emptyList(),
     onSearchWorks: (String) -> Unit = {},
     onForgetSearch: (String) -> Unit = {},
+    /** L'artiste au centre du demi-cercle devient l'artiste sélectionné (sans ouvrir sa frise). */
+    onSelect: (Artist) -> Unit = {},
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     val sort = SortMode.PERIOD
@@ -135,6 +137,11 @@ fun ArtistMenuScreen(
     val backdrops = rememberBackdrops()
     // fond : l'artiste sélectionné, à défaut le premier de la liste (le menu n'est jamais « vide »)
     val backdrop = backdrops.of((selected ?: items.firstOrNull() ?: artists.firstOrNull())?.id)
+
+    // le peintre sélectionné est toujours celui du centre : au démarrage, ou quand la recherche l'a retiré de la liste, c'est le premier
+    val currentSelect by rememberUpdatedState(onSelect)
+    LaunchedEffect(items, selectedId) { if (items.isNotEmpty() && items.none { it.id == selectedId }) currentSelect(items.first()) }
+    val currentOpen by rememberUpdatedState(onTap)
 
     BoxWithConstraints(modifier.fillMaxSize().background(Ink)) {
         // lus ici : les lambdas imbriquées (Row, Column…) ont leur propre récepteur et n'ont plus accès à maxWidth / maxHeight
@@ -147,7 +154,8 @@ fun ArtistMenuScreen(
 
         // ── fond : un tableau, regard / visage / arbre sur la règle des tiers, fondu entre deux artistes ──
         Crossfade(targetState = backdrop, animationSpec = tween(700), label = "fond") { b ->
-            Box(Modifier.fillMaxSize()) {
+            // un simple toucher sur le fond ouvre la frise de l'artiste sélectionné
+            Box(Modifier.fillMaxSize().pointerInput(selected?.id) { detectTapGestures(onTap = { selected?.let { currentOpen(it) } }) }) {
                 BackdropImage(b, backdrops.embedded, screenW, screenH)
                 // voile : le texte reste lisible quelle que soit la clarté du tableau
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x99000000), Color(0x22000000), Color(0xB3000000)))))
@@ -167,7 +175,7 @@ fun ArtistMenuScreen(
                     ArtistPanel(selected, backdrop, model, level, onTap, onRefresh, onReportLongPress, Modifier.widthIn(max = 560.dp))
                 }
                 CaptionBar(backdrop)
-                ArcPicker(items, selectedId, model.portraits, onTap, landscape, maxW, Modifier.fillMaxWidth())
+                ArcPicker(items, selectedId, model.portraits, onTap, onSelect, landscape, maxW, Modifier.fillMaxWidth())
                 DetailSlider(shown, maxLevel) { onLevel(it) }
             } else {
                 // paysage : la fiche à gauche ; à droite le demi-cercle de portraits et, tout à droite, le curseur de niveau
@@ -176,7 +184,7 @@ fun ArtistMenuScreen(
                         ArtistPanel(selected, backdrop, model, level, onTap, onRefresh, onReportLongPress, Modifier.fillMaxWidth())
                         CaptionBar(backdrop)
                     }
-                    SideArcPicker(items, selectedId, model.portraits, onTap, Modifier.width(150.dp).fillMaxHeight())
+                    SideArcPicker(items, selectedId, model.portraits, onTap, onSelect, Modifier.width(150.dp).fillMaxHeight())
                     VerticalDetailSlider(shown, maxLevel, Modifier.width(38.dp).fillMaxHeight()) { onLevel(it) }
                 }
             }
@@ -283,10 +291,11 @@ private fun PortraitChip(artist: Artist, selected: Boolean, portraitUrl: String?
  */
 @Composable
 private fun ArcPicker(
-    items: List<Artist>, selectedId: String?, portraits: Map<String, String>, onTap: (Artist) -> Unit,
+    items: List<Artist>, selectedId: String?, portraits: Map<String, String>, onTap: (Artist) -> Unit, onCenter: (Artist) -> Unit,
     landscape: Boolean, screenWidth: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
+    val centerNow by rememberUpdatedState(onCenter)
     val pos = remember { Animatable(0f) }                  // position (en nombre de portraits) de celui qui est au centre de l'arc
     val selectedIndex = items.indexOfFirst { it.id == selectedId }
     LaunchedEffect(selectedIndex, items.size) { if (selectedIndex >= 0) pos.animateTo(selectedIndex.toFloat(), tween(350)) }
@@ -304,7 +313,12 @@ private fun ArcPicker(
         Box(
             Modifier.fillMaxSize().pointerInput(items.size) {
                 detectHorizontalDragGestures(
-                    onDragEnd = { scope.launch { pos.animateTo(pos.value.roundToInt().coerceIn(0, (items.size - 1).coerceAtLeast(0)).toFloat(), tween(250)) } },
+                    onDragEnd = {
+                        // le portrait qui s'arrête au centre devient l'artiste sélectionné
+                        val k = pos.value.roundToInt().coerceIn(0, (items.size - 1).coerceAtLeast(0))
+                        scope.launch { pos.animateTo(k.toFloat(), tween(250)) }
+                        items.getOrNull(k)?.let { centerNow(it) }
+                    },
                     onHorizontalDrag = { change, dx ->
                         change.consume()
                         scope.launch { pos.snapTo((pos.value - dx / arcLenPx).coerceIn(-0.4f, items.size - 0.6f)) }
@@ -362,6 +376,7 @@ private fun ArtistPanel(
     onTap: (Artist) -> Unit, onRefresh: (Artist) -> Unit, onReport: () -> Unit, modifier: Modifier = Modifier,
 ) {
     val currentReport by rememberUpdatedState(onReport)
+    val openNow by rememberUpdatedState(onTap)
     Column(
         modifier
             .fillMaxWidth()
@@ -378,7 +393,11 @@ private fun ArtistPanel(
             BasicText("Touchez un portrait pour découvrir l'artiste.", style = TextStyle(color = Color.White, fontSize = 15.sp, textAlign = TextAlign.Center))
             return@Column
         }
-        BasicText(artist.name, maxLines = 2, style = TextStyle(color = Color.White, fontSize = 26.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center))
+        BasicText(
+            artist.name, maxLines = 2,
+            style = TextStyle(color = Color.White, fontSize = 26.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
+            modifier = Modifier.pointerInput(artist.id) { detectTapGestures(onTap = { openNow(artist) }) },   // toucher le nom ouvre la frise
+        )
         // niveau 1 : seulement le nom et les dates
         val shown = if (artist.hasUniverse) level else level.coerceAtMost(2)
         if (shown <= 1) {
@@ -537,8 +556,9 @@ internal fun DetailSlider(level: Int, max: Int, onLevel: (Int) -> Unit) {
  * vers la droite). Glisser verticalement les fait défiler ; toucher un portrait le sélectionne et le ramène au centre.
  */
 @Composable
-private fun SideArcPicker(items: List<Artist>, selectedId: String?, portraits: Map<String, String>, onTap: (Artist) -> Unit, modifier: Modifier = Modifier) {
+private fun SideArcPicker(items: List<Artist>, selectedId: String?, portraits: Map<String, String>, onTap: (Artist) -> Unit, onCenter: (Artist) -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
+    val centerNow by rememberUpdatedState(onCenter)
     val pos = remember { Animatable(0f) }
     val selectedIndex = items.indexOfFirst { it.id == selectedId }
     LaunchedEffect(selectedIndex, items.size) { if (selectedIndex >= 0) pos.animateTo(selectedIndex.toFloat(), tween(350)) }
@@ -554,7 +574,12 @@ private fun SideArcPicker(items: List<Artist>, selectedId: String?, portraits: M
         Box(
             Modifier.fillMaxSize().pointerInput(items.size) {
                 detectVerticalDragGestures(
-                    onDragEnd = { scope.launch { pos.animateTo(pos.value.roundToInt().coerceIn(0, (items.size - 1).coerceAtLeast(0)).toFloat(), tween(250)) } },
+                    onDragEnd = {
+                        // le portrait qui s'arrête au centre devient l'artiste sélectionné
+                        val k = pos.value.roundToInt().coerceIn(0, (items.size - 1).coerceAtLeast(0))
+                        scope.launch { pos.animateTo(k.toFloat(), tween(250)) }
+                        items.getOrNull(k)?.let { centerNow(it) }
+                    },
                     onVerticalDrag = { change, dy ->
                         change.consume()
                         scope.launch { pos.snapTo((pos.value - dy / arcLenPx).coerceIn(-0.4f, items.size - 0.6f)) }

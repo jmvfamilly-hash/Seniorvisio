@@ -460,3 +460,10 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 - Annuaire explicite de ~120 musées (`MuseumMap`, coordonnées approximatives) : un lieu absent n'est pas deviné, l'œuvre va dans « lieu inconnu » (puce en haut à gauche).
 - Fond de carte embarqué : Natural Earth 1:50m (domaine public), projection de Mercator, sans service en ligne. Pincer / glisser ; repères avec vignette, pile et nombre d'œuvres ; lieux proches regroupés (toucher = zoom) ; toucher un lieu ouvre sa fiche (bandeau de ses œuvres, ouverture dans la visionneuse comme depuis la frise).
 - Limites : les filtres de la frise ne s'appliquent pas à la carte ; le lieu indiqué est celui de la notice (prêts et dépôts non suivis).
+
+## Rev55 — sélection au centre, détail à la demande, niveau 3 de la frise, diaporama des musées
+
+- **Menu** : l'artiste sélectionné est toujours celui au centre du demi-cercle (il le devient quand le défilement s'arrête ; au démarrage, le premier). Un simple toucher sur le fond, sur le nom de l'artiste ou sur sa vignette centrale ouvre la frise.
+- **Vue détaillée** : plus de bandeau ni de curseur à l'écran ; un bouton discret en bas à droite (avec la pastille de licence) affiche la fiche en transparence, avec le curseur de niveau ; un nouveau toucher la masque.
+- **Frise, niveau 3** : chaque carte porte tout le texte du détail (date, lieu, origine, commentaire, fiche du musée), à côté de la vignette en paysage, dessous en portrait ; on parcourt la frise du doigt.
+- **Carte** : un musée consulté fait défiler ses œuvres en fondu enchaîné (4 s) ; toucher ou pincer l'image ouvre la visionneuse de détail ; « Reprendre le parcours » relance le défilement.

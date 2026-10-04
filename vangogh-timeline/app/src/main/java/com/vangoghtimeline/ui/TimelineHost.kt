@@ -239,7 +239,7 @@ fun TimelineHost(
                     }
                     // pendant le dézoom de sortie, les doigts sont absorbés : on ne relance pas un zoom en plein retour
                     // licence et conditions de l'œuvre ouverte (un toucher sur la barre déplie le détail)
-                    if (viewerTop && !closing) RightsBar(req.artwork, artistFor?.invoke(req.artwork) ?: artist, artistFor?.invoke(req.artwork)?.name ?: artistName, level, onLevel, Modifier.align(Alignment.BottomStart))
+                    if (viewerTop && !closing) DetailOverlay(req.artwork, artistFor?.invoke(req.artwork) ?: artist, artistFor?.invoke(req.artwork)?.name ?: artistName, level, onLevel)
                     if (closing) Box(Modifier.fillMaxSize().pointerInput(Unit) {
                         awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
                     })

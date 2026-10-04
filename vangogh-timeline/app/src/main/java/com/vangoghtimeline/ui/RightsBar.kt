@@ -1,6 +1,7 @@
 package com.vangoghtimeline.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -68,7 +69,7 @@ internal fun RightsBar(artwork: Artwork, artist: Artist?, artistName: String?, l
         modifier
             .padding(10.dp)
             .fillMaxWidth(0.92f)
-            .background(Color(0xD9000000), RoundedCornerShape(10.dp))
+            .background(Color(0x99000000), RoundedCornerShape(10.dp))     // transparent : l'œuvre reste visible dessous
             .padding(horizontal = 10.dp, vertical = 7.dp),
     ) {
         BasicText(
@@ -138,4 +139,29 @@ private fun Line(text: String, bold: Boolean = false, dim: Boolean = false) {
         modifier = Modifier.padding(top = 2.dp),
         style = TextStyle(color = if (dim) Color(0xFF8B96A3) else Color(0xFFD5DAE0), fontSize = 11.sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal),
     )
+}
+
+/**
+ * Vue détaillée : le détail est masqué par défaut. Un bouton discret en bas à droite (avec la pastille de licence) affiche la fiche par-dessus
+ * l'œuvre, en transparence, avec son curseur de niveau ; un nouveau toucher sur le bouton la masque.
+ */
+@Composable
+internal fun DetailOverlay(artwork: Artwork, artist: Artist?, artistName: String?, level: Int, onLevel: (Int) -> Unit, modifier: Modifier = Modifier) {
+    var open by remember(artwork.id) { mutableStateOf(false) }
+    androidx.compose.foundation.layout.Box(modifier.fillMaxSize()) {
+        if (open) RightsBar(artwork, artist, artistName, level, onLevel, Modifier.align(Alignment.BottomStart).padding(bottom = 46.dp))
+        Row(
+            Modifier.align(Alignment.BottomEnd).padding(10.dp)
+                .background(if (open) Color(0xCCF0D58A) else Color(0x66000000), RoundedCornerShape(16.dp))
+                .pointerInput(artwork.id) { detectTapGestures(onTap = { open = !open }) }
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            artwork.rights?.let { RightsBadge(it.kind); Spacer(Modifier.width(6.dp)) }
+            BasicText(
+                if (open) "Masquer" else "Détail",
+                style = TextStyle(color = if (open) Color(0xFF14171B) else Color(0xE6FFFFFF), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+            )
+        }
+    }
 }
