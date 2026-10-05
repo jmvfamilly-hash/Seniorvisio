@@ -182,8 +182,8 @@ fun TimelineHost(
         var mapMode by rememberSaveable { mutableStateOf(false) }
         val header = title ?: artistName?.let { n -> artistLife?.let { "$n · $it" } ?: n }
         val nameOf = artistFor?.let { f -> { a: Artwork -> f(a)?.name } }
-        if (mapMode) MapScreen(artworks, onArtworkTap = ::open, title = header, artistNameOf = nameOf, headerTrailing = { ViewModeToggle(true) { mapMode = it } })
-        else TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, backdropArtistId = artist?.id, level = level, onLevel = onLevel, artistNameOf = nameOf, title = header, headerTrailing = { ViewModeToggle(false) { mapMode = it } })
+        if (mapMode) MapScreen(artworks, onArtworkTap = ::open, title = header, artistNameOf = nameOf, viewerOpen = request != null, headerTrailing = { ViewModeToggle(true) { mapMode = it } })
+        else TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, viewerOpen = request != null, backdropArtistId = artist?.id, level = level, onLevel = onLevel, artistNameOf = nameOf, title = header, headerTrailing = { ViewModeToggle(false) { mapMode = it } })
 
         credit?.let {
             BasicText(

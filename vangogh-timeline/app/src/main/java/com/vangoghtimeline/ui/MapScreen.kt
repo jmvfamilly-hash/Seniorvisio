@@ -118,6 +118,8 @@ fun MapScreen(
     title: String? = null,
     headerTrailing: (@Composable () -> Unit)? = null,
     artistNameOf: ((Artwork) -> String?)? = null,
+    /** Une œuvre est ouverte dans la visionneuse : le parcours plein écran se met en attente et reprend à sa fermeture. */
+    viewerOpen: Boolean = false,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -223,7 +225,7 @@ fun MapScreen(
             )
             selected?.let { (head, list) ->
                 var fullscreen by remember(list) { mutableStateOf(false) }
-                if (fullscreen) FullscreenSlideshow(head, list, onArtworkTap, artistNameOf, onStop = { fullscreen = false }, modifier = Modifier.fillMaxSize())
+                if (fullscreen) FullscreenSlideshow(head, list, onArtworkTap, artistNameOf, paused = viewerOpen, onStop = { fullscreen = false }, modifier = Modifier.fillMaxSize())
                 else PlaceStrip(head, list, landscape = w > h, onArtworkTap, artistNameOf, onPlay = { fullscreen = true }, onClose = { selected = null }, modifier = Modifier.align(Alignment.BottomCenter))
             }
         }
@@ -329,12 +331,13 @@ private fun PlaceStrip(
 @Composable
 private fun FullscreenSlideshow(
     head: String, list: List<Artwork>, onArtworkTap: (OpenRequest) -> Unit, artistNameOf: ((Artwork) -> String?)?,
-    onStop: () -> Unit, modifier: Modifier,
+    paused: Boolean, onStop: () -> Unit, modifier: Modifier,
 ) {
     val stop by rememberUpdatedState(onStop)
     val openArtwork by rememberUpdatedState(onArtworkTap)
     var index by remember(list) { mutableStateOf(0) }
-    LaunchedEffect(index, list) { if (list.size > 1) { kotlinx.coroutines.delay(4000); index = (index + 1) % list.size } }
+    // en attente pendant que la visionneuse est ouverte (l'œuvre reste celle qu'on a ouverte) ; reprend dès sa fermeture
+    LaunchedEffect(index, list, paused) { if (!paused && list.size > 1) { kotlinx.coroutines.delay(4000); index = (index + 1) % list.size } }
     val current = list.getOrNull(index) ?: return
     val coords = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
     val density = LocalDensity.current

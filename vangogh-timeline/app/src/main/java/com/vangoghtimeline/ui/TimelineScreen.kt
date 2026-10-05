@@ -74,6 +74,8 @@ fun TimelineScreen(
     artistNameOf: ((Artwork) -> String?)? = null,
     /** À droite du titre (bascule Frise / Carte). */
     headerTrailing: (@Composable () -> Unit)? = null,
+    /** Une œuvre est ouverte dans la visionneuse : le parcours en lecture se met en attente, et reprend tout seul à sa fermeture. */
+    viewerOpen: Boolean = false,
 ) {
     val density = LocalDensity.current
     val state = rememberTimelineScrollState()
@@ -137,8 +139,8 @@ fun TimelineScreen(
             state.scrollToUnclamped(sx + (tx - sx) * v, sy + (ty - sy) * v)
         }
     }
-    LaunchedEffect(playing, tourIdx) {
-        if (!playing) return@LaunchedEffect
+    LaunchedEffect(playing, tourIdx, viewerOpen) {
+        if (!playing || viewerOpen) return@LaunchedEffect
         delay(2600)
         val n = ChronoTour.next(tourIdx, tourOrder.size, startIndex())
         if (n == tourIdx) playing = false else tour = n

@@ -473,3 +473,7 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 - Un lieu choisi affiche ses œuvres dans une frise d'un tiers de l'écran : une ligne qui défile en paysage, des lignes qui reviennent à la ligne en portrait. Toucher une œuvre l'ouvre dans la visionneuse.
 - « ▶ Lecture » lance le parcours du lieu en plein écran (fondu enchaîné, 4 s) ; « ❚❚ Pause » ou un pincement revient à la liste ; un toucher ouvre l'œuvre affichée.
 - Double toucher sur un repère : la liste de toutes les œuvres du lieu, ou de tout le regroupement de musées (un simple toucher sur un regroupement zoome toujours dessus).
+
+## Rev57 — le parcours reprend à la sortie de la visionneuse
+
+- Si un parcours était en lecture (« ▷ Lecture » de la frise, ou lecture plein écran d'un lieu sur la carte) quand une œuvre a été ouverte, il se met en attente pendant la visionneuse et reprend tout seul à sa fermeture, qu'on sorte par le geste système ou en dézoomant au-delà de l'image entière.
