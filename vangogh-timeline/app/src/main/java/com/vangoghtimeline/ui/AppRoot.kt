@@ -63,7 +63,10 @@ fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: () -> String =
     val searchFile = remember { java.io.File(context.filesDir, "searches.json") }
     var history by remember { mutableStateOf(SearchHistory.decode(runCatching { searchFile.readText() }.getOrNull())) }
     fun saveHistory(h: List<String>) { history = h; runCatching { searchFile.writeText(SearchHistory.encode(h)) } }
-    var resultsQuery by rememberSaveable { mutableStateOf<String?>(null) }
+    var resultsQuery by rememberSaveable { mutableStateOf<String?>(null) }      // "" = pas de texte : les filtres seuls, tous les peintres
+
+    // ── filtres de la vue générale : partagés par le menu, la frise d'un peintre et les résultats « tous les peintres » ──
+    val filters = rememberFilterState()
 
     val opened = artists.firstOrNull { it.id == openedId }
     val searching = resultsQuery
@@ -71,16 +74,19 @@ fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: () -> String =
         BackHandler { resultsQuery = null }
         // relu à chaque œuvre qui arrive (les univers chargés ou lus sur disque)
         val known = model.knownWorks(artists)
-        val hits = remember(searching, known.values.sumOf { it.size }) { WorkSearch.search(searching, known) }
+        val hits = remember(searching, known.values.sumOf { it.size }) {
+            if (searching.isBlank()) known.flatMap { (a, list) -> list.map { com.vangoghtimeline.model.WorkHit(a, it) } } else WorkSearch.search(searching, known)
+        }
         val artistById = remember(hits) { hits.associate { it.artwork.id to it.artist } }
         val missingCount = model.missing(artists).size
         var loadingMissing by remember { mutableStateOf(false) }
         Box(Modifier.fillMaxSize().background(Color(0xFF0F1114))) {
-            if (hits.isEmpty()) Message("Aucune œuvre pour « $searching ».\n(${artists.count { it.hasUniverse } - missingCount} artistes sur ${artists.count { it.hasUniverse }} consultés)\n\n(retour : geste système)")
+            if (hits.isEmpty()) Message((if (searching.isBlank()) "Aucune œuvre chargée pour l'instant." else "Aucune œuvre pour « $searching ».") + "\n(${artists.count { it.hasUniverse } - missingCount} artistes sur ${artists.count { it.hasUniverse }} consultés)\n\n(retour : geste système)")
             else key(searching) {
                 TimelineHost(
-                    hits.map { it.artwork }, credit = null, title = "Recherche : « $searching » · ${hits.size} œuvres · ${hits.map { it.artist.id }.toSet().size} peintres",
-                    artistFor = { artistById[it.id] }, level = level, onLevel = { level = it },
+                    hits.map { it.artwork }, credit = null,
+                    title = (if (searching.isBlank()) "Tous les peintres" else "Recherche : « $searching »") + " · ${hits.map { it.artist.id }.toSet().size} peintres",
+                    artistFor = { artistById[it.id] }, level = level, onLevel = { level = it }, filterState = filters,
                 )
             }
             if (missingCount > 0) {
@@ -95,7 +101,14 @@ fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: () -> String =
             }
         }
     } else if (opened == null) {
+        val known = model.knownWorks(artists)
+        val allWorks = remember(known.values.sumOf { it.size }) { known.values.flatten() }
+        val menuFilter = rememberWorkFilter(allWorks, filters, analyseAlways = false)
         ArtistMenuScreen(
+            filterBar = menuFilter.bar,
+            filtersActive = menuFilter.active,
+            filteredCount = menuFilter.artworks.size,
+            onShowFiltered = { resultsQuery = "" },
             artists = artists,
             selectedId = selectedId,
             model = model,
@@ -123,7 +136,7 @@ fun AppRoot(artists: List<Artist>, model: AppModel, reportHeader: () -> String =
         Box(Modifier.fillMaxSize().background(Color(0xFF0F1114))) {
             when {
                 state != null && state.artworks.isNotEmpty() ->
-                    key(opened.id) { TimelineHost(state.artworks, credit = state.credit, artistName = opened.name, artistLife = opened.lifespan, artist = opened, level = level, onLevel = { level = it }) }
+                    key(opened.id) { TimelineHost(state.artworks, credit = state.credit, artistName = opened.name, artistLife = opened.lifespan, artist = opened, level = level, onLevel = { level = it }, filterState = filters) }
                 state != null && state.done -> Message(
                     "Aucune œuvre de ${opened.name} n'a pu être connectée.\n" +
                         state.reports.joinToString("\n") { "${it.name} : ${it.detail}" } + "\n\n(retour : geste système)",

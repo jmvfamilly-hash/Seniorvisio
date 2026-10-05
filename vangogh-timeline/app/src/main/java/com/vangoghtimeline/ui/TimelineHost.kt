@@ -109,6 +109,8 @@ fun TimelineHost(
     title: String? = null,
     level: Int = 1,
     onLevel: (Int) -> Unit = {},
+    /** Filtres choisis dans la vue générale (et modifiables ici) : partagés avec le menu, ils survivent au retour. */
+    filterState: FilterState = rememberFilterState(),
 ) {
     val scope = rememberCoroutineScope()
     var request by remember { mutableStateOf<OpenRequest?>(null) }
@@ -192,7 +194,7 @@ fun TimelineHost(
         val header = title ?: artistName?.let { n -> artistLife?.let { "$n · $it" } ?: n }
         val nameOf = artistFor?.let { f -> { a: Artwork -> f(a)?.name } }
         // filtres au-dessus des deux vues : les mêmes œuvres filtrées sur la frise et sur la carte
-        val works = rememberWorkFilter(artworks)
+        val works = rememberWorkFilter(artworks, filterState)
         if (mapMode) MapScreen(works.artworks, onArtworkTap = ::open, title = header, artistNameOf = nameOf, viewerOpen = request != null, onPlayTour = playTour, filterBar = works.bar, headerTrailing = { ViewModeToggle(true) { mapMode = it } })
         else TimelineScreen(works.artworks, onArtworkTap = ::open, prefetcher = prefetcher, viewerOpen = request != null, onPlayTour = playTour, backdropArtistId = artist?.id, level = level, onLevel = onLevel, artistNameOf = nameOf, title = header, filterBar = works.bar, emptyText = works.emptyText, headerTrailing = { ViewModeToggle(false) { mapMode = it } })
 

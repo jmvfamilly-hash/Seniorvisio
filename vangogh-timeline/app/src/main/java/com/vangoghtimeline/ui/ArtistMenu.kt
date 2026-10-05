@@ -128,6 +128,14 @@ fun ArtistMenuScreen(
     onForgetSearch: (String) -> Unit = {},
     /** L'artiste au centre du demi-cercle devient l'artiste sélectionné (sans ouvrir sa frise). */
     onSelect: (Artist) -> Unit = {},
+    /**
+     * Filtres de la vue générale (sujet, technique, licence, définition, couleur) : le peintre n'est qu'un paramètre parmi d'autres. Ils
+     * s'appliquent à la frise du peintre ouvert ; [onShowFiltered] montre les [filteredCount] œuvres retenues chez TOUS les peintres.
+     */
+    filterBar: (@Composable () -> Unit)? = null,
+    filtersActive: Boolean = false,
+    filteredCount: Int = 0,
+    onShowFiltered: () -> Unit = {},
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     val sort = SortMode.PERIOD
@@ -165,6 +173,27 @@ fun ArtistMenuScreen(
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp)) {
             SearchBar(query, onSubmit = { onSearchWorks(query) }) { query = it }
             if (history.isNotEmpty()) HistoryRow(history, onSearchWorks, onForgetSearch)
+            if (filterBar != null) {
+                Spacer(Modifier.height(6.dp))
+                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))) { filterBar() }
+                if (filtersActive) {
+                    val show by rememberUpdatedState(onShowFiltered)
+                    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        BasicText(
+                            "Voir les $filteredCount œuvres — tous les peintres ›",
+                            style = TextStyle(color = Gold, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Glass)
+                                .pointerInput(Unit) { detectTapGestures(onTap = { show() }) }.padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        BasicText(
+                            selected?.let { "ou ouvrir ${it.name} : filtres appliqués" } ?: "",
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(color = Muted, fontSize = 11.sp), modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(8.dp))
             // le niveau 3 n'existe que si l'artiste a un univers
             val maxLevel = if (selected?.hasUniverse == true) 3 else 2

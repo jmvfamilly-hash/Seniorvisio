@@ -46,29 +46,47 @@ import com.vangoghtimeline.model.TagFilter
 import com.vangoghtimeline.model.Technique
 
 /** Les œuvres retenues par les filtres, la barre qui les règle et le message quand rien ne correspond. */
-internal class WorkFilter(val artworks: List<Artwork>, val emptyText: String, val bar: @Composable () -> Unit)
+internal class WorkFilter(val artworks: List<Artwork>, val active: Boolean, val emptyText: String, val bar: @Composable () -> Unit)
 
 /**
- * Filtres partagés par la frise et la carte : l'état vit au-dessus des deux vues (TimelineHost), on garde ses choix en basculant de l'une à l'autre.
- * Sujet / technique (métadonnées), licence, définition, et couleur (analyse des vignettes, voir [StyleIndex]).
+ * Les filtres choisis, partagés par TOUT l'écran : réglés dans la vue générale (menu des peintres), ils s'appliquent à la frise et à la carte du
+ * peintre ouvert, ou à toutes les œuvres de tous les peintres. Le peintre n'est qu'un paramètre de recherche parmi les autres.
+ */
+@androidx.compose.runtime.Stable
+class FilterState(initial: TagFilter = TagFilter()) {
+    var filter by mutableStateOf(initial)
+
+    companion object {
+        val Saver: androidx.compose.runtime.saveable.Saver<FilterState, List<String>> = androidx.compose.runtime.saveable.Saver(
+            save = { s -> with(s.filter) { listOf(subject?.name, technique?.name, mode?.name, hue?.name, rights?.name, definition?.name).map { it.orEmpty() } } },
+            restore = { l ->
+                fun at(i: Int) = l.getOrNull(i)?.takeIf { it.isNotEmpty() }
+                FilterState(TagFilter(
+                    at(0)?.let { Subject.valueOf(it) }, at(1)?.let { Technique.valueOf(it) }, at(2)?.let { ColorMode.valueOf(it) },
+                    at(3)?.let { NamedColor.valueOf(it) }, at(4)?.let { RightsKind.valueOf(it) }, at(5)?.let { DefinitionTier.valueOf(it) },
+                ))
+            },
+        )
+    }
+}
+
+@Composable
+fun rememberFilterState(): FilterState = rememberSaveable(saver = FilterState.Saver) { FilterState() }
+
+/**
+ * Applique [state] à [all] et fournit la barre de filtres (sujet / technique, licence, définition, couleur — voir [StyleIndex] pour la couleur).
+ * [analyseAlways] : analyser les vignettes dès l'affichage (frise d'un peintre) ; sinon seulement quand un filtre de couleur est choisi (vue générale,
+ * où il y a les œuvres de tous les peintres).
  */
 @Composable
-internal fun rememberWorkFilter(all: List<Artwork>): WorkFilter {
+internal fun rememberWorkFilter(all: List<Artwork>, state: FilterState, analyseAlways: Boolean = true): WorkFilter {
     val context = LocalContext.current
     val metas = remember(all) { all.associate { it.id to MetaTagger.tag(it) } }
     val tiers = remember(all) { all.associate { it.id to DefinitionTier.of(it) } }
     val styleVersion = StyleIndex.version
-    var fSubject by rememberSaveable { mutableStateOf<String?>(null) }
-    var fTechnique by rememberSaveable { mutableStateOf<String?>(null) }
-    var fMode by rememberSaveable { mutableStateOf<String?>(null) }
-    var fHue by rememberSaveable { mutableStateOf<String?>(null) }
-    var fRights by rememberSaveable { mutableStateOf<String?>(null) }
-    var fDef by rememberSaveable { mutableStateOf<String?>(null) }
-    val filter = TagFilter(
-        fSubject?.let { Subject.valueOf(it) }, fTechnique?.let { Technique.valueOf(it) }, fMode?.let { ColorMode.valueOf(it) }, fHue?.let { NamedColor.valueOf(it) },
-        fRights?.let { RightsKind.valueOf(it) }, fDef?.let { DefinitionTier.valueOf(it) },
-    )
-    LaunchedEffect(all) { StyleIndex.index(context, context.imageLoader, all) }
+    val filter = state.filter
+    val analyse = analyseAlways || filter.needsPixels
+    LaunchedEffect(all, analyse) { if (analyse) StyleIndex.index(context, context.imageLoader, all) }
     val shown = remember(all, filter, styleVersion) {
         if (!filter.active) all else all.filter { filter.matches(metas.getValue(it.id), StyleIndex.get(it.id), it.rights?.kind, tiers[it.id]) }
     }
@@ -78,10 +96,11 @@ internal fun rememberWorkFilter(all: List<Artwork>): WorkFilter {
     val definitionCounts = remember(tiers) { tiers.values.groupingBy { it }.eachCount() }
     val indexed = StyleIndex.indexedCount(all)
     val empty = if (filter.needsPixels && indexed < all.size) "Aucune œuvre analysée ne correspond pour l'instant — l'analyse des couleurs continue…" else "Aucune œuvre ne correspond à ces filtres."
-    return WorkFilter(shown, empty) {
+    return WorkFilter(shown, filter.active, empty) {
         FilterBar(
-            filter, { f -> fSubject = f.subject?.name; fTechnique = f.technique?.name; fMode = f.mode?.name; fHue = f.hue?.name; fRights = f.rights?.name; fDef = f.definition?.name },
-            subjectCounts, techniqueCounts, rightsCounts, definitionCounts, shown = shown.size, total = all.size, indexed = indexed,
+            filter, { state.filter = it },
+            subjectCounts, techniqueCounts, rightsCounts, definitionCounts, shown = shown.size, total = all.size,
+            indexed = if (analyse) indexed else all.size,
         )
     }
 }

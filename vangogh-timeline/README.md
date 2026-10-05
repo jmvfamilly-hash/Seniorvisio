@@ -493,3 +493,10 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 - Les filtres (sujet, technique, licence, définition, couleur) sont remontés au-dessus des deux vues : la même barre, juste sous l'en-tête, en **frise et en carte**, et les choix sont conservés quand on bascule de l'une à l'autre (`rememberWorkFilter` dans TimelineFilters.kt).
 - La liste des sources n'est plus affichée en bas de la frise ni de la carte.
 - Visionneuse (ouverture normale, parcours, image non zoomable) : **titre · auteur · date** toujours visibles, en petit et en semi-transparence en bas à gauche ; le bouton « Détail » les reprend en grand avec le reste.
+
+## Rev61 — filtres dans la vue générale : le peintre est un paramètre parmi d'autres
+
+- La barre « Filtres » (sujet, technique, licence, définition, couleur) est dans la **vue générale** (menu des peintres), sous la recherche ; les compteurs portent sur les œuvres de tous les peintres déjà chargées.
+- Un seul jeu de filtres (`FilterState`, conservé à la rotation) pour tout l'écran : ouvrir un peintre montre sa frise / sa carte déjà filtrées ; « Voir les N œuvres — tous les peintres › » ouvre une frise de toutes les œuvres retenues (sans texte de recherche) ; une recherche d'œuvres applique aussi les filtres.
+- Les filtres restent modifiables depuis la frise et la carte (même état : le changement se retrouve au retour dans le menu).
+- L'analyse des couleurs des vignettes ne se lance dans la vue générale que si un filtre de couleur est choisi.
