@@ -467,3 +467,9 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 - **Vue détaillée** : plus de bandeau ni de curseur à l'écran ; un bouton discret en bas à droite (avec la pastille de licence) affiche la fiche en transparence, avec le curseur de niveau ; un nouveau toucher la masque.
 - **Frise, niveau 3** : chaque carte porte tout le texte du détail (date, lieu, origine, commentaire, fiche du musée), à côté de la vignette en paysage, dessous en portrait ; on parcourt la frise du doigt.
 - **Carte** : un musée consulté fait défiler ses œuvres en fondu enchaîné (4 s) ; toucher ou pincer l'image ouvre la visionneuse de détail ; « Reprendre le parcours » relance le défilement.
+
+## Rev56 — carte : frise du lieu, lecture plein écran, double toucher
+
+- Un lieu choisi affiche ses œuvres dans une frise d'un tiers de l'écran : une ligne qui défile en paysage, des lignes qui reviennent à la ligne en portrait. Toucher une œuvre l'ouvre dans la visionneuse.
+- « ▶ Lecture » lance le parcours du lieu en plein écran (fondu enchaîné, 4 s) ; « ❚❚ Pause » ou un pincement revient à la liste ; un toucher ouvre l'œuvre affichée.
+- Double toucher sur un repère : la liste de toutes les œuvres du lieu, ou de tout le regroupement de musées (un simple toucher sur un regroupement zoome toujours dessus).

@@ -187,6 +187,10 @@ fun MapScreen(
                     artwork = first.artworks.first(), count = g.count, label = label, stacked = g.count > 1,
                     modifier = Modifier.offset { IntOffset((g.x - mw / 2f).roundToInt(), (g.y - mh).roundToInt()) },
                     width = markerW, height = markerH,
+                    onDoubleTap = {
+                        val all = g.clusters.flatMap { it.artworks }.sortedBy { it.date.positionEpochDay }
+                        selected = (if (g.clusters.size == 1) "${first.place.name} · ${first.place.city}" else "${first.place.city} · ${g.clusters.size} lieux") to all
+                    },
                     onTap = {
                         if (g.clusters.size == 1) selected = "${first.place.name} · ${first.place.city}" to first.artworks
                         else scope.launch {
@@ -217,7 +221,11 @@ fun MapScreen(
                 style = TextStyle(color = Color(0xFF8B96A3), fontSize = 11.sp),
                 modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
             )
-            selected?.let { (head, list) -> PlaceSlideshow(head, list, onArtworkTap, artistNameOf, { selected = null }, Modifier.align(Alignment.BottomCenter)) }
+            selected?.let { (head, list) ->
+                var fullscreen by remember(list) { mutableStateOf(false) }
+                if (fullscreen) FullscreenSlideshow(head, list, onArtworkTap, artistNameOf, onStop = { fullscreen = false }, modifier = Modifier.fillMaxSize())
+                else PlaceStrip(head, list, landscape = w > h, onArtworkTap, artistNameOf, onPlay = { fullscreen = true }, onClose = { selected = null }, modifier = Modifier.align(Alignment.BottomCenter))
+            }
         }
     }
 }
@@ -226,12 +234,13 @@ fun MapScreen(
 private fun Marker(
     artwork: Artwork, count: Int, label: String, stacked: Boolean,
     width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp,
-    modifier: Modifier, onTap: () -> Unit,
+    modifier: Modifier, onTap: () -> Unit, onDoubleTap: () -> Unit = onTap,
 ) {
     val tap by rememberUpdatedState(onTap)
+    val doubleTap by rememberUpdatedState(onDoubleTap)
     val density = LocalDensity.current
     Column(modifier.width(width), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(width, height).pointerInput(artwork.id) { detectTapGestures(onTap = { tap() }) }) {
+        Box(Modifier.size(width, height).pointerInput(artwork.id) { detectTapGestures(onTap = { tap() }, onDoubleTap = { doubleTap() }) }) {
             // une pile : deux cartons décalés derrière la vignette quand le lieu a plusieurs œuvres
             if (stacked) {
                 Box(Modifier.offset(6.dp, (-6).dp).fillMaxSize().clip(RoundedCornerShape(6.dp)).background(Color(0xFF3A4048)))
@@ -258,73 +267,121 @@ private fun Marker(
 }
 
 /**
- * Un lieu consulté : ses œuvres DÉFILENT seules, en fondu enchaîné (une toutes les 4 s, dans l'ordre du temps). Dès que l'on touche ou que l'on
- * pince l'image, le défilement s'arrête et l'œuvre s'ouvre dans la visionneuse de détail ; au retour, « Reprendre le parcours » relance le défilement.
+ * Un lieu consulté : ses œuvres dans une frise d'un TIERS de la hauteur de l'écran, dans l'ordre du temps — une ligne qui défile en paysage, des
+ * lignes qui reviennent à la ligne en portrait. Toucher une œuvre l'ouvre dans la visionneuse ; « ▶ Lecture » lance le parcours en plein écran.
  */
 @Composable
-private fun PlaceSlideshow(
-    head: String, list: List<Artwork>, onArtworkTap: (OpenRequest) -> Unit, artistNameOf: ((Artwork) -> String?)?,
-    onClose: () -> Unit, modifier: Modifier,
+private fun PlaceStrip(
+    head: String, list: List<Artwork>, landscape: Boolean, onArtworkTap: (OpenRequest) -> Unit, artistNameOf: ((Artwork) -> String?)?,
+    onPlay: () -> Unit, onClose: () -> Unit, modifier: Modifier,
 ) {
+    val play by rememberUpdatedState(onPlay)
     val close by rememberUpdatedState(onClose)
-    val openArtwork by rememberUpdatedState(onArtworkTap)
-    var index by remember(list) { mutableStateOf(0) }
-    var playing by remember(list) { mutableStateOf(true) }
-    LaunchedEffect(playing, index, list) {
-        if (playing && list.size > 1) { kotlinx.coroutines.delay(4000); index = (index + 1) % list.size }
-    }
-    val current = list.getOrNull(index) ?: return
-    val coords = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
     val density = LocalDensity.current
-    Column(modifier.fillMaxWidth().fillMaxHeight(0.66f).background(Color(0xEB101317))) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            BasicText("$head · ${index + 1}/${list.size}", maxLines = 1, overflow = TextOverflow.Ellipsis,
+    Column(modifier.fillMaxWidth().fillMaxHeight(0.34f).background(Color(0xEB101317))) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            BasicText("$head · ${list.size} œuvres", maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = TextStyle(color = Gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold), modifier = Modifier.weight(1f))
-            if (!playing && list.size > 1) BasicText(
-                "▷ Reprendre le parcours",
+            BasicText(
+                "▶ Lecture",
                 style = TextStyle(color = Color(0xFF14171B), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.padding(end = 8.dp).background(Gold, RoundedCornerShape(12.dp))
-                    .pointerInput(Unit) { detectTapGestures(onTap = { playing = true; index = (index + 1) % list.size }) }
+                    .pointerInput(Unit) { detectTapGestures(onTap = { play() }) }
                     .padding(horizontal = 10.dp, vertical = 5.dp),
             )
             BasicText("✕", style = TextStyle(color = Color.White, fontSize = 16.sp),
                 modifier = Modifier.pointerInput(Unit) { detectTapGestures(onTap = { close() }) }.padding(horizontal = 8.dp, vertical = 2.dp))
         }
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp)) {
-            val wPx = with(density) { maxWidth.roundToPx() }
-            val hPx = with(density) { maxHeight.roundToPx() }
-            fun enterViewer() {
-                playing = false
-                val bounds = coords[0]?.takeIf { it.isAttached }?.let { c -> androidx.compose.ui.geometry.Rect(c.localToRoot(Offset.Zero), androidx.compose.ui.geometry.Size(c.size.width.toFloat(), c.size.height.toFloat())) }
-                if (bounds != null) openArtwork(OpenRequest(current, bounds, wPx, hPx))
-            }
-            Box(
-                Modifier.fillMaxSize()
-                    .onGloballyPositioned { coords[0] = it }
-                    // toucher OU pincer : on quitte le défilement pour la visionneuse de détail
-                    .pointerInput(current.id) { detectTapGestures(onTap = { enterViewer() }) }
-                    .pointerInput(current.id) {
-                        var fired = false
-                        detectTransformGestures { _, _, zoom, _ -> if (!fired && zoom != 1f) { fired = true; enterViewer() } }
-                    },
-            ) {
-                androidx.compose.animation.Crossfade(targetState = current, animationSpec = tween(900), label = "fondu") { a ->
-                    Box(Modifier.fillMaxSize().background(Color(0xFF0B0D10))) {
-                        coil.compose.AsyncImage(
-                            model = a.iiif.thumbnailUrlFor(wPx, hPx)?.let { thumbRequest(androidx.compose.ui.platform.LocalContext.current, a, it, wPx, hPx) },
-                            contentDescription = a.title,
-                            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize(),
-                        )
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            if (landscape) {
+                // paysage : une seule ligne, on la fait défiler du doigt
+                val ch = maxHeight - 12.dp
+                val cw = ch * 1.15f
+                val wPx = with(density) { cw.roundToPx() }; val hPx = with(density) { ch.roundToPx() }
+                LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(list, key = { it.id }) { a ->
+                        Box(Modifier.size(cw, ch)) { ArtworkCard(a, wPx, hPx, artistName = artistNameOf?.invoke(a), onTap = onArtworkTap) }
+                    }
+                }
+            } else {
+                // portrait : les vignettes reviennent à la ligne ; on fait défiler les lignes
+                val cw = 104.dp; val ch = 92.dp
+                val wPx = with(density) { cw.roundToPx() }; val hPx = with(density) { ch.roundToPx() }
+                androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                    columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(cw),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(list.size, key = { list[it].id }) { k ->
+                        val a = list[k]
+                        Box(Modifier.size(cw, ch)) { ArtworkCard(a, wPx, hPx, artistName = artistNameOf?.invoke(a), onTap = onArtworkTap) }
                     }
                 }
             }
         }
-        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+    }
+}
+
+/**
+ * Le parcours d'un lieu en PLEIN ÉCRAN : les œuvres défilent en fondu enchaîné (une toutes les 4 s). « ❚❚ Pause » ou un pincement (zoom)
+ * revient à la liste ; un toucher ouvre l'œuvre affichée dans la visionneuse de détail.
+ */
+@Composable
+private fun FullscreenSlideshow(
+    head: String, list: List<Artwork>, onArtworkTap: (OpenRequest) -> Unit, artistNameOf: ((Artwork) -> String?)?,
+    onStop: () -> Unit, modifier: Modifier,
+) {
+    val stop by rememberUpdatedState(onStop)
+    val openArtwork by rememberUpdatedState(onArtworkTap)
+    var index by remember(list) { mutableStateOf(0) }
+    LaunchedEffect(index, list) { if (list.size > 1) { kotlinx.coroutines.delay(4000); index = (index + 1) % list.size } }
+    val current = list.getOrNull(index) ?: return
+    val coords = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
+    val density = LocalDensity.current
+    BoxWithConstraints(modifier.background(Color(0xFF0B0D10))) {
+        val wPx = with(density) { maxWidth.roundToPx() }
+        val hPx = with(density) { maxHeight.roundToPx() }
+        Box(
+            Modifier.fillMaxSize()
+                .onGloballyPositioned { coords[0] = it }
+                .pointerInput(current.id) {
+                    detectTapGestures(onTap = {
+                        val c = coords[0]?.takeIf { it.isAttached } ?: return@detectTapGestures
+                        val bounds = androidx.compose.ui.geometry.Rect(c.localToRoot(Offset.Zero), androidx.compose.ui.geometry.Size(c.size.width.toFloat(), c.size.height.toFloat()))
+                        openArtwork(OpenRequest(current, bounds, wPx, hPx))
+                    })
+                }
+                // pincer : retour à la liste
+                .pointerInput(Unit) {
+                    var fired = false
+                    detectTransformGestures { _, _, zoom, _ -> if (!fired && zoom != 1f) { fired = true; stop() } }
+                },
+        ) {
+            androidx.compose.animation.Crossfade(targetState = current, animationSpec = tween(900), label = "fondu") { a ->
+                coil.compose.AsyncImage(
+                    model = a.iiif.thumbnailUrlFor(wPx, hPx)?.let { thumbRequest(androidx.compose.ui.platform.LocalContext.current, a, it, wPx, hPx) },
+                    contentDescription = a.title,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Color(0x99000000)).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            BasicText("$head · ${index + 1}/${list.size}", maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = TextStyle(color = Gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold), modifier = Modifier.weight(1f))
+            BasicText(
+                "❚❚ Pause",
+                style = TextStyle(color = Color(0xFF14171B), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.background(Gold, RoundedCornerShape(12.dp))
+                    .pointerInput(Unit) { detectTapGestures(onTap = { stop() }) }
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            )
+        }
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().background(Color(0x99000000)).padding(horizontal = 12.dp, vertical = 8.dp)) {
             artistNameOf?.invoke(current)?.let { BasicText(it, style = TextStyle(color = Gold, fontSize = 11.sp)) }
-            BasicText(current.title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = TextStyle(color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+            BasicText(current.title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = TextStyle(color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
             BasicText(current.date.formatFr() + (current.place?.let { " · $it" } ?: ""), style = TextStyle(color = Color(0xFFD9D3BF), fontSize = 12.sp))
-            BasicText(if (playing) "Toucher ou pincer l'image pour l'ouvrir" else "Parcours en pause", style = TextStyle(color = Color(0xFF8B96A3), fontSize = 11.sp), modifier = Modifier.padding(top = 2.dp))
+            BasicText("Toucher : ouvrir l'œuvre · pincer : revenir à la liste", style = TextStyle(color = Color(0xFF8B96A3), fontSize = 11.sp), modifier = Modifier.padding(top = 2.dp))
         }
     }
 }
