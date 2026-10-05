@@ -122,6 +122,8 @@ fun MapScreen(
     viewerOpen: Boolean = false,
     /** « ▶ Lecture » d'un lieu : le parcours de ses œuvres dans la visionneuse. */
     onPlayTour: ((List<Artwork>, Int) -> Unit)? = null,
+    /** Sous l'en-tête : les filtres, communs à la frise et à la carte ; [artworks] est déjà filtrée. */
+    filterBar: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -139,6 +141,7 @@ fun MapScreen(
             )
             headerTrailing?.invoke()
         }
+        filterBar?.invoke()
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
             val w = with(density) { maxWidth.toPx() }
             val h = with(density) { maxHeight.toPx() }

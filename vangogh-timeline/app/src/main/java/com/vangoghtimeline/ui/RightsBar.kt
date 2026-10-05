@@ -150,6 +150,14 @@ internal fun DetailOverlay(artwork: Artwork, artist: Artist?, artistName: String
     var open by remember(artwork.id) { mutableStateOf(false) }
     androidx.compose.foundation.layout.Box(modifier.fillMaxSize()) {
         if (open) RightsBar(artwork, artist, artistName, level, onLevel, Modifier.align(Alignment.BottomStart).padding(bottom = 46.dp))
+        // toujours là, discrète : titre, auteur, date (le détail déplié les reprend en grand)
+        else BasicText(
+            artwork.title + (artistName?.let { " · $it" } ?: "") + " · " + artwork.date.formatFr(),
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            style = TextStyle(color = Color(0xCCFFFFFF), fontSize = 11.sp),
+            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth(0.72f).padding(10.dp)
+                .background(Color(0x4D000000), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp),
+        )
         Row(
             Modifier.align(Alignment.BottomEnd).padding(10.dp)
                 .background(if (open) Color(0xCCF0D58A) else Color(0x66000000), RoundedCornerShape(16.dp))

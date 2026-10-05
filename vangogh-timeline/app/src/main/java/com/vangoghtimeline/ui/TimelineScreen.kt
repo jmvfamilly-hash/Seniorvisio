@@ -27,16 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.imageLoader
 import com.vangoghtimeline.model.Artwork
 import com.vangoghtimeline.model.ChronoTour
 import com.vangoghtimeline.model.formatFr
-import com.vangoghtimeline.model.ColorMode
-import com.vangoghtimeline.model.MetaTagger
-import com.vangoghtimeline.model.NamedColor
-import com.vangoghtimeline.model.Subject
-import com.vangoghtimeline.model.TagFilter
-import com.vangoghtimeline.model.Technique
 import com.vangoghtimeline.model.CardSpec
 import com.vangoghtimeline.model.FocusCandidate
 import com.vangoghtimeline.model.NextScrollOrder
@@ -78,35 +71,13 @@ fun TimelineScreen(
     viewerOpen: Boolean = false,
     /** « ▷ Lecture » : lance le parcours dans la visionneuse (œuvres dans l'ordre du temps, à partir de l'indice donné). */
     onPlayTour: ((List<Artwork>, Int) -> Unit)? = null,
+    /** Sous l'en-tête : les filtres, communs à la frise et à la carte (voir [rememberWorkFilter]) ; [artworks] est déjà filtrée. */
+    filterBar: (@Composable () -> Unit)? = null,
+    emptyText: String = "Aucune œuvre ne correspond à ces filtres.",
 ) {
     val density = LocalDensity.current
     val state = rememberTimelineScrollState()
     var daysPerPixel by rememberSaveable { mutableStateOf(initialDaysPerPixel) }
-
-    // ── filtres par sujet / technique (métadonnées) et par couleur (analyse des vignettes, voir StyleIndex) ──
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val metas = remember(artworks) { artworks.associate { it.id to MetaTagger.tag(it) } }
-    val styleVersion = StyleIndex.version
-    var fSubject by rememberSaveable { mutableStateOf<String?>(null) }
-    var fTechnique by rememberSaveable { mutableStateOf<String?>(null) }
-    var fMode by rememberSaveable { mutableStateOf<String?>(null) }
-    var fHue by rememberSaveable { mutableStateOf<String?>(null) }
-    var fRights by rememberSaveable { mutableStateOf<String?>(null) }
-    var fDef by rememberSaveable { mutableStateOf<String?>(null) }
-    val filter = TagFilter(
-        fSubject?.let { Subject.valueOf(it) }, fTechnique?.let { Technique.valueOf(it) }, fMode?.let { ColorMode.valueOf(it) }, fHue?.let { NamedColor.valueOf(it) },
-        fRights?.let { com.vangoghtimeline.model.RightsKind.valueOf(it) }, fDef?.let { com.vangoghtimeline.model.DefinitionTier.valueOf(it) },
-    )
-    val tiers = remember(artworks) { artworks.associate { it.id to com.vangoghtimeline.model.DefinitionTier.of(it) } }
-    val allArtworks = artworks
-    LaunchedEffect(allArtworks) { StyleIndex.index(context, context.imageLoader, allArtworks) }
-    val artworks = remember(allArtworks, filter, styleVersion) {
-        if (!filter.active) allArtworks else allArtworks.filter { filter.matches(metas.getValue(it.id), StyleIndex.get(it.id), it.rights?.kind, tiers[it.id]) }
-    }
-    val subjectCounts = remember(metas) { metas.values.groupingBy { it.subject }.eachCount() }
-    val techniqueCounts = remember(metas) { metas.values.groupingBy { it.technique }.eachCount() }
-    val rightsCounts = remember(allArtworks) { allArtworks.groupingBy { it.rights?.kind ?: com.vangoghtimeline.model.RightsKind.UNKNOWN }.eachCount() }
-    val definitionCounts = remember(tiers) { tiers.values.groupingBy { it }.eachCount() }
 
     // niveau 3 : la carte porte le texte du détail, à côté de la vignette en paysage, dessous en portrait
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
@@ -214,10 +185,7 @@ fun TimelineScreen(
                 headerTrailing?.invoke()
             }
         }
-        FilterBar(
-            filter, { f -> fSubject = f.subject?.name; fTechnique = f.technique?.name; fMode = f.mode?.name; fHue = f.hue?.name; fRights = f.rights?.name; fDef = f.definition?.name },
-            subjectCounts, techniqueCounts, rightsCounts, definitionCounts, shown = artworks.size, total = allArtworks.size, indexed = StyleIndex.indexedCount(allArtworks),
-        )
+        filterBar?.invoke()
         TimeAxis(plan, state, roller = roller)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             TimelineLayout(
@@ -246,7 +214,7 @@ fun TimelineScreen(
                 )
             }
             if (artworks.isEmpty()) BasicText(
-                if (filter.needsPixels && StyleIndex.indexedCount(allArtworks) < allArtworks.size) "Aucune œuvre analysée ne correspond pour l'instant — l'analyse des couleurs continue…" else "Aucune œuvre ne correspond à ces filtres.",
+                emptyText,
                 style = TextStyle(color = Color(0xFFC9D0D8), fontSize = 14.sp), modifier = Modifier.align(Alignment.Center).padding(24.dp),
             )
             // niveau 1 : le zoom actuel

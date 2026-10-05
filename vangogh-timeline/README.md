@@ -487,3 +487,9 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 
 - Une œuvre sans image IIIF zoomable n'est plus refusée (« Pas d'image IIIF ») : elle s'ouvre en plein écran avec sa meilleure image disponible, un badge « Image non zoomable », ✕ / retour pour fermer et le bouton « Détail ». Les gestes de zoom n'ont aucun effet.
 - Le parcours (frise et carte) inclut désormais ces œuvres : affichage fixe avec le même badge, l'enchaînement continue ; aucune tuile n'est préchauffée pour elles.
+
+## Rev60 — filtres communs, sans liste des sources, légende dans la visionneuse
+
+- Les filtres (sujet, technique, licence, définition, couleur) sont remontés au-dessus des deux vues : la même barre, juste sous l'en-tête, en **frise et en carte**, et les choix sont conservés quand on bascule de l'une à l'autre (`rememberWorkFilter` dans TimelineFilters.kt).
+- La liste des sources n'est plus affichée en bas de la frise ni de la carte.
+- Visionneuse (ouverture normale, parcours, image non zoomable) : **titre · auteur · date** toujours visibles, en petit et en semi-transparence en bas à gauche ; le bouton « Détail » les reprend en grand avec le reste.

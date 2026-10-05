@@ -18,6 +18,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import coil.imageLoader
+import com.vangoghtimeline.model.Artwork
+import com.vangoghtimeline.model.MetaTagger
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
@@ -38,6 +44,47 @@ import com.vangoghtimeline.model.NamedColor
 import com.vangoghtimeline.model.Subject
 import com.vangoghtimeline.model.TagFilter
 import com.vangoghtimeline.model.Technique
+
+/** Les œuvres retenues par les filtres, la barre qui les règle et le message quand rien ne correspond. */
+internal class WorkFilter(val artworks: List<Artwork>, val emptyText: String, val bar: @Composable () -> Unit)
+
+/**
+ * Filtres partagés par la frise et la carte : l'état vit au-dessus des deux vues (TimelineHost), on garde ses choix en basculant de l'une à l'autre.
+ * Sujet / technique (métadonnées), licence, définition, et couleur (analyse des vignettes, voir [StyleIndex]).
+ */
+@Composable
+internal fun rememberWorkFilter(all: List<Artwork>): WorkFilter {
+    val context = LocalContext.current
+    val metas = remember(all) { all.associate { it.id to MetaTagger.tag(it) } }
+    val tiers = remember(all) { all.associate { it.id to DefinitionTier.of(it) } }
+    val styleVersion = StyleIndex.version
+    var fSubject by rememberSaveable { mutableStateOf<String?>(null) }
+    var fTechnique by rememberSaveable { mutableStateOf<String?>(null) }
+    var fMode by rememberSaveable { mutableStateOf<String?>(null) }
+    var fHue by rememberSaveable { mutableStateOf<String?>(null) }
+    var fRights by rememberSaveable { mutableStateOf<String?>(null) }
+    var fDef by rememberSaveable { mutableStateOf<String?>(null) }
+    val filter = TagFilter(
+        fSubject?.let { Subject.valueOf(it) }, fTechnique?.let { Technique.valueOf(it) }, fMode?.let { ColorMode.valueOf(it) }, fHue?.let { NamedColor.valueOf(it) },
+        fRights?.let { RightsKind.valueOf(it) }, fDef?.let { DefinitionTier.valueOf(it) },
+    )
+    LaunchedEffect(all) { StyleIndex.index(context, context.imageLoader, all) }
+    val shown = remember(all, filter, styleVersion) {
+        if (!filter.active) all else all.filter { filter.matches(metas.getValue(it.id), StyleIndex.get(it.id), it.rights?.kind, tiers[it.id]) }
+    }
+    val subjectCounts = remember(metas) { metas.values.groupingBy { it.subject }.eachCount() }
+    val techniqueCounts = remember(metas) { metas.values.groupingBy { it.technique }.eachCount() }
+    val rightsCounts = remember(all) { all.groupingBy { it.rights?.kind ?: RightsKind.UNKNOWN }.eachCount() }
+    val definitionCounts = remember(tiers) { tiers.values.groupingBy { it }.eachCount() }
+    val indexed = StyleIndex.indexedCount(all)
+    val empty = if (filter.needsPixels && indexed < all.size) "Aucune œuvre analysée ne correspond pour l'instant — l'analyse des couleurs continue…" else "Aucune œuvre ne correspond à ces filtres."
+    return WorkFilter(shown, empty) {
+        FilterBar(
+            filter, { f -> fSubject = f.subject?.name; fTechnique = f.technique?.name; fMode = f.mode?.name; fHue = f.hue?.name; fRights = f.rights?.name; fDef = f.definition?.name },
+            subjectCounts, techniqueCounts, rightsCounts, definitionCounts, shown = shown.size, total = all.size, indexed = indexed,
+        )
+    }
+}
 
 private val Gold = Color(0xFFF0D58A)
 private val Line = Color(0x40FFFFFF)

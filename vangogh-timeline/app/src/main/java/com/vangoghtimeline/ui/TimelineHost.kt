@@ -191,16 +191,11 @@ fun TimelineHost(
         var mapMode by rememberSaveable { mutableStateOf(false) }
         val header = title ?: artistName?.let { n -> artistLife?.let { "$n · $it" } ?: n }
         val nameOf = artistFor?.let { f -> { a: Artwork -> f(a)?.name } }
-        if (mapMode) MapScreen(artworks, onArtworkTap = ::open, title = header, artistNameOf = nameOf, viewerOpen = request != null, onPlayTour = playTour, headerTrailing = { ViewModeToggle(true) { mapMode = it } })
-        else TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, viewerOpen = request != null, onPlayTour = playTour, backdropArtistId = artist?.id, level = level, onLevel = onLevel, artistNameOf = nameOf, title = header, headerTrailing = { ViewModeToggle(false) { mapMode = it } })
+        // filtres au-dessus des deux vues : les mêmes œuvres filtrées sur la frise et sur la carte
+        val works = rememberWorkFilter(artworks)
+        if (mapMode) MapScreen(works.artworks, onArtworkTap = ::open, title = header, artistNameOf = nameOf, viewerOpen = request != null, onPlayTour = playTour, filterBar = works.bar, headerTrailing = { ViewModeToggle(true) { mapMode = it } })
+        else TimelineScreen(works.artworks, onArtworkTap = ::open, prefetcher = prefetcher, viewerOpen = request != null, onPlayTour = playTour, backdropArtistId = artist?.id, level = level, onLevel = onLevel, artistNameOf = nameOf, title = header, filterBar = works.bar, emptyText = works.emptyText, headerTrailing = { ViewModeToggle(false) { mapMode = it } })
 
-        credit?.let {
-            BasicText(
-                it,
-                Modifier.align(Alignment.BottomEnd).fillMaxWidth(0.58f).padding(10.dp),
-                style = TextStyle(color = Color(0xFF8B96A3), fontSize = 11.sp, textAlign = TextAlign.End),
-            )
-        }
         hint?.let {
             BasicText(
                 it,
@@ -434,7 +429,7 @@ internal fun TourViewer(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BasicText(
-                listOfNotNull(artistOf(current)?.name, current.title).joinToString(" — ") + " · ${index + 1}/${tour.size}",
+                "Parcours · ${index + 1}/${tour.size}",
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = TextStyle(color = Color(0xFFF0D58A), fontSize = 14.sp), modifier = Modifier.weight(1f),
             )
@@ -471,11 +466,10 @@ private fun StillImageView(artwork: Artwork, artist: Artist?, level: Int, onLeve
     Box(modifier.background(Color.Black).pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
         ArtworkImage(artwork, 1600, 1600)
         Row(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Color(0x99000000)).padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BasicText(listOfNotNull(artist?.name, artwork.title).joinToString(" — "), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = TextStyle(color = Color(0xFFF0D58A), fontSize = 14.sp), modifier = Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
             BasicText("✕", style = TextStyle(color = Color.White, fontSize = 16.sp),
                 modifier = Modifier.pointerInput(Unit) { detectTapGestures(onTap = { close() }) }.padding(horizontal = 8.dp, vertical = 2.dp))
         }
