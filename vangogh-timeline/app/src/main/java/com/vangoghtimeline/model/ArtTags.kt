@@ -119,19 +119,48 @@ object PixelTagger {
     private val neutrals = setOf(NamedColor.BLACK, NamedColor.WHITE, NamedColor.GRAY)
 }
 
+/**
+ * Ce que l'image permet au zoom, d'après sa taille réelle (ou la résolution maximale servie, ex. images restreintes du NGA) :
+ * zoom profond possible (≥ 6000 px de côté), zoom simple (≥ 1600 px, ou image IIIF de taille inconnue), pas de zoom utile (petite image, ou aucune).
+ */
+enum class DefinitionTier(val label: String) {
+    WOW("Zoom profond"), SIMPLE("Zoom simple"), NONE("Pas de zoom utile");
+
+    companion object {
+        private val LIMIT = Regex("""limitée à (\d+) px""")
+
+        fun of(a: Artwork): DefinitionTier {
+            val iiif = a.iiif
+            if (!iiif.canOpenViewer) return NONE
+            val size = if (iiif.canvasWidth != null && iiif.canvasHeight != null) maxOf(iiif.canvasWidth, iiif.canvasHeight) else null
+            val limit = a.rights?.label?.let { LIMIT.find(it)?.groupValues?.get(1)?.toIntOrNull() }
+            val side = listOfNotNull(size, limit).minOrNull() ?: return SIMPLE
+            return when {
+                side >= 6000 -> WOW
+                side >= 1600 -> SIMPLE
+                else -> NONE
+            }
+        }
+    }
+}
+
 /** La sélection de filtres de la frise : chaque critère vide = pas de filtre ; les critères choisis se cumulent (ET). */
 data class TagFilter(
     val subject: Subject? = null,
     val technique: Technique? = null,
     val mode: ColorMode? = null,
     val hue: NamedColor? = null,
+    val rights: RightsKind? = null,
+    val definition: DefinitionTier? = null,
 ) {
-    val active: Boolean get() = subject != null || technique != null || mode != null || hue != null
+    val active: Boolean get() = subject != null || technique != null || mode != null || hue != null || rights != null || definition != null
     val needsPixels: Boolean get() = mode != null || hue != null
 
     /** [pixel] `null` = vignette pas encore analysée : l'œuvre ne répond alors à aucun filtre de couleur. */
-    fun matches(meta: MetaTags, pixel: PixelTags?): Boolean =
-        (subject == null || meta.subject == subject) &&
+    fun matches(meta: MetaTags, pixel: PixelTags?, rightsKind: RightsKind? = null, tier: DefinitionTier? = null): Boolean =
+        (rights == null || (rightsKind ?: RightsKind.UNKNOWN) == rights) &&
+            (definition == null || tier == definition) &&
+            (subject == null || meta.subject == subject) &&
             (technique == null || meta.technique == technique) &&
             (mode == null || pixel?.mode == mode) &&
             (hue == null || (pixel != null && hue in pixel.dominant))

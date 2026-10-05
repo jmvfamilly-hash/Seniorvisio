@@ -1,6 +1,8 @@
 package com.vangoghtimeline.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -178,12 +180,20 @@ fun TimelineHost(
     BackHandler(enabled = request != null && !closing) { close() }
 
     Box(modifier.fillMaxSize().onSizeChanged { rootSize = it }) {
+        // parcours dans la visionneuse : (œuvres, indice de départ) ; null = pas de parcours
+        var tour by remember { mutableStateOf<Pair<List<Artwork>, Int>?>(null) }
+        val playTour: (List<Artwork>, Int) -> Unit = { list, start ->
+            val start0 = list.getOrNull(start)
+            val openable = list.filter { it.iiif.canOpenViewer }
+            if (openable.isNotEmpty()) tour = openable to (start0?.let { s0 -> openable.indexOfFirst { it.id == s0.id } }?.takeIf { it >= 0 } ?: 0)
+            else hint = "Pas d'image IIIF à parcourir"
+        }
         // deux vues des mêmes œuvres : la frise (le temps) ou la carte (le lieu de conservation) ; on bascule par l'en-tête
         var mapMode by rememberSaveable { mutableStateOf(false) }
         val header = title ?: artistName?.let { n -> artistLife?.let { "$n · $it" } ?: n }
         val nameOf = artistFor?.let { f -> { a: Artwork -> f(a)?.name } }
-        if (mapMode) MapScreen(artworks, onArtworkTap = ::open, title = header, artistNameOf = nameOf, viewerOpen = request != null, headerTrailing = { ViewModeToggle(true) { mapMode = it } })
-        else TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, viewerOpen = request != null, backdropArtistId = artist?.id, level = level, onLevel = onLevel, artistNameOf = nameOf, title = header, headerTrailing = { ViewModeToggle(false) { mapMode = it } })
+        if (mapMode) MapScreen(artworks, onArtworkTap = ::open, title = header, artistNameOf = nameOf, viewerOpen = request != null, onPlayTour = playTour, headerTrailing = { ViewModeToggle(true) { mapMode = it } })
+        else TimelineScreen(artworks, onArtworkTap = ::open, prefetcher = prefetcher, viewerOpen = request != null, onPlayTour = playTour, backdropArtistId = artist?.id, level = level, onLevel = onLevel, artistNameOf = nameOf, title = header, headerTrailing = { ViewModeToggle(false) { mapMode = it } })
 
         credit?.let {
             BasicText(
@@ -198,6 +208,15 @@ fun TimelineHost(
                 Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp)
                     .background(Color(0xCC1E2228), RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 8.dp),
                 style = TextStyle(color = Color.White, fontSize = 13.sp),
+            )
+        }
+
+        tour?.let { (list, start) ->
+            TourViewer(
+                list, start, sources, prefetcher,
+                artistOf = { a -> artistFor?.invoke(a) ?: artist }, level = level, onLevel = onLevel,
+                onExit = { tour = null },
+                modifier = Modifier.fillMaxSize().zIndex(4f),
             )
         }
 
@@ -322,5 +341,103 @@ private fun ExpandingCard(
                 placeholderKey = thumbKey(request.artwork, request.cardWidthPx, request.cardHeightPx),
             )
         }
+    }
+}
+
+
+/**
+ * Le PARCOURS dans la visionneuse : chaque œuvre s'ouvre en plein écran dans la visionneuse IIIF, on peut zoomer et naviguer directement
+ * dessus. Lecture automatique (une œuvre toutes les ~8 s une fois l'image chargée, fondu enchaîné) ; dès qu'on touche l'image, la lecture se met
+ * en pause et on explore librement ; « ▷ Reprendre » relance. Les tuiles de l'œuvre SUIVANTE sont chargées d'avance (préchauffage) pendant
+ * qu'on regarde la courante. Sortie : ✕, geste retour, ou dézoom au-delà de l'image entière.
+ */
+@Composable
+internal fun TourViewer(
+    tour: List<Artwork>, startIndex: Int, sources: com.iiifviewer.IiifSources, prefetcher: TimelinePrefetcher,
+    artistOf: (Artwork) -> Artist?, level: Int, onLevel: (Int) -> Unit, onExit: () -> Unit, modifier: Modifier = Modifier,
+) {
+    val exit by rememberUpdatedState(onExit)
+    var index by remember(tour) { mutableStateOf(startIndex.coerceIn(0, (tour.size - 1).coerceAtLeast(0))) }
+    var playing by remember(tour) { mutableStateOf(true) }
+    var ready by remember { mutableStateOf(false) }
+    val current = tour.getOrNull(index) ?: return
+    val next = tour.getOrNull(index + 1)
+    BackHandler { exit() }
+
+    // tuiles : l'œuvre courante (déjà chaude si elle était la suivante) et, d'avance, la suivante
+    val currentId by rememberUpdatedState(current.id)
+    DisposableEffect(current.id) { onDispose { prefetcher.viewerClosed(current) } }
+    DisposableEffect(next?.id) {
+        val n = next
+        if (n != null) prefetcher.acquire(n)
+        onDispose { if (n != null && n.id != currentId) prefetcher.viewerClosed(n) }
+    }
+    LaunchedEffect(index) { ready = false }
+    LaunchedEffect(index, playing, ready) {
+        if (!playing || !ready) return@LaunchedEffect
+        delay(8000)
+        if (index < tour.size - 1) index++ else playing = false
+    }
+
+    Box(modifier.background(Color.Black)) {
+        // toute interaction avec l'IMAGE met la lecture en pause (on observe sans consommer : la visionneuse reçoit les gestes) ;
+        // les boutons du haut et du détail sont en dehors de cette zone
+        Box(Modifier.fillMaxSize().pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    if (e.changes.any { it.pressed }) playing = false
+                }
+            }
+        }) {
+        androidx.compose.animation.Crossfade(targetState = current, animationSpec = tween(700), label = "parcours") { a ->
+            val prewarm = remember(a.id) { prefetcher.acquire(a) }
+            val controller = rememberIiifZoomController()
+            Box(Modifier.fillMaxSize()) {
+                // la vignette reste dessous tant que les tuiles n'ont pas pris sa place
+                ArtworkImage(a, 1080, 1080)
+                IiifZoomViewer(
+                    manifestUrl = a.iiif.viewerUrl.orEmpty(),
+                    sources = sources,
+                    prewarm = prewarm,
+                    transparentUntilReady = true,
+                    initialFocus = Offset.Unspecified,
+                    initialZoom = 1f,
+                    controller = controller,
+                    onReady = { if (a.id == currentId) ready = true },
+                    onUnzoomPastFit = { exit() },
+                    onError = {
+                        if (a.id == currentId) ready = true            // une œuvre qui ne s'ouvre pas ne bloque pas le parcours
+                        Diag.error("parcours", "ouverture impossible de « ${a.title} » : ${it.message ?: it.javaClass.simpleName}", a.iiif.viewerUrl)
+                    },
+                    onLoadError = LoadErrorListener { url, attempt, error, last ->
+                        val msg = error.message ?: error.javaClass.simpleName
+                        Diag.warn("tuile", "essai $attempt${if (last) " (abandon)" else ""} : $msg", url, key = "tuile|${Diag.hostOf(url)}|${msg.take(60)}")
+                    },
+                )
+            }
+        }
+        }
+        Row(
+            Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Color(0x99000000)).padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BasicText(
+                listOfNotNull(artistOf(current)?.name, current.title).joinToString(" — ") + " · ${index + 1}/${tour.size}",
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = TextStyle(color = Color(0xFFF0D58A), fontSize = 14.sp), modifier = Modifier.weight(1f),
+            )
+            BasicText(
+                if (playing) "❚❚" else "▷ Reprendre",
+                style = TextStyle(color = Color(0xFF14171B), fontSize = 13.sp),
+                modifier = Modifier.padding(horizontal = 6.dp).background(Color(0xFFF0D58A), RoundedCornerShape(12.dp))
+                    .pointerInput(Unit) { detectTapGestures(onTap = { playing = !playing; if (playing && index >= tour.size - 1) index = 0 }) }
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            )
+            BasicText("✕", style = TextStyle(color = Color.White, fontSize = 16.sp),
+                modifier = Modifier.pointerInput(Unit) { detectTapGestures(onTap = { exit() }) }.padding(horizontal = 8.dp, vertical = 2.dp))
+        }
+        if (!ready) WaitIndicator(Modifier.align(Alignment.Center))
+        DetailOverlay(current, artistOf(current), artistOf(current)?.name, level, onLevel)
     }
 }

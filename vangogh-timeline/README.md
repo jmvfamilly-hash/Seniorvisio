@@ -477,3 +477,8 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 ## Rev57 — le parcours reprend à la sortie de la visionneuse
 
 - Si un parcours était en lecture (« ▷ Lecture » de la frise, ou lecture plein écran d'un lieu sur la carte) quand une œuvre a été ouverte, il se met en attente pendant la visionneuse et reprend tout seul à sa fermeture, qu'on sorte par le geste système ou en dézoomant au-delà de l'image entière.
+
+## Rev58 — filtres licence et définition, parcours dans la visionneuse
+
+- Filtres de la frise : **Licence** (domaine public, licence ouverte, consultation privée, non précisé) et **Définition** (`DefinitionTier` : zoom profond ≥ 6000 px de côté, zoom simple ≥ 1600 px ou IIIF de taille inconnue, pas de zoom utile ; la résolution maximale servie des images restreintes du NGA l'emporte sur la taille de l'original).
+- « ▷ Lecture » (frise) et « ▶ Lecture » (lieu sur la carte) lancent le parcours **dans la visionneuse** : chaque œuvre en plein écran, zoom et navigation directs, fondu enchaîné, une œuvre toutes les ~8 s après chargement ; toucher l'image met en pause, « ▷ Reprendre » relance ; ✕, retour ou dézoom profond pour sortir. Les tuiles de l'œuvre suivante sont préchauffées pendant qu'on regarde la courante.

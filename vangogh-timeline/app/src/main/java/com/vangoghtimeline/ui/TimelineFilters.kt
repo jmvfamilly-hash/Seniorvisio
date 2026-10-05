@@ -32,6 +32,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vangoghtimeline.model.ColorMode
+import com.vangoghtimeline.model.DefinitionTier
+import com.vangoghtimeline.model.RightsKind
 import com.vangoghtimeline.model.NamedColor
 import com.vangoghtimeline.model.Subject
 import com.vangoghtimeline.model.TagFilter
@@ -49,12 +51,13 @@ private val Line = Color(0x40FFFFFF)
 internal fun FilterBar(
     filter: TagFilter, onFilter: (TagFilter) -> Unit,
     subjectCounts: Map<Subject, Int>, techniqueCounts: Map<Technique, Int>,
+    rightsCounts: Map<RightsKind, Int>, definitionCounts: Map<DefinitionTier, Int>,
     shown: Int, total: Int, indexed: Int,
     modifier: Modifier = Modifier,
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
     val currentFilter by rememberUpdatedState(onFilter)
-    val activeCount = listOf(filter.subject, filter.technique, filter.mode, filter.hue).count { it != null }
+    val activeCount = listOf(filter.subject, filter.technique, filter.mode, filter.hue, filter.rights, filter.definition).count { it != null }
     Column(modifier.fillMaxWidth().background(Color(0xB314171B)).padding(horizontal = 12.dp, vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             BasicText(
@@ -75,6 +78,12 @@ internal fun FilterBar(
             }
             Group("Technique") {
                 for (t in Technique.values()) Chip(t.label, techniqueCounts[t], filter.technique == t) { currentFilter(filter.copy(technique = if (filter.technique == t) null else t)) }
+            }
+            Group("Licence") {
+                for (r in RightsKind.values()) Chip(r.labelFr.replaceFirstChar { it.uppercase() }, rightsCounts[r] ?: 0, filter.rights == r) { currentFilter(filter.copy(rights = if (filter.rights == r) null else r)) }
+            }
+            Group("Définition") {
+                for (d in DefinitionTier.values()) Chip(d.label, definitionCounts[d] ?: 0, filter.definition == d) { currentFilter(filter.copy(definition = if (filter.definition == d) null else d)) }
             }
             Group("Couleur") {
                 for (m in ColorMode.values()) Chip(m.label, null, filter.mode == m) { currentFilter(filter.copy(mode = if (filter.mode == m) null else m)) }

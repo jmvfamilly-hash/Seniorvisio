@@ -76,6 +76,8 @@ fun TimelineScreen(
     headerTrailing: (@Composable () -> Unit)? = null,
     /** Une œuvre est ouverte dans la visionneuse : le parcours en lecture se met en attente, et reprend tout seul à sa fermeture. */
     viewerOpen: Boolean = false,
+    /** « ▷ Lecture » : lance le parcours dans la visionneuse (œuvres dans l'ordre du temps, à partir de l'indice donné). */
+    onPlayTour: ((List<Artwork>, Int) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val state = rememberTimelineScrollState()
@@ -89,14 +91,22 @@ fun TimelineScreen(
     var fTechnique by rememberSaveable { mutableStateOf<String?>(null) }
     var fMode by rememberSaveable { mutableStateOf<String?>(null) }
     var fHue by rememberSaveable { mutableStateOf<String?>(null) }
-    val filter = TagFilter(fSubject?.let { Subject.valueOf(it) }, fTechnique?.let { Technique.valueOf(it) }, fMode?.let { ColorMode.valueOf(it) }, fHue?.let { NamedColor.valueOf(it) })
+    var fRights by rememberSaveable { mutableStateOf<String?>(null) }
+    var fDef by rememberSaveable { mutableStateOf<String?>(null) }
+    val filter = TagFilter(
+        fSubject?.let { Subject.valueOf(it) }, fTechnique?.let { Technique.valueOf(it) }, fMode?.let { ColorMode.valueOf(it) }, fHue?.let { NamedColor.valueOf(it) },
+        fRights?.let { com.vangoghtimeline.model.RightsKind.valueOf(it) }, fDef?.let { com.vangoghtimeline.model.DefinitionTier.valueOf(it) },
+    )
+    val tiers = remember(artworks) { artworks.associate { it.id to com.vangoghtimeline.model.DefinitionTier.of(it) } }
     val allArtworks = artworks
     LaunchedEffect(allArtworks) { StyleIndex.index(context, context.imageLoader, allArtworks) }
     val artworks = remember(allArtworks, filter, styleVersion) {
-        if (!filter.active) allArtworks else allArtworks.filter { filter.matches(metas.getValue(it.id), StyleIndex.get(it.id)) }
+        if (!filter.active) allArtworks else allArtworks.filter { filter.matches(metas.getValue(it.id), StyleIndex.get(it.id), it.rights?.kind, tiers[it.id]) }
     }
     val subjectCounts = remember(metas) { metas.values.groupingBy { it.subject }.eachCount() }
     val techniqueCounts = remember(metas) { metas.values.groupingBy { it.technique }.eachCount() }
+    val rightsCounts = remember(allArtworks) { allArtworks.groupingBy { it.rights?.kind ?: com.vangoghtimeline.model.RightsKind.UNKNOWN }.eachCount() }
+    val definitionCounts = remember(tiers) { tiers.values.groupingBy { it }.eachCount() }
 
     // niveau 3 : la carte porte le texte du détail, à côté de la vignette en paysage, dessous en portrait
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
@@ -205,8 +215,8 @@ fun TimelineScreen(
             }
         }
         FilterBar(
-            filter, { f -> fSubject = f.subject?.name; fTechnique = f.technique?.name; fMode = f.mode?.name; fHue = f.hue?.name },
-            subjectCounts, techniqueCounts, shown = artworks.size, total = allArtworks.size, indexed = StyleIndex.indexedCount(allArtworks),
+            filter, { f -> fSubject = f.subject?.name; fTechnique = f.technique?.name; fMode = f.mode?.name; fHue = f.hue?.name; fRights = f.rights?.name; fDef = f.definition?.name },
+            subjectCounts, techniqueCounts, rightsCounts, definitionCounts, shown = artworks.size, total = allArtworks.size, indexed = StyleIndex.indexedCount(allArtworks),
         )
         TimeAxis(plan, state, roller = roller)
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -250,7 +260,7 @@ fun TimelineScreen(
                 position = tourIdx, total = tourOrder.size, label = tourOrder.getOrNull(tourIdx)?.date?.formatFr(), playing = playing,
                 onPrevious = { tour = ChronoTour.previous(tourIdx, tourOrder.size, startIndex()) },
                 onNext = { tour = ChronoTour.next(tourIdx, tourOrder.size, startIndex()) },
-                onPlay = { playing = !playing; if (playing && tourIdx < 0) tour = startIndex() },
+                onPlay = { if (onPlayTour != null) onPlayTour(tourOrder, if (tourIdx >= 0) tourIdx else startIndex()) else { playing = !playing; if (playing && tourIdx < 0) tour = startIndex() } },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp),
             )
         }

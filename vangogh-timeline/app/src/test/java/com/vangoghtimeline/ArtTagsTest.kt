@@ -82,4 +82,28 @@ class ArtTagsTest {
         val plan = TimelineEngine.layout(emptyList(), 1.6f, CardSpec(100f, 80f, 5f, 5f), 40f)
         assertTrue(plan.items.isEmpty())
     }
+
+    private fun art(service: String?, w: Int?, h: Int?, rights: RightsInfo? = null, manifest: String = "") =
+        Artwork("a", "t", ArtworkDate.year(1888), iiif = IiifRef(manifest, imageServiceId = service, canvasWidth = w, canvasHeight = h), rights = rights)
+
+    @Test fun definitionTierFromImageSize() {
+        assertEquals(DefinitionTier.WOW, DefinitionTier.of(art("https://x/iiif/1", 21000, 28000)))
+        assertEquals(DefinitionTier.SIMPLE, DefinitionTier.of(art("https://x/iiif/1", 2400, 3000)))
+        assertEquals(DefinitionTier.NONE, DefinitionTier.of(art("https://x/iiif/1", 800, 600)))
+        assertEquals(DefinitionTier.SIMPLE, DefinitionTier.of(art("https://x/iiif/1", null, null)))     // taille inconnue
+        assertEquals(DefinitionTier.NONE, DefinitionTier.of(art(null, null, null)))                    // rien à ouvrir
+        // image restreinte : la résolution servie l'emporte sur la taille de l'original
+        val restricted = RightsCatalog.viewOnly("Image à accès restreint (usage loyal) — résolution limitée à 640 px — National Gallery of Art", "https://www.nga.gov/legal.html")
+        assertEquals(DefinitionTier.NONE, DefinitionTier.of(art("https://x/iiif/1", 21000, 28000, restricted)))
+    }
+
+    @Test fun filterByRightsAndDefinition() {
+        val meta = MetaTags(Subject.PORTRAIT, Technique.OIL)
+        assertTrue(TagFilter(rights = RightsKind.PUBLIC_DOMAIN).matches(meta, null, RightsKind.PUBLIC_DOMAIN, DefinitionTier.WOW))
+        assertTrue(!TagFilter(rights = RightsKind.PUBLIC_DOMAIN).matches(meta, null, RightsKind.VIEW_ONLY, DefinitionTier.WOW))
+        assertTrue(TagFilter(rights = RightsKind.UNKNOWN).matches(meta, null, null, DefinitionTier.WOW))       // droits absents = non précisés
+        assertTrue(TagFilter(definition = DefinitionTier.WOW).matches(meta, null, null, DefinitionTier.WOW))
+        assertTrue(!TagFilter(definition = DefinitionTier.WOW).matches(meta, null, null, DefinitionTier.SIMPLE))
+        assertTrue(TagFilter(definition = DefinitionTier.NONE).active)
+    }
 }

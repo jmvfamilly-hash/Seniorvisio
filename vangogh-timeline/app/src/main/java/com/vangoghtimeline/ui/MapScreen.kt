@@ -120,6 +120,8 @@ fun MapScreen(
     artistNameOf: ((Artwork) -> String?)? = null,
     /** Une œuvre est ouverte dans la visionneuse : le parcours plein écran se met en attente et reprend à sa fermeture. */
     viewerOpen: Boolean = false,
+    /** « ▶ Lecture » d'un lieu : le parcours de ses œuvres dans la visionneuse. */
+    onPlayTour: ((List<Artwork>, Int) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -226,7 +228,7 @@ fun MapScreen(
             selected?.let { (head, list) ->
                 var fullscreen by remember(list) { mutableStateOf(false) }
                 if (fullscreen) FullscreenSlideshow(head, list, onArtworkTap, artistNameOf, paused = viewerOpen, onStop = { fullscreen = false }, modifier = Modifier.fillMaxSize())
-                else PlaceStrip(head, list, landscape = w > h, onArtworkTap, artistNameOf, onPlay = { fullscreen = true }, onClose = { selected = null }, modifier = Modifier.align(Alignment.BottomCenter))
+                else PlaceStrip(head, list, landscape = w > h, onArtworkTap, artistNameOf, onPlay = { if (onPlayTour != null) onPlayTour(list, 0) else fullscreen = true }, onClose = { selected = null }, modifier = Modifier.align(Alignment.BottomCenter))
             }
         }
     }
