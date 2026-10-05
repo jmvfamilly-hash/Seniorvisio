@@ -123,6 +123,7 @@ fun TimelineHost(
     var running by remember { mutableStateOf<Job?>(null) }
     var closing by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf<String?>(null) }
+    var still by remember { mutableStateOf<Artwork?>(null) }      // œuvre affichée sans visionneuse (image non zoomable)
     val zoomController = rememberIiifZoomController()
 
     val context = LocalContext.current
@@ -137,7 +138,7 @@ fun TimelineHost(
     fun open(req: OpenRequest) {
         if (request != null) return
         if (!req.artwork.iiif.canOpenViewer) {
-            hint = "Pas d'image IIIF pour cette œuvre"
+            still = req.artwork          // pas d'image zoomable : on l'affiche quand même, sans zoom
             return
         }
         request = req
@@ -183,10 +184,8 @@ fun TimelineHost(
         // parcours dans la visionneuse : (œuvres, indice de départ) ; null = pas de parcours
         var tour by remember { mutableStateOf<Pair<List<Artwork>, Int>?>(null) }
         val playTour: (List<Artwork>, Int) -> Unit = { list, start ->
-            val start0 = list.getOrNull(start)
-            val openable = list.filter { it.iiif.canOpenViewer }
-            if (openable.isNotEmpty()) tour = openable to (start0?.let { s0 -> openable.indexOfFirst { it.id == s0.id } }?.takeIf { it >= 0 } ?: 0)
-            else hint = "Pas d'image IIIF à parcourir"
+            // toutes les œuvres, zoomables ou non : une image non zoomable est montrée telle quelle
+            if (list.isNotEmpty()) tour = list to start.coerceIn(0, list.size - 1) else hint = "Aucune œuvre à parcourir"
         }
         // deux vues des mêmes œuvres : la frise (le temps) ou la carte (le lieu de conservation) ; on bascule par l'en-tête
         var mapMode by rememberSaveable { mutableStateOf(false) }
@@ -211,6 +210,9 @@ fun TimelineHost(
             )
         }
 
+        still?.let { a ->
+            StillImageView(a, artistFor?.invoke(a) ?: artist, level, onLevel, onClose = { still = null }, modifier = Modifier.fillMaxSize().zIndex(5f))
+        }
         tour?.let { (list, start) ->
             TourViewer(
                 list, start, sources, prefetcher,
@@ -366,9 +368,9 @@ internal fun TourViewer(
 
     // tuiles : l'œuvre courante (déjà chaude si elle était la suivante) et, d'avance, la suivante
     val currentId by rememberUpdatedState(current.id)
-    DisposableEffect(current.id) { onDispose { prefetcher.viewerClosed(current) } }
+    DisposableEffect(current.id) { onDispose { if (current.iiif.canOpenViewer) prefetcher.viewerClosed(current) } }
     DisposableEffect(next?.id) {
-        val n = next
+        val n = next?.takeIf { it.iiif.canOpenViewer }
         if (n != null) prefetcher.acquire(n)
         onDispose { if (n != null && n.id != currentId) prefetcher.viewerClosed(n) }
     }
@@ -391,6 +393,15 @@ internal fun TourViewer(
             }
         }) {
         androidx.compose.animation.Crossfade(targetState = current, animationSpec = tween(700), label = "parcours") { a ->
+            if (!a.iiif.canOpenViewer) {
+                // pas d'image zoomable : affichée telle quelle, le zoom est sans effet ; le parcours continue normalement
+                LaunchedEffect(a.id) { if (a.id == currentId) ready = true }
+                Box(Modifier.fillMaxSize()) {
+                    ArtworkImage(a, 1600, 1600)
+                    NotZoomableBadge(Modifier.align(Alignment.BottomCenter).padding(bottom = 56.dp))
+                }
+                return@Crossfade
+            }
             val prewarm = remember(a.id) { prefetcher.acquire(a) }
             val controller = rememberIiifZoomController()
             Box(Modifier.fillMaxSize()) {
@@ -439,5 +450,36 @@ internal fun TourViewer(
         }
         if (!ready) WaitIndicator(Modifier.align(Alignment.Center))
         DetailOverlay(current, artistOf(current), artistOf(current)?.name, level, onLevel)
+    }
+}
+
+
+@Composable
+private fun NotZoomableBadge(modifier: Modifier = Modifier) {
+    BasicText(
+        "Image non zoomable",
+        style = TextStyle(color = Color(0xE6FFFFFF), fontSize = 12.sp),
+        modifier = modifier.background(Color(0x99000000), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 5.dp),
+    )
+}
+
+/** Une œuvre sans image zoomable (pas de service IIIF) : l'image disponible, en plein écran, sans zoom ; le détail reste accessible. */
+@Composable
+private fun StillImageView(artwork: Artwork, artist: Artist?, level: Int, onLevel: (Int) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    val close by rememberUpdatedState(onClose)
+    BackHandler { close() }
+    Box(modifier.background(Color.Black).pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
+        ArtworkImage(artwork, 1600, 1600)
+        Row(
+            Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Color(0x99000000)).padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BasicText(listOfNotNull(artist?.name, artwork.title).joinToString(" — "), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = TextStyle(color = Color(0xFFF0D58A), fontSize = 14.sp), modifier = Modifier.weight(1f))
+            BasicText("✕", style = TextStyle(color = Color.White, fontSize = 16.sp),
+                modifier = Modifier.pointerInput(Unit) { detectTapGestures(onTap = { close() }) }.padding(horizontal = 8.dp, vertical = 2.dp))
+        }
+        NotZoomableBadge(Modifier.align(Alignment.BottomCenter).padding(bottom = 56.dp))
+        DetailOverlay(artwork, artist, artist?.name, level, onLevel)
     }
 }

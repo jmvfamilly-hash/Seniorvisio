@@ -482,3 +482,8 @@ Le menu des artistes (`ui/ArtistMenu.kt`) est remplacé selon la maquette :
 
 - Filtres de la frise : **Licence** (domaine public, licence ouverte, consultation privée, non précisé) et **Définition** (`DefinitionTier` : zoom profond ≥ 6000 px de côté, zoom simple ≥ 1600 px ou IIIF de taille inconnue, pas de zoom utile ; la résolution maximale servie des images restreintes du NGA l'emporte sur la taille de l'original).
 - « ▷ Lecture » (frise) et « ▶ Lecture » (lieu sur la carte) lancent le parcours **dans la visionneuse** : chaque œuvre en plein écran, zoom et navigation directs, fondu enchaîné, une œuvre toutes les ~8 s après chargement ; toucher l'image met en pause, « ▷ Reprendre » relance ; ✕, retour ou dézoom profond pour sortir. Les tuiles de l'œuvre suivante sont préchauffées pendant qu'on regarde la courante.
+
+## Rev59 — images non zoomables affichées
+
+- Une œuvre sans image IIIF zoomable n'est plus refusée (« Pas d'image IIIF ») : elle s'ouvre en plein écran avec sa meilleure image disponible, un badge « Image non zoomable », ✕ / retour pour fermer et le bouton « Détail ». Les gestes de zoom n'ont aucun effet.
+- Le parcours (frise et carte) inclut désormais ces œuvres : affichage fixe avec le même badge, l'enchaînement continue ; aucune tuile n'est préchauffée pour elles.
