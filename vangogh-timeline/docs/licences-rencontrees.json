@@ -1,0 +1,678 @@
+{
+ "schema": {
+  "description": "Inventaire des licences et statuts de droits rencontrés dans le projet « frise Van Gogh » (appli Android) et ses maquettes. Une entrée = une licence ou un statut, tel que rencontré dans une source.",
+  "generated": "2026-10-05",
+  "fields": {
+   "id": "identifiant stable de l'entrée",
+   "category": "artwork_image | metadata | map_data | ml_model | software | text_content",
+   "license": "nom normalisé (SPDX quand il existe)",
+   "license_url": "adresse de référence de la licence ou de la politique",
+   "app_class": "classement appliqué par l'appli : PD (domaine public), CC (licence ouverte), © (consultation privée), ? (non précisé), n/a",
+   "sources": "fournisseurs chez qui ce statut apparaît",
+   "detection": "comment l'appli le reconnaît (champ lu, valeur)",
+   "obligations": "ce que la licence impose en cas de réutilisation",
+   "app_usage": "ce que l'appli en fait",
+   "evidence": "observed_runtime (vu dans une capture ou un journal) | handled_in_code (prévu par le code, non vu à l'exécution) | from_knowledge (connaissance générale, à vérifier)",
+   "confidence": "high | medium | low",
+   "notes": "remarques"
+  }
+ },
+ "entries": [
+  {
+   "id": "cc0-aic",
+   "category": "artwork_image",
+   "license": "CC0-1.0",
+   "license_url": "https://www.artic.edu/open-access/open-access-images",
+   "app_class": "PD",
+   "sources": [
+    "Art Institute of Chicago"
+   ],
+   "detection": "API AIC : is_public_domain = true",
+   "obligations": "aucune ; citation recommandée",
+   "app_usage": "affichage IIIF, vignettes",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": "si is_public_domain = false : classé © avec le texte copyright_notice"
+  },
+  {
+   "id": "aic-reserved",
+   "category": "artwork_image",
+   "license": "LicenseRef-AIC-terms (droits réservés)",
+   "license_url": "https://www.artic.edu/terms",
+   "app_class": "©",
+   "sources": [
+    "Art Institute of Chicago"
+   ],
+   "detection": "is_public_domain = false",
+   "obligations": "pas de redistribution ; consultation",
+   "app_usage": "consultation privée dans l'appli",
+   "evidence": "handled_in_code",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "cc0-rijks",
+   "category": "artwork_image",
+   "license": "CC0-1.0",
+   "license_url": "https://www.rijksmuseum.nl/en/research/conduct-research/data/policy",
+   "app_class": "PD",
+   "sources": [
+    "Rijksmuseum"
+   ],
+   "detection": "toutes les œuvres de la source sont classées domaine public",
+   "obligations": "aucune",
+   "app_usage": "affichage",
+   "evidence": "handled_in_code",
+   "confidence": "medium",
+   "notes": "le code ne lit pas de champ de droits par œuvre : à vérifier pour d'éventuelles œuvres protégées"
+  },
+  {
+   "id": "cc0-met",
+   "category": "artwork_image",
+   "license": "CC0-1.0",
+   "license_url": "https://www.metmuseum.org/about-the-met/policies-and-documents/open-access",
+   "app_class": "PD",
+   "sources": [
+    "The Metropolitan Museum of Art"
+   ],
+   "detection": "API Met : isPublicDomain = true",
+   "obligations": "aucune",
+   "app_usage": "affichage",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": "sinon © avec le champ rightsAndReproduction"
+  },
+  {
+   "id": "met-reserved",
+   "category": "artwork_image",
+   "license": "LicenseRef-Met-image-resources",
+   "license_url": "https://www.metmuseum.org/policies/image-resources",
+   "app_class": "©",
+   "sources": [
+    "The Metropolitan Museum of Art"
+   ],
+   "detection": "isPublicDomain = false",
+   "obligations": "usage privé",
+   "app_usage": "consultation privée",
+   "evidence": "handled_in_code",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "cc0-cleveland",
+   "category": "artwork_image",
+   "license": "CC0-1.0",
+   "license_url": "https://www.clevelandart.org/open-access",
+   "app_class": "PD",
+   "sources": [
+    "Cleveland Museum of Art"
+   ],
+   "detection": "share_license_status = CC0",
+   "obligations": "aucune",
+   "app_usage": "affichage",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": "sinon © avec le champ copyright"
+  },
+  {
+   "id": "cc0-smk",
+   "category": "artwork_image",
+   "license": "CC0-1.0",
+   "license_url": "https://open.smk.dk/en/about",
+   "app_class": "PD",
+   "sources": [
+    "Statens Museum for Kunst (SMK)"
+   ],
+   "detection": "public_domain = true",
+   "obligations": "aucune",
+   "app_usage": "affichage",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": "sinon © avec le champ rights"
+  },
+  {
+   "id": "cc0-nga",
+   "category": "artwork_image",
+   "license": "CC0-1.0",
+   "license_url": "https://www.nga.gov/open-access-images.html",
+   "app_class": "PD",
+   "sources": [
+    "National Gallery of Art (Washington)"
+   ],
+   "detection": "open data NGA : published_images.openaccess = 1",
+   "obligations": "aucune",
+   "app_usage": "affichage, fonds du menu (14 tableaux), maquettes de parcours (images embarquées)",
+   "evidence": "observed_runtime",
+   "confidence": "high",
+   "notes": "vu à l'écran : « Open access (CC0) — National Gallery of Art »"
+  },
+  {
+   "id": "nga-restricted",
+   "category": "artwork_image",
+   "license": "LicenseRef-NGA-restricted (usage loyal, résolution limitée)",
+   "license_url": "https://www.nga.gov/legal.html",
+   "app_class": "©",
+   "sources": [
+    "National Gallery of Art (Washington)"
+   ],
+   "detection": "openaccess = 0 (champ maxpixels = résolution maximale servie)",
+   "obligations": "pas de redistribution",
+   "app_usage": "consultation privée à résolution limitée",
+   "evidence": "handled_in_code",
+   "confidence": "medium",
+   "notes": "concerne ici Bonnard (0/320 libres), Matisse (0/111), une partie de Signac, Munch (2/296 libres), Degas (9 œuvres)"
+  },
+  {
+   "id": "pdm-europeana",
+   "category": "artwork_image",
+   "license": "PDM-1.0 (Public Domain Mark)",
+   "license_url": "https://creativecommons.org/publicdomain/mark/1.0/",
+   "app_class": "PD",
+   "sources": [
+    "Europeana (fournisseurs multiples)"
+   ],
+   "detection": "champ rights = creativecommons.org/publicdomain/mark/…",
+   "obligations": "aucune",
+   "app_usage": "affichage",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "cc0-europeana",
+   "category": "artwork_image",
+   "license": "CC0-1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "app_class": "PD",
+   "sources": [
+    "Europeana",
+    "Wikimedia Commons"
+   ],
+   "detection": "rights = creativecommons.org/publicdomain/zero/… ; Commons LicenseShortName = CC0",
+   "obligations": "aucune",
+   "app_usage": "affichage",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "cc-by",
+   "category": "artwork_image",
+   "license": "CC-BY-* (toutes versions)",
+   "license_url": "https://creativecommons.org/licenses/by/4.0/",
+   "app_class": "CC",
+   "sources": [
+    "Europeana",
+    "Wikimedia Commons"
+   ],
+   "detection": "rights = creativecommons.org/licenses/by/… ; Commons LicenseShortName commençant par « CC »",
+   "obligations": "citer l'auteur",
+   "app_usage": "affichage avec attribution dans la fiche",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": "le code décompose les termes by / sa / nc / nd et la version"
+  },
+  {
+   "id": "cc-by-sa-4",
+   "category": "artwork_image",
+   "license": "CC-BY-SA-4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+   "app_class": "CC",
+   "sources": [
+    "Wikimedia Commons"
+   ],
+   "detection": "Commons extmetadata LicenseShortName = « CC BY-SA 4.0 »",
+   "obligations": "citer l'auteur ; partager dans les mêmes conditions",
+   "app_usage": "affichage avec attribution",
+   "evidence": "observed_runtime",
+   "confidence": "high",
+   "notes": "vu à l'écran : « CC BY-SA 4.0 (Wikimedia Commons) » (Sorolla, « Sewing the sail »). Concerne souvent la photographie d'une œuvre en 2D, alors que l'œuvre elle-même est dans le domaine public"
+  },
+  {
+   "id": "cc-by-sa-3",
+   "category": "artwork_image",
+   "license": "CC-BY-SA-3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+   "app_class": "CC",
+   "sources": [
+    "Wikimedia Commons"
+   ],
+   "detection": "LicenseShortName = « CC BY-SA 3.0 »",
+   "obligations": "citer l'auteur ; partager dans les mêmes conditions",
+   "app_usage": "affichage avec attribution",
+   "evidence": "handled_in_code",
+   "confidence": "medium",
+   "notes": "courant sur Commons, non relevé explicitement"
+  },
+  {
+   "id": "cc-nc-nd",
+   "category": "artwork_image",
+   "license": "CC-BY-NC-* / CC-BY-ND-* / CC-BY-NC-ND-*",
+   "license_url": "https://creativecommons.org/licenses/",
+   "app_class": "CC",
+   "sources": [
+    "Europeana"
+   ],
+   "detection": "rights = creativecommons.org/licenses/by-nc…, by-nd…",
+   "obligations": "pas d'usage commercial et/ou pas de modification",
+   "app_usage": "affichage",
+   "evidence": "handled_in_code",
+   "confidence": "medium",
+   "notes": "classé « licence ouverte » ; une analyse plus stricte pourrait les traiter à part"
+  },
+  {
+   "id": "commons-pd",
+   "category": "artwork_image",
+   "license": "Public domain (PD-old, PD-Art, PD-US…)",
+   "license_url": "https://commons.wikimedia.org/wiki/Commons:Licensing",
+   "app_class": "PD",
+   "sources": [
+    "Wikimedia Commons"
+   ],
+   "detection": "LicenseShortName commençant par « PD » ou contenant « public domain »",
+   "obligations": "aucune (selon le pays)",
+   "app_usage": "affichage ; fonds du menu (Cézanne, Munch, Boch, Fattori, Gonzalès, Breslau, Gauguin, Sorolla, Matisse, Signac, Bonnard)",
+   "evidence": "observed_runtime",
+   "confidence": "high",
+   "notes": "vu à l'écran : « Public domain (Wikimedia Commons) » (Gauguin, Vairumati). La licence lue est inscrite dans le crédit du fond de menu au build"
+  },
+  {
+   "id": "commons-other",
+   "category": "artwork_image",
+   "license": "LicenseRef-Commons-other",
+   "license_url": "",
+   "app_class": "©",
+   "sources": [
+    "Wikimedia Commons"
+   ],
+   "detection": "LicenseShortName présent mais ni PD ni CC (ex. GFDL, Attribution, Copyrighted free use)",
+   "obligations": "selon la licence",
+   "app_usage": "consultation privée par prudence",
+   "evidence": "handled_in_code",
+   "confidence": "medium",
+   "notes": "la GFDL est donc classée © ; à revoir"
+  },
+  {
+   "id": "commons-unread",
+   "category": "artwork_image",
+   "license": "NOASSERTION",
+   "license_url": "",
+   "app_class": "?",
+   "sources": [
+    "Wikimedia Commons"
+   ],
+   "detection": "LicenseShortName absent",
+   "obligations": "inconnues",
+   "app_usage": "consultation privée",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rs-noc",
+   "category": "artwork_image",
+   "license": "RightsStatements NoC-* (NoC-US, NoC-CR, NoC-NC, NoC-OKLR, NoC-CONTRACTUAL)",
+   "license_url": "https://rightsstatements.org/vocab/",
+   "app_class": "PD",
+   "sources": [
+    "Europeana"
+   ],
+   "detection": "rights = rightsstatements.org/vocab/NoC-…",
+   "obligations": "pas de droit d'auteur connu, mais restrictions possibles (contractuelles, non commerciales, légales)",
+   "app_usage": "affichage",
+   "evidence": "handled_in_code",
+   "confidence": "medium",
+   "notes": "NoC-NC et NoC-CONTRACTUAL sont classés PD, ce qui est discutable"
+  },
+  {
+   "id": "rs-inc",
+   "category": "artwork_image",
+   "license": "RightsStatements InC",
+   "license_url": "https://rightsstatements.org/vocab/InC/1.0/",
+   "app_class": "©",
+   "sources": [
+    "Europeana"
+   ],
+   "detection": "rights = rightsstatements.org/vocab/InC",
+   "obligations": "autorisation du détenteur requise",
+   "app_usage": "consultation privée",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rs-inc-edu",
+   "category": "artwork_image",
+   "license": "RightsStatements InC-EDU",
+   "license_url": "https://rightsstatements.org/vocab/InC-EDU/1.0/",
+   "app_class": "©",
+   "sources": [
+    "Europeana"
+   ],
+   "detection": "rights = …/InC-EDU",
+   "obligations": "usage éducatif seulement",
+   "app_usage": "consultation privée",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rs-inc-nc",
+   "category": "artwork_image",
+   "license": "RightsStatements InC-NC",
+   "license_url": "https://rightsstatements.org/vocab/InC-NC/1.0/",
+   "app_class": "©",
+   "sources": [
+    "Europeana"
+   ],
+   "detection": "rights = …/InC-NC",
+   "obligations": "pas d'usage commercial",
+   "app_usage": "consultation privée",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rs-inc-ow-eu",
+   "category": "artwork_image",
+   "license": "RightsStatements InC-OW-EU (œuvre orpheline)",
+   "license_url": "https://rightsstatements.org/vocab/InC-OW-EU/1.0/",
+   "app_class": "©",
+   "sources": [
+    "Europeana"
+   ],
+   "detection": "rights = …/InC-OW-EU",
+   "obligations": "cadre de la directive européenne sur les œuvres orphelines",
+   "app_usage": "consultation privée",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rs-inc-ruu",
+   "category": "artwork_image",
+   "license": "RightsStatements InC-RUU",
+   "license_url": "https://rightsstatements.org/vocab/InC-RUU/1.0/",
+   "app_class": "©",
+   "sources": [
+    "Europeana"
+   ],
+   "detection": "rights = …/InC-RUU",
+   "obligations": "détenteur introuvable ; prudence",
+   "app_usage": "consultation privée",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rs-cne",
+   "category": "artwork_image",
+   "license": "RightsStatements CNE",
+   "license_url": "https://rightsstatements.org/vocab/CNE/1.0/",
+   "app_class": "?",
+   "sources": [
+    "Europeana"
+   ],
+   "detection": "rights = …/CNE",
+   "obligations": "inconnues",
+   "app_usage": "consultation privée",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rs-und",
+   "category": "artwork_image",
+   "license": "RightsStatements UND",
+   "license_url": "https://rightsstatements.org/vocab/UND/1.0/",
+   "app_class": "?",
+   "sources": [
+    "Europeana"
+   ],
+   "detection": "rights = …/UND",
+   "obligations": "inconnues",
+   "app_usage": "consultation privée",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rs-nkc",
+   "category": "artwork_image",
+   "license": "RightsStatements NKC",
+   "license_url": "https://rightsstatements.org/vocab/NKC/1.0/",
+   "app_class": "?",
+   "sources": [
+    "Europeana"
+   ],
+   "detection": "rights = …/NKC",
+   "obligations": "inconnues",
+   "app_usage": "consultation privée",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "unknown-rights",
+   "category": "artwork_image",
+   "license": "NOASSERTION",
+   "license_url": "",
+   "app_class": "?",
+   "sources": [
+    "toute source sans champ de droits lisible"
+   ],
+   "detection": "URL de droits vide ou non reconnue",
+   "obligations": "inconnues",
+   "app_usage": "consultation privée",
+   "evidence": "handled_in_code",
+   "confidence": "high",
+   "notes": "une URL non reconnue est affichée telle quelle (« Droits : <url> »)"
+  },
+  {
+   "id": "copyright-term-artists",
+   "category": "artwork_image",
+   "license": "Droit d'auteur de l'artiste (durée : vie + 70 ans en UE)",
+   "license_url": "",
+   "app_class": "n/a",
+   "sources": [
+    "Matisse (†1954)",
+    "Bonnard (†1947)",
+    "Signac (†1935)",
+    "Munch (†1944)"
+   ],
+   "detection": "non détecté automatiquement : dépend de la notice de chaque source",
+   "obligations": "dans le domaine public en UE depuis 1er janvier de l'année décès + 71 ; aux États-Unis, dépend de la date de publication (avant 1930 : domaine public)",
+   "app_usage": "explique les œuvres © dans les sources américaines",
+   "evidence": "from_knowledge",
+   "confidence": "medium",
+   "notes": "Matisse dans le domaine public en France depuis le 1er janvier 2025"
+  },
+  {
+   "id": "cc0-metadata",
+   "category": "metadata",
+   "license": "CC0-1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "app_class": "n/a",
+   "sources": [
+    "Wikidata",
+    "Europeana (métadonnées)",
+    "NGA open data (CSV)",
+    "AIC API",
+    "Met API",
+    "Cleveland API",
+    "SMK API",
+    "Rijksmuseum API"
+   ],
+   "detection": "politique publiée par chaque fournisseur",
+   "obligations": "aucune",
+   "app_usage": "titres, dates, dimensions, techniques, crédits",
+   "evidence": "from_knowledge",
+   "confidence": "medium",
+   "notes": "NGA open data : CC0 confirmé par le dépôt GitHub NationalGalleryOfArt/opendata"
+  },
+  {
+   "id": "wikipedia-text",
+   "category": "text_content",
+   "license": "CC-BY-SA-4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+   "app_class": "n/a",
+   "sources": [
+    "Wikipédia (API summary)"
+   ],
+   "detection": "—",
+   "obligations": "citer ; partager dans les mêmes conditions",
+   "app_usage": "seule la vignette de portrait de l'article est utilisée (image sous sa propre licence Commons) ; le texte n'est pas affiché",
+   "evidence": "from_knowledge",
+   "confidence": "medium",
+   "notes": "la licence de chaque portrait n'est pas lue par l'appli : point à corriger si les portraits sont redistribués"
+  },
+  {
+   "id": "natural-earth",
+   "category": "map_data",
+   "license": "Public domain (Natural Earth)",
+   "license_url": "https://www.naturalearthdata.com/about/terms-of-use/",
+   "app_class": "n/a",
+   "sources": [
+    "Natural Earth 1:50m land"
+   ],
+   "detection": "—",
+   "obligations": "aucune",
+   "app_usage": "fond de la vue Carte, embarqué dans l'APK",
+   "evidence": "from_knowledge",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "museum-gazetteer",
+   "category": "map_data",
+   "license": "Œuvre originale du projet (coordonnées de faits publics)",
+   "license_url": "",
+   "app_class": "n/a",
+   "sources": [
+    "annuaire MuseumMap (~120 musées)"
+   ],
+   "detection": "—",
+   "obligations": "—",
+   "app_usage": "placement des œuvres sur la carte",
+   "evidence": "from_knowledge",
+   "confidence": "medium",
+   "notes": "coordonnées approximatives saisies à la main"
+  },
+  {
+   "id": "model-siglip",
+   "category": "ml_model",
+   "license": "Apache-2.0",
+   "license_url": "https://huggingface.co/google/siglip-base-patch16-224",
+   "app_class": "n/a",
+   "sources": [
+    "google/siglip-base-patch16-224"
+   ],
+   "detection": "—",
+   "obligations": "conserver l'avis de licence",
+   "app_usage": "démo d'indexation (CI), non embarqué",
+   "evidence": "from_knowledge",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "model-openclip",
+   "category": "ml_model",
+   "license": "MIT (code open_clip et poids ViT-B-32 laion2b_s34b_b79k)",
+   "license_url": "https://github.com/mlfoundations/open_clip",
+   "app_class": "n/a",
+   "sources": [
+    "OpenCLIP ViT-B-32 / LAION-2B"
+   ],
+   "detection": "—",
+   "obligations": "conserver l'avis de licence",
+   "app_usage": "démo d'indexation (CI), non embarqué",
+   "evidence": "from_knowledge",
+   "confidence": "medium",
+   "notes": "le jeu d'entraînement LAION-2B pose des questions de provenance indépendantes de la licence du modèle"
+  },
+  {
+   "id": "model-qwen25vl-3b",
+   "category": "ml_model",
+   "license": "LicenseRef-Qwen-Research",
+   "license_url": "https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct",
+   "app_class": "n/a",
+   "sources": [
+    "Qwen/Qwen2.5-VL-3B-Instruct"
+   ],
+   "detection": "—",
+   "obligations": "usage de recherche / non commercial (à vérifier sur la fiche du modèle)",
+   "app_usage": "démo d'annotations (CI), non embarqué",
+   "evidence": "from_knowledge",
+   "confidence": "low",
+   "notes": "les autres tailles de Qwen2.5-VL sont sous Apache-2.0 : vérifier la licence exacte du 3B avant tout usage commercial"
+  },
+  {
+   "id": "model-moondream2",
+   "category": "ml_model",
+   "license": "Apache-2.0",
+   "license_url": "https://huggingface.co/vikhyatk/moondream2",
+   "app_class": "n/a",
+   "sources": [
+    "vikhyatk/moondream2 (révision 2025-06-21)"
+   ],
+   "detection": "—",
+   "obligations": "conserver l'avis de licence",
+   "app_usage": "démo d'annotations (CI), non embarqué",
+   "evidence": "from_knowledge",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "opencv-haar",
+   "category": "software",
+   "license": "Apache-2.0",
+   "license_url": "https://github.com/opencv/opencv/blob/master/LICENSE",
+   "app_class": "n/a",
+   "sources": [
+    "opencv-python-headless (détection de visages au build)"
+   ],
+   "detection": "—",
+   "obligations": "conserver l'avis de licence",
+   "app_usage": "outil de build, non embarqué",
+   "evidence": "from_knowledge",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "google-fonts",
+   "category": "software",
+   "license": "OFL-1.1",
+   "license_url": "https://openfontlicense.org",
+   "app_class": "n/a",
+   "sources": [
+    "Bodoni Moda, Source Sans 3, IBM Plex Mono (maquette de parcours)"
+   ],
+   "detection": "—",
+   "obligations": "conserver la licence si les polices sont redistribuées",
+   "app_usage": "chargées depuis Google Fonts par la maquette web, non embarquées",
+   "evidence": "from_knowledge",
+   "confidence": "high",
+   "notes": ""
+  }
+ ],
+ "usage_policies": [
+  {
+   "provider": "Wikimedia (Commons, Wikidata, API)",
+   "policy": "identification obligatoire par User-Agent, largeurs de vignettes standard, cadence limitée",
+   "url": "https://meta.wikimedia.org/wiki/User-Agent_policy",
+   "app_compliance": "User-Agent identifiant sans adresse personnelle, largeurs standard, file d'attente et nouvelles tentatives sur 429/503"
+  },
+  {
+   "provider": "The Metropolitan Museum of Art (API)",
+   "policy": "limite de débit (environ 80 requêtes/s annoncées) et pare-feu anti-robots",
+   "url": "https://metmuseum.github.io/",
+   "app_compliance": "une requête à la fois, écart adaptatif, disjoncteur, reprise différée"
+  },
+  {
+   "provider": "National Gallery of Art (IIIF)",
+   "policy": "open access CC0 ; images restreintes servies à résolution limitée",
+   "url": "https://www.nga.gov/open-access-images.html",
+   "app_compliance": "respect de maxpixels pour les images restreintes"
+  }
+ ]
+}
