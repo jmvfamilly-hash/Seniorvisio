@@ -262,12 +262,7 @@ class DeviceStatusReporter(private val context: Context) {
                 append(" — pic ").append(format1(androidPeak))
                 append(" dB / seuil ").append(format1(androidThreshold)).append(" dB")
             }
-            // Le portier de voix, quand il tourne. Sans ce chiffre, un
-            // portier trop sévère ferait passer la transcription pour cassée
-            // sans que rien ne le désigne — et on chercherait la panne du
-            // mauvais côté.
             append(" — bascule : ").append(service.describeHandoff())
-            status.voiceSharePercent?.let { append(" — voix ").append(it).append("%") }
             // La bascule vers Transcription instantanée : ce qu'elle fait, ou
             // ce qui l'en empêche. Les causes de refus — application absente,
             // fenêtre de nuit, pause après un retour — se ressemblent toutes

@@ -4,8 +4,10 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -17,17 +19,12 @@ import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.AndroidSpeechSession
 import com.seniorvisio.core.RoomHandoffController
-import com.seniorvisio.core.RoomVoiceGate
-import com.seniorvisio.core.TranscriptionEngine
-import com.seniorvisio.core.TranscriptionEngineChoice
-import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.ui.MainActivity
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.time.LocalDateTime
 import kotlin.math.sqrt
 
@@ -54,13 +51,13 @@ import kotlin.math.sqrt
  * si le réveil est trop capricieux (déclenche pour rien) ou trop mou (ne
  * déclenche pas assez).
  *
- * Sert aussi de source unique du micro pour la transcription de la pièce
- * (voir MainActivity, zone 2 de l'écran, et startRoomTranscription) : la même
- * capture déjà en cours pour le réveil au son est réutilisée, jamais une
+ * Sert aussi de source unique du micro pour les sous-titres de la pièce (voir
+ * MainActivity, zone 2 de l'écran, et setRoomCaptionListener) : jamais une
  * deuxième capture concurrente — exactement le problème qui rendait les
- * sous-titres d'appel peu fiables (deux consommateurs du même micro),
- * résolu ici par construction plutôt qu'en espérant que le système tolère
- * les deux captures à la fois.
+ * sous-titres d'appel peu fiables (deux consommateurs du même micro), résolu
+ * ici par construction. Le moteur d'Android qui les produit ne tourne que
+ * pendant que l'écran est allumé (voir applyListeningMode) ; écran éteint,
+ * seul le réveil au son reste actif.
  */
 class RoomPresenceService : Service() {
 
@@ -104,9 +101,8 @@ class RoomPresenceService : Service() {
      */
     @Volatile private var micYieldedToCompanion = false
 
-    private var transcription: TranscriptionEngine? = null
-    private var voiceGate: RoomVoiceGate? = null
-    private var lastRoomSoundAtMs = 0L
+    /** Vrai le temps d'un vrai appel : aucun des deux mécanismes d'écoute ne doit redémarrer tout seul. */
+    @Volatile private var pausedForCall = false
 
     @Volatile private var lastRms = 0
     @Volatile private var peakRmsSinceReport = 0
@@ -186,13 +182,6 @@ class RoomPresenceService : Service() {
          */
         val androidLevelDb: Float? = null,
         val androidThresholdDb: Float? = null,
-
-        /**
-         * Part du temps jugée vocale par le portier depuis la dernière
-         * lecture, en pourcentage. Nulle quand le portier ne tourne pas — ce
-         * qui est le cas dès que la pièce est sur un moteur gratuit.
-         */
-        val voiceSharePercent: Int? = null,
     )
 
     /**
@@ -217,14 +206,13 @@ class RoomPresenceService : Service() {
         wakeLockHeld = wakeLock?.isHeld == true,
         screenOn = (getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive == true,
         wakeRequests = wakeRequests,
-        transcribing = transcription?.activeSource() != null,
+        transcribing = androidSpeech?.isRunning() == true,
         captureError = lastCaptureError,
         listeningMode = if (androidSpeech?.isRunning() == true) "reconnaissance Android"
         else if (isCapturing) "capture interne"
         else "aucune écoute",
         androidLevelDb = androidSpeech?.takeIf { it.isRunning() }?.lastLevelDb(),
         androidThresholdDb = androidSpeech?.takeIf { it.isRunning() }?.wakeThresholdDb(),
-        voiceSharePercent = voiceGate?.consumeVoiceShare(),
     )
 
     /**
@@ -245,15 +233,41 @@ class RoomPresenceService : Service() {
     }
     private val binder = LocalBinder()
 
+    /**
+     * Bascule le mécanisme d'écoute dès que l'écran s'allume ou s'éteint (voir
+     * applyListeningMode) — en dehors d'un appel, qu'un drapeau dédié exclut
+     * explicitement (voir pausedForCall) : un écran qui scintille pendant une
+     * conversation ne doit surtout pas relancer un mécanisme qui disputerait
+     * le micro à WebRTC.
+     */
+    private val screenStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (pausedForCall) return
+            applyListeningMode()
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         running = this
         adminConfig = AdminConfig(this)
         startForeground(FOREGROUND_ID, buildForegroundNotification())
+        // Diffusion système protégée (aucune autre application ne peut
+        // l'émettre) : NOT_EXPORTED est donc à la fois le flag exigé à partir
+        // de l'API 34 et le plus restrictif des deux possibles.
+        ContextCompat.registerReceiver(
+            this,
+            screenStateReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     /**
-     * Lié par l'écran d'accueil (voir MainActivity, startRoomTranscription) —
+     * Lié par l'écran d'accueil (voir MainActivity, setRoomCaptionListener) —
      * reste par ailleurs un service démarré classique (startForegroundService)
      * pour le réveil au son, les deux modes de communication Android
      * coexistant sans conflit sur un même service.
@@ -263,10 +277,14 @@ class RoomPresenceService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_PAUSE -> {
+                pausedForCall = true
                 endHandoffForCall()
                 stopListening()
             }
-            ACTION_RESUME -> startListening()
+            ACTION_RESUME -> {
+                pausedForCall = false
+                startListening()
+            }
             else -> startListening()
         }
         return START_STICKY
@@ -274,8 +292,7 @@ class RoomPresenceService : Service() {
 
     override fun onDestroy() {
         stopListening()
-        voiceGate?.close()
-        voiceGate = null
+        unregisterReceiver(screenStateReceiver)
         // Le bandeau de retour est une fenêtre système : la laisser derrière
         // soi la ferait flotter sur la tablette sans plus personne pour la
         // retirer.
@@ -287,104 +304,65 @@ class RoomPresenceService : Service() {
 
     /**
      * Volontairement pas de garde-fou sur roomWakeEnabled ici : la capture
-     * sert aussi à la transcription de la pièce (voir startRoomTranscription),
-     * qui doit rester disponible même quand le réveil au son est désactivé.
-     * Ce réglage ne fait que dispenser ensureAwake() d'agir, plus bas.
+     * sert aussi aux sous-titres de la pièce (voir setRoomCaptionListener),
+     * qui doivent rester disponibles même quand le réveil au son est
+     * désactivé. Ce réglage ne fait que dispenser ensureAwake() d'agir, plus
+     * bas.
      */
-    /**
-     * Démarre l'écoute de la pièce par le mécanisme choisi par
-     * l'administrateur — et c'est le seul endroit qui décide lequel.
-     *
-     * Deux mécanismes exclusifs, parce qu'un seul composant à la fois peut
-     * tenir le micro. Le nôtre (AudioRecord) mesure le niveau sonore et
-     * alimente un moteur qu'on nourrit ; celui d'Android écoute le micro
-     * lui-même et ne nous laisse rien à mesurer — c'est donc lui qui signale
-     * la parole pour le réveil (voir AndroidSpeechSession). Les lancer tous
-     * les deux ferait échouer l'un des deux, au hasard.
-     *
-     * ═══ LE MOTEUR D'ANDROID EST REVENU, ET AVEC LUI SES SONS ═══
-     *
-     * Il a été retiré d'ici une journée, parce qu'il fait du bruit : son
-     * interface est MODALE — un énoncé, une clôture, une relance — et le
-     * service de Google joue ses deux sons d'interaction à chaque reprise.
-     * Il est remis à la demande de l'administrateur, qui le veut pour ce
-     * qu'il transcrit.
-     *
-     * CES SONS NE SE DÉSACTIVENT PAS, et ce n'est pas faute d'avoir cherché :
-     * le banc d'essai Papyrus, construit pour observer ce moteur seul, le
-     * conclut en toutes lettres — « les bips appartiennent au moteur, ils
-     * reviennent à chaque relance, c'est un fait à constater, pas un réglage
-     * à trouver ». La logique de session ici est la dernière mesurée, et elle
-     * réduit le TEMPS MORT entre deux sessions, pas le nombre de sessions.
-     *
-     * Dans une pièce silencieuse, le moteur rend ERROR_SPEECH_TIMEOUT au bout
-     * de quelques secondes et la session repart : c'est de là que vient un
-     * son qui revient régulièrement sans que personne n'ait parlé.
-     *
-     * Le seul palliatif en place est le volume (voir AlertVolume), qui
-     * descend les notifications à leur plus bas cran audible — jamais zéro,
-     * qu'Android refuse sans une autorisation qu'un propriétaire d'appareil
-     * ne peut pas s'accorder.
-     */
+    /** Démarre l'écoute de la pièce par le mécanisme qui convient à l'état de l'écran (voir applyListeningMode). */
     private fun startListening() {
-        // ═══ PLUS D'ÉCOUTE DE LA VOIX, SEULEMENT DU NIVEAU SONORE ═══
-        //
-        // La transcription de la pièce, les commandes vocales et la bascule
-        // automatique sur la voix sont retirées (voir MainActivity) : trop de
-        // pannes, dont un processus tué pendant la capture. Le moteur
-        // d'Android n'est donc plus jamais lancé ici, quel que soit le réglage
-        // de moteur : la capture interne ne sert plus qu'au réveil au son,
-        // seul chemin de retour après « Sommeil ».
-        stopAndroidSpeech()
-        startCapture()
+        applyListeningMode()
     }
 
     /**
      * Qui tient le micro : le moteur d'Android, ou notre propre capture ?
      *
-     * ═══ LA BASCULE PASSE DEVANT LE CHOIX DE MOTEUR ═══
+     * ═══ DEUX MÉCANISMES EXCLUSIFS, JAMAIS LES DEUX À LA FOIS ═══
      *
-     * Et ce n'est pas une préférence : c'est une nécessité matérielle. La
-     * bascule se déclenche sur de la VOIX, détectée par un petit réseau de
-     * neurones qui a besoin du SON. Le moteur d'Android tient le micro
-     * lui-même et ne nous en livre jamais. Les deux ne peuvent pas coexister,
-     * et tant que le moteur d'Android écoute, aucun déclencheur n'existe.
+     * Un seul composant peut tenir le microphone. La nôtre (AudioRecord)
+     * mesure un simple niveau sonore ; le moteur d'Android écoute le micro
+     * lui-même, ne nous laisse rien à mesurer, et signale donc lui-même la
+     * parole pour le réveil (voir AndroidSpeechSession.onSpeechDetected).
      *
-     * J'ai cru pouvoir contourner cela en déclenchant sur les MOTS que ce
-     * moteur reconnaît. C'était une faute de raisonnement : ce moteur ne rend
-     * aucun texte sur cette tablette — c'est précisément la panne qu'on
-     * cherche depuis deux jours. Le déclencheur était donc branché sur le seul
-     * chemin dont on savait déjà qu'il ne donne rien, et la bascule ne pouvait
-     * pas partir.
+     * ═══ LE MOTEUR D'ANDROID, SEULEMENT ÉCRAN ALLUMÉ ═══
      *
-     * ═══ ET ON NE PERD RIEN ═══
+     * Demandé explicitement, et pour une raison grave : ce moteur a déjà fait
+     * planter l'application entière une fois — processus tué en pleine
+     * capture, peu après un retour de la bascule vers Transcription
+     * instantanée — ce qui avait motivé son retrait complet à l'époque. Le
+     * borner aux heures où l'écran est allumé réduit nettement sa fenêtre
+     * d'exposition : la tablette passe l'essentiel d'une journée écran
+     * éteint, c'est-à-dire sans personne devant pour remarquer un plantage ni
+     * le corriger. Écran allumé, quelqu'un est vraisemblablement dans la
+     * pièce — exactement le moment où lire ce qui s'y dit a un sens.
      *
-     * Écarter le moteur d'Android quand la bascule est armée ne coûte aucune
-     * transcription : c'est l'application de Google qui transcrit dès qu'elle
-     * a l'écran, et elle le fait mieux — en continu, sans le découpage modal
-     * qui nous gêne. Le moteur local ne servirait qu'entre deux bascules.
+     * Le réveil au son reste sur notre capture, légère et déjà éprouvée des
+     * mois durant en continu 24h/24 : elle seule tourne écran éteint, et
+     * c'est elle qui allume la dalle. Le moteur d'Android ne prend le relais
+     * qu'une fois l'écran effectivement allumé (voir screenStateReceiver), et
+     * le lui rend dès qu'il s'éteint.
      *
-     * Le principe existait déjà dans ce projet, écrit pour les services
-     * payants : « bascule active, ce moteur est écarté pour la pièce » (voir
-     * TranscriptionEngine.engineFor). Il s'étend ici à celui d'Android, pour
-     * une raison plus forte encore — les autres étaient écartés par économie,
-     * celui-ci rend la bascule impossible.
-     *
-     * Effet de bord, et il est bienvenu : plus de moteur d'Android, donc plus
-     * de sons de reprise d'écoute.
+     * CES SONS NE SE DÉSACTIVENT PAS, et ce n'est pas faute d'avoir cherché :
+     * son interface est MODALE — un énoncé, une clôture, une relance — et le
+     * service de Google joue ses deux sons d'interaction à chaque reprise, y
+     * compris sur un silence qui finit par expirer (ERROR_SPEECH_TIMEOUT). Le
+     * seul palliatif en place est le volume (voir AlertVolume), qui descend
+     * les notifications à leur plus bas cran audible — jamais zéro, qu'Android
+     * refuse sans une autorisation qu'un propriétaire d'appareil ne peut pas
+     * s'accorder.
      */
-    /**
-     * Le moteur RÉELLEMENT en service pour la pièce, en clair.
-     *
-     * Distinct du réglage : la bascule armée écarte celui d'Android, et le
-     * journal annonçait pourtant « moteur=Reconnaissance Android » — c'est-à-
-     * dire le réglage, pas ce qui écoute. Une ligne de journal qui rapporte
-     * une intention au lieu d'un fait est pire qu'absente : on s'y fie pour ne
-     * pas chercher ailleurs.
-     */
-    fun moteurDeLaPièceEnClair(): String = "aucun (écoute de la voix retirée — réveil au son seul)"
+    private fun applyListeningMode() {
+        if (isScreenOn()) {
+            stopCapture()
+            startAndroidSpeech()
+        } else {
+            stopAndroidSpeech()
+            startCapture()
+        }
+    }
 
-    private fun écouteParLeMoteurAndroid(): Boolean = false
+    private fun isScreenOn(): Boolean =
+        (getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive == true
 
     private fun startAndroidSpeech() {
         if (androidSpeech?.isRunning() == true) return
@@ -572,99 +550,27 @@ class RoomPresenceService : Service() {
         }
         audioRecord = null
         releaseWakeLockIfHeld()
-        transcription?.stop()
     }
 
     /**
-     * Démarre les sous-titres de la pièce (voir MainActivity, zone 2), en
-     * réutilisant la capture micro déjà en cours ou en la démarrant si besoin
-     * (ex. réveil au son désactivé, voir startCapture). onError remonte un
-     * échec de connexion AssemblyAI à l'écran appelant, sans quoi seul le
-     * journal système (inaccessible ici) le révélerait.
-     *
-     * "Démarre" ne veut pas dire "transcrit en permanence" : voir
-     * feedRoomTranscription, qui n'ouvre une session AssemblyAI que le temps
-     * qu'il y a effectivement du son dans la pièce.
+     * Les sous-titres de la pièce sur l'écran d'accueil (voir MainActivity,
+     * zone 2) s'abonnent ici au texte produit par le moteur d'Android — le
+     * seul des deux mécanismes qui en produise, et seulement pendant qu'il
+     * tourne (voir applyListeningMode, isRunning). Rien à démarrer de plus :
+     * la capture elle-même suit déjà l'état de l'écran toute seule.
      */
-    fun startRoomTranscription(
+    fun setRoomCaptionListener(
         onText: (text: String, isFinal: Boolean) -> Unit,
         onError: (String) -> Unit = {},
     ) {
         roomTranscriptionOnText = onText
         roomTranscriptionOnError = onError
-        transcription = TranscriptionEngine(
-            context = this,
-            onText = { _, text, isFinal ->
-                roomTranscriptionOnText?.invoke(text, isFinal)
-            },
-            onDiagnostic = { message -> roomTranscriptionOnError?.invoke(message) },
-        )
-        startListening()
     }
 
     /** À appeler quand l'écran qui affiche les paroles de la pièce passe en arrière-plan. */
-    fun stopRoomTranscription() {
+    fun clearRoomCaptionListener() {
         roomTranscriptionOnText = null
         roomTranscriptionOnError = null
-        transcription?.stop()
-        transcription = null
-    }
-
-    /**
-     * N'ouvre une session AssemblyAI que tant qu'il y a du son dans la pièce,
-     * et la referme après quelques secondes de silence.
-     *
-     * AssemblyAI est facturé à la durée de connexion : laisser la session
-     * ouverte en permanence sur une tablette allumée 24h/24 coûterait une
-     * centaine d'euros par mois pour transcrire, l'essentiel du temps, une
-     * pièce vide.
-     *
-     * Le seuil employé ici n'est PLUS celui du réveil au son. Il l'a été, au
-     * nom d'« une seule sensibilité à ajuster, pas deux qui se
-     * contredisent » — et c'était une erreur de raisonnement : les deux
-     * réglages ne répondent pas à la même question. Le réveil demande « ce
-     * bruit mérite-t-il d'allumer l'écran ? », et sa réponse doit être assez
-     * exigeante pour ignorer un clavier à deux mètres. La transcription
-     * demande « y a-t-il quelque chose à écrire ? », et sa réponse doit être
-     * la plus généreuse possible.
-     *
-     * Les avoir confondus avait une conséquence qu'on ne pouvait pas voir
-     * tant que le seuil restait bas : monter la sensibilité du réveil coupait
-     * l'attaque de chaque phrase, toujours plus faible que son milieu.
-     * Plusieurs mots perdus à chaque prise de parole, et un réglage censé ne
-     * concerner que l'écran.
-     *
-     * Le maintien de quelques secondes après le dernier son évite de couper
-     * la session entre deux phrases d'une même conversation.
-     */
-    private fun feedRoomTranscription(buffer: ShortArray, length: Int, rms: Double) {
-        val engine = transcription ?: return
-
-        val now = System.currentTimeMillis()
-
-        // Le portier de voix ne sert — et ne tourne — que pour un moteur
-        // facturé à la durée. Sur un moteur embarqué il n'économiserait rien
-        // et coûterait un petit réseau de neurones toutes les 32 ms, sur une
-        // tablette qui écoute toute la journée.
-        val gated = adminConfig.roomEngine.billedByDuration && adminConfig.voiceGateEnabled
-        val gate = if (gated) ensureVoiceGate() else null
-        gate?.accept(buffer, length)
-
-        // Voix pour un service payant, simple présence de son sinon. C'est
-        // toute la différence : un aspirateur franchit un plancher de niveau,
-        // il ne franchit pas une détection de parole.
-        val heard = if (gate != null) gate.isVoiceActive() else rms >= SPEECH_FLOOR_RMS
-        if (heard) lastRoomSoundAtMs = now
-        // Silence prolongé : on rend la source inactive, ce qui ferme la
-        // session AssemblyAI. Elle se rouvrira au premier son suivant.
-        val someoneIsSpeaking = now - lastRoomSoundAtMs <= TRANSCRIPTION_HOLD_MS
-        engine.setActiveSource(if (someoneIsSpeaking) TranscriptionSource.ROOM else null)
-        if (!someoneIsSpeaking) return
-
-        val bytes = ByteArray(length * 2)
-        val byteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-        for (i in 0 until length) byteBuffer.putShort(buffer[i])
-        engine.feed(TranscriptionSource.ROOM, bytes, SAMPLE_RATE_HZ, 1)
     }
 
     private fun ensureHandoff(): RoomHandoffController {
@@ -698,12 +604,6 @@ class RoomPresenceService : Service() {
      * Rend le message d'échec, ou null si c'est parti.
      */
     fun testHandoff(): String? = ensureHandoff().forceHandOff()
-
-    /** Chargé à la première utilisation : inutile de payer le modèle si aucun moteur payant n'écoute. */
-    private fun ensureVoiceGate(): RoomVoiceGate {
-        voiceGate?.let { return it }
-        return RoomVoiceGate(this).also { voiceGate = it }
-    }
 
     private fun computeRms(buffer: ShortArray, length: Int): Double {
         var sumOfSquares = 0.0
@@ -846,29 +746,6 @@ class RoomPresenceService : Service() {
          * effectivement tenu, donc jamais sur une pièce vide.
          */
         private const val SILENCE_WATCHDOG_TICK_MS = 1_000L
-
-        /**
-         * Durée de maintien de la session AssemblyAI après le dernier son
-         * détecté (voir feedRoomTranscription). Plus long que SILENCE_HOLD_MS,
-         * qui ne pilote que l'écran : une pause de réflexion au milieu d'une
-         * phrase dure facilement plus de trois secondes, et rétablir la
-         * connexion coûte le début de la phrase suivante.
-         */
-        private const val TRANSCRIPTION_HOLD_MS = 8_000L
-
-        /**
-         * En dessous, on considère qu'il n'y a rien à écrire. Fixe et bas,
-         * volontairement : c'est un plancher de présence de son, pas un
-         * réglage de confort. Il vaut le seuil de silence du moteur lui-même
-         * (voir TranscriptionEngine.SILENCE_LEVEL) pour que les deux étages de
-         * la chaîne prennent la même décision — deux planchers différents, et
-         * l'un des deux couperait ce que l'autre laisse passer.
-         *
-         * Ne pas remonter cette valeur pour régler des réveils intempestifs :
-         * c'est le curseur de sensibilité qui sert à ça, et c'est précisément
-         * de les avoir confondus que venait la perte des débuts de phrase.
-         */
-        private const val SPEECH_FLOOR_RMS = 300.0
 
         private const val MAX_WAKE_LOCK_MS = 30 * 60 * 1000L
         /**

@@ -32,6 +32,7 @@ import com.seniorvisio.core.CompanionApps
 import com.seniorvisio.core.MiseEnVeille
 import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
+import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.core.UsageStats
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.recueil.Element
@@ -64,16 +65,21 @@ class MainActivity : AppCompatActivity() {
 
     private val adminConfig by lazy { AdminConfig(this) }
     private lateinit var zones: HomeZonesController
-    // ═══ PLUS AUCUNE ÉCOUTE DE LA PIÈCE ═══
+    // ═══ LES SOUS-TITRES DE LA PIÈCE SONT DE RETOUR, BORNÉS À L'ÉCRAN ALLUMÉ ═══
     //
-    // La transcription de la pièce, les commandes vocales et la bascule
-    // automatique sur la voix sont retirées : trop de pannes pour ce qu'elles
-    // apportaient (processus tué en pleine capture, micro disputé avec
-    // Transcription instantanée). Il reste le bouton « Sous-titres », et une
-    // ligne dans le bandeau du haut qui dit aux visiteurs de s'en servir.
+    // Les commandes vocales et la bascule automatique sur la voix restent
+    // retirées (trop de pannes pour ce qu'elles apportaient). La transcription
+    // de la pièce, elle, revient sous une forme plus prudente : le moteur
+    // d'Android (voir RoomPresenceService.applyListeningMode) ne tourne que
+    // pendant que l'écran est allumé, jamais en continu 24h/24 — une tablette
+    // allumée en permanence passe l'essentiel de ses heures écran éteint, et
+    // c'est précisément là que ce moteur a déjà fait planter l'application
+    // une fois. Le bouton « Sous-titres » (bascule manuelle vers
+    // Transcription instantanée) reste disponible en plus, sans rapport avec
+    // ce mécanisme.
     //
-    // Le service RoomPresenceService tourne toujours : il ne garde que le
-    // réveil au son et porte la bascule que le bouton déclenche.
+    // S'abonne et se désabonne avec le cycle de vie de cet écran (onResume/
+    // onPause) : c'est le seul endroit qui affiche ce texte.
 
     private val screenAwakeHandler = Handler(Looper.getMainLooper())
     private var textGoneSinceMs = 0L
@@ -261,6 +267,14 @@ class MainActivity : AppCompatActivity() {
         AlertVolume.quiet(this)
         KioskManager.startIfDeviceOwner(this, MainActivity::class.java)
         zones.onResume()
+        // Ce que le moteur d'Android entend dans la pièce, affiché zone 2 —
+        // voir RoomPresenceService.setRoomCaptionListener. Le service peut ne
+        // pas encore être là au tout premier lancement (démarrage asynchrone,
+        // voir onCreate) : sans effet dans ce cas, et le prochain onResume
+        // (retour d'un appel, du panneau admin…) s'abonnera normalement.
+        RoomPresenceService.running?.setRoomCaptionListener(
+            onText = { text, isFinal -> zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal) },
+        )
         screenAwakeHandler.removeCallbacks(screenAwakeTicker)
         screenAwakeHandler.post(screenAwakeTicker)
     }
@@ -561,6 +575,7 @@ class MainActivity : AppCompatActivity() {
         // rappel qui capture l'Activity la retiendrait en mémoire bien après sa
         // fermeture. On se débranche, et on se rebranchera à onResume.
         CallListenerService.enService?.galerie?.observateur = null
+        RoomPresenceService.running?.clearRoomCaptionListener()
         super.onPause()
         zones.onPause()
         screenAwakeHandler.removeCallbacks(screenAwakeTicker)
