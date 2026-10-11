@@ -62,12 +62,10 @@ jobs:
         env:
           ASSEMBLYAI_API_KEY: ${{ secrets.ASSEMBLYAI_API_KEY }}
           GLADIA_API_KEY: ${{ secrets.GLADIA_API_KEY }}
-          PICOVOICE_ACCESS_KEY: ${{ secrets.PICOVOICE_ACCESS_KEY }}
           SPEECH_TRACE_KEY: ${{ secrets.SPEECH_TRACE_KEY }}
         run: |
           echo "ASSEMBLYAI_API_KEY : ${#ASSEMBLYAI_API_KEY} caractère(s)"
           echo "GLADIA_API_KEY : ${#GLADIA_API_KEY} caractère(s)"
-          echo "PICOVOICE_ACCESS_KEY : ${#PICOVOICE_ACCESS_KEY} caractère(s)"
           echo "SPEECH_TRACE_KEY : ${#SPEECH_TRACE_KEY} caractère(s)"
 
       # Les mêmes clés qu'en production, et c'est voulu : un banc d'essai qui
@@ -80,7 +78,6 @@ jobs:
         env:
           ASSEMBLYAI_API_KEY: ${{ secrets.ASSEMBLYAI_API_KEY }}
           GLADIA_API_KEY: ${{ secrets.GLADIA_API_KEY }}
-          PICOVOICE_ACCESS_KEY: ${{ secrets.PICOVOICE_ACCESS_KEY }}
           SPEECH_TRACE_KEY: ${{ secrets.SPEECH_TRACE_KEY }}
         run: |
           # ═══ LES ERREURS DE COMPILATION DOIVENT ÊTRE LISIBLES ═══
@@ -99,7 +96,6 @@ jobs:
             "-PbuildRev=val${{ github.run_number }}" \
             "-PassemblyAiApiKey=${ASSEMBLYAI_API_KEY}" \
             "-PgladiaApiKey=${GLADIA_API_KEY}" \
-            "-PpicovoiceAccessKey=${PICOVOICE_ACCESS_KEY}" \
             "-PspeechTraceKey=${SPEECH_TRACE_KEY}" 2>&1 | tee /tmp/gradle.log
           code=${PIPESTATUS[0]}
           set -e

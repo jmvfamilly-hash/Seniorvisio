@@ -72,6 +72,13 @@ TROP_COMMUNS = {
     # ZoomableAsyncImage(model = …)) : signalé après le retrait de Vosk, dont
     # le champ « model » n'avait aucun rapport avec ces appels-là.
     "model",
+    # Signalés après le retrait de la reconnaissance de locuteur (Eagle,
+    # EmbeddedSpeakerRecogniser, VoiceSignature) : « Builder »/« build » et
+    # « parse » viennent d'AlertDialog.Builder, NotificationCompat.Builder et
+    # Uri.parse partout ailleurs dans l'app ; « window » est Activity.window ;
+    # « create » et « reference » sont des noms sans rapport dans d'autres
+    # fichiers (MiseEnFormeSenior, DeviceStatusReporter).
+    "Builder", "build", "parse", "window", "create", "reference", "reset",
     "start", "stop", "close", "clear", "release", "invoke", "toString",
     "equals", "hashCode", "compareTo", "iterator", "next", "hasNext",
     # Des méthodes du socle Android et Kotlin, qu'une recherche textuelle ne

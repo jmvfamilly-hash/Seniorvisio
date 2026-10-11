@@ -39,13 +39,6 @@ android {
         // comme AssemblyAI sans clé.
         buildConfigField "String", "GLADIA_API_KEY_DEFAULT", "\"${project.findProperty('gladiaApiKey') ?: ""}\""
 
-        // Clé d'accès Picovoice, pour la reconnaissance de locuteur Eagle (voir
-        // EagleSpeakerRecogniser), injectée depuis le secret GitHub
-        // PICOVOICE_ACCESS_KEY. Absente, le champ vaut la chaîne vide et le
-        // moteur refuse de démarrer en le disant — le moteur intégré reste
-        // disponible et ne demande aucune clé.
-        buildConfigField "String", "PICOVOICE_ACCESS_KEY_DEFAULT", "\"${project.findProperty('picovoiceAccessKey') ?: ""}\""
-
         // Clé de chiffrement de la trace de reconnaissance (voir
         // TranscriptionTrace), injectée depuis le secret GitHub
         // SPEECH_TRACE_KEY.
@@ -250,13 +243,6 @@ dependencies {
     // et vérifiée pour elle-même, pas en passager clandestin d'une
     // fonctionnalité.
     implementation 'com.github.gkonovalov.android-vad:silero:2.0.8'
-
-    // Reconnaissance de locuteur sur l'appareil (voir EagleSpeakerRecogniser).
-    // Environ six mégaoctets : un modèle de 4,7 Mo et du code natif pour les
-    // quatre architectures. Aucune dépendance déclarée de son côté, ce qui
-    // écarte d'emblée le conflit de version de compilateur Kotlin qui a coûté
-    // un build à l'intégration de Silero.
-    implementation 'ai.picovoice:eagle-android:3.0.2'
 
     // Scan de QR Wi-Fi depuis les réglages admin (voir WifiConfigurator.kt) :
     // évite de retaper à la main un SSID/mot de passe sur un écran tactile,

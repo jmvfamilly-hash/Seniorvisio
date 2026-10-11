@@ -21,15 +21,10 @@ import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.AndroidSpeechSession
 import com.seniorvisio.core.RoomHandoffController
-import com.seniorvisio.core.EagleSpeakerRecogniser
-import com.seniorvisio.core.EmbeddedSpeakerRecogniser
 import com.seniorvisio.core.RoomVoiceGate
 import com.seniorvisio.core.TranscriptionEngine
 import com.seniorvisio.core.TranscriptionEngineChoice
-import com.seniorvisio.core.SpeakerEngineChoice
-import com.seniorvisio.core.SpeakerRecogniser
 import com.seniorvisio.core.TranscriptionSource
-import com.seniorvisio.core.VoiceSignature
 import com.seniorvisio.ui.MainActivity
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -112,37 +107,6 @@ class RoomPresenceService : Service() {
     private var transcription: TranscriptionEngine? = null
     private var voiceGate: RoomVoiceGate? = null
     private var lastRoomSoundAtMs = 0L
-
-    /**
-     * Reconnaissance du locuteur, pour atténuer les paroles de Jean à l'écran
-     * (voir SpeakerRecogniser et ses deux implémentations).
-     *
-     * Alimentée depuis la boucle de capture elle-même, sans jamais consulter ni
-     * le moteur choisi ni l'interrupteur du portier de voix payant. C'est une
-     * exigence, pas un détail d'écriture : ce portier-là ne tourne que sur un
-     * moteur facturé à la durée, donc jamais dans la configuration courante, et
-     * y accrocher la reconnaissance du locuteur aurait livré une fonction
-     * silencieusement inerte.
-     *
-     * Reconstruite quand le moteur, la signature ou le seuil changent à
-     * distance, sans quoi un réglage n'aurait d'effet qu'au prochain
-     * redémarrage.
-     */
-    private var speakerGate: SpeakerRecogniser? = null
-
-    /** Ce dont le portier en place a été construit, pour savoir quand le refaire. */
-    private var speakerGateKey: String? = null
-
-    /** Pourquoi la reconnaissance ne fonctionne pas, quand elle ne fonctionne pas. */
-    @Volatile private var speakerGateError: String? = null
-
-    /** Avant cette date, on ne retente pas de construire un portier qui vient d'échouer. */
-    private var speakerGateRetryAtMs = 0L
-
-    /** Apprentissage de la voix de Jean en cours, ou null (voir startVoiceEnrollment). */
-    private var enrollment: SpeakerRecogniser? = null
-    private var enrollmentEndsAtMs = 0L
-    @Volatile private var enrollmentProgress = 0f
 
     @Volatile private var lastRms = 0
     @Volatile private var peakRmsSinceReport = 0
@@ -229,36 +193,6 @@ class RoomPresenceService : Service() {
          * qui est le cas dès que la pièce est sur un moteur gratuit.
          */
         val voiceSharePercent: Int? = null,
-
-        /**
-         * Reconnaissance du locuteur (voir SpeakerRecogniser) : ce qu'elle fait,
-         * et ce qu'elle mesure.
-         *
-         * [speakerMode] dit en une phrase pourquoi elle agit ou n'agit pas —
-         * voix non enregistrée, atténuation coupée, moteur d'Android qui ne
-         * laisse aucun son à analyser. Sans cette phrase, les trois cas
-         * ressemblent tous à « ça ne marche pas », et se corrigent de trois
-         * façons différentes.
-         *
-         * [jeanSimilarityPercent] est la ressemblance réellement mesurée sur la
-         * dernière prise de parole. C'est de là que doit venir le réglage du
-         * seuil, pas d'une valeur devinée : faire parler Jean puis un proche et
-         * lire les deux nombres dit immédiatement où placer la limite.
-         */
-        val speakerMode: String = "",
-
-        /**
-         * Faux quand le mécanisme d'écoute en cours ne nous livre aucun son —
-         * c'est le cas de la reconnaissance d'Android, qui tient le microphone
-         * pour elle. Un booléen et non une comparaison sur [speakerMode] : ce
-         * texte est destiné à être lu et reformulé, s'appuyer dessus pour
-         * décider casserait silencieusement à la première retouche.
-         */
-        val canRecogniseSpeaker: Boolean = true,
-        val jeanSimilarityPercent: Int? = null,
-        val jeanSharePercent: Int? = null,
-        val enrollmentProgressPercent: Int? = null,
-        val enrollmentResult: String? = null,
     )
 
     /**
@@ -291,35 +225,7 @@ class RoomPresenceService : Service() {
         androidLevelDb = androidSpeech?.takeIf { it.isRunning() }?.lastLevelDb(),
         androidThresholdDb = androidSpeech?.takeIf { it.isRunning() }?.wakeThresholdDb(),
         voiceSharePercent = voiceGate?.consumeVoiceShare(),
-        speakerMode = describeSpeakerRecognition(),
-        canRecogniseSpeaker = adminConfig.roomEngine != TranscriptionEngineChoice.ANDROID,
-        jeanSimilarityPercent = speakerGate?.lastSimilarityPercent(),
-        jeanSharePercent = speakerGate?.consumeJeanSharePercent(),
-        enrollmentProgressPercent = enrollmentProgress()?.let { (it * 100).toInt() },
-        enrollmentResult = lastEnrollmentResult,
     )
-
-    /**
-     * Pourquoi la reconnaissance du locuteur agit, ou n'agit pas. Les causes
-     * d'inaction sont énumérées dans l'ordre où elles s'appliquent, chacune
-     * appelant une correction différente — et toutes se présentant, sans cette
-     * phrase, sous la forme indistincte d'un écran qui n'atténue rien.
-     */
-    private fun describeSpeakerRecognition(): String {
-        val engine = adminConfig.speakerEngine
-        return when {
-            enrollment != null -> "apprentissage en cours avec « ${engine.adminLabel} »"
-            adminConfig.roomEngine == TranscriptionEngineChoice.ANDROID ->
-                "impossible : la reconnaissance Android tient le micro, aucun son à analyser"
-            !adminConfig.dimJeanSpeech -> "atténuation désactivée"
-            // L'erreur avant tout le reste : c'est elle qui distingue « pas
-            // encore de son » d'une clé absente ou d'un profil illisible, trois
-            // situations qui se ressemblent exactement vues de l'écran.
-            speakerGateError != null -> "${engine.adminLabel} — ${speakerGateError}"
-            speakerGate == null -> "${engine.adminLabel} — en attente du premier son"
-            else -> "${engine.adminLabel}, seuil ${adminConfig.jeanVoiceThresholdPercent(engine)}%"
-        }
-    }
 
     /**
      * Pendant du consumePeakRms de l'autre mécanisme d'écoute, et séparé de
@@ -331,24 +237,8 @@ class RoomPresenceService : Service() {
     fun consumeAndroidPeakLevelDb(): Float? =
         androidSpeech?.takeIf { it.isRunning() }?.consumePeakLevelDb()
 
-    /**
-     * `fromJean` dit si la prise de parole en cours est attribuée à Jean (voir
-     * SpeakerRecogniser). Porté par le texte lui-même et non consultable après
-     * coup : le texte arrive avec du retard sur la parole, et interroger le
-     * portier au moment de l'affichage donnerait l'identité de qui parle
-     * maintenant, pas de qui a dit cette phrase-là.
-     */
-    private var roomTranscriptionOnText: ((text: String, isFinal: Boolean, fromJean: Boolean) -> Unit)? = null
+    private var roomTranscriptionOnText: ((text: String, isFinal: Boolean) -> Unit)? = null
     private var roomTranscriptionOnError: ((String) -> Unit)? = null
-
-    /**
-     * Faux dès qu'il y a le moindre doute — signature absente, verdict pas
-     * encore rendu, moteur d'Android qui ne nous laisse aucun son à analyser.
-     * Le doute profite à la lisibilité : afficher en clair une phrase de Jean
-     * ne coûte que de la place, l'atténuer à tort retire à Jean ce qu'il a
-     * besoin de lire.
-     */
-    private fun currentSpeakerIsJean(): Boolean = speakerGate?.currentSpeakerIsJean() == true
 
     inner class LocalBinder : Binder() {
         fun getService(): RoomPresenceService = this@RoomPresenceService
@@ -386,12 +276,6 @@ class RoomPresenceService : Service() {
         stopListening()
         voiceGate?.close()
         voiceGate = null
-        // Eagle tient un modèle natif : le laisser derrière soi fuiterait de la
-        // mémoire hors du tas Java, invisible aux outils habituels.
-        speakerGate?.close()
-        speakerGate = null
-        enrollment?.close()
-        enrollment = null
         // Le bandeau de retour est une fenêtre système : la laisser derrière
         // soi la ferait flotter sur la tablette sans plus personne pour la
         // retirer.
@@ -509,12 +393,8 @@ class RoomPresenceService : Service() {
         if (micYieldedToCompanion) return
         val session = AndroidSpeechSession(
             context = this,
-            // Ce moteur tient le microphone lui-même et ne nous livre aucun
-            // son : aucune reconnaissance du locuteur n'y est possible, et tout
-            // s'affiche en clair. Dit dans l'état (voir Status.speakerMode)
-            // plutôt que laissé à constater comme une panne.
             onText = { text, isFinal ->
-                roomTranscriptionOnText?.invoke(text, isFinal, false)
+                roomTranscriptionOnText?.invoke(text, isFinal)
             },
             // Ce moteur ne nous donne pas de niveau sonore exploitable, mais il
             // dit quand quelqu'un se met à parler : c'est tout ce dont le
@@ -707,7 +587,7 @@ class RoomPresenceService : Service() {
      * qu'il y a effectivement du son dans la pièce.
      */
     fun startRoomTranscription(
-        onText: (text: String, isFinal: Boolean, fromJean: Boolean) -> Unit,
+        onText: (text: String, isFinal: Boolean) -> Unit,
         onError: (String) -> Unit = {},
     ) {
         roomTranscriptionOnText = onText
@@ -715,7 +595,7 @@ class RoomPresenceService : Service() {
         transcription = TranscriptionEngine(
             context = this,
             onText = { _, text, isFinal ->
-                roomTranscriptionOnText?.invoke(text, isFinal, currentSpeakerIsJean())
+                roomTranscriptionOnText?.invoke(text, isFinal)
             },
             onDiagnostic = { message -> roomTranscriptionOnError?.invoke(message) },
         )
@@ -787,49 +667,6 @@ class RoomPresenceService : Service() {
         engine.feed(TranscriptionSource.ROOM, bytes, SAMPLE_RATE_HZ, 1)
     }
 
-    /**
-     * Alimente la reconnaissance du locuteur, et l'apprentissage de la voix de
-     * Jean quand il est en cours.
-     *
-     * Appelée depuis la boucle de capture, avant et indépendamment de la
-     * transcription. Aucune condition portant sur le moteur, sur son mode de
-     * facturation ou sur l'interrupteur du portier de voix : ce sont deux
-     * mécanismes sans rapport, et les lier aurait rendu celui-ci inerte.
-     *
-     * Le silence est écarté sur le niveau sonore déjà calculé, avant toute
-     * analyse. Ce n'est pas une optimisation de confort : l'analyse fait une
-     * transformée de Fourier et une autocorrélation par tranche de 64 ms, et
-     * les faire tourner sur une pièce vide toute la journée coûterait de la
-     * batterie pour rigoureusement rien.
-     */
-    private fun feedSpeakerRecognition(buffer: ShortArray, length: Int, rms: Double) {
-        if (rms < SPEECH_FLOOR_RMS) return
-        val now = System.currentTimeMillis()
-
-        enrollment?.let { recogniser ->
-            enrollmentProgress = recogniser.enroll(buffer, length)
-            // On s'arrête quand le moteur estime en avoir assez entendu, pas au
-            // bout d'un temps donné : vingt secondes pendant lesquelles Jean se
-            // tait n'apprennent rien, et une minuterie aurait pourtant conclu
-            // que c'était fait — puis l'enregistrement aurait échoué à la toute
-            // fin, après avoir fait parler quelqu'un pour rien. La durée reste
-            // un garde-fou, pour qu'un apprentissage ne dure pas indéfiniment
-            // si personne ne parle.
-            if (enrollmentProgress >= 1f || now >= enrollmentEndsAtMs) finishVoiceEnrollment()
-            // Pendant l'apprentissage, on n'attribue rien : la signature de
-            // référence est justement ce qu'on est en train de constituer.
-            return
-        }
-
-        // La bascule vers Transcription instantanée ne part plus jamais sur
-        // la voix : seul le bouton « Sous-titres » la déclenche (voir
-        // testHandoff).
-
-        if (!adminConfig.dimJeanSpeech) return
-        val gate = ensureSpeakerGate() ?: return
-        gate.accept(buffer, length, now)
-    }
-
     private fun ensureHandoff(): RoomHandoffController {
         handoff?.let { return it }
         return RoomHandoffController(
@@ -861,158 +698,6 @@ class RoomPresenceService : Service() {
      * Rend le message d'échec, ou null si c'est parti.
      */
     fun testHandoff(): String? = ensureHandoff().forceHandOff()
-
-    /**
-     * Construit le portier, ou le reconstruit si le moteur, la signature ou le
-     * seuil ont changé à distance. Null quand la reconnaissance ne peut pas
-     * fonctionner — auquel cas [speakerGateError] dit pourquoi, et la
-     * transcription s'affiche entièrement en clair.
-     *
-     * Aucun repli automatique d'un moteur sur l'autre, contrairement à ce que
-     * fait la transcription quand un plafond est atteint. Ici ce serait nuisible
-     * : les signatures ne sont pas interchangeables et les seuils ne veulent pas
-     * dire la même chose d'un moteur à l'autre. Un repli silencieux appliquerait
-     * donc une exigence qui n'a aucun sens, et le dirait d'autant moins qu'il
-     * aurait l'air de fonctionner.
-     */
-    private fun ensureSpeakerGate(): SpeakerRecogniser? {
-        val engine = adminConfig.speakerEngine
-        val signature = adminConfig.jeanVoiceSignature(engine)
-        val threshold = adminConfig.jeanVoiceThresholdPercent(engine)
-        val key = "${engine.remoteValue}|$threshold|${signature.hashCode()}"
-        val now = System.currentTimeMillis()
-        // Un échec ne se retente pas au bloc suivant. Cette fonction est
-        // appelée à chaque bloc de son, soit une quinzaine de fois par
-        // seconde : sans cette retenue, une clé absente ou refusée ferait
-        // reconstruire un modèle natif en boucle, indéfiniment, pour échouer
-        // à chaque fois. On réessaie de loin en loin, ce qui laisse une chance
-        // à une panne passagère sans transformer un réglage manquant en
-        // tempête.
-        if (key == speakerGateKey && (speakerGate != null || now < speakerGateRetryAtMs)) {
-            return speakerGate
-        }
-
-        speakerGate?.close()
-        speakerGate = null
-        speakerGateKey = key
-        speakerGateRetryAtMs = now + SPEAKER_GATE_RETRY_MS
-
-        if (signature.isBlank()) {
-            speakerGateError = "voix de Jean non apprise avec « ${engine.adminLabel} »"
-            return null
-        }
-
-        val built = buildSpeakerRecogniser(engine, signature, threshold, forEnrollment = false)
-        speakerGate = built
-        return built
-    }
-
-    /**
-     * Fabrique un moteur de reconnaissance, pour reconnaître ou pour apprendre.
-     * Rend null en renseignant [speakerGateError] : tout ce qui peut empêcher un
-     * moteur de démarrer doit se lire à distance, sans quoi les causes se
-     * présentent toutes sous la même forme — un écran qui n'atténue rien.
-     */
-    private fun buildSpeakerRecogniser(
-        engine: SpeakerEngineChoice,
-        signature: String?,
-        threshold: Int,
-        forEnrollment: Boolean,
-    ): SpeakerRecogniser? = when (engine) {
-        SpeakerEngineChoice.EMBEDDED -> {
-            val reference = if (forEnrollment) null else VoiceSignature.parse(signature)
-            if (!forEnrollment && reference == null) {
-                speakerGateError = "signature intégrée illisible, à réapprendre"
-                null
-            } else {
-                speakerGateError = null
-                EmbeddedSpeakerRecogniser(reference, threshold)
-            }
-        }
-        SpeakerEngineChoice.PICOVOICE -> {
-            val result = EagleSpeakerRecogniser.create(
-                context = this,
-                accessKey = adminConfig.picovoiceAccessKey,
-                storedProfile = signature,
-                thresholdPercent = threshold,
-                forEnrollment = forEnrollment,
-            )
-            speakerGateError = result.error
-            result.error?.let { Log.w(TAG, "Reconnaissance de locuteur : $it") }
-            result.recogniser
-        }
-    }
-
-    /**
-     * Démarre l'apprentissage de la voix de Jean avec le moteur actuellement
-     * choisi : la signature obtenue n'a de sens que pour lui.
-     *
-     * Jean n'a rien à manipuler — il parle, c'est tout, et c'est un proche qui
-     * lance l'apprentissage depuis l'écran d'administration. Cela suppose
-     * évidemment que personne d'autre ne parle pendant ce temps : la signature
-     * mélangerait les deux voix et ne désignerait plus personne.
-     */
-    fun startVoiceEnrollment(): String? {
-        val engine = adminConfig.speakerEngine
-        val recogniser = buildSpeakerRecogniser(
-            engine = engine,
-            signature = null,
-            threshold = adminConfig.jeanVoiceThresholdPercent(engine),
-            forEnrollment = true,
-        ) ?: return speakerGateError ?: "moteur de reconnaissance indisponible"
-        enrollment?.close()
-        enrollment = recogniser
-        enrollmentProgress = 0f
-        enrollmentEndsAtMs = System.currentTimeMillis() + ENROLLMENT_TIMEOUT_MS
-        lastEnrollmentResult = null
-        return null
-    }
-
-    /** Avancement de l'apprentissage, de 0 à 1, ou null s'il n'y en a pas en cours. */
-    fun enrollmentProgress(): Float? {
-        enrollment ?: return null
-        return enrollmentProgress
-    }
-
-    /**
-     * Résultat du dernier apprentissage, à afficher. Null tant qu'aucun n'a été
-     * mené à son terme depuis le démarrage.
-     */
-    @Volatile var lastEnrollmentResult: String? = null
-        private set
-
-    private fun finishVoiceEnrollment() {
-        val recogniser = enrollment ?: return
-        enrollment = null
-        val engine = recogniser.engine
-        val signature = recogniser.finishEnrollment()
-        recogniser.close()
-        if (signature == null) {
-            // Trop peu de voix entendue. Le dire précisément plutôt que de
-            // stocker une signature bâtie sur trois syllabes, qui ne
-            // reconnaîtrait rien et ferait chercher la panne ailleurs.
-            lastEnrollmentResult =
-                "apprentissage incomplet (${(enrollmentProgress * 100).toInt()} %) — " +
-                    "rapprochez-vous du micro, faites parler Jean sans interruption, et recommencez"
-            Log.w(TAG, "Apprentissage de la voix insuffisant (${(enrollmentProgress * 100).toInt()} %)")
-            return
-        }
-        adminConfig.setJeanVoiceSignature(engine, signature)
-        // Le portier se reconstruira tout seul au prochain bloc de son, la
-        // signature stockée ayant changé (voir ensureSpeakerGate).
-        speakerGateKey = null
-        lastEnrollmentResult = "voix apprise avec « ${engine.adminLabel} »"
-        Log.i(TAG, "Voix de Jean apprise avec ${engine.remoteValue}")
-    }
-
-    /** Efface la signature du moteur en cours : l'atténuation redevient sans effet. */
-    fun forgetVoiceSignature() {
-        adminConfig.setJeanVoiceSignature(adminConfig.speakerEngine, "")
-        speakerGate?.close()
-        speakerGate = null
-        speakerGateKey = null
-        lastEnrollmentResult = "voix oubliée pour « ${adminConfig.speakerEngine.adminLabel} »"
-    }
 
     /** Chargé à la première utilisation : inutile de payer le modèle si aucun moteur payant n'écoute. */
     private fun ensureVoiceGate(): RoomVoiceGate {
@@ -1185,23 +870,6 @@ class RoomPresenceService : Service() {
          */
         private const val SPEECH_FLOOR_RMS = 300.0
 
-        /**
-         * Garde-fou de durée de l'apprentissage, et non sa durée nominale : il
-         * s'achève normalement quand le moteur estime avoir assez entendu (voir
-         * SpeakerRecogniser.enroll). Deux minutes laissent largement le temps de
-         * faire parler Jean, y compris s'il faut le relancer une ou deux fois,
-         * et empêchent un apprentissage lancé par mégarde de rester ouvert
-         * indéfiniment dans une pièce vide.
-         */
-        private const val ENROLLMENT_TIMEOUT_MS = 120_000L
-
-        /**
-         * Espacement entre deux tentatives de construction du portier de
-         * locuteur après un échec. Une minute : assez pour qu'une clé
-         * fraîchement saisie prenne effet sans redémarrage, assez peu pour ne
-         * pas relancer un modèle natif quinze fois par seconde.
-         */
-        private const val SPEAKER_GATE_RETRY_MS = 60_000L
         private const val MAX_WAKE_LOCK_MS = 30 * 60 * 1000L
         /**
          * Combien de temps on attend que le fil de capture sorte de

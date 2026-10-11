@@ -607,10 +607,6 @@ const els = {
   transcriptionDiagnostic: el("transcriptionDiagnostic"),
   paidUsage: el("paidUsage"),
   voiceGateToggle: el("voiceGateToggle"),
-  dimJeanSpeechToggle: el("dimJeanSpeechToggle"),
-  speakerEngineSelect: el("speakerEngineSelect"),
-  thresholdEmbeddedSlider: el("thresholdEmbeddedSlider"),
-  thresholdPicovoiceSlider: el("thresholdPicovoiceSlider"),
   quotaAssemblyaiSlider: el("quotaAssemblyaiSlider"),
   quotaGladiaSlider: el("quotaGladiaSlider"),
   refreshUsageButton: el("refreshUsageButton"),
@@ -1176,12 +1172,6 @@ const ADMIN_SLIDER_FIELDS = [
   // nouvelle convention (voir DeviceStatusReporter, FIELD_QUOTA_PREFIX).
   ["quotaAssemblyaiSlider", "quotaHours_assemblyai"],
   ["quotaGladiaSlider", "quotaHours_gladia"],
-  // Ressemblance exigée pour attribuer une parole à Jean. Un seuil par
-  // moteur : leurs scores ne sont pas comparables, et un curseur commun
-  // appliquerait à l'un une exigence réglée pour l'autre (voir
-  // SpeakerEngineChoice).
-  ["thresholdEmbeddedSlider", "jeanVoiceThreshold_embedded"],
-  ["thresholdPicovoiceSlider", "jeanVoiceThreshold_picovoice"],
   // Zéro est légitime ici — « pas de retour minuté » — comme pour les
   // plafonds mensuels.
   ["handoffReturnSlider", "roomHandoffReturnMinutes"],
@@ -1196,7 +1186,6 @@ const ADMIN_TOGGLE_FIELDS = [
   ["roomWakeEnabledToggle", "roomWakeEnabled"],
   ["blockWakeAtNightToggle", "blockWakeAtNight"],
   ["voiceGateToggle", "voiceGateEnabled"],
-  ["dimJeanSpeechToggle", "dimJeanSpeech"],
   ["speechTraceToggle", "speechTraceEnabled"],
 ];
 
@@ -1803,7 +1792,6 @@ const ENGINE_SELECT_FIELDS = [
   // deuxième façon de tomber en panne.
   ["policeSelect", "policeSenior"],
   ["callEngineSelect", "callTranscriptionEngine"],
-  ["speakerEngineSelect", "speakerEngine"],
 ];
 
 let lastDeviceData = null;
@@ -1890,7 +1878,6 @@ function applyDeviceSettings(data) {
   // Vrai par défaut côté tablette : un champ absent veut dire « jamais réglé
   // d'ici », pas « désactivé ».
   els.voiceGateToggle.checked = data.voiceGateEnabled !== false;
-  els.dimJeanSpeechToggle.checked = data.dimJeanSpeech !== false;
   // Faux par défaut côté tablette, contrairement aux autres : ce mode
   // change ce que Jean a sous les yeux, il ne s'arme pas tout seul.
 

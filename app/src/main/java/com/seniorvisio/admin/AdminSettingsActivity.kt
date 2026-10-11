@@ -114,34 +114,11 @@ class AdminSettingsActivity : AppCompatActivity() {
             appendLine("Rallumages demandés : ${status.wakeRequests}")
             append("Transcription en cours : ${if (status.transcribing) "oui" else "non"}")
         }
-        refreshVoiceEnrollmentState(status)
+        refreshHandoffState()
     }
 
-    /**
-     * L'état de la reconnaissance du locuteur, rafraîchi au même rythme que le
-     * reste.
-     *
-     * Pendant l'apprentissage, l'avancement doit se voir : vingt secondes
-     * pendant lesquelles rien ne bouge à l'écran sont vingt secondes pendant
-     * lesquelles on ne sait pas si la tablette écoute ou si le bouton n'a rien
-     * fait — et on relance, ce qui recommence tout.
-     */
-    private fun refreshVoiceEnrollmentState(status: RoomPresenceService.Status) {
-        val view = findViewById<TextView>(R.id.textVoiceEnrollmentState)
-        val progress = status.enrollmentProgressPercent
-        view.text = buildString {
-            if (progress != null) {
-                // L'avancement mesure la voix entendue, pas le temps écoulé :
-                // il ne bouge pas tant que personne ne parle, et c'est
-                // précisément ce qu'il faut savoir.
-                append("Apprentissage… $progress %  — faites parler Jean, il s'arrête tout seul")
-                return@buildString
-            }
-            append(status.speakerMode)
-            status.jeanSimilarityPercent?.let { append("\nDernière ressemblance mesurée : $it %") }
-            status.enrollmentResult?.let { append("\n$it") }
-        }
-
+    /** L'état de la bascule vers Transcription instantanée, rafraîchi au même rythme que le reste. */
+    private fun refreshHandoffState() {
         findViewById<TextView>(R.id.textHandoffState).text = buildString {
             append(roomService?.describeHandoff() ?: "service non joignable")
             append("\nBandeau de retour : ")
@@ -198,7 +175,6 @@ class AdminSettingsActivity : AppCompatActivity() {
 
         val inputAssemblyAiKey = findViewById<EditText>(R.id.inputAssemblyAiKey)
         val inputGladiaKey = findViewById<EditText>(R.id.inputGladiaKey)
-        val inputPicovoiceKey = findViewById<EditText>(R.id.inputPicovoiceKey)
         val checkboxRoomWakeEnabled = findViewById<CheckBox>(R.id.checkboxRoomWakeEnabled)
         val checkboxBlockWakeAtNight = findViewById<CheckBox>(R.id.checkboxBlockWakeAtNight)
         val inputNightStartHour = findViewById<EditText>(R.id.inputNightStartHour)
@@ -211,7 +187,6 @@ class AdminSettingsActivity : AppCompatActivity() {
         inputAccess.setText(adminConfig.accessPassword)
         inputAssemblyAiKey.setText(adminConfig.assemblyAiApiKey)
         inputGladiaKey.setText(adminConfig.gladiaApiKey)
-        inputPicovoiceKey.setText(adminConfig.picovoiceAccessKey)
         checkboxRoomWakeEnabled.isChecked = adminConfig.roomWakeEnabled
         checkboxBlockWakeAtNight.isChecked = adminConfig.blockWakeAtNight
         inputNightStartHour.setText(adminConfig.nightStartHour.toString())
@@ -251,7 +226,6 @@ class AdminSettingsActivity : AppCompatActivity() {
             adminConfig.accessPassword = inputAccess.text.toString().trim()
             adminConfig.assemblyAiApiKey = inputAssemblyAiKey.text.toString().trim()
             adminConfig.gladiaApiKey = inputGladiaKey.text.toString().trim()
-            adminConfig.picovoiceAccessKey = inputPicovoiceKey.text.toString().trim()
             adminConfig.zoneOrder = zoneOrders[spinnerZoneOrder.selectedItemPosition]
             adminConfig.roomWakeEnabled = checkboxRoomWakeEnabled.isChecked
             adminConfig.blockWakeAtNight = checkboxBlockWakeAtNight.isChecked
@@ -310,36 +284,6 @@ class AdminSettingsActivity : AppCompatActivity() {
             startActivity(Intent(this, TranscriptionLabActivity::class.java))
         }
 
-        // Apprentissage de la voix de Jean. Sur la tablette et non dans le PWA :
-        // il faut être dans la pièce avec lui pour le faire parler.
-        findViewById<Button>(R.id.buttonLearnJeanVoice).setOnClickListener {
-            val service = roomService
-            if (service == null) {
-                Toast.makeText(this, "Service d'écoute non joignable", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            // Le moteur d'Android tient le microphone lui-même et ne nous
-            // laisse aucun son : le dire avant plutôt que de laisser tourner
-            // vingt secondes pour rien et conclure à une panne.
-            if (!service.currentStatus().canRecogniseSpeaker) {
-                Toast.makeText(this, "Impossible avec la reconnaissance Android : elle tient le micro. Changez le moteur de la pièce.", Toast.LENGTH_LONG).show()
-                return@setOnClickListener
-            }
-            // Le moteur peut refuser de démarrer — clé Picovoice absente,
-            // bibliothèque native manquante. Le dire ici, au moment du geste,
-            // plutôt que de laisser croire que l'apprentissage a commencé.
-            val refus = service.startVoiceEnrollment()
-            if (refus != null) {
-                Toast.makeText(this, refus, Toast.LENGTH_LONG).show()
-                return@setOnClickListener
-            }
-            Toast.makeText(
-                this,
-                "Faites parler Jean jusqu'à ce que l'apprentissage atteigne 100 %",
-                Toast.LENGTH_LONG,
-            ).show()
-        }
-
         // L'autorisation de dessiner par-dessus les autres applications ne peut
         // pas s'accorder par le code : elle est précisément la porte des
         // attaques par recouvrement, et même un propriétaire d'appareil ne peut
@@ -362,11 +306,6 @@ class AdminSettingsActivity : AppCompatActivity() {
             if (failure != null) {
                 Toast.makeText(this, "Bascule impossible : $failure", Toast.LENGTH_LONG).show()
             }
-        }
-
-        findViewById<Button>(R.id.buttonForgetJeanVoice).setOnClickListener {
-            roomService?.forgetVoiceSignature()
-            Toast.makeText(this, "Voix oubliée : tout s'affiche de nouveau en clair", Toast.LENGTH_SHORT).show()
         }
 
         findViewById<Button>(R.id.buttonPickWifiNetwork).setOnClickListener { pickWifiNetwork() }
@@ -394,10 +333,6 @@ class AdminSettingsActivity : AppCompatActivity() {
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             )
-            inputPicovoiceKey.inputType = plainOrPassword(
-                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
-                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            )
             inputAccess.inputType = plainOrPassword(
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -407,7 +342,6 @@ class AdminSettingsActivity : AppCompatActivity() {
             inputWifiPassword.setSelection(inputWifiPassword.text.length)
             inputAssemblyAiKey.setSelection(inputAssemblyAiKey.text.length)
             inputGladiaKey.setSelection(inputGladiaKey.text.length)
-            inputPicovoiceKey.setSelection(inputPicovoiceKey.text.length)
             inputAccess.setSelection(inputAccess.text.length)
         }
     }
