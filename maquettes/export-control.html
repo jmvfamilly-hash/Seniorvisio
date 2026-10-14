@@ -3,16 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Export Control – Registre multi-juridictions</title>
+<title>Registre Export Control</title>
 <style>
 :root{
   --bg:#f4f6f9;--panel:#fff;--ink:#1c2430;--mute:#64707f;--line:#dde3ea;--brand:#1f4e8c;--brand-ink:#fff;
   --ok:#17803d;--ok-bg:#e3f4e9;--warn:#b25e00;--warn-bg:#fdf0dc;--bad:#b3261e;--bad-bg:#fbe4e2;--chip:#eaeef3;
 }
-@media (prefers-color-scheme:dark){:root{
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#12171e;--panel:#1b222c;--ink:#e6ebf1;--mute:#94a0ae;--line:#2c3644;--brand:#5b9bf0;--brand-ink:#0b1320;
   --ok:#5fd18a;--ok-bg:#16301f;--warn:#f0b04d;--warn-bg:#35280f;--bad:#ff8a80;--bad-bg:#3a1a18;--chip:#263140;
-}}
+;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12171e;--panel:#1b222c;--ink:#e6ebf1;--mute:#94a0ae;--line:#2c3644;--brand:#5b9bf0;--brand-ink:#0b1320;
+  --ok:#5fd18a;--ok-bg:#16301f;--warn:#f0b04d;--warn-bg:#35280f;--bad:#ff8a80;--bad-bg:#3a1a18;--chip:#263140;
+;color-scheme:dark}
 *{box-sizing:border-box}
 body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
 .app{display:grid;grid-template-columns:210px 1fr;min-height:100vh}
@@ -33,6 +37,7 @@ h3{margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:.04em;
 .kpi.red b{color:var(--bad)}.kpi.orange b{color:var(--warn)}.kpi.green b{color:var(--ok)}
 .bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
 input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-width:0}
+[hidden]{display:none!important}
 textarea{width:100%;min-height:90px;resize:vertical}
 input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
 .btn{background:var(--brand);color:var(--brand-ink);border:0;border-radius:6px;padding:8px 14px;font:inherit;cursor:pointer}
@@ -200,6 +205,10 @@ function renderDash(){
       <button class="btn ghost" id="csv">Exporter CSV</button>
       <button class="btn" id="new">+ Nouvel actif</button>
     </div>
+    <div id="csvbox" hidden class="card" style="background:var(--bg)">
+      <div class="bar"><b>Export CSV</b><span class="spacer"></span>
+        <button class="btn ghost" id="csvcopy">Copier</button><button class="btn ghost" id="csvclose">Fermer</button></div>
+      <textarea id="csvtxt" readonly style="font-family:ui-monospace,monospace;font-size:12px"></textarea></div>
     <div class="tw"><table>
       <thead><tr><th>Actif</th><th>Type</th><th>Propriétaire</th><th>Juridictions · code · statut</th><th>Conformité</th></tr></thead>
       <tbody>${shown.map(({a,ev})=>`<tr class="click" data-id="${a.id}">
@@ -215,6 +224,9 @@ function renderDash(){
   bind('#fq','q','input');bind('#fj','jur','change');bind('#fs','status','change');bind('#fr','risk','change');
   $('#new').onclick=newAsset;
   $('#csv').onclick=()=>exportCsv(shown.map(r=>r.a));
+  $('#csvclose').onclick=()=>{$('#csvbox').hidden=true};
+  $('#csvcopy').onclick=()=>{const t=$('#csvtxt');t.select();
+    try{navigator.clipboard.writeText(t.value).catch(()=>document.execCommand('copy'))}catch(e){document.execCommand('copy')}};
   document.querySelectorAll('tr.click').forEach(tr=>tr.onclick=()=>{cur=JSON.parse(JSON.stringify(db.find(a=>a.id==tr.dataset.id)));go('edit')});
 }
 function exportCsv(list){
@@ -257,6 +269,7 @@ function renderEdit(){
     <div class="bar">
       <button class="btn" id="save">Enregistrer</button>
       <button class="btn ghost" id="cancel">Retour</button>
+      <span id="msg" style="color:var(--bad)" role="alert"></span>
       <span class="spacer"></span>
       ${a._new?'':'<button class="btn danger" id="del">Supprimer</button>'}
     </div>
@@ -269,8 +282,8 @@ function renderEdit(){
   $('#addbtn').onclick=()=>{const k=$('#addj').value;if(k){a.juris.push(j(k,'','À déterminer'));renderJuris();renderComp()}};
   $('#save').onclick=save;
   $('#cancel').onclick=()=>{cur=null;go('dash')};
-  if($('#del'))$('#del').onclick=()=>{if(confirm('Supprimer cet actif ?')){
-    db=db.filter(x=>x.id!==a.id);log(a.name,'Suppression de la fiche');persist();cur=null;go('dash')}};
+  if($('#del'))$('#del').onclick=e=>{if(!armed(e.target,'Confirmer la suppression'))return;
+    db=db.filter(x=>x.id!==a.id);log(a.name,'Suppression de la fiche');persist();cur=null;go('dash')};
   renderJuris();renderComp();
   const mine=history.filter(h=>h.asset===(a._orig||a.name)).sort((x,y)=>y.ts-x.ts);
   $('#ahist').innerHTML=mine.map(h=>`<li><time>${fmt(h.ts)}</time>${esc(h.msg)}</li>`).join('')||'<li style="color:var(--mute)">Aucune modification enregistrée.</li>';
@@ -295,10 +308,16 @@ function renderComp(){
   $('#comp').innerHTML=`<div style="margin-bottom:10px">${badge(ev.level)}</div>`+
     ev.issues.map(o=>`<div class="alert ${o.l}">${esc(o.m)}</div>`).join('');
 }
+// confirmation en deux clics (confirm() est indisponible dans les visionneuses web)
+function armed(btn,label){
+  if(btn.dataset.armed)return true;
+  const old=btn.textContent;btn.dataset.armed=1;btn.textContent=label;
+  setTimeout(()=>{btn.textContent=old;delete btn.dataset.armed},4000);return false;
+}
 function log(asset,msg){history.push({ts:Date.now(),asset,msg})}
 function save(){
   const a=cur;
-  if(!a.name.trim()){alert("Le nom de l'actif est obligatoire.");$('#f_name').focus();return}
+  if(!a.name.trim()){$('#msg').textContent="Le nom de l'actif est obligatoire.";$('#f_name').focus();return}
   const old=db.find(x=>x.id===a.id);
   if(!old)log(a.name,'Création de la fiche');
   else{
@@ -324,7 +343,9 @@ function renderHist(){
     <div class="tw"><table><thead><tr><th>Date</th><th>Actif</th><th>Modification</th></tr></thead><tbody>
     ${h.map(x=>`<tr><td>${fmt(x.ts)}</td><td>${esc(x.asset)}</td><td>${esc(x.msg)}</td></tr>`).join('')}</tbody></table></div>
     ${h.length?'':'<div class="empty">Aucune modification.</div>'}</div>`;
-  $('#reset').onclick=()=>{if(confirm('Revenir aux données de démo ?')){try{localStorage.removeItem('ec_db');localStorage.removeItem('ec_hist')}catch(e){}location.reload()}};
+  $('#reset').onclick=e=>{if(!armed(e.target,'Confirmer la réinitialisation'))return;
+    try{localStorage.removeItem('ec_db');localStorage.removeItem('ec_hist')}catch(x){}
+    db=JSON.parse(JSON.stringify(SEED));history=[];persist();renderHist()};
 }
 
 go('dash');
