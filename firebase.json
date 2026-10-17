@@ -39,6 +39,36 @@
           ]
         }
       ]
+    },
+    {
+      "//": "Inscription des testeurs de l'appli impressionniste + lien stable /app/. Site distinct de seniorvisio-test : aucun lien avec Senior Visio.",
+      "target": "impressionnistes",
+      "public": "impressionnistes",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "headers": [
+        {
+          "source": "**/*.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        }
+      ]
     }
   ],
   "functions": [

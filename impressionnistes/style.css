@@ -1,0 +1,15 @@
+:root { --fond:#fbf7ee; --encre:#1f2a3a; --accent:#3a6ea5; --doux:#e9e1cf; }
+* { box-sizing:border-box; }
+body { margin:0; font:18px/1.55 Georgia,"Times New Roman",serif; color:var(--encre); background:var(--fond); }
+main { max-width:640px; margin:0 auto; padding:24px 16px 96px; }
+h1 { font-size:1.7rem; line-height:1.2; margin:.2em 0 .4em; }
+h2 { font-size:1.2rem; margin:1.6em 0 .4em; }
+.bande { height:10px; background:linear-gradient(90deg,#7fa8d1,#e8c36a,#c97b84,#8fb58a); }
+.carte { background:#fff; border:1px solid var(--doux); border-radius:14px; padding:16px; margin:16px 0; }
+iframe { width:100%; min-height:640px; border:0; border-radius:10px; }
+.petit { font-size:.85rem; color:#58627a; }
+a { color:var(--accent); }
+button { font:inherit; padding:10px 16px; border-radius:10px; border:0; background:var(--accent); color:#fff; cursor:pointer; }
+button.secondaire { background:var(--doux); color:var(--encre); }
+.bandeau-mesure { position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--doux); padding:12px 16px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.bandeau-mesure p { margin:0; flex:1 1 100%; font-size:.95rem; }

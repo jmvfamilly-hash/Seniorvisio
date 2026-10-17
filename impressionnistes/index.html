@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Devenez testeur – Promenade impressionniste</title>
+<meta name="description" content="Inscrivez-vous pour tester en avant-première une application de navigation dans les tableaux impressionnistes.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="bande"></div>
+<main>
+  <h1>Entrez dans les tableaux impressionnistes</h1>
+  <p>Nous préparons une application pour <strong>se promener à l'intérieur des tableaux</strong> impressionnistes.
+  Vous aimez le dessin et la peinture : devenez testeur en avant-première.</p>
+
+  <h2>Comment ça se passe</h2>
+  <ol>
+    <li>Vous vous inscrivez ci-dessous, <strong>aujourd'hui</strong>.</li>
+    <li>Dans quelques jours, nous vous envoyons <strong>l'adresse de l'application</strong>, uniquement si vous l'avez accepté.</li>
+    <li>Elle s'ouvre dans le navigateur de votre téléphone, sans rien à installer.</li>
+  </ol>
+
+  <div class="carte" id="zone-formulaire"></div>
+
+  <h2>Vos données</h2>
+  <p class="petit">Nous ne gardons que ce que vous saisissez dans le formulaire, uniquement pour vous envoyer le lien de test
+  et recueillir votre avis. Elles ne sont ni vendues ni cédées, et supprimées à la fin du test.
+  Pour vous désinscrire ou faire effacer vos données : <a id="contact"></a>.</p>
+</main>
+<script src="config.js"></script>
+<script>
+  var c = window.IMPRESSIONNISTES, z = document.getElementById("zone-formulaire");
+  var mail = document.getElementById("contact");
+  mail.textContent = c.contact; mail.href = "mailto:" + c.contact;
+  if (c.formUrl) {
+    var f = document.createElement("iframe");
+    f.src = c.formUrl; f.title = "Formulaire d'inscription"; f.loading = "lazy";
+    z.appendChild(f);
+  } else {
+    z.innerHTML = "<p>Le formulaire d'inscription arrive très bientôt. Revenez dans un instant.</p>";
+  }
+</script>
+<script src="analytics.js"></script>
+</body>
+</html>

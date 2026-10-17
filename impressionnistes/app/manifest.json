@@ -1,0 +1,10 @@
+{
+  "name": "Promenade impressionniste",
+  "short_name": "Impressionnistes",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fbf7ee",
+  "theme_color": "#3a6ea5",
+  "icons": []
+}

@@ -5,7 +5,12 @@
   "targets": {
     "seniorvisio": {
       "hosting": {
-        "test": ["seniorvisio-test"]
+        "test": [
+          "seniorvisio-test"
+        ],
+        "impressionnistes": [
+          "seniorvisio-impressionnistes"
+        ]
       }
     }
   }

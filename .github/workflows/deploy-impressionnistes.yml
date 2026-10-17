@@ -1,0 +1,28 @@
+name: Deploy impressionnistes (Firebase Hosting)
+
+on:
+  push:
+    branches:
+      - ccr-0b87fff9-q1gf3s
+    paths:
+      - 'impressionnistes/**'
+      - 'firebase.json'
+      - '.firebaserc'
+      - '.github/workflows/deploy-impressionnistes.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Déploie sur Firebase Hosting
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
+          npx firebase-tools deploy --only hosting:impressionnistes \
+            --project seniorvisio --non-interactive --force
