@@ -315,6 +315,7 @@ const SETTINGS_STORAGE_KEY = "seniorvisio_caller_settings";
 // et qui a coûté une journée à remettre d'aplomb.
 //
 //     …/Seniorvisio/?mode=proches   la vue visio, sans réglages ni admin
+//     …/Seniorvisio/?mode=aidant    encore plus nu : un bouton, l'appel, raccrocher
 //     …/Seniorvisio/?mode=complet   rétablit tout
 //
 // MÉMORISÉ, et ce n'est pas du confort. Le manifeste déclare
@@ -326,6 +327,7 @@ const SETTINGS_STORAGE_KEY = "seniorvisio_caller_settings";
 // l'administrateur resterait simplifié pour toujours, et il faudrait vider les
 // données du site pour en ressortir — sur un téléphone, personne ne trouve.
 const MODE_STORAGE_KEY = "seniorvisio_mode_affichage";
+const MODES_VALIDES = ["proches", "aidant", "complet"];
 
 function modeAffichage() {
   let demandé = null;
@@ -335,7 +337,7 @@ function modeAffichage() {
     demandé = null;
   }
   try {
-    if (demandé === "proches" || demandé === "complet") {
+    if (MODES_VALIDES.includes(demandé)) {
       localStorage.setItem(MODE_STORAGE_KEY, demandé);
       return demandé;
     }
@@ -352,6 +354,7 @@ function modeAffichage() {
 // buter sur un élément absent, là où document.getElementById rend null et fait
 // tomber tout le câblage qui suit (voir l'en-tête de ce fichier).
 document.body.classList.toggle("mode-proches", modeAffichage() === "proches");
+document.body.classList.toggle("mode-aidant", modeAffichage() === "aidant");
 
 const DEFAULT_SETTINGS = {
   volume: 100,
@@ -1011,7 +1014,11 @@ async function lancerAppel({ sousTitres = false } = {}) {
     // Elle suit la case mémorisée pour un appel ordinaire. Ici, la laisser
     // suivre produirait exactement ce qu'un proche ne peut pas diagnostiquer :
     // un appel qui se connecte, aucun son, aucune image, et rien qui s'écrit.
-    captionModeEnabled: sousTitres ? true : settings.captionEnabled,
+    //
+    // Même raison pour le mode aidant : pas de case à cocher sur cet écran nu,
+    // donc rien qu'un réglage mémorisé puisse suivre — les paroles s'écrivent
+    // systématiquement, ou la case qui manque serait un réglage qui ment.
+    captionModeEnabled: sousTitres || modeAffichage() === "aidant" ? true : settings.captionEnabled,
     sousTitresMode: sousTitres,
     callerPhotoBase64: identity.photoBase64 || null,
   });
