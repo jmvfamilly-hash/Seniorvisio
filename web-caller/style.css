@@ -888,6 +888,38 @@ body.mode-proches #openSettingsButton,
 body.mode-proches #openAdminIdleButton { display: none; }
 
 
+/* ═══ PAGE NUE POUR L'AIDANT (?mode=aidant) ═══
+
+   Un bouton pour appeler, l'appel, un bouton pour raccrocher — rien d'autre.
+   Pas de panneau d'identité ni de recueils sur l'écran d'attente : ce sont des
+   préparatifs qu'un appel ordinaire peut se permettre d'ignorer, pas une
+   visite qui commence tout de suite. Pas de case « sous-titres » non plus —
+   ses paroles s'écrivent déjà systématiquement chez Jean (voir app.js,
+   lancerAppel), la case n'aurait donc rien à faire.
+
+   Dans l'appel : ni réglages, ni caméra, ni photos, ni volume, ni les deux
+   cases qui vivent normalement à côté du volume — l'une (même pièce) ne
+   s'applique pas à un appel depuis l'extérieur, l'autre (afficher mes
+   paroles) est déjà acquise, en dur, sans case à décocher. Vidéo des deux
+   côtés, texte partagé avec Jean et son retard de lecture, raccroché : ce qui
+   reste est exactement ce que l'aidant est venu faire. */
+body.mode-aidant #sameRoomReminder,
+body.mode-aidant #sousTitresButton,
+body.mode-aidant #sousTitresButton + .hint,
+body.mode-aidant #identityPanel,
+body.mode-aidant #recueilsPanel,
+body.mode-aidant #openAdminIdleButton,
+body.mode-aidant #openSettingsButton,
+body.mode-aidant #switchCameraButton,
+body.mode-aidant #openSlideshowButton,
+body.mode-aidant .volume-control-visio,
+body.mode-aidant .caption-control-visio,
+body.mode-aidant #recueilBar,
+body.mode-aidant #recueilNav,
+body.mode-aidant #slideshowNav,
+body.mode-aidant #slideshowStopButton { display: none; }
+
+
 /* ═══ MODE « SOUS-TITRES » (proche assis à côté de Jean) ═══
 
    Rien n'est retiré du document : tout est masqué par cette seule classe,
