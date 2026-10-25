@@ -129,7 +129,7 @@ class CallListenerService : LifecycleService() {
             // (ni un second appui sur la tablette, ni le PWA) avant les 30
             // minutes, ce battement le constate et joue l'annonce de fin (voir
             // PauseAppels.vérifierExpirationNaturelle).
-            PauseAppels.vérifierExpirationNaturelle(this)
+            PauseAppels.vérifierExpirationNaturelle(this@CallListenerService)
             surveillerMémoireAuRepos()
             statusReporter.reportHeartbeat(échecsDÉcoute)
             heartbeatHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
