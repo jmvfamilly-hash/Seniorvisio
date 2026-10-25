@@ -48,6 +48,14 @@ class IncomingCallService : LifecycleService() {
         return current != callId
     }
 
+    /**
+     * Un soignant a posé une pause de 30 minutes (voir PauseAppels). Même
+     * philosophie que [isBusyWithAnotherCall] : Jean n'en est pas averti, et
+     * c'est voulu — l'écran d'appel ne se déclenche même pas, le proche est
+     * renseigné tout de suite côté PWA (voir CallSignalingClient.STATUS_BLOCKED_CARE).
+     */
+    private fun isBlockedForCareBreak(): Boolean = adminConfig.isCareBreakActive()
+
     override fun onCreate() {
         super.onCreate()
         adminConfig = AdminConfig(this)
@@ -73,7 +81,9 @@ class IncomingCallService : LifecycleService() {
         val callId = intent?.getStringExtra(EXTRA_CALL_ID)
         val sousTitres = intent?.getBooleanExtra(EXTRA_SOUS_TITRES, false) == true
         if (callId != null) {
-            if (isBusyWithAnotherCall(callId)) {
+            if (isBlockedForCareBreak()) {
+                signaling.updateStatus(callId, CallSignalingClient.STATUS_BLOCKED_CARE)
+            } else if (isBusyWithAnotherCall(callId)) {
                 signaling.updateStatus(callId, CallSignalingClient.STATUS_BUSY)
             } else {
                 // Un appel lève le sommeil demandé par Jean : « Sommeil » veut

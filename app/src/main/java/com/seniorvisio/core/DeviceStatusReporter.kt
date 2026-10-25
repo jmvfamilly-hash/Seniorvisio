@@ -163,6 +163,8 @@ class DeviceStatusReporter(private val context: Context) {
                 // là qu'ils manquaient (voir TranscriptionDiagnostics).
                 FIELD_TRANSCRIPTION_DIAGNOSTIC to TranscriptionDiagnostics.describe(),
                 FIELD_PAID_USAGE to describePaidUsage(),
+                FIELD_CARE_BREAK_STATUS to PauseAppels.décrire(context),
+                FIELD_CARE_BREAK_ACTIVE to AdminConfig(context).isCareBreakActive(),
             ),
             SetOptions.merge()
         ).addOnFailureListener { e -> Log.e(TAG, "Échec de l'envoi du signe de vie à Firestore", e) }
@@ -427,6 +429,7 @@ class DeviceStatusReporter(private val context: Context) {
         when (command) {
             COMMAND_RESTART_APP -> restartApp()
             COMMAND_REBOOT -> rebootDevice()
+            COMMAND_CANCEL_CARE_BREAK -> PauseAppels.annulerÀDistance(context)
             else -> Log.w(TAG, "Commande à distance inconnue : $command")
         }
     }
@@ -962,6 +965,7 @@ class DeviceStatusReporter(private val context: Context) {
 
         const val COMMAND_RESTART_APP = "restart-app"
         const val COMMAND_REBOOT = "reboot"
+        const val COMMAND_CANCEL_CARE_BREAK = "cancel-care-break"
 
         private const val RESTART_REQUEST_CODE = 4207
         private const val RESTART_DELAY_MS = 1_500L
@@ -972,6 +976,8 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"
         private const val FIELD_SLEEP_HOURS = "sleepHours"
         private const val FIELD_VOICE_GATE_ENABLED = "voiceGateEnabled"
+        private const val FIELD_CARE_BREAK_STATUS = "careBreakStatus"
+        private const val FIELD_CARE_BREAK_ACTIVE = "careBreakActive"
         private const val FIELD_DIM_JEAN_SPEECH = "dimJeanSpeech"
         private const val FIELD_SPEAKER_ENGINE = "speakerEngine"
         // Pas de champ pour la clé Picovoice : comme les deux clés de

@@ -23,6 +23,7 @@ import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.CallerPhotoCache
 import com.seniorvisio.core.DeviceStatusReporter
 import com.seniorvisio.core.Environnement
+import com.seniorvisio.core.PauseAppels
 import com.seniorvisio.recueil.RecueilStore
 import com.seniorvisio.core.UsageStats
 import com.seniorvisio.signaling.CallSignalingClient
@@ -124,6 +125,11 @@ class CallListenerService : LifecycleService() {
             // perdu — système qui a repoussé l'alarme, tablette éteinte à
             // l'heure dite — la photo se remet d'aplomb ici.
             galerie.réévaluer()
+            // Filet de la pause soignants : si personne n'a levé le blocage
+            // (ni un second appui sur la tablette, ni le PWA) avant les 30
+            // minutes, ce battement le constate et joue l'annonce de fin (voir
+            // PauseAppels.vérifierExpirationNaturelle).
+            PauseAppels.vérifierExpirationNaturelle(this)
             surveillerMémoireAuRepos()
             statusReporter.reportHeartbeat(échecsDÉcoute)
             heartbeatHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS)

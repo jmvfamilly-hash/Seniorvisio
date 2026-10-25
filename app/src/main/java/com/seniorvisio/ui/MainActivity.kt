@@ -32,6 +32,7 @@ import com.seniorvisio.core.CompanionApps
 import com.seniorvisio.core.MiseEnVeille
 import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
+import com.seniorvisio.core.PauseAppels
 import com.seniorvisio.core.UsageStats
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.recueil.Element
@@ -64,6 +65,7 @@ class MainActivity : AppCompatActivity() {
 
     private val adminConfig by lazy { AdminConfig(this) }
     private lateinit var zones: HomeZonesController
+    private lateinit var boutonPauseAppels: Button
     // ═══ PLUS AUCUNE ÉCOUTE DE LA PIÈCE ═══
     //
     // La transcription de la pièce, les commandes vocales et la bascule
@@ -169,6 +171,12 @@ class MainActivity : AppCompatActivity() {
             },
         )
 
+        boutonPauseAppels = findViewById(R.id.boutonPauseAppels)
+        boutonPauseAppels.setOnClickListener {
+            PauseAppels.basculer(this)
+            rafraîchirBoutonPauseAppels()
+        }
+
         permissionLauncher.launch(
             arrayOf(
                 Manifest.permission.CAMERA,
@@ -263,6 +271,19 @@ class MainActivity : AppCompatActivity() {
         zones.onResume()
         screenAwakeHandler.removeCallbacks(screenAwakeTicker)
         screenAwakeHandler.post(screenAwakeTicker)
+        // Reflète un éventuel déblocage survenu pendant que cet écran n'était
+        // pas affiché : depuis le PWA, ou l'expiration naturelle des 30 min.
+        rafraîchirBoutonPauseAppels()
+    }
+
+    /** Le bouton affiche l'action possible, pas un état : « bloquer » tant que
+     *  les appels passent, « débloquer » pendant la pause (voir PauseAppels). */
+    private fun rafraîchirBoutonPauseAppels() {
+        boutonPauseAppels.text = if (adminConfig.isCareBreakActive()) {
+            "Permettre de nouveau les appels"
+        } else {
+            "Mettez-moi en veille 30 minutes, plus d'appels pendant ce temps-là"
+        }
     }
 
     /**

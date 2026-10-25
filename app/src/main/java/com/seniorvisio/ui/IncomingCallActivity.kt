@@ -386,19 +386,21 @@ class IncomingCallActivity : AppCompatActivity() {
             runOnUiThread { appliquerMêmePièceVidéo(enabled) }
         }
 
-        // Le bouton « Connexion immédiate » du PWA écrit cette demande (voir
-        // web-caller/app.js), et le proche peut le toucher AVANT que l'offre
-        // WebRTC n'ait été récupérée. Connecter à ce moment-là échouait en silence —
-        // answer() abandonne sans rien dire tant que la connexion n'existe pas —
-        // laissant le proche devant un décompte qui ne se termine jamais, alors
-        // que la transcription, elle, fonctionnait (elle passe par Firestore, pas
-        // par WebRTC) et donnait l'illusion d'un appel établi. La demande est
-        // donc mise en attente jusqu'à onReady si l'offre n'est pas encore là.
+        // L'appui secret de 5 s sur la barre de progression du PWA (voir
+        // web-caller/app.js) écrit cette demande, et le proche peut le
+        // déclencher AVANT que l'offre WebRTC n'ait été récupérée. Connecter à
+        // ce moment-là échouait en silence — answer() abandonne sans rien dire
+        // tant que la connexion n'existe pas — laissant le proche devant un
+        // décompte qui ne se termine jamais, alors que la transcription, elle,
+        // fonctionnait (elle passe par Firestore, pas par WebRTC) et donnait
+        // l'illusion d'un appel établi. La demande est donc mise en attente
+        // jusqu'à onReady si l'offre n'est pas encore là.
         var forceConnectHandled = false
         callEngine.listenForForceConnect {
             runOnUiThread {
                 if (forceConnectHandled || isConnected) return@runOnUiThread
                 forceConnectHandled = true
+                CallTrace.record("APPEL connexion immédiate", "appui secret de 5 s côté PWA")
                 alertController.cancel()
                 if (isPrepared) connectVideoCall() else pendingForceConnect = true
             }

@@ -88,6 +88,19 @@ class AdminConfig(context: Context) {
     fun isSleeping(nowMs: Long = System.currentTimeMillis()): Boolean =
         nowMs < sleepUntilMs
 
+    /**
+     * Jusqu'à quand les appels externes sont bloqués, à la demande d'un
+     * soignant (voir PauseAppels). Même mécanique que [sleepUntilMs] :
+     * horloge murale, pour survivre à un redémarrage du service permanent.
+     */
+    var careBreakUntilMs: Long
+        get() = prefs.getLong(KEY_CARE_BREAK_UNTIL_MS, 0L)
+        set(value) = prefs.edit().putLong(KEY_CARE_BREAK_UNTIL_MS, value).apply()
+
+    /** Vrai tant que les appels externes sont bloqués à la demande d'un soignant. */
+    fun isCareBreakActive(nowMs: Long = System.currentTimeMillis()): Boolean =
+        nowMs < careBreakUntilMs
+
     // --- Durée de l'alerte avant connexion automatique (paramétrable, 30s par défaut) ---
     var countdownSeconds: Int
         get() = prefs.getInt(KEY_COUNTDOWN_SECONDS, 30)
@@ -548,6 +561,7 @@ class AdminConfig(context: Context) {
         private const val KEY_COUNTDOWN_SECONDS = "countdown_seconds"
         private const val KEY_SLEEP_HOURS = "sleep_hours"
         private const val KEY_SLEEP_UNTIL_MS = "sleep_until_ms"
+        private const val KEY_CARE_BREAK_UNTIL_MS = "care_break_until_ms"
         private const val KEY_BLOCKING_ENABLED = "blocking_enabled"
         private const val KEY_ADMIN_PIN = "admin_pin"
         private const val KEY_ACCESS_PASSWORD = "access_password"

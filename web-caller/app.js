@@ -522,7 +522,7 @@ const els = {
   callButton: el("callButton"),
   sousTitresButton: el("sousTitresButton"),
   cancelButton: el("cancelButton"),
-  forceConnectButton: el("forceConnectButton"),
+  countdownBar: el("countdownBar"),
   policeSelect: el("policeSelect"),
   handoffReturnSlider: el("handoffReturnSlider"),
   galeriePreferee: el("galeriePreferee"),
@@ -622,6 +622,8 @@ const els = {
   restartAppButton: el("restartAppButton"),
   rebootDeviceButton: el("rebootDeviceButton"),
   commandStatus: el("commandStatus"),
+  careBreakStatus: el("careBreakStatus"),
+  careBreakCancelButton: el("careBreakCancelButton"),
   captionOverflowIndicator: el("captionOverflowIndicator"),
   // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
   jeanScreen: el("jeanScreen"),
@@ -982,12 +984,6 @@ async function lancerAppel({ sousTitres = false } = {}) {
   // ne doivent pas réapparaître le temps que la tablette publie les siens.
   applyScreenState({ roomText: null, callText: null, lagSeconds: 0 });
   els.jeanSlideshow.classList.add("hidden");
-  // Désactivé tant que l'appel n'est pas prêt (voir plus bas) : un appui
-  // pendant la mise en place (caméra, création de l'offre...) tombait dans
-  // le vide côté PWA — le document d'appel n'existait pas encore, la
-  // demande de connexion immédiate ne partait jamais — tout en désactivant
-  // le bouton, sans plus aucun moyen de relancer la connexion pour cet appel.
-  els.forceConnectButton.disabled = true;
   showState("calling");
   // Identité renseignée sur l'écran d'attente, sinon repli sur l'ancien
   // comportement : nom générique et capture webcam prise à l'ouverture.
@@ -1427,10 +1423,29 @@ on("cadencePhotos", "change", async () => {
   }
 });
 
-on("forceConnectButton", "click", () => {
-  els.forceConnectButton.disabled = true;
-  engine.forceConnect();
+// ═══ APPUI SECRET DE 5 S : CONNEXION IMMÉDIATE ═══
+//
+// Remplace l'ancien bouton « Se connecter maintenant », retiré : visible, il
+// était utilisé par des aidants qui n'avaient pas à le voir. Posé sur la
+// barre de progression du décompte déjà affichée, sans aucun retour à
+// l'écran pendant l'appui — seul l'administrateur sait qu'elle réagit.
+let appuiSecretMinuterie = null;
+
+function annulerAppuiSecret() {
+  clearTimeout(appuiSecretMinuterie);
+  appuiSecretMinuterie = null;
+}
+
+on("countdownBar", "pointerdown", () => {
+  annulerAppuiSecret();
+  appuiSecretMinuterie = setTimeout(() => {
+    appuiSecretMinuterie = null;
+    engine.forceConnect();
+  }, 5000);
 });
+on("countdownBar", "pointerup", annulerAppuiSecret);
+on("countdownBar", "pointercancel", annulerAppuiSecret);
+on("countdownBar", "pointerleave", annulerAppuiSecret);
 
 on("cancelButton", "click", async () => {
   await engine.cancelCall();
@@ -1789,6 +1804,24 @@ on("rebootDeviceButton", "click", () =>
   sendCommand("reboot", "Redémarrer complètement la tablette de Jean ? Elle sera indisponible une minute ou deux.")
 );
 
+on("careBreakCancelButton", "click", async () => {
+  if (!window.confirm("Permettre de nouveau les appels tout de suite ?")) return;
+  els.careBreakCancelButton.disabled = true;
+  try {
+    await engine.sendDeviceCommand(CONFIG.deviceDocId, "cancel-care-break");
+  } catch (e) {
+    console.warn("[app] Déblocage non transmis :", e);
+  } finally {
+    els.careBreakCancelButton.disabled = false;
+  }
+});
+
+/** Affiché avec le reste de l'état de la tablette, voir renderDeviceHealth. */
+function renderCareBreak(data) {
+  if (els.careBreakStatus) els.careBreakStatus.textContent = data.careBreakStatus || "—";
+  if (els.careBreakCancelButton) els.careBreakCancelButton.hidden = !data.careBreakActive;
+}
+
 // --- Moteur de transcription de la tablette, réglé à distance ---
 // Sur l'écran d'accueil et non dans les réglages d'appel : le moteur de la
 // pièce écoute toute la journée, il doit pouvoir être changé sans avoir à
@@ -1935,6 +1968,7 @@ function applyDeviceSettings(data) {
   // pouvoir emporter du code qui marchait.
   try {
     renderDeviceHealth(data);
+    renderCareBreak(data);
   } catch (e) {
     console.warn("[app] État de la tablette non affichable :", e);
   }
@@ -2716,15 +2750,18 @@ on("hangupButton", "click", async () => {
   showState("idle");
 });
 
-// Deux façons de ne pas aboutir, qui n'ont rien à voir l'une avec l'autre :
-// Jean a refusé, ou il était déjà en ligne avec quelqu'un d'autre. Dans le
-// second cas il n'a même pas été dérangé — le dire évite de faire croire à un
-// refus, et évite surtout de rappeler dans la seconde en pensant à une fausse
-// manœuvre.
+// Trois façons de ne pas aboutir, qui n'ont rien à voir l'une avec l'autre :
+// Jean a refusé, il était déjà en ligne avec quelqu'un d'autre, ou un soignant
+// a posé une pause de 30 minutes. Dans les deux derniers cas il n'a même pas
+// été dérangé — le dire évite de faire croire à un refus, et évite surtout de
+// rappeler dans la seconde en pensant à une fausse manœuvre.
 engine.onBlocked((reason) => {
   els.blockedMessage.textContent = reason === "busy"
     ? "Jean est déjà en communication avec quelqu'un. Réessayez dans quelques minutes."
+    : reason === "blocked_care"
+    ? "Appel bloqué pendant l'intervention des soignants"
     : "Jean a bloqué l'appel.";
+  els.blocked.classList.toggle("blocked-care", reason === "blocked_care");
   showState("blocked");
 });
 engine.onConnected(() => {

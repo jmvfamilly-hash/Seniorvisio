@@ -608,6 +608,14 @@ class CallSignalingClient {
          * dérangé — et le proche n'a pas à croire qu'on lui a raccroché au nez.
          */
         const val STATUS_BUSY = "busy"
+
+        /**
+         * Un appel arrivé pendant qu'un soignant a posé une pause de 30 minutes
+         * (voir PauseAppels, IncomingCallService.isBlockedForCareBreak).
+         * Distinct de "blocked" pour la même raison que "busy" : Jean n'a rien
+         * refusé, il n'a même pas été dérangé.
+         */
+        const val STATUS_BLOCKED_CARE = "blocked_care"
         const val STATUS_ENDED = "ended"
     }
 }
