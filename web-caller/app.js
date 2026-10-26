@@ -1018,7 +1018,6 @@ async function lancerAppel({ sousTitres = false } = {}) {
     sousTitresMode: sousTitres,
     callerPhotoBase64: identity.photoBase64 || null,
   });
-  els.forceConnectButton.disabled = false;
 }
 
 on("callButton", "click", () => lancerAppel());
