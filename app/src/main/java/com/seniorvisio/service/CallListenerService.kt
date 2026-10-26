@@ -83,6 +83,15 @@ class CallListenerService : LifecycleService() {
      */
     val galerie = OrdonnanceurPhotos(this)
 
+    /**
+     * Appelée par l'écran d'accueil juste après un appui sur le bouton de
+     * pause soignants (voir MainActivity) : publie l'état à jour tout de
+     * suite, sans attendre le prochain signe de vie, pour que le panneau
+     * d'administration du PWA et l'écran d'un proche en attente le reflètent
+     * sans délai.
+     */
+    fun publierPauseAppelsMaintenant() = statusReporter.publierPauseAppels()
+
     // Sans ce verrou, Android coupe l'économiseur d'énergie Wi-Fi une fois
     // l'écran éteint : l'association tombe au bout de quelques heures, et la
     // tablette devient injoignable (plus d'appel entrant, plus de mise à jour

@@ -1819,6 +1819,15 @@ on("careBreakCancelButton", "click", async () => {
 function renderCareBreak(data) {
   if (els.careBreakStatus) els.careBreakStatus.textContent = data.careBreakStatus || "—";
   if (els.careBreakCancelButton) els.careBreakCancelButton.hidden = !data.careBreakActive;
+
+  // Le proche resté sur l'écran orange (voir engine.onBlocked, raison
+  // "blocked_care") n'a aucun moyen de savoir que la pause vient de se lever :
+  // rien ne le lui dit tant qu'il ne retente pas l'appel de lui-même. On le
+  // ramène donc à l'écran d'attente dès que la tablette confirme que les
+  // appels sont repassés possibles — il n'a plus qu'à appuyer sur « Appeler ».
+  if (!data.careBreakActive && els.blocked.classList.contains("blocked-care") && !els.blocked.classList.contains("hidden")) {
+    showState("idle");
+  }
 }
 
 // --- Moteur de transcription de la tablette, réglé à distance ---

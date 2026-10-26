@@ -175,6 +175,7 @@ class MainActivity : AppCompatActivity() {
         boutonPauseAppels.setOnClickListener {
             PauseAppels.basculer(this)
             rafraîchirBoutonPauseAppels()
+            CallListenerService.enService?.publierPauseAppelsMaintenant()
         }
 
         permissionLauncher.launch(

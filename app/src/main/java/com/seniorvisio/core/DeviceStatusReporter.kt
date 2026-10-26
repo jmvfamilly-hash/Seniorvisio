@@ -172,6 +172,22 @@ class DeviceStatusReporter(private val context: Context) {
     }
 
     /**
+     * Les deux champs de la pause soignants, publiés hors du cycle du signe
+     * de vie (voir applyRemoteCommand, COMMAND_CANCEL_CARE_BREAK) : le proche
+     * qui attend sur l'écran orange ne doit pas patienter jusqu'au prochain
+     * battement pour voir que les appels sont repassés possibles.
+     */
+    fun publierPauseAppels() {
+        deviceDoc.set(
+            mapOf(
+                FIELD_CARE_BREAK_STATUS to PauseAppels.décrire(context),
+                FIELD_CARE_BREAK_ACTIVE to AdminConfig(context).isCareBreakActive(),
+            ),
+            SetOptions.merge()
+        ).addOnFailureListener { e -> Log.e(TAG, "Échec de la publication de la pause appels", e) }
+    }
+
+    /**
      * La journée en cours dans son propre document, une par jour (voir
      * UsageStats). Séparée du document d'appareil pour deux raisons : elle
      * grossit au fil de la journée, et surtout le PWA doit pouvoir relire les
@@ -429,7 +445,14 @@ class DeviceStatusReporter(private val context: Context) {
         when (command) {
             COMMAND_RESTART_APP -> restartApp()
             COMMAND_REBOOT -> rebootDevice()
-            COMMAND_CANCEL_CARE_BREAK -> PauseAppels.annulerÀDistance(context)
+            COMMAND_CANCEL_CARE_BREAK -> {
+                PauseAppels.annulerÀDistance(context)
+                // Sans cette publication immédiate, le proche resté sur l'écran
+                // orange (voir web-caller/app.js, renderCareBreak) n'aurait vu
+                // careBreakActive repasser à faux qu'au prochain signe de vie —
+                // jusqu'à cinq minutes après que l'administrateur a cliqué.
+                publierPauseAppels()
+            }
             else -> Log.w(TAG, "Commande à distance inconnue : $command")
         }
     }
