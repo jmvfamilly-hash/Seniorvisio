@@ -133,6 +133,11 @@ video {
   border-radius: 6px;
   margin-top: 16px;
   overflow: hidden;
+  /* Zone de l'appui secret de 5 s (voir app.js) : pas de sélection de texte
+     ni de défilement pendant le maintien. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .progress-bar-fill {
@@ -140,6 +145,15 @@ video {
   width: 0%;
   background: #2ECC71;
   transition: width 0.25s linear;
+}
+
+/* Appel refusé parce qu'un soignant a posé une pause, et non par Jean : fond
+   franchement différent du reste de l'écran "blocked", pour qu'on comprenne
+   d'un coup d'œil qu'il ne s'agit pas d'un refus personnel. */
+#stateBlocked.blocked-care {
+  background: #E67E22;
+  border-radius: 12px;
+  padding: 16px;
 }
 
 .countdown-text {

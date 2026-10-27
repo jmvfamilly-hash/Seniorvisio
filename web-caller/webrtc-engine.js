@@ -723,10 +723,13 @@ class RealCallEngine extends CallEngine {
       }
       // "blocked" : Jean a refusé l'appel. "busy" : il est déjà en
       // conversation avec quelqu'un d'autre et n'a même pas été dérangé (voir
-      // IncomingCallService.isBusyWithAnotherCall). Deux situations très
-      // différentes pour l'appelant, d'où la raison transmise au rappel — les
-      // confondre laisserait croire à un refus là où il n'y en a pas.
-      if (data.status === "blocked" || data.status === "busy") {
+      // IncomingCallService.isBusyWithAnotherCall). "blocked_care" : un
+      // soignant a posé une pause de 30 minutes, Jean n'a pas non plus été
+      // dérangé (voir IncomingCallService.isBlockedForCareBreak). Trois
+      // situations très différentes pour l'appelant, d'où la raison transmise
+      // au rappel — les confondre laisserait croire à un refus là où il n'y
+      // en a pas.
+      if (data.status === "blocked" || data.status === "busy" || data.status === "blocked_care") {
         this._blockedCb && this._blockedCb(data.status);
         this._teardown();
       }

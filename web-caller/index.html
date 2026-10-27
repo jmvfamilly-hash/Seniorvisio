@@ -129,9 +129,8 @@
     <div id="stateCalling" class="state hidden">
       <p>Appel en cours vers Jean…</p>
       <p class="hint" id="callingHint">Connexion à sa tablette…</p>
-      <div class="progress-bar"><div class="progress-bar-fill" id="countdownFill"></div></div>
+      <div class="progress-bar" id="countdownBar"><div class="progress-bar-fill" id="countdownFill"></div></div>
       <p class="countdown-text" id="countdownText"></p>
-      <button id="forceConnectButton">📞 Se connecter maintenant</button>
       <button id="cancelButton" class="secondary">Annuler</button>
     </div>
 
@@ -814,6 +813,17 @@
           <button id="restartAppButton" class="secondary">♻️ Relancer l'application</button>
           <button id="rebootDeviceButton" class="secondary">⚡ Redémarrer la tablette</button>
           <p class="hint" id="commandStatus"></p>
+
+          <h3 class="admin-section">Pause soignants</h3>
+          <p class="hint">
+            Un soignant peut bloquer les appels externes 30 minutes depuis le
+            bouton au centre de l'écran de Jean, et les redébloquer en partant
+            avec le même bouton. S'il oublie, le blocage se lève tout seul au
+            bout des 30 minutes.
+          </p>
+          <p class="hint" id="careBreakStatus">—</p>
+          <button id="careBreakCancelButton" class="secondary" hidden>Permettre de nouveau les appels</button>
+          <p class="hint" id="careBreakSince" hidden></p>
 
           <h3 class="admin-section">Diagnostic</h3>
           <!-- Test décisif pour localiser un écho : s'il disparaît en coupant

@@ -184,22 +184,51 @@ object UsageStats {
         // compter fausserait la moyenne de la semaine.
         if (nowMs - from > MAX_CATCH_UP_MS) return
 
-        var cursor = from
-        while (cursor < nowMs) {
+        pourChaqueTranche(from, nowMs) { date, slot, seconds -> credit(date, slot, seconds) }
+    }
+
+    /**
+     * Découpe un intervalle en tranches de quart d'heure et crédite chacune
+     * séparément — jamais à cheval sur deux tranches, sinon le graphique de la
+     * journée décalerait un peu plus à chaque appel. Partagée entre le
+     * rattrapage de l'éveil ([flushLocked]) et la pause soignants
+     * ([noteCareBreak]), qui créditent chacun leur propre compteur.
+     */
+    private fun pourChaqueTranche(fromMs: Long, toMs: Long, crédite: (LocalDate, Int, Int) -> Unit) {
+        var cursor = fromMs
+        while (cursor < toMs) {
             val moment = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(cursor), ZoneId.systemDefault())
             val slot = moment.hour * SLOTS_PER_HOUR + moment.minute / SLOT_MINUTES
-            // Fin de la tranche courante, ou fin de l'intervalle : on ne
-            // crédite jamais à cheval sur deux tranches, sinon le graphique de
-            // la journée décalerait un peu plus à chaque passage.
             val slotEnd = moment
                 .withMinute((slot % SLOTS_PER_HOUR) * SLOT_MINUTES)
                 .withSecond(0).withNano(0)
                 .plusMinutes(SLOT_MINUTES.toLong())
                 .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            val chunkEnd = minOf(nowMs, slotEnd)
+            val chunkEnd = minOf(toMs, slotEnd)
             val seconds = ((chunkEnd - cursor) / 1000L).toInt()
-            if (seconds > 0) credit(moment.toLocalDate(), slot, seconds)
+            if (seconds > 0) crédite(moment.toLocalDate(), slot, seconds)
             cursor = chunkEnd
+        }
+    }
+
+    /**
+     * Une pause soignants déjà terminée, répartie dans les tranches de quart
+     * d'heure qu'elle a traversées.
+     *
+     * Appelée une seule fois, une fois la pause levée (voir PauseAppels) : à
+     * la différence de l'éveil de l'écran, l'intervalle entier est déjà connu
+     * d'un coup, sans qu'aucun rattrapage périodique ne soit nécessaire.
+     */
+    @Synchronized
+    fun noteCareBreak(startedAtMs: Long, endedAtMs: Long) {
+        if (!ready() || endedAtMs <= startedAtMs) return
+        pourChaqueTranche(startedAtMs, endedAtMs) { date, slot, seconds ->
+            val key = date.toString()
+            val day = readDay(key)
+            val slots = day.optJSONArray(FIELD_CARE_BREAK_SLOTS) ?: emptySlots()
+            slots.put(slot, slots.optInt(slot) + seconds)
+            day.put(FIELD_CARE_BREAK_SLOTS, slots)
+            writeDay(key, day)
         }
     }
 
@@ -327,6 +356,9 @@ object UsageStats {
     const val FIELD_AWAKE = "awakeSeconds"
     const val FIELD_ASLEEP = "asleepSeconds"
     const val FIELD_SLOTS = "awakeSlots"
+
+    /** Mêmes tranches que [FIELD_SLOTS], mais pour la pause soignants (voir noteCareBreak). */
+    const val FIELD_CARE_BREAK_SLOTS = "careBreakSlots"
     const val FIELD_ENGINES = "engineSeconds"
     const val FIELD_BILLABLE_EQUIVALENT = "billableEquivalentSeconds"
     const val FIELD_CALLS = "calls"

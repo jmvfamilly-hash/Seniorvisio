@@ -23,6 +23,7 @@ import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.CallerPhotoCache
 import com.seniorvisio.core.DeviceStatusReporter
 import com.seniorvisio.core.Environnement
+import com.seniorvisio.core.PauseAppels
 import com.seniorvisio.recueil.RecueilStore
 import com.seniorvisio.core.UsageStats
 import com.seniorvisio.signaling.CallSignalingClient
@@ -82,6 +83,15 @@ class CallListenerService : LifecycleService() {
      */
     val galerie = OrdonnanceurPhotos(this)
 
+    /**
+     * Appelée par l'écran d'accueil juste après un appui sur le bouton de
+     * pause soignants (voir MainActivity) : publie l'état à jour tout de
+     * suite, sans attendre le prochain signe de vie, pour que le panneau
+     * d'administration du PWA et l'écran d'un proche en attente le reflètent
+     * sans délai.
+     */
+    fun publierPauseAppelsMaintenant() = statusReporter.publierPauseAppels()
+
     // Sans ce verrou, Android coupe l'économiseur d'énergie Wi-Fi une fois
     // l'écran éteint : l'association tombe au bout de quelques heures, et la
     // tablette devient injoignable (plus d'appel entrant, plus de mise à jour
@@ -124,6 +134,11 @@ class CallListenerService : LifecycleService() {
             // perdu — système qui a repoussé l'alarme, tablette éteinte à
             // l'heure dite — la photo se remet d'aplomb ici.
             galerie.réévaluer()
+            // Filet de la pause soignants : si personne n'a levé le blocage
+            // (ni un second appui sur la tablette, ni le PWA) avant les 30
+            // minutes, ce battement le constate et joue l'annonce de fin (voir
+            // PauseAppels.vérifierExpirationNaturelle).
+            PauseAppels.vérifierExpirationNaturelle(this@CallListenerService)
             surveillerMémoireAuRepos()
             statusReporter.reportHeartbeat(échecsDÉcoute)
             heartbeatHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS)

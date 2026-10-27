@@ -522,7 +522,7 @@ const els = {
   callButton: el("callButton"),
   sousTitresButton: el("sousTitresButton"),
   cancelButton: el("cancelButton"),
-  forceConnectButton: el("forceConnectButton"),
+  countdownBar: el("countdownBar"),
   policeSelect: el("policeSelect"),
   handoffReturnSlider: el("handoffReturnSlider"),
   galeriePreferee: el("galeriePreferee"),
@@ -618,6 +618,9 @@ const els = {
   restartAppButton: el("restartAppButton"),
   rebootDeviceButton: el("rebootDeviceButton"),
   commandStatus: el("commandStatus"),
+  careBreakStatus: el("careBreakStatus"),
+  careBreakCancelButton: el("careBreakCancelButton"),
+  careBreakSince: el("careBreakSince"),
   captionOverflowIndicator: el("captionOverflowIndicator"),
   // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
   jeanScreen: el("jeanScreen"),
@@ -978,12 +981,6 @@ async function lancerAppel({ sousTitres = false } = {}) {
   // ne doivent pas réapparaître le temps que la tablette publie les siens.
   applyScreenState({ roomText: null, callText: null, lagSeconds: 0 });
   els.jeanSlideshow.classList.add("hidden");
-  // Désactivé tant que l'appel n'est pas prêt (voir plus bas) : un appui
-  // pendant la mise en place (caméra, création de l'offre...) tombait dans
-  // le vide côté PWA — le document d'appel n'existait pas encore, la
-  // demande de connexion immédiate ne partait jamais — tout en désactivant
-  // le bouton, sans plus aucun moyen de relancer la connexion pour cet appel.
-  els.forceConnectButton.disabled = true;
   showState("calling");
   // Identité renseignée sur l'écran d'attente, sinon repli sur l'ancien
   // comportement : nom générique et capture webcam prise à l'ouverture.
@@ -1018,7 +1015,6 @@ async function lancerAppel({ sousTitres = false } = {}) {
     sousTitresMode: sousTitres,
     callerPhotoBase64: identity.photoBase64 || null,
   });
-  els.forceConnectButton.disabled = false;
 }
 
 on("callButton", "click", () => lancerAppel());
@@ -1416,10 +1412,29 @@ on("cadencePhotos", "change", async () => {
   }
 });
 
-on("forceConnectButton", "click", () => {
-  els.forceConnectButton.disabled = true;
-  engine.forceConnect();
+// ═══ APPUI SECRET DE 5 S : CONNEXION IMMÉDIATE ═══
+//
+// Remplace l'ancien bouton « Se connecter maintenant », retiré : visible, il
+// était utilisé par des aidants qui n'avaient pas à le voir. Posé sur la
+// barre de progression du décompte déjà affichée, sans aucun retour à
+// l'écran pendant l'appui — seul l'administrateur sait qu'elle réagit.
+let appuiSecretMinuterie = null;
+
+function annulerAppuiSecret() {
+  clearTimeout(appuiSecretMinuterie);
+  appuiSecretMinuterie = null;
+}
+
+on("countdownBar", "pointerdown", () => {
+  annulerAppuiSecret();
+  appuiSecretMinuterie = setTimeout(() => {
+    appuiSecretMinuterie = null;
+    engine.forceConnect();
+  }, 5000);
 });
+on("countdownBar", "pointerup", annulerAppuiSecret);
+on("countdownBar", "pointercancel", annulerAppuiSecret);
+on("countdownBar", "pointerleave", annulerAppuiSecret);
 
 on("cancelButton", "click", async () => {
   await engine.cancelCall();
@@ -1583,17 +1598,29 @@ function formatDuration(seconds) {
  * dit la proportion de ce quart d'heure passée écran allumé — un total
  * quotidien ne dirait ni à quelles heures il y a de l'activité, ni si elle est
  * groupée ou éparpillée, qui est justement ce qu'on cherche à voir.
+ *
+ * Les tranches où un soignant a bloqué les appels (voir
+ * UsageStats.noteCareBreak) remplacent la couleur d'éveil par l'orange déjà
+ * utilisé pour cette pause ailleurs dans le PWA (voir .blocked-care) : c'est
+ * une information plus importante pour cette tranche que l'éveil de l'écran.
  */
 function renderDayBar(day) {
   const slots = Array.isArray(day.awakeSlots) ? day.awakeSlots : [];
+  const pauseSlots = Array.isArray(day.careBreakSlots) ? day.careBreakSlots : [];
   const bar = document.createElement("div");
   bar.className = "usage-bar";
   for (let i = 0; i < SLOTS_PER_DAY; i++) {
     const cell = document.createElement("div");
     cell.className = "usage-slot";
-    // 900 secondes = un quart d'heure entier éveillé.
-    const share = Math.min(1, (Number(slots[i]) || 0) / 900);
-    cell.style.opacity = share === 0 ? 0.08 : 0.25 + share * 0.75;
+    // 900 secondes = un quart d'heure entier.
+    const pauseShare = Math.min(1, (Number(pauseSlots[i]) || 0) / 900);
+    if (pauseShare > 0) {
+      cell.style.background = "#E67E22";
+      cell.style.opacity = 0.35 + pauseShare * 0.65;
+    } else {
+      const share = Math.min(1, (Number(slots[i]) || 0) / 900);
+      cell.style.opacity = share === 0 ? 0.08 : 0.25 + share * 0.75;
+    }
     bar.appendChild(cell);
   }
   return bar;
@@ -1778,6 +1805,43 @@ on("rebootDeviceButton", "click", () =>
   sendCommand("reboot", "Redémarrer complètement la tablette de Jean ? Elle sera indisponible une minute ou deux.")
 );
 
+on("careBreakCancelButton", "click", async () => {
+  if (!window.confirm("Permettre de nouveau les appels tout de suite ?")) return;
+  els.careBreakCancelButton.disabled = true;
+  try {
+    await engine.sendDeviceCommand(CONFIG.deviceDocId, "cancel-care-break");
+  } catch (e) {
+    console.warn("[app] Déblocage non transmis :", e);
+  } finally {
+    els.careBreakCancelButton.disabled = false;
+  }
+});
+
+/** Affiché avec le reste de l'état de la tablette, voir renderDeviceHealth. */
+function renderCareBreak(data) {
+  if (els.careBreakStatus) els.careBreakStatus.textContent = data.careBreakStatus || "—";
+  if (els.careBreakCancelButton) els.careBreakCancelButton.hidden = !data.careBreakActive;
+  if (els.careBreakSince) {
+    els.careBreakSince.hidden = !data.careBreakActive || !data.careBreakStartedAtMs;
+    if (data.careBreakActive && data.careBreakStartedAtMs) {
+      const depuis = new Date(data.careBreakStartedAtMs).toLocaleTimeString("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      els.careBreakSince.textContent = `Bloquée depuis ${depuis}`;
+    }
+  }
+
+  // Le proche resté sur l'écran orange (voir engine.onBlocked, raison
+  // "blocked_care") n'a aucun moyen de savoir que la pause vient de se lever :
+  // rien ne le lui dit tant qu'il ne retente pas l'appel de lui-même. On le
+  // ramène donc à l'écran d'attente dès que la tablette confirme que les
+  // appels sont repassés possibles — il n'a plus qu'à appuyer sur « Appeler ».
+  if (!data.careBreakActive && els.blocked.classList.contains("blocked-care") && !els.blocked.classList.contains("hidden")) {
+    showState("idle");
+  }
+}
+
 // --- Moteur de transcription de la tablette, réglé à distance ---
 // Sur l'écran d'accueil et non dans les réglages d'appel : le moteur de la
 // pièce écoute toute la journée, il doit pouvoir être changé sans avoir à
@@ -1922,6 +1986,7 @@ function applyDeviceSettings(data) {
   // pouvoir emporter du code qui marchait.
   try {
     renderDeviceHealth(data);
+    renderCareBreak(data);
   } catch (e) {
     console.warn("[app] État de la tablette non affichable :", e);
   }
@@ -2703,15 +2768,18 @@ on("hangupButton", "click", async () => {
   showState("idle");
 });
 
-// Deux façons de ne pas aboutir, qui n'ont rien à voir l'une avec l'autre :
-// Jean a refusé, ou il était déjà en ligne avec quelqu'un d'autre. Dans le
-// second cas il n'a même pas été dérangé — le dire évite de faire croire à un
-// refus, et évite surtout de rappeler dans la seconde en pensant à une fausse
-// manœuvre.
+// Trois façons de ne pas aboutir, qui n'ont rien à voir l'une avec l'autre :
+// Jean a refusé, il était déjà en ligne avec quelqu'un d'autre, ou un soignant
+// a posé une pause de 30 minutes. Dans les deux derniers cas il n'a même pas
+// été dérangé — le dire évite de faire croire à un refus, et évite surtout de
+// rappeler dans la seconde en pensant à une fausse manœuvre.
 engine.onBlocked((reason) => {
   els.blockedMessage.textContent = reason === "busy"
     ? "Jean est déjà en communication avec quelqu'un. Réessayez dans quelques minutes."
+    : reason === "blocked_care"
+    ? "Appel bloqué pendant l'intervention des soignants"
     : "Jean a bloqué l'appel.";
+  els.blocked.classList.toggle("blocked-care", reason === "blocked_care");
   showState("blocked");
 });
 engine.onConnected(() => {

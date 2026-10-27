@@ -33,6 +33,7 @@ import com.seniorvisio.core.MiseEnVeille
 import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.TranscriptionSource
+import com.seniorvisio.core.PauseAppels
 import com.seniorvisio.core.UsageStats
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.recueil.Element
@@ -65,6 +66,7 @@ class MainActivity : AppCompatActivity() {
 
     private val adminConfig by lazy { AdminConfig(this) }
     private lateinit var zones: HomeZonesController
+    private lateinit var boutonPauseAppels: Button
     // ═══ LES SOUS-TITRES DE LA PIÈCE SONT DE RETOUR, BORNÉS À L'ÉCRAN ALLUMÉ ═══
     //
     // Les commandes vocales et la bascule automatique sur la voix restent
@@ -175,6 +177,15 @@ class MainActivity : AppCompatActivity() {
             },
         )
 
+        boutonPauseAppels = findViewById(R.id.boutonPauseAppels)
+        boutonPauseAppels.setOnClickListener {
+            // Le texte se remet à jour via le témoin posé dans onResume
+            // (l'écran est forcément au premier plan pour qu'on ait pu
+            // cliquer), pas besoin de le refaire ici.
+            PauseAppels.basculer(this)
+            CallListenerService.enService?.publierPauseAppelsMaintenant()
+        }
+
         permissionLauncher.launch(
             arrayOf(
                 Manifest.permission.CAMERA,
@@ -277,6 +288,24 @@ class MainActivity : AppCompatActivity() {
         )
         screenAwakeHandler.removeCallbacks(screenAwakeTicker)
         screenAwakeHandler.post(screenAwakeTicker)
+        // Reflète un éventuel déblocage survenu pendant que cet écran n'était
+        // pas affiché : depuis le PWA, ou l'expiration naturelle des 30 min.
+        rafraîchirBoutonPauseAppels()
+        // Et tant que cet écran reste au premier plan, toute bascule — y
+        // compris celle déclenchée à distance pendant qu'on le regarde — met
+        // le bouton à jour tout de suite, sans attendre le prochain passage
+        // par onResume (voir PauseAppels.annulerÀDistance).
+        PauseAppels.setOnChangeListener { runOnUiThread { rafraîchirBoutonPauseAppels() } }
+    }
+
+    /** Le bouton affiche l'action possible, pas un état : « bloquer » tant que
+     *  les appels passent, « débloquer » pendant la pause (voir PauseAppels). */
+    private fun rafraîchirBoutonPauseAppels() {
+        boutonPauseAppels.text = if (adminConfig.isCareBreakActive()) {
+            "Permettre de nouveau les appels"
+        } else {
+            "Mettez-moi en veille 30 minutes, plus d'appels pendant ce temps-là"
+        }
     }
 
     /**
@@ -576,6 +605,7 @@ class MainActivity : AppCompatActivity() {
         // fermeture. On se débranche, et on se rebranchera à onResume.
         CallListenerService.enService?.galerie?.observateur = null
         RoomPresenceService.running?.clearRoomCaptionListener()
+        PauseAppels.clearOnChangeListener()
         super.onPause()
         zones.onPause()
         screenAwakeHandler.removeCallbacks(screenAwakeTicker)

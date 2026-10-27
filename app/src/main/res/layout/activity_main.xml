@@ -62,6 +62,36 @@
 
     <include layout="@layout/view_home_zones" />
 
+    <!-- ═══ « PAUSE SOIGNANTS » : BLOQUER LES APPELS LE TEMPS D'UNE INTERVENTION ═══
+
+         Un soignant appuie en arrivant, les appels externes sont bloqués 30
+         minutes (voir PauseAppels), et appuie à nouveau en partant pour les
+         redébloquer tout de suite — le même bouton bascule dans les deux
+         sens. S'il oublie, le blocage se lève tout seul au bout des 30
+         minutes, et l'administrateur peut aussi débloquer depuis le PWA.
+
+         Centré sur tout l'écran, et non dans le bandeau de la date : c'est un
+         geste ponctuel d'un soignant de passage, pas un réglage permanent de
+         l'accueil de Jean comme le bouton de sommeil. -->
+    <Button
+        android:id="@+id/boutonPauseAppels"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:minWidth="88dp"
+        android:minHeight="88dp"
+        android:text="Mettez-moi en veille 30 minutes, plus d'appels pendant ce temps-là"
+        android:textSize="20sp"
+        android:textAllCaps="false"
+        android:textColor="#FFFFFF"
+        android:gravity="center"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
+        android:elevation="6dp"
+        android:background="@drawable/fond_bouton_navigation" />
+
     <!-- ═══ « SOUS-TITRES » : JEAN APPELLE LA TRANSCRIPTION QUAND IL VEUT ═══
 
          Bascule vers « Transcription instantanée » de Google, SANS AUCUNE
