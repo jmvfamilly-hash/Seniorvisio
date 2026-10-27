@@ -165,6 +165,7 @@ class DeviceStatusReporter(private val context: Context) {
                 FIELD_PAID_USAGE to describePaidUsage(),
                 FIELD_CARE_BREAK_STATUS to PauseAppels.décrire(context),
                 FIELD_CARE_BREAK_ACTIVE to AdminConfig(context).isCareBreakActive(),
+                FIELD_CARE_BREAK_STARTED_AT_MS to AdminConfig(context).careBreakStartedAtMs,
             ),
             SetOptions.merge()
         ).addOnFailureListener { e -> Log.e(TAG, "Échec de l'envoi du signe de vie à Firestore", e) }
@@ -172,7 +173,7 @@ class DeviceStatusReporter(private val context: Context) {
     }
 
     /**
-     * Les deux champs de la pause soignants, publiés hors du cycle du signe
+     * Les trois champs de la pause soignants, publiés hors du cycle du signe
      * de vie (voir applyRemoteCommand, COMMAND_CANCEL_CARE_BREAK) : le proche
      * qui attend sur l'écran orange ne doit pas patienter jusqu'au prochain
      * battement pour voir que les appels sont repassés possibles.
@@ -182,6 +183,7 @@ class DeviceStatusReporter(private val context: Context) {
             mapOf(
                 FIELD_CARE_BREAK_STATUS to PauseAppels.décrire(context),
                 FIELD_CARE_BREAK_ACTIVE to AdminConfig(context).isCareBreakActive(),
+                FIELD_CARE_BREAK_STARTED_AT_MS to AdminConfig(context).careBreakStartedAtMs,
             ),
             SetOptions.merge()
         ).addOnFailureListener { e -> Log.e(TAG, "Échec de la publication de la pause appels", e) }
@@ -1001,6 +1003,7 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_VOICE_GATE_ENABLED = "voiceGateEnabled"
         private const val FIELD_CARE_BREAK_STATUS = "careBreakStatus"
         private const val FIELD_CARE_BREAK_ACTIVE = "careBreakActive"
+        private const val FIELD_CARE_BREAK_STARTED_AT_MS = "careBreakStartedAtMs"
         private const val FIELD_DIM_JEAN_SPEECH = "dimJeanSpeech"
         private const val FIELD_SPEAKER_ENGINE = "speakerEngine"
         // Pas de champ pour la clé Picovoice : comme les deux clés de

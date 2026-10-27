@@ -14,15 +14,34 @@ object PauseAppels {
 
     private const val DURÉE_MINUTES = 30
 
+    /**
+     * Rappelé à chaque bascule (démarrage, annulation quelle qu'en soit la
+     * cause) pendant que l'écran d'accueil est au premier plan — voir
+     * MainActivity.onResume/onPause. Un seul abonné à la fois : cet écran est
+     * le seul à afficher le bouton concerné.
+     */
+    private var onChange: (() -> Unit)? = null
+
+    fun setOnChangeListener(listener: () -> Unit) {
+        onChange = listener
+    }
+
+    fun clearOnChangeListener() {
+        onChange = null
+    }
+
     /** Appelée par le bouton de la tablette : démarre si rien n'est en cours, annule sinon. */
     fun basculer(context: Context) {
         val config = AdminConfig(context)
         if (config.isCareBreakActive()) {
             annulerActive(context, config, "appui répété sur le bouton de la tablette")
         } else {
-            config.careBreakUntilMs = System.currentTimeMillis() + DURÉE_MINUTES * 60_000L
+            val maintenant = System.currentTimeMillis()
+            config.careBreakStartedAtMs = maintenant
+            config.careBreakUntilMs = maintenant + DURÉE_MINUTES * 60_000L
             CallTrace.record("PAUSE APPELS activée", "$DURÉE_MINUTES min, bouton de la tablette")
             AnnoncesVocales.jouer(context, AnnoncesVocales.Annonce.APPELS_INTERDITS)
+            onChange?.invoke()
         }
     }
 
@@ -58,9 +77,16 @@ object PauseAppels {
         restantConnuMin: Long? = null,
     ) {
         val restantMin = restantConnuMin ?: ((config.careBreakUntilMs - System.currentTimeMillis()) / 60_000L)
+        val débutaitÀ = config.careBreakStartedAtMs
         config.careBreakUntilMs = 0L
+        config.careBreakStartedAtMs = 0L
         CallTrace.record("PAUSE APPELS levée", "$motif — il restait $restantMin min")
+        // Journalisée seulement maintenant, l'intervalle entier déjà connu :
+        // contrairement à l'éveil de l'écran, une pause n'a pas besoin de
+        // rattrapage périodique (voir UsageStats.noteCareBreak).
+        if (débutaitÀ > 0L) UsageStats.noteCareBreak(débutaitÀ, System.currentTimeMillis())
         AnnoncesVocales.jouer(context, AnnoncesVocales.Annonce.APPELS_AUTORISÉS)
+        onChange?.invoke()
     }
 
     /** Ce que le bouton de la tablette et le panneau d'administration affichent. */

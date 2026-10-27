@@ -624,6 +624,7 @@ const els = {
   commandStatus: el("commandStatus"),
   careBreakStatus: el("careBreakStatus"),
   careBreakCancelButton: el("careBreakCancelButton"),
+  careBreakSince: el("careBreakSince"),
   captionOverflowIndicator: el("captionOverflowIndicator"),
   // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
   jeanScreen: el("jeanScreen"),
@@ -1608,17 +1609,29 @@ function formatDuration(seconds) {
  * dit la proportion de ce quart d'heure passée écran allumé — un total
  * quotidien ne dirait ni à quelles heures il y a de l'activité, ni si elle est
  * groupée ou éparpillée, qui est justement ce qu'on cherche à voir.
+ *
+ * Les tranches où un soignant a bloqué les appels (voir
+ * UsageStats.noteCareBreak) remplacent la couleur d'éveil par l'orange déjà
+ * utilisé pour cette pause ailleurs dans le PWA (voir .blocked-care) : c'est
+ * une information plus importante pour cette tranche que l'éveil de l'écran.
  */
 function renderDayBar(day) {
   const slots = Array.isArray(day.awakeSlots) ? day.awakeSlots : [];
+  const pauseSlots = Array.isArray(day.careBreakSlots) ? day.careBreakSlots : [];
   const bar = document.createElement("div");
   bar.className = "usage-bar";
   for (let i = 0; i < SLOTS_PER_DAY; i++) {
     const cell = document.createElement("div");
     cell.className = "usage-slot";
-    // 900 secondes = un quart d'heure entier éveillé.
-    const share = Math.min(1, (Number(slots[i]) || 0) / 900);
-    cell.style.opacity = share === 0 ? 0.08 : 0.25 + share * 0.75;
+    // 900 secondes = un quart d'heure entier.
+    const pauseShare = Math.min(1, (Number(pauseSlots[i]) || 0) / 900);
+    if (pauseShare > 0) {
+      cell.style.background = "#E67E22";
+      cell.style.opacity = 0.35 + pauseShare * 0.65;
+    } else {
+      const share = Math.min(1, (Number(slots[i]) || 0) / 900);
+      cell.style.opacity = share === 0 ? 0.08 : 0.25 + share * 0.75;
+    }
     bar.appendChild(cell);
   }
   return bar;
@@ -1819,6 +1832,16 @@ on("careBreakCancelButton", "click", async () => {
 function renderCareBreak(data) {
   if (els.careBreakStatus) els.careBreakStatus.textContent = data.careBreakStatus || "—";
   if (els.careBreakCancelButton) els.careBreakCancelButton.hidden = !data.careBreakActive;
+  if (els.careBreakSince) {
+    els.careBreakSince.hidden = !data.careBreakActive || !data.careBreakStartedAtMs;
+    if (data.careBreakActive && data.careBreakStartedAtMs) {
+      const depuis = new Date(data.careBreakStartedAtMs).toLocaleTimeString("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      els.careBreakSince.textContent = `Bloquée depuis ${depuis}`;
+    }
+  }
 
   // Le proche resté sur l'écran orange (voir engine.onBlocked, raison
   // "blocked_care") n'a aucun moyen de savoir que la pause vient de se lever :

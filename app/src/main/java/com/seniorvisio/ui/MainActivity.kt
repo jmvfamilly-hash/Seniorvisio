@@ -173,8 +173,10 @@ class MainActivity : AppCompatActivity() {
 
         boutonPauseAppels = findViewById(R.id.boutonPauseAppels)
         boutonPauseAppels.setOnClickListener {
+            // Le texte se remet à jour via le témoin posé dans onResume
+            // (l'écran est forcément au premier plan pour qu'on ait pu
+            // cliquer), pas besoin de le refaire ici.
             PauseAppels.basculer(this)
-            rafraîchirBoutonPauseAppels()
             CallListenerService.enService?.publierPauseAppelsMaintenant()
         }
 
@@ -275,6 +277,11 @@ class MainActivity : AppCompatActivity() {
         // Reflète un éventuel déblocage survenu pendant que cet écran n'était
         // pas affiché : depuis le PWA, ou l'expiration naturelle des 30 min.
         rafraîchirBoutonPauseAppels()
+        // Et tant que cet écran reste au premier plan, toute bascule — y
+        // compris celle déclenchée à distance pendant qu'on le regarde — met
+        // le bouton à jour tout de suite, sans attendre le prochain passage
+        // par onResume (voir PauseAppels.annulerÀDistance).
+        PauseAppels.setOnChangeListener { runOnUiThread { rafraîchirBoutonPauseAppels() } }
     }
 
     /** Le bouton affiche l'action possible, pas un état : « bloquer » tant que
@@ -583,6 +590,7 @@ class MainActivity : AppCompatActivity() {
         // rappel qui capture l'Activity la retiendrait en mémoire bien après sa
         // fermeture. On se débranche, et on se rebranchera à onResume.
         CallListenerService.enService?.galerie?.observateur = null
+        PauseAppels.clearOnChangeListener()
         super.onPause()
         zones.onPause()
         screenAwakeHandler.removeCallbacks(screenAwakeTicker)

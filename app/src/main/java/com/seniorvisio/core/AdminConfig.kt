@@ -97,6 +97,18 @@ class AdminConfig(context: Context) {
         get() = prefs.getLong(KEY_CARE_BREAK_UNTIL_MS, 0L)
         set(value) = prefs.edit().putLong(KEY_CARE_BREAK_UNTIL_MS, value).apply()
 
+    /**
+     * Depuis quand la pause en cours a démarré. Gardé à part de
+     * [careBreakUntilMs] plutôt que déduit de lui (durée moins 30 min) : la
+     * durée est pour l'instant fixe, mais rien ici ne doit en dépendre
+     * implicitement. Affiché par le panneau d'administration du PWA, et
+     * utilisé pour journaliser la pause une fois terminée (voir
+     * UsageStats.noteCareBreak).
+     */
+    var careBreakStartedAtMs: Long
+        get() = prefs.getLong(KEY_CARE_BREAK_STARTED_AT_MS, 0L)
+        set(value) = prefs.edit().putLong(KEY_CARE_BREAK_STARTED_AT_MS, value).apply()
+
     /** Vrai tant que les appels externes sont bloqués à la demande d'un soignant. */
     fun isCareBreakActive(nowMs: Long = System.currentTimeMillis()): Boolean =
         nowMs < careBreakUntilMs
@@ -562,6 +574,7 @@ class AdminConfig(context: Context) {
         private const val KEY_SLEEP_HOURS = "sleep_hours"
         private const val KEY_SLEEP_UNTIL_MS = "sleep_until_ms"
         private const val KEY_CARE_BREAK_UNTIL_MS = "care_break_until_ms"
+        private const val KEY_CARE_BREAK_STARTED_AT_MS = "care_break_started_at_ms"
         private const val KEY_BLOCKING_ENABLED = "blocking_enabled"
         private const val KEY_ADMIN_PIN = "admin_pin"
         private const val KEY_ACCESS_PASSWORD = "access_password"
