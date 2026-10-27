@@ -462,6 +462,7 @@ class IncomingCallActivity : AppCompatActivity() {
         val durationSeconds = adminConfig.countdownSeconds
         callEngine.signalAlertStarted(durationSeconds)
         playDiscreetAlertSound()
+        pulseAttentionAppel()
         alertController.startCountdown(
             callerName = callerName,
             durationSeconds = durationSeconds,
@@ -622,6 +623,7 @@ class IncomingCallActivity : AppCompatActivity() {
      * bouge pas — il contraste avec les deux.
      */
     private fun applyPaletteToAlert(palette: ScreenTheme.Palette) {
+        findViewById<TextView>(R.id.textAppelEnCours).setTextColor(palette.primaryText)
         findViewById<TextView>(R.id.textCallerName).setTextColor(palette.primaryText)
         findViewById<TextView>(R.id.textCountdownHint).setTextColor(palette.secondaryText)
         findViewById<View>(R.id.countdownProgressContainer).setBackgroundColor(
@@ -702,6 +704,25 @@ class IncomingCallActivity : AppCompatActivity() {
         } catch (_: Exception) {
             // Pas de son système configuré : pas bloquant, le décompte visuel suffit.
         }
+    }
+
+    /**
+     * Un seul pulse lumineux de 2 s par-dessus tout l'écran, à l'arrivée d'un
+     * appel — pour attirer le regard de qui se trouve dans la pièce sans
+     * regarder la tablette à cet instant précis.
+     *
+     * Une seule respiration douce, jamais un clignotement répété : la montée
+     * est plus rapide que la descente (700 ms puis 1300 ms) parce que c'est la
+     * variation brusque qui capte un regard périphérique, tandis que la
+     * descente lente évite tout effet de clignotement sec. Au-delà d'un pulse
+     * isolé, le risque de déclencher une crise chez une personne photosensible
+     * devient réel — inacceptable sur un appareil destiné à une personne âgée.
+     */
+    private fun pulseAttentionAppel() {
+        val overlay = findViewById<View>(R.id.pulseAttentionAppel)
+        overlay.animate().alpha(0.35f).setDuration(700L).withEndAction {
+            overlay.animate().alpha(0f).setDuration(1300L).start()
+        }.start()
     }
 
     /**

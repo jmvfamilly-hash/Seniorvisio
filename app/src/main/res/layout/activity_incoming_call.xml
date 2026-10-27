@@ -242,6 +242,19 @@
              en dur, elles dataient du fond bleu foncé permanent — sur la
              palette claire du jour, l'écran de sonnerie devenait du blanc sur
              blanc, sans nom d'appelant ni barre d'attente visibles. -->
+        <!-- Première chose lisible, même d'un coup d'œil depuis l'autre bout
+             de la pièce : ce qui se passe, avant même de savoir qui appelle.
+             Volontairement plus grand que le nom de l'appelant. -->
+        <TextView
+            android:id="@+id/textAppelEnCours"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Appel en cours"
+            android:textSize="60sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="12dp" />
+
         <TextView
             android:id="@+id/textCallerName"
             android:layout_width="wrap_content"
@@ -304,6 +317,26 @@
         android:textColor="#4DFFFFFF"
         android:textSize="11sp"
         android:text="" />
+
+    <!-- ═══ PULSE D'ATTENTION, 2 S, À L'ARRIVÉE D'UN APPEL ═══
+
+         Un seul pulse doux (voir IncomingCallActivity.pulseAttentionAppel),
+         jamais un clignotement répété : au-delà d'un pulse isolé, le risque
+         de déclencher une crise chez une personne photosensible devient réel
+         — inacceptable sur un appareil destiné à une personne âgée.
+
+         Non interactif (clickable/focusable à faux) : il ne doit jamais
+         intercepter un appui destiné aux boutons Répondre/Bloquer, placés
+         après lui dans l'empilement et donc toujours par-dessus à l'écran. -->
+    <View
+        android:id="@+id/pulseAttentionAppel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FFC107"
+        android:alpha="0"
+        android:clickable="false"
+        android:focusable="false"
+        android:importantForAccessibility="no" />
 
     <!-- Répondre sans attendre la fin du décompte.
          Pour qui se trouve déjà dans la pièce — un proche en visite, quelqu'un
