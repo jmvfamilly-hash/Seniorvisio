@@ -512,6 +512,15 @@ class IncomingCallActivity : AppCompatActivity() {
         // la date reste ce qu'elle est le reste du temps — un repère.
         zones.setBackground(HomeZonesController.Background.SOLID, animate = false)
 
+        // Le moment de la journée et « Écran noir » (voir
+        // activity_incoming_call.xml) : GONE par défaut, montrés seulement
+        // ici. Un appel vidéo ordinaire n'en a pas besoin — zoneInfo s'efface
+        // déjà toute seule pendant que la vidéo du proche occupe l'écran
+        // (voir setBackground ci-dessus) — mais ce groupe-ci vit HORS de
+        // zoneInfo et ne suivait donc pas ce fondu : resté affiché par-dessus
+        // la vidéo du proche tant que ce visibility n'était pas posé ici.
+        findViewById<View>(R.id.groupeMomentEtSommeilAppel).visibility = View.VISIBLE
+
         // Qui parle, au-dessus de ce qu'il dit. Sans visage ni sonnerie, c'est
         // la seule chose à l'écran qui réponde à la question.
         findViewById<TextView>(R.id.textCallCaptionTitre)?.apply {

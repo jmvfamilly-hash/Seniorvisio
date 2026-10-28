@@ -330,15 +330,26 @@
          Tous deux à GAUCHE, contrairement à l'accueil où « Écran noir » est à
          droite : à droite ici, c'est la place de groupeRaccrocher (la
          consigne et le bouton rouge), qui lui ne disparaît jamais, y compris
-         en mode « Sous-titres » — les deux s'y chevaucheraient. -->
+         en mode « Sous-titres » — les deux s'y chevaucheraient.
+
+         GONE par défaut, rendu visible SEULEMENT dans préparerÉcranSousTitres
+         (voir IncomingCallActivity) : ce groupe est un ajout tardif, posé en
+         dehors de zoneInfo (que setBackground() cache déjà correctement
+         pendant un appel vidéo ordinaire, voir HomeZonesController) — sans ce
+         visibility explicite, il restait affiché par défaut, directement
+         par-dessus la vidéo du proche, y compris hors mode « Sous-titres »
+         (signalé après essai : le moment de la journée se voyait sur
+         l'image de l'appelant). -->
     <LinearLayout
+        android:id="@+id/groupeMomentEtSommeilAppel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|start"
         android:layout_marginStart="32dp"
         android:layout_marginBottom="24dp"
         android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:gravity="center_vertical"
+        android:visibility="gone">
 
         <TextView
             android:id="@+id/textMomentIcon"
