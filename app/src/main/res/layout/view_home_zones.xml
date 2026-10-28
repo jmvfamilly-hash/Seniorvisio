@@ -69,101 +69,89 @@
          zoneInfo ne se réduit plus aujourd'hui, mais la dépendance circulaire,
          elle, reviendrait telle quelle.
 
-         ═══ DATE À GAUCHE, MOMENT ET MÉTÉO EMPILÉS À DROITE ═══
+         ═══ DATE EN HAUT À GAUCHE, MÉTÉO EN HAUT À DROITE, MOMENT EN BAS À GAUCHE ═══
 
-         La date seule a été jugée trop petite à trois mètres (38 sp) : elle
-         gagne toute la largeur disponible à gauche pour pouvoir grossir
-         (50 sp) sans se heurter au reste. Le moment et la météo, moins
-         critiques à lire de loin, se tassent l'un sur l'autre à droite plutôt
-         que côte à côte : c'était leur alignement horizontal qui poussait la
-         date vers le centre et limitait sa taille. -->
-    <LinearLayout
+         Un FrameLayout et non plus une ligne : chaque information occupe son
+         propre coin, pour grossir sans se gêner les unes les autres — demandé
+         après un premier essai où moment et météo, empilés et poussés contre
+         le bouton de sommeil, restaient petits et serrés. -->
+    <FrameLayout
         android:id="@+id/blocInfoCentre"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="horizontal"
-        android:baselineAligned="false"
-        android:gravity="top">
+        android:layout_height="match_parent"
+        android:layout_weight="1">
 
         <TextView
             android:id="@+id/textClockDate"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textSize="50sp"
+            android:layout_gravity="top|start"
+            android:textSize="46sp"
             android:textStyle="bold"
-            android:gravity="start"
             android:text="" />
 
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="24dp"
-            android:orientation="vertical"
-            android:gravity="end">
+            android:layout_gravity="top|end"
+            android:layout_marginEnd="8dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-
-                <TextView
-                    android:id="@+id/textMomentIcon"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textSize="36sp"
-                    android:text="" />
-
-                <TextView
-                    android:id="@+id/textMomentLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:textSize="26sp"
-                    android:textStyle="bold"
-                    android:text="" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-
-                <TextView
-                    android:id="@+id/textWeatherIcon"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textSize="36sp"
-                    android:visibility="gone"
-                    android:text="" />
-
-                <TextView
-                    android:id="@+id/textWeatherLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:textSize="26sp"
-                    android:textStyle="bold"
-                    android:visibility="gone"
-                    android:text="" />
-            </LinearLayout>
-
-            <!-- Ne séparait plus que deux lignes déjà distinctes une fois le
-                 moment et la météo empilés : gardé pour le code qui bascule
-                 sa visibilité (voir HomeZonesController.updateInfoZone), mais
-                 sans dimension propre pour ne plus rien dessiner. -->
             <TextView
-                android:id="@+id/textMomentWeatherSeparator"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
+                android:id="@+id/textWeatherIcon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="44sp"
                 android:visibility="gone"
-                android:text="·" />
+                android:text="" />
+
+            <TextView
+                android:id="@+id/textWeatherLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:textSize="34sp"
+                android:textStyle="bold"
+                android:visibility="gone"
+                android:text="" />
         </LinearLayout>
-    </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|start"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/textMomentIcon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="44sp"
+                android:text="" />
+
+            <TextView
+                android:id="@+id/textMomentLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:textSize="34sp"
+                android:textStyle="bold"
+                android:text="" />
+        </LinearLayout>
+
+        <!-- Ne séparait plus moment et météo une fois chacun dans son coin :
+             gardé pour le code qui bascule sa visibilité (voir
+             HomeZonesController.updateInfoZone), mais sans dimension propre
+             pour ne plus rien dessiner. -->
+        <TextView
+            android:id="@+id/textMomentWeatherSeparator"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone"
+            android:text="·" />
+    </FrameLayout>
 
         <!-- ═══ « ÉCRAN NOIR » (EX « SOMMEIL ») : JEAN ÉTEINT SA DALLE QUAND IL VEUT ═══
 
