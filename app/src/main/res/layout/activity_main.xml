@@ -78,32 +78,18 @@
          Couleur posée en code selon la palette jour/nuit (voir MainActivity,
          onPalette), comme tout le reste de cet écran.
 
-         ═══ UN TIERS VIDE AU-DESSUS, ET NON match_parent + MARGE ═══
+         ═══ PLEIN ÉCRAN, SANS RÉSERVER LE BANDEAU ═══
 
-         zoneInfo (voir view_home_zones.xml) pèse un tiers plein de la
-         hauteur en permanence, avec son propre fond opaque. Une horloge en
-         match_parent avec une simple marge passait dessous : le haut du
-         cadran (le « 12 ») se faisait effacer par ce fond, visible au premier
-         essai sur la tablette. Un espaceur du même poids que zoneInfo réserve
-         exactement sa place, et l'horloge n'empiète plus jamais dessus,
-         quelle que soit la hauteur réelle de l'écran. -->
-    <LinearLayout
+         Un espaceur réservait auparavant la hauteur de zoneInfo (voir
+         view_home_zones.xml) pour que le cadran ne passe pas sous son fond
+         opaque. Ce fond a disparu (voir MainActivity, onPalette, qui l'annule
+         exprès) : plus rien n'empêche l'horloge de s'étendre sous la date et
+         la météo, qui restent lisibles par-dessus, dessinées après elle. -->
+    <com.seniorvisio.ui.HorlogeAiguilles
+        android:id="@+id/horlogeAccueil"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical">
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
-        <com.seniorvisio.ui.HorlogeAiguilles
-            android:id="@+id/horlogeAccueil"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="2"
-            android:layout_margin="12dp" />
-    </LinearLayout>
+        android:layout_margin="8dp" />
 
     <include layout="@layout/view_home_zones" />
 
@@ -176,7 +162,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
             android:minHeight="150dp"
-            android:text="Bloquez les appels 30 minutes"
+            android:text="Bloquer les appels 30 minutes"
             android:textSize="22sp"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
@@ -227,10 +213,18 @@
             android:text="" />
     </LinearLayout>
 
-    <!-- ═══ « ÉCRAN NOIR », EN BAS À DROITE DE L'ÉCRAN ═══
+    <!-- ═══ « ÉCRAN NOIR » : RETIRÉ DE L'ÉCRAN DE JEAN ═══
 
-         Même sortie du bandeau, même raison (voir ci-dessus) : « en bas »
-         voulait dire en bas de l'écran. -->
+         GONE et non supprimé : HomeZonesController le cherche sans condition
+         (voir boutonSommeil, lu par root.findViewById) et le câble toujours
+         via brancherSommeil (voir MainActivity.brancherGalerie) — retirer la
+         vue plutôt que la masquer ferait planter l'écran au démarrage.
+
+         Jean n'a donc plus, sur cet écran, de moyen à lui d'éteindre la dalle
+         à la demande — seul le réveil au son (voir DetecteurSon) la rallume
+         s'il vient à s'éteindre autrement (minuterie système, etc.). Gardé
+         câblé côté écran d'appel (mode « Sous-titres », voir
+         activity_incoming_call.xml), où il reste visible. -->
     <Button
         android:id="@+id/boutonSommeil"
         android:layout_width="wrap_content"
@@ -240,6 +234,7 @@
         android:layout_marginBottom="90dp"
         android:minWidth="108dp"
         android:minHeight="108dp"
+        android:visibility="gone"
         android:text="Écran noir"
         android:textSize="20sp"
         android:textAllCaps="false"

@@ -170,12 +170,19 @@ class MainActivity : AppCompatActivity() {
         textBuildRev.setOnLongClickListener { promptAdminPin(); true }
 
         val horlogeAccueil = findViewById<HorlogeAiguilles>(R.id.horlogeAccueil)
+        val zoneInfo = findViewById<View>(R.id.zoneInfo)
         zones = HomeZonesController(
             root = findViewById(R.id.homeRoot),
             onPalette = { palette ->
                 findViewById<View>(R.id.homeRoot).setBackgroundColor(palette.background)
                 textBuildRev.setTextColor(palette.secondaryText)
                 horlogeAccueil.setCouleur(palette.primaryText)
+                // Retire le fond semi-opaque que HomeZonesController vient de
+                // poser sur zoneInfo (voir applyPalette) : utile quand la date
+                // flotte sur une photo ou une vidéo quelconques, inutile et
+                // disgracieux ici où elle flotte sur l'horloge — demandé après
+                // un essai où ce fond se voyait nettement derrière la date.
+                zoneInfo.background = null
             },
         )
 
@@ -306,7 +313,7 @@ class MainActivity : AppCompatActivity() {
         boutonPauseAppels.text = if (adminConfig.isCareBreakActive()) {
             "Permettre de nouveau les appels"
         } else {
-            "Bloquez les appels 30 minutes"
+            "Bloquer les appels 30 minutes"
         }
     }
 
