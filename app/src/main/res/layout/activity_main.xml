@@ -102,7 +102,7 @@
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="2"
-            android:layout_margin="24dp" />
+            android:layout_margin="12dp" />
     </LinearLayout>
 
     <include layout="@layout/view_home_zones" />
@@ -194,6 +194,64 @@
          le mode simplifié du PWA qu'il ouvrait n'existe plus. L'écran de Jean
          n'affiche que ce qui le concerne — la date, la météo, le moment de la
          journée et ce qui se dit autour de lui. -->
+
+    <!-- ═══ LE MOMENT DE LA JOURNÉE, EN BAS À GAUCHE DE L'ÉCRAN ═══
+
+         Sorti du bandeau de la date (voir view_home_zones.xml) : « en bas »
+         voulait dire en bas de l'ÉCRAN, pas en bas du bandeau — l'horloge,
+         bien plus grande qu'avant, laisse largement la place dans ce coin,
+         le cadran restant centré sur la largeur. -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="32dp"
+        android:layout_marginBottom="90dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/textMomentIcon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="44sp"
+            android:text="" />
+
+        <TextView
+            android:id="@+id/textMomentLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:textSize="34sp"
+            android:textStyle="bold"
+            android:text="" />
+    </LinearLayout>
+
+    <!-- ═══ « ÉCRAN NOIR », EN BAS À DROITE DE L'ÉCRAN ═══
+
+         Même sortie du bandeau, même raison (voir ci-dessus) : « en bas »
+         voulait dire en bas de l'écran. -->
+    <Button
+        android:id="@+id/boutonSommeil"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="32dp"
+        android:layout_marginBottom="90dp"
+        android:minWidth="108dp"
+        android:minHeight="108dp"
+        android:text="Écran noir"
+        android:textSize="20sp"
+        android:textAllCaps="false"
+        android:textColor="#FFFFFF"
+        android:drawableTop="@drawable/ic_sommeil"
+        android:drawablePadding="4dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:elevation="6dp"
+        android:background="@drawable/fond_bouton_navigation" />
 
     <!-- ═══ LA CONSIGNE DU BOUTON « SOUS-TITRES », TOUT EN BAS DE L'ÉCRAN ═══
 

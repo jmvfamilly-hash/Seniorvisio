@@ -33,53 +33,30 @@
     android:orientation="vertical"
     android:padding="20dp">
 
-    <!-- Zone 1 : la seule toujours affichée. Date, moment de la journée et
-         météo — un pictogramme et un mot pour chacun, jamais l'heure exacte
-         ni la température (voir TimeContext et WeatherClient). La seule
-         heure exacte de cet écran est désormais l'horloge à aiguilles,
-         ajoutée à part dans activity_main.xml — un choix délibéré fait à la
+    <!-- Zone 1 : la seule toujours affichée. Date et météo — jamais l'heure
+         exacte ni la température (voir TimeContext et WeatherClient). La
+         seule heure exacte de cet écran est désormais l'horloge à aiguilles,
+         ajoutée à part dans les écrans hôtes — un choix délibéré fait à la
          demande, qui revient sur la règle énoncée ci-dessus pour cette seule
-         zone. -->
-    <LinearLayout
+         zone.
+
+         Le moment de la journée et le bouton « Écran noir » ne sont PLUS ici :
+         sortis vers chaque écran hôte (voir activity_main.xml et
+         activity_incoming_call.xml), posés tout en bas de l'écran plutôt que
+         dans ce bandeau — demandé après un essai où « en bas » avait été
+         compris comme « en bas du bandeau » plutôt que « en bas de l'écran ».
+         Ce même choix libère aussi toute la hauteur de ce bandeau pour la
+         seule date et la météo, et donc d'autant plus de place en dessous
+         pour l'horloge. -->
+    <FrameLayout
         android:id="@+id/zoneInfo"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="horizontal"
-        android:baselineAligned="false"
-        android:gravity="top"
         android:layout_marginTop="8dp"
         android:padding="16dp">
-
-    <!-- Le bandeau proprement dit, inchangé, mais désormais dans une colonne à
-         part : le bouton de sommeil vit à sa droite, et sans cette colonne il
-         aurait décentré la date et la météo. Poids 1 pour que le bandeau reste
-         centré sur la largeur qui lui reste, quelle que soit celle du bouton. -->
-    <!-- wrap_content, ET ON N'Y REVIENT PAS.
-
-         Cette colonne a été en match_parent. Tant que zoneInfo pesait un tiers
-         de l'écran cela ne se voyait pas, mais le jour où zoneInfo s'est
-         réduite à son contenu, un enfant match_parent dans un parent
-         wrap_content n'a plus eu de hauteur définie — chacun attendait la
-         mesure de l'autre. La bande se mesurait trop court, la date de 38 sp
-         débordait par le bas, et ce qui était dessiné après la recouvrait.
-
-         zoneInfo ne se réduit plus aujourd'hui, mais la dépendance circulaire,
-         elle, reviendrait telle quelle.
-
-         ═══ DATE EN HAUT À GAUCHE, MÉTÉO EN HAUT À DROITE, MOMENT EN BAS À GAUCHE ═══
-
-         Un FrameLayout et non plus une ligne : chaque information occupe son
-         propre coin, pour grossir sans se gêner les unes les autres — demandé
-         après un premier essai où moment et météo, empilés et poussés contre
-         le bouton de sommeil, restaient petits et serrés. -->
-    <FrameLayout
-        android:id="@+id/blocInfoCentre"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1">
 
         <TextView
             android:id="@+id/textClockDate"
@@ -94,7 +71,6 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="top|end"
-            android:layout_marginEnd="8dp"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
@@ -117,31 +93,7 @@
                 android:text="" />
         </LinearLayout>
 
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|start"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:id="@+id/textMomentIcon"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="44sp"
-                android:text="" />
-
-            <TextView
-                android:id="@+id/textMomentLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="14dp"
-                android:textSize="34sp"
-                android:textStyle="bold"
-                android:text="" />
-        </LinearLayout>
-
-        <!-- Ne séparait plus moment et météo une fois chacun dans son coin :
+        <!-- Ne séparait plus moment et météo une fois le moment sorti d'ici :
              gardé pour le code qui bascule sa visibilité (voir
              HomeZonesController.updateInfoZone), mais sans dimension propre
              pour ne plus rien dessiner. -->
@@ -152,43 +104,6 @@
             android:visibility="gone"
             android:text="·" />
     </FrameLayout>
-
-        <!-- ═══ « ÉCRAN NOIR » (EX « SOMMEIL ») : JEAN ÉTEINT SA DALLE QUAND IL VEUT ═══
-
-             Pas d'interrupteur, pas de bouton physique à trouver derrière la
-             tablette : le geste le plus courant de la journée — « je ne veux
-             plus de lumière » — n'avait aucune réponse à l'écran.
-
-             Rien d'irréversible : l'écran se rallume au premier appel et à la
-             première parole dans la pièce, le réveil au son étant le seul
-             chemin de retour (voir DetecteurSon et le seuil réglé par
-             l'administrateur). C'est pourquoi le pictogramme est une lune et
-             non un symbole d'extinction, qui aurait laissé croire à Jean qu'il
-             vient de fermer quelque chose qu'il ne saurait pas rouvrir.
-
-             « Écran noir » plutôt que « Sommeil » : plus explicite sur ce que
-             le bouton fait réellement, demandé après l'ajout de l'horloge —
-             un bouton qui dirait encore « Sommeil » à côté d'une horloge
-             aurait pu laisser croire qu'il réglait une alarme. -->
-        <Button
-            android:id="@+id/boutonSommeil"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="108dp"
-            android:minHeight="108dp"
-            android:text="Écran noir"
-            android:textSize="20sp"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            android:drawableTop="@drawable/ic_sommeil"
-            android:drawablePadding="4dp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp"
-            android:elevation="6dp"
-            android:background="@drawable/fond_bouton_navigation" />
-    </LinearLayout>
 
     <!-- Zone 2 : tout ce que le microphone de la tablette entend — ce qui se
          dit dans la pièce, auprès de Jean (voir TranscriptionSource.ROOM). -->

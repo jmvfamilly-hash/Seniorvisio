@@ -320,6 +320,63 @@
         android:visibility="gone"
         android:text="" />
 
+    <!-- ═══ MOMENT DE LA JOURNÉE ET « ÉCRAN NOIR », EN BAS À GAUCHE ═══
+
+         Montrés seulement en mode « Sous-titres » (voir préparerÉcranSousTitres,
+         qui ramène zoneInfo en fond SOLID). zoneInfo les a perdus (voir
+         view_home_zones.xml) : HomeZonesController les lit sans condition,
+         ils doivent donc exister ici aussi.
+
+         Tous deux à GAUCHE, contrairement à l'accueil où « Écran noir » est à
+         droite : à droite ici, c'est la place de groupeRaccrocher (la
+         consigne et le bouton rouge), qui lui ne disparaît jamais, y compris
+         en mode « Sous-titres » — les deux s'y chevaucheraient. -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="32dp"
+        android:layout_marginBottom="24dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/textMomentIcon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="44sp"
+            android:text="" />
+
+        <TextView
+            android:id="@+id/textMomentLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:textSize="34sp"
+            android:textStyle="bold"
+            android:text="" />
+
+        <Button
+            android:id="@+id/boutonSommeil"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:minWidth="108dp"
+            android:minHeight="108dp"
+            android:text="Écran noir"
+            android:textSize="20sp"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:drawableTop="@drawable/ic_sommeil"
+            android:drawablePadding="4dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:elevation="6dp"
+            android:background="@drawable/fond_bouton_navigation" />
+    </LinearLayout>
+
     <!-- Miniature de Jean, au-dessus des zones : c'est un tout petit élément
          qu'un cadre de texte recouvrirait entièrement. Masquée par défaut,
          affichée seulement si le proche l'active depuis le PWA. -->
