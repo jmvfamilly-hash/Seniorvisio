@@ -78,18 +78,22 @@
          Couleur posée en code selon la palette jour/nuit (voir MainActivity,
          onPalette), comme tout le reste de cet écran.
 
-         ═══ PLEIN ÉCRAN, SANS RÉSERVER LE BANDEAU ═══
+         ═══ JUSTE SOUS LE BANDEAU, DEVENU UNE SEULE LIGNE ═══
 
-         Un espaceur réservait auparavant la hauteur de zoneInfo (voir
-         view_home_zones.xml) pour que le cadran ne passe pas sous son fond
-         opaque. Ce fond a disparu (voir MainActivity, onPalette, qui l'annule
-         exprès) : plus rien n'empêche l'horloge de s'étendre sous la date et
-         la météo, qui restent lisibles par-dessus, dessinées après elle. -->
+         zoneInfo (voir view_home_zones.xml) ne pèse plus qu'une ligne sur cet
+         écran (voir MainActivity, qui l'y réduit par code) au lieu d'un tiers
+         plein : toute la hauteur gagnée revient à l'horloge. layout_marginTop
+         n'est qu'un repli avant la première mesure — MainActivity le
+         réajuste ensuite exactement sur la hauteur réelle de zoneInfo, quelle
+         que soit la police ou la présence de la météo. -->
     <com.seniorvisio.ui.HorlogeAiguilles
         android:id="@+id/horlogeAccueil"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_margin="8dp" />
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="8dp"
+        android:layout_marginTop="100dp" />
 
     <include layout="@layout/view_home_zones" />
 

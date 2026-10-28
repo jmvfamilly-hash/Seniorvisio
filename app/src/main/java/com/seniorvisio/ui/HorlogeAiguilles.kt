@@ -96,7 +96,7 @@ class HorlogeAiguilles @JvmOverloads constructor(
         super.onDraw(canvas)
         val centreX = width / 2f
         val centreY = height / 2f
-        val rayon = min(width, height) / 2f * 0.92f
+        val rayon = min(width, height) / 2f * 0.97f
         if (rayon <= 0f) return
 
         canvas.drawCircle(centreX, centreY, rayon, traitCadran)

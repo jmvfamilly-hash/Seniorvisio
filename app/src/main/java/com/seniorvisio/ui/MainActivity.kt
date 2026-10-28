@@ -14,8 +14,10 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -171,6 +173,36 @@ class MainActivity : AppCompatActivity() {
 
         val horlogeAccueil = findViewById<HorlogeAiguilles>(R.id.horlogeAccueil)
         val zoneInfo = findViewById<View>(R.id.zoneInfo)
+
+        // ═══ UNE SEULE LIGNE, PAS UN TIERS D'ÉCRAN — ICI SEULEMENT ═══
+        //
+        // view_home_zones.xml pose zoneInfo à poids 1 parmi trois zones
+        // égales (voir ce fichier) : un invariant partagé avec l'écran
+        // d'appel, qu'on ne touche pas. Ici, demandé explicitement, zoneInfo
+        // se réduit à son contenu — la date et la météo, une ligne — pour
+        // laisser toute la hauteur restante à l'horloge. zoneRoom et zoneCall
+        // se partagent simplement le surplus, sans conséquence : ils restent
+        // invisibles (alpha 0) hors appel.
+        (zoneInfo.layoutParams as LinearLayout.LayoutParams).apply {
+            height = ViewGroup.LayoutParams.WRAP_CONTENT
+            weight = 0f
+            zoneInfo.layoutParams = this
+        }
+
+        // L'horloge commence exactement là où finit cette ligne — « juste
+        // sous la date », pas à une hauteur fixe devinée à l'avance, qui
+        // aurait divergé au moindre changement de police ou de taille de
+        // texte. Réévalué à chaque mesure de zoneInfo (apparition/
+        // disparition de la météo, rotation d'écran...).
+        zoneInfo.viewTreeObserver.addOnGlobalLayoutListener {
+            val hauteurBandeau = zoneInfo.height
+            val marges = horlogeAccueil.layoutParams as ViewGroup.MarginLayoutParams
+            if (marges.topMargin != hauteurBandeau) {
+                marges.topMargin = hauteurBandeau
+                horlogeAccueil.layoutParams = marges
+            }
+        }
+
         zones = HomeZonesController(
             root = findViewById(R.id.homeRoot),
             onPalette = { palette ->
@@ -369,7 +401,12 @@ class MainActivity : AppCompatActivity() {
     private var rangPhoto = 0
 
     private fun brancherGalerie() {
-        zones.brancherSommeil { endormir() }
+        // Plus de bouton « Écran noir » sur cet écran (voir activity_main.xml,
+        // où il reste présent mais masqué pour satisfaire HomeZonesController) :
+        // demandé explicitement, Jean n'a donc plus de geste dédié pour
+        // éteindre la dalle depuis l'accueil — brancherSommeil n'est donc plus
+        // appelé ici (il l'est toujours côté écran d'appel, en mode
+        // « Sous-titres », où le bouton reste visible).
         brancherBoutonTranscription()
         // ═══ LE GLISSEMENT VIENT DU PAGER, PLUS DE NOUS ═══
         //
@@ -423,21 +460,6 @@ class MainActivity : AppCompatActivity() {
         // l'alarme et rattrape un réveil perdu. Les deux ne font pas la même
         // chose, et celui-ci ne poussera rien de plus — le rang n'a pas bougé.
         service.galerie.réévaluer()
-    }
-
-    /**
-     * Éteint la dalle, à la demande de Jean.
-     *
-     * Le compteur d'inactivité est remis à zéro AVANT : sans ça, le battement
-     * qui garde l'écran allumé tant qu'il reste du texte (voir
-     * screenAwakeTicker) reposerait son drapeau à la seconde suivante, et
-     * l'écran se rallumerait tout seul. Le bouton aurait alors l'air de ne rien
-     * faire, ce qui est pire que de ne pas exister.
-     */
-    private fun endormir() {
-        textGoneSinceMs = 1L
-        zones.clearTranscriptions()
-        MiseEnVeille.endormir(this, window)
     }
 
     /**
