@@ -3,7 +3,9 @@ package com.seniorvisio.ui
 import android.app.NotificationManager
 import android.content.Intent
 import android.content.res.Configuration
+import android.animation.ArgbEvaluator
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
@@ -21,6 +23,7 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import android.widget.TextView
@@ -79,6 +82,13 @@ class IncomingCallActivity : AppCompatActivity() {
     private lateinit var zones: HomeZonesController
     private lateinit var buttonBlock: Button
 
+    /**
+     * Le groupe « consigne + bouton rouge », qui se déplace d'un bloc entre
+     * portrait et paysage (voir applyOrientationLayout) — voir le commentaire
+     * de groupeRaccrocher dans activity_incoming_call.xml.
+     */
+    private lateinit var groupeRaccrocher: LinearLayout
+
     /** Répondre sans attendre la fin du décompte. Masqué dès la connexion (voir connectVideoCall). */
     private lateinit var buttonAnswerNow: Button
     private var isConnected = false
@@ -107,6 +117,9 @@ class IncomingCallActivity : AppCompatActivity() {
 
     /** Agrandissement/rétrécissement en cours de la vidéo (voir fitVideoAboveCaptions). */
     private var videoHeightAnimator: ValueAnimator? = null
+
+    /** La transition blanc→vert du panneau gauche, en cours (voir demarrerTransitionCouleurAppel). */
+    private var transitionCouleurAnimator: ValueAnimator? = null
 
     /**
      * Le lecteur de recueil de CET appel. Null tant qu'aucun magasin n'est
@@ -299,6 +312,7 @@ class IncomingCallActivity : AppCompatActivity() {
         val textCallerName = findViewById<TextView>(R.id.textCallerName)
         val countdownFill = findViewById<View>(R.id.countdownProgressFill)
         buttonBlock = findViewById(R.id.buttonBlock)
+        groupeRaccrocher = findViewById(R.id.groupeRaccrocher)
         buttonAnswerNow = findViewById(R.id.buttonAnswerNow)
 
         // Prénom renseigné côté PWA (panneau "Qui appelle ?") affiché quand il
@@ -461,6 +475,7 @@ class IncomingCallActivity : AppCompatActivity() {
         callEngine.signalAlertStarted(durationSeconds)
         playDiscreetAlertSound()
         pulseAttentionAppel()
+        demarrerTransitionCouleurAppel()
         alertController.startCountdown(
             callerName = callerName,
             durationSeconds = durationSeconds,
@@ -706,6 +721,45 @@ class IncomingCallActivity : AppCompatActivity() {
         overlay.animate().alpha(0.55f).setDuration(700L).withEndAction {
             overlay.animate().alpha(0f).setDuration(1300L).start()
         }.start()
+    }
+
+    /**
+     * Le panneau gauche passe du blanc au vert en 10 s, le texte qu'il porte
+     * changeant de couleur avec lui pour rester lisible aux deux bouts.
+     *
+     * Une couleur qui évolue doucement, plutôt qu'un chiffre qui défile :
+     * même logique que la barre de décompte, qui ne montre pas non plus de
+     * nombre (effet anxiogène d'un compte à rebours visible).
+     *
+     * Dix secondes fixes, indépendantes de la durée réelle du décompte
+     * (30 s par défaut, réglable par l'administrateur) : c'est la demande
+     * telle qu'elle a été formulée, et une transition calée sur une durée
+     * variable aurait changé de rythme selon ce réglage, sans que personne
+     * ne l'ait demandé.
+     */
+    private fun demarrerTransitionCouleurAppel() {
+        val panneau = findViewById<View>(R.id.alertLeftPanel)
+        val titre = findViewById<TextView>(R.id.textAppelEnCours)
+        val nom = findViewById<TextView>(R.id.textCallerName)
+        val indice = findViewById<TextView>(R.id.textCountdownHint)
+        val évaluateur = ArgbEvaluator()
+        val blanc = Color.parseColor("#FFFFFF")
+        val vert = Color.parseColor("#145A31")
+        val texteFoncé = Color.parseColor("#101A2E")
+        val texteFoncéMuet = Color.parseColor("#41506A")
+        val texteClairMuet = Color.parseColor("#CFE3D5")
+        transitionCouleurAnimator?.cancel()
+        transitionCouleurAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = TRANSITION_COULEUR_MS
+            addUpdateListener { animation ->
+                val f = animation.animatedValue as Float
+                panneau.setBackgroundColor(évaluateur.evaluate(f, blanc, vert) as Int)
+                titre.setTextColor(évaluateur.evaluate(f, texteFoncé, Color.WHITE) as Int)
+                nom.setTextColor(évaluateur.evaluate(f, texteFoncéMuet, texteClairMuet) as Int)
+                indice.setTextColor(évaluateur.evaluate(f, texteFoncéMuet, texteClairMuet) as Int)
+            }
+            start()
+        }
     }
 
     /**
@@ -1093,6 +1147,10 @@ class IncomingCallActivity : AppCompatActivity() {
         // raccrochait donc côté proche, sans explication.
         if (isConnected) return
         isConnected = true
+        // Sans effet visuel : alertContent, qui porte le panneau en
+        // transition, disparaît juste après (voir plus bas) — mais le fil
+        // continuerait à tourner pour rien sans cet arrêt explicite.
+        transitionCouleurAnimator?.cancel()
         buttonAnswerNow.visibility = View.GONE
         // Le micro a déjà changé de main à l'arrivée de l'appel (voir
         // onCreate) : WebRTC le trouve libre, sans avoir à attendre une
@@ -1416,7 +1474,7 @@ class IncomingCallActivity : AppCompatActivity() {
         val density = resources.displayMetrics.density
         val margin16 = (16 * density).roundToInt()
 
-        (buttonBlock.layoutParams as FrameLayout.LayoutParams).apply {
+        (groupeRaccrocher.layoutParams as FrameLayout.LayoutParams).apply {
             if (isLandscape) {
                 gravity = Gravity.TOP or Gravity.END
                 topMargin = margin16; bottomMargin = 0
@@ -1425,14 +1483,18 @@ class IncomingCallActivity : AppCompatActivity() {
                 topMargin = 0; bottomMargin = (24 * density).roundToInt()
             }
             marginEnd = if (isLandscape) margin16 else (24 * density).roundToInt()
-            buttonBlock.layoutParams = this
+            groupeRaccrocher.layoutParams = this
         }
 
         (localRenderer.layoutParams as FrameLayout.LayoutParams).apply {
             gravity = Gravity.TOP or Gravity.END
             marginStart = margin16; marginEnd = margin16; bottomMargin = 0
-            // Décalée sous le bouton en paysage pour ne pas être recouverte.
-            topMargin = if (isLandscape) margin16 + (74 * density).roundToInt() else margin16
+            // Décalée sous le groupe consigne + bouton en paysage pour ne pas
+            // être recouverte — 132dp et non 74 depuis que la consigne
+            // "Bloquez si vous le souhaitez" s'est ajoutée au-dessus du
+            // bouton (voir groupeRaccrocher), qui a rendu l'ensemble plus
+            // haut.
+            topMargin = if (isLandscape) margin16 + (132 * density).roundToInt() else margin16
             localRenderer.layoutParams = this
         }
     }
@@ -1762,6 +1824,8 @@ class IncomingCallActivity : AppCompatActivity() {
         silenceHandler.removeCallbacks(raccrocherAprèsSilence)
         videoHeightAnimator?.cancel()
         videoHeightAnimator = null
+        transitionCouleurAnimator?.cancel()
+        transitionCouleurAnimator = null
         // Le fil de décodage du lecteur est un fil démon, donc il n'empêcherait
         // pas l'application de s'arrêter — mais il survivrait à l'appel, à
         // décoder une photo dont plus personne ne veut. Un appel qui se termine
@@ -1807,6 +1871,9 @@ class IncomingCallActivity : AppCompatActivity() {
          * toute la règle est que rien ne surprenne Jean.
          */
         private const val VIDEO_RESIZE_MS = 400L
+
+        /** Voir demarrerTransitionCouleurAppel : la demande fixe dix secondes. */
+        private const val TRANSITION_COULEUR_MS = 10_000L
 
         /**
          * Le silence au bout duquel le mode « Sous-titres » se termine de

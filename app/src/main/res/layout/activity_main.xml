@@ -60,92 +60,143 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
+    <!-- ═══ L'HORLOGE REMPLACE LE DIAPORAMA SUR CET ÉCRAN ═══
+
+         Demandée lisible à trois mètres, sur tout l'écran, en laissant la
+         place du bandeau et du bouton de pause des appels : elle est donc
+         posée en fond, APRÈS hotePhotos (elle recouvre la galerie de photos
+         s'il en reste une configurée — c'est le sens de « remplace ») et
+         AVANT la pile des zones et les boutons, qui restent lisibles
+         par-dessus.
+
+         hotePhotos et toute l'infrastructure de galerie (OrdonnanceurPhotos,
+         MainActivity.brancherGalerie) restent branchés tels quels : rien n'a
+         été retiré, seulement recouvert. Revenir aux photos sur cet écran ne
+         demandera donc qu'un réglage d'affichage, pas de récrire ce qui
+         existe déjà.
+
+         Couleur posée en code selon la palette jour/nuit (voir MainActivity,
+         onPalette), comme tout le reste de cet écran. -->
+    <com.seniorvisio.ui.HorlogeAiguilles
+        android:id="@+id/horlogeAccueil"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_margin="24dp" />
+
     <include layout="@layout/view_home_zones" />
 
-    <!-- ═══ « PAUSE SOIGNANTS » : BLOQUER LES APPELS LE TEMPS D'UNE INTERVENTION ═══
+    <!-- ═══ LES BOUTONS DE JEAN, GROUPÉS À DROITE ═══
 
-         Un soignant appuie en arrivant, les appels externes sont bloqués 30
-         minutes (voir PauseAppels), et appuie à nouveau en partant pour les
-         redébloquer tout de suite — le même bouton bascule dans les deux
-         sens. S'il oublie, le blocage se lève tout seul au bout des 30
-         minutes, et l'administrateur peut aussi débloquer depuis le PWA.
+         « Sous-titres », « Pause soignants » : deux gestes ponctuels, pas des
+         réglages permanents de l'écran comme le bouton de sommeil (resté
+         dans le bandeau de la date, voir view_home_zones.xml). Regroupés en
+         une seule colonne plutôt que dispersés aux quatre coins de l'écran —
+         demandé après que le bouton rond de pause ne se lisait pas comme un
+         bouton — et agrandis pour rester faciles à viser malgré leur
+         nouvelle taille.
 
-         Centré sur tout l'écran, et non dans le bandeau de la date : c'est un
-         geste ponctuel d'un soignant de passage, pas un réglage permanent de
-         l'accueil de Jean comme le bouton de sommeil. -->
-    <Button
-        android:id="@+id/boutonPauseAppels"
-        android:layout_width="wrap_content"
+         Déclarée APRÈS la pile et l'horloge : elle flotte donc par-dessus,
+         comme les boutons l'ont toujours fait sur cet écran. -->
+    <LinearLayout
+        android:id="@+id/colonneBoutonsAccueil"
+        android:layout_width="260dp"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:minWidth="88dp"
-        android:minHeight="88dp"
-        android:text="Mettez-moi en veille 30 minutes, plus d'appels pendant ce temps-là"
-        android:textSize="20sp"
-        android:textAllCaps="false"
-        android:textColor="#FFFFFF"
-        android:gravity="center"
-        android:paddingStart="24dp"
-        android:paddingEnd="24dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="16dp"
-        android:elevation="6dp"
-        android:background="@drawable/fond_bouton_navigation" />
+        android:layout_gravity="center_vertical|end"
+        android:layout_marginEnd="32dp"
+        android:orientation="vertical">
 
-    <!-- ═══ « SOUS-TITRES » : JEAN APPELLE LA TRANSCRIPTION QUAND IL VEUT ═══
+        <!-- ═══ « SOUS-TITRES » : JEAN APPELLE LA TRANSCRIPTION QUAND IL VEUT ═══
 
-         Bascule vers « Transcription instantanée » de Google, SANS AUCUNE
-         CONDITION : ni le mode automatique armé, ni une voix détectée, ni les
-         gardes qui retiennent la bascule automatique (voir
-         RoomHandoffController.forceHandOff). Jean appuie, l'écran change.
+             Bascule vers « Transcription instantanée » de Google, SANS AUCUNE
+             CONDITION : ni le mode automatique armé, ni une voix détectée, ni
+             les gardes qui retiennent la bascule automatique (voir
+             RoomHandoffController.forceHandOff). Jean appuie, l'écran change.
 
-         Le mode automatique répond à « quelqu'un parle, écris-le ». Ce bouton
-         répond à une autre question, et elle est à lui : « je veux lire, tout
-         de suite ». Les conditions qui protègent le premier — ne pas basculer
-         sur un aspirateur, ne pas repartir trois secondes après un retour —
-         n'ont aucun sens quand c'est lui qui demande.
+             Le mode automatique répond à « quelqu'un parle, écris-le ». Ce
+             bouton répond à une autre question, et elle est à lui : « je veux
+             lire, tout de suite ». Les conditions qui protègent le premier —
+             ne pas basculer sur un aspirateur, ne pas repartir trois secondes
+             après un retour — n'ont aucun sens quand c'est lui qui demande.
 
-         ═══ POURQUOI DANS LE CADRE ET NON DANS LA BANDE D'INFORMATION ═══
+             Masqué quand l'application de Google n'est pas installée (voir
+             MainActivity) : une cible qui ne peut rien faire est pire qu'une
+             absence, parce qu'on y revient. -->
+        <Button
+            android:id="@+id/boutonTranscription"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="150dp"
+            android:text="Sous-titres"
+            android:textSize="22sp"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:drawableTop="@drawable/ic_transcription"
+            android:drawablePadding="10dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="22dp"
+            android:paddingBottom="22dp"
+            android:elevation="6dp"
+            android:visibility="gone"
+            android:background="@drawable/fond_bouton_navigation" />
 
-         L'ordre des trois zones est réglable par l'administrateur (voir
-         HomeZone). Posé dans la bande de la date, ce bouton descendrait au
-         milieu ou en bas de l'écran le jour où quelqu'un change cet ordre.
-         Ici, il est en haut à gauche, et il y reste.
+        <!-- ═══ « PAUSE SOIGNANTS » : BLOQUER LES APPELS LE TEMPS D'UNE INTERVENTION ═══
 
-         Déclaré APRÈS la pile : il flotte donc par-dessus, y compris sur une
-         photo en plein cadre — comme le bouton de sommeil, avec lequel il
-         fait paire aux deux coins hauts.
-
-         Masqué quand l'application de Google n'est pas installée (voir
-         MainActivity) : une cible qui ne peut rien faire est pire qu'une
-         absence, parce qu'on y revient. -->
-    <Button
-        android:id="@+id/boutonTranscription"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|start"
-        android:layout_margin="28dp"
-        android:minWidth="88dp"
-        android:minHeight="88dp"
-        android:text="Sous-titres"
-        android:textSize="20sp"
-        android:textAllCaps="false"
-        android:textColor="#FFFFFF"
-        android:drawableTop="@drawable/ic_transcription"
-        android:drawablePadding="4dp"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="10dp"
-        android:elevation="6dp"
-        android:visibility="gone"
-        android:background="@drawable/fond_bouton_navigation" />
+             Un soignant appuie en arrivant, les appels externes sont bloqués
+             30 minutes (voir PauseAppels), et appuie à nouveau en partant
+             pour les redébloquer tout de suite — le même bouton bascule dans
+             les deux sens. S'il oublie, le blocage se lève tout seul au bout
+             des 30 minutes, et l'administrateur peut aussi débloquer depuis
+             le PWA. -->
+        <Button
+            android:id="@+id/boutonPauseAppels"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:minHeight="150dp"
+            android:text="Bloquez les appels 30 minutes"
+            android:textSize="22sp"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:gravity="center"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="22dp"
+            android:paddingBottom="22dp"
+            android:elevation="6dp"
+            android:background="@drawable/fond_bouton_navigation" />
+    </LinearLayout>
 
     <!-- Plus aucun QR code sur cet écran. Il en a porté un, puis les réglages
          admin l'ont porté à leur tour, et il a fini par ne plus rien servir :
          le mode simplifié du PWA qu'il ouvrait n'existe plus. L'écran de Jean
          n'affiche que ce qui le concerne — la date, la météo, le moment de la
          journée et ce qui se dit autour de lui. -->
+
+    <!-- ═══ LA CONSIGNE DU BOUTON « SOUS-TITRES », TOUT EN BAS DE L'ÉCRAN ═══
+
+         Posée ici et non dans le bandeau de la date (voir
+         view_home_zones.xml, dont elle est sortie) : ce même id vit
+         maintenant en double, une fois par écran hôte, parce que l'écran
+         d'appel n'en a pas l'usage mais doit quand même porter la vue (voir
+         HomeZonesController, qui la lit sans condition) — la sienne, dans
+         activity_incoming_call.xml, reste invisible et vide.
+
+         Masquée par défaut, affichée par l'accueil en même temps que le
+         bouton (voir MainActivity.brancherBoutonTranscription) : une consigne
+         qui renvoie à un bouton absent serait pire que rien. -->
+    <TextView
+        android:id="@+id/textConsigneSousTitres"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="16dp"
+        android:paddingStart="40dp"
+        android:paddingEnd="40dp"
+        android:textSize="20sp"
+        android:gravity="center"
+        android:visibility="gone"
+        android:text="Pour que Jean puisse lire ce que vous dites, appuyez sur le bouton « Sous-titres »" />
 
     <!-- Version affichée en permanence, discrètement, pour vérifier quel APK
          tourne réellement sur la tablette sans la brancher (voir

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Fond du bouton « Répondre maintenant », depuis que le panneau derrière
+     lui peut lui-même devenir vert (voir IncomingCallActivity.
+     demarrerTransitionCouleurAppel) : avec l'ancien fond #145A31, le bouton
+     se noyait dans un fond de même teinte dès la fin de la transition —
+     signalé après essai sur la tablette.
+
+     Un vert nettement plus clair et vif, avec du texte et une icône
+     sombres (voir ic_repondre_sombre) plutôt que blancs : mesuré, pas
+     choisi à l'œil — #101A2E sous #2ECC71 donne 8,25:1, au-dessus du seuil
+     de 7:1 visé par les consignes d'accessibilité de ce projet, et très
+     proche du 8,28:1 déjà posé pour l'ancien bouton.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#239B56" />
+            <corners android:radius="16dp" />
+            <stroke android:width="2dp" android:color="#239B56" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#2ECC71" />
+            <corners android:radius="16dp" />
+            <stroke android:width="3dp" android:color="#1F8C4C" />
+        </shape>
+    </item>
+</selector>

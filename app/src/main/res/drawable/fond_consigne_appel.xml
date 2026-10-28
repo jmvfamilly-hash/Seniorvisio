@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Fond de la consigne « Bloquez si vous le souhaitez », posée au-dessus du
+     bouton rouge pendant la sonnerie ET pendant l'appel connecté (voir
+     groupeRaccrocher dans activity_incoming_call.xml) : à cet endroit, c'est
+     tantôt la vidéo du proche, tantôt une photo quelconque qui se trouve
+     derrière, jamais un fond qu'on choisit. Un aplat sombre semi-opaque, pas
+     teinté selon la palette jour/nuit, garantit la lecture quelle que soit
+     la scène.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#99000000" />
+    <corners android:radius="12dp" />
+</shape>

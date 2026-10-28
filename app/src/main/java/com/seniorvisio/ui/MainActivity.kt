@@ -169,11 +169,13 @@ class MainActivity : AppCompatActivity() {
         // accéder (Réglages système bloqués), voir KioskManager.
         textBuildRev.setOnLongClickListener { promptAdminPin(); true }
 
+        val horlogeAccueil = findViewById<HorlogeAiguilles>(R.id.horlogeAccueil)
         zones = HomeZonesController(
             root = findViewById(R.id.homeRoot),
             onPalette = { palette ->
                 findViewById<View>(R.id.homeRoot).setBackgroundColor(palette.background)
                 textBuildRev.setTextColor(palette.secondaryText)
+                horlogeAccueil.setCouleur(palette.primaryText)
             },
         )
 
@@ -304,7 +306,7 @@ class MainActivity : AppCompatActivity() {
         boutonPauseAppels.text = if (adminConfig.isCareBreakActive()) {
             "Permettre de nouveau les appels"
         } else {
-            "Mettez-moi en veille 30 minutes, plus d'appels pendant ce temps-là"
+            "Bloquez les appels 30 minutes"
         }
     }
 

@@ -203,25 +203,26 @@
             android:background="@drawable/fond_bouton_navigation" />
     </LinearLayout>
 
-    <!-- ═══ BARRE BASSE : TEXTE À GAUCHE, PHOTO À DROITE ═══
+    <!-- ═══ PLEINE HAUTEUR : TEXTE À GAUCHE, PHOTO À DROITE ═══
 
          Remplace l'ancienne mise en page (photo plein écran, texte centré
-         par-dessus avec un voile sombre pour rester lisible). Les deux
-         informations qui comptent — « il se passe un appel » et « qui
-         appelle » — sont maintenant posées côte à côte dans une bande fixe en
-         bas de l'écran, chacune sur son propre fond, sans se superposer.
+         par-dessus avec un voile sombre pour rester lisible), puis l'ancienne
+         bande basse de 300dp : les deux informations qui comptent — « il se
+         passe un appel » et « qui appelle » — occupent maintenant chacune une
+         moitié de l'écran, sur toute sa hauteur.
 
-         Fond BLANC fixe à gauche, et non teinté selon la palette jour/nuit
-         comme avant : un texte noir sur blanc reste lisible quelle que soit
-         l'heure, sans calcul de contraste à refaire à chaque palette. -->
+         Fond BLANC au départ à gauche, qui passe au vert en douceur pendant
+         les dix premières secondes (voir IncomingCallActivity.
+         demarrerTransitionCouleurAppel) — pas teinté selon la palette
+         jour/nuit : la transition se voit pareil quelle que soit l'heure. -->
     <LinearLayout
         android:id="@+id/alertContent"
         android:layout_width="match_parent"
-        android:layout_height="300dp"
-        android:layout_gravity="bottom"
+        android:layout_height="match_parent"
         android:orientation="horizontal">
 
         <LinearLayout
+            android:id="@+id/alertLeftPanel"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
@@ -261,14 +262,14 @@
             <FrameLayout
                 android:id="@+id/countdownProgressContainer"
                 android:layout_width="280dp"
-                android:layout_height="10dp"
+                android:layout_height="28dp"
                 android:layout_marginTop="20dp"
                 android:background="#22000000">
 
                 <View
                     android:id="@+id/countdownProgressFill"
                     android:layout_width="280dp"
-                    android:layout_height="10dp"
+                    android:layout_height="28dp"
                     android:background="#2ECC71" />
             </FrameLayout>
 
@@ -305,6 +306,19 @@
 
     <!-- Les trois zones, identiques à celles de l'écran d'accueil. -->
     <include layout="@layout/view_home_zones" />
+
+    <!-- N'est jamais montrée ici : cet écran n'a pas de bouton « Sous-titres »
+         à annoncer (voir MainActivity.brancherBoutonTranscription, qui ne
+         tourne que sur l'accueil). Le même id existe quand même, invisible et
+         vide, parce que HomeZonesController le lit sans condition quel que
+         soit l'écran hôte (voir activity_main.xml pour la version réellement
+         affichée). -->
+    <TextView
+        android:id="@+id/textConsigneSousTitres"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        android:text="" />
 
     <!-- Miniature de Jean, au-dessus des zones : c'est un tout petit élément
          qu'un cadre de texte recouvrirait entièrement. Masquée par défaut,
@@ -388,6 +402,11 @@
             texte descriptif accélère la reconnaissance et réduit les erreurs.
             La paire, pas l'un des deux : le texte reste donc à côté de
             l'icône, il ne la remplace pas et elle ne le remplace pas. -->
+    <!-- Icône et texte sombres, et fond vert clair plutôt que
+         fond_bouton_vert : depuis que le panneau derrière ce bouton peut lui
+         aussi devenir vert (voir demarrerTransitionCouleurAppel), l'ancien
+         fond #145A31 s'y noyait complètement — signalé après essai sur la
+         tablette. Voir fond_bouton_vert_clair pour le contraste mesuré. -->
     <Button
         android:id="@+id/buttonAnswerNow"
         android:layout_width="wrap_content"
@@ -398,7 +417,8 @@
         android:text="Répondre maintenant"
         android:textSize="24sp"
         android:textAllCaps="false"
-        android:drawableStart="@drawable/ic_repondre"
+        android:textColor="#101A2E"
+        android:drawableStart="@drawable/ic_repondre_sombre"
         android:drawablePadding="20dp"
         android:paddingLeft="32dp"
         android:paddingRight="32dp"
@@ -407,34 +427,73 @@
         android:minHeight="88dp"
         android:minWidth="280dp"
         android:elevation="6dp"
-        android:background="@drawable/fond_bouton_vert" />
+        android:background="@drawable/fond_bouton_vert_clair" />
 
-    <!-- Même traitement, mêmes raisons (voir le bouton ci-dessus). Le rouge
-         passe de #C0392B (5,44:1) à #96281B (8,03:1).
+    <!-- ═══ LA CONSIGNE ET SON BOUTON, DANS UN SEUL GROUPE ═══
 
-         Gabarit identique à son voisin, délibérément : deux boutons côte à
-         côte de tailles différentes suggèrent que l'un compte plus que
-         l'autre, alors que les deux gestes sont symétriques — et que celui-ci
-         est le seul moyen pour Jean d'écarter un appel. -->
-    <Button
-        android:id="@+id/buttonBlock"
+         « Bloquez si vous le souhaitez » reste affichée au-dessus du bouton
+         rouge tout le temps — pendant la sonnerie ET pendant l'appel connecté
+         (ce bouton ne disparaît jamais, voir connectVideoCall qui masque
+         alertContent mais pas ce groupe, contrairement à buttonAnswerNow).
+
+         Un seul groupe plutôt que deux vues indépendantes : les garder
+         séparées aurait demandé de recalculer la position de la consigne à
+         chaque rotation d'écran EN PLUS de celle du bouton (voir
+         applyOrientationLayout, qui déplace désormais ce groupe entier d'un
+         bloc), pour un résultat qui aurait fini par diverger au premier
+         oubli.
+
+         Fond semi-opaque sur la consigne (voir fond_consigne_appel) : à cet
+         endroit c'est tantôt la vidéo du proche, tantôt une photo
+         quelconque qui se trouve derrière, jamais un fond choisi.
+
+         Même traitement que toujours pour le bouton lui-même : rouge
+         #96281B, 8,03:1. Mêmes dimensions que buttonAnswerNow, délibérément :
+         deux boutons de tailles différentes suggèrent que l'un compte plus
+         que l'autre, alors que les deux gestes sont symétriques. -->
+    <LinearLayout
+        android:id="@+id/groupeRaccrocher"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_marginBottom="24dp"
         android:layout_marginEnd="24dp"
-        android:text="Bloquer l'appel"
-        android:textSize="24sp"
-        android:textAllCaps="false"
-        android:drawableStart="@drawable/ic_bloquer"
-        android:drawablePadding="20dp"
-        android:paddingLeft="32dp"
-        android:paddingRight="32dp"
-        android:paddingTop="20dp"
-        android:paddingBottom="20dp"
-        android:minHeight="88dp"
-        android:minWidth="280dp"
-        android:elevation="6dp"
-        android:background="@drawable/fond_bouton_rouge" />
+        android:orientation="vertical"
+        android:gravity="end">
+
+        <TextView
+            android:id="@+id/textBlockHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:text="Bloquez si vous le souhaitez"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/fond_consigne_appel"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp" />
+
+        <Button
+            android:id="@+id/buttonBlock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:text="Bloquer l'appel"
+            android:textSize="24sp"
+            android:textAllCaps="false"
+            android:drawableStart="@drawable/ic_bloquer"
+            android:drawablePadding="20dp"
+            android:paddingLeft="32dp"
+            android:paddingRight="32dp"
+            android:paddingTop="20dp"
+            android:paddingBottom="20dp"
+            android:minHeight="88dp"
+            android:minWidth="280dp"
+            android:elevation="6dp"
+            android:background="@drawable/fond_bouton_rouge" />
+    </LinearLayout>
 
 </FrameLayout>
