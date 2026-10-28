@@ -34,7 +34,6 @@ import com.seniorvisio.core.AlertVolume
 import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.MiseEnVeille
-import com.seniorvisio.core.ScreenTheme
 import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.core.UsageStats
@@ -274,7 +273,6 @@ class IncomingCallActivity : AppCompatActivity() {
                 // vidéo ne le recouvrent — d'où une palette qui sert surtout
                 // aux premières secondes de la sonnerie.
                 findViewById<View>(R.id.callRoot).setBackgroundColor(palette.background)
-                applyPaletteToAlert(palette)
                 screenIsDark = palette.isDark
                 publishScreenLayout()
             },
@@ -491,7 +489,6 @@ class IncomingCallActivity : AppCompatActivity() {
         callEngine.setModeSousTitres(true)
         findViewById<View>(R.id.alertContent).visibility = View.GONE
         findViewById<View>(R.id.imageCallerPhoto).visibility = View.GONE
-        findViewById<View>(R.id.callerPhotoScrim).visibility = View.GONE
         findViewById<View>(R.id.remoteRenderer).visibility = View.GONE
         findViewById<View>(R.id.localRenderer).visibility = View.INVISIBLE
 
@@ -609,28 +606,6 @@ class IncomingCallActivity : AppCompatActivity() {
         silenceHandler.postDelayed(raccrocherAprèsSilence, SILENCE_SOUS_TITRES_MS)
     }
 
-    /**
-     * Le nom de l'appelant, la barre d'attente et sa légende suivent la
-     * palette du moment. Leurs couleurs étaient écrites en dur du temps où le
-     * fond était toujours bleu foncé : sur la palette claire du jour, l'écran
-     * de sonnerie devenait du blanc sur blanc — un écran entièrement vide, avec
-     * seulement le son de notification pour dire qu'il se passait quelque
-     * chose.
-     *
-     * La piste du décompte est dessinée en code plutôt que teintée : sa
-     * couleur doit rester lisible aussi bien sur fond clair que sombre, ce
-     * qu'une teinte unique ne permet pas. Le vert de remplissage, lui, ne
-     * bouge pas — il contraste avec les deux.
-     */
-    private fun applyPaletteToAlert(palette: ScreenTheme.Palette) {
-        findViewById<TextView>(R.id.textAppelEnCours).setTextColor(palette.primaryText)
-        findViewById<TextView>(R.id.textCallerName).setTextColor(palette.primaryText)
-        findViewById<TextView>(R.id.textCountdownHint).setTextColor(palette.secondaryText)
-        findViewById<View>(R.id.countdownProgressContainer).setBackgroundColor(
-            if (palette.isDark) COUNTDOWN_TRACK_ON_DARK else COUNTDOWN_TRACK_ON_LIGHT
-        )
-    }
-
     override fun onResume() {
         super.onResume()
         zones.onResume()
@@ -717,10 +692,18 @@ class IncomingCallActivity : AppCompatActivity() {
      * descente lente évite tout effet de clignotement sec. Au-delà d'un pulse
      * isolé, le risque de déclencher une crise chez une personne photosensible
      * devient réel — inacceptable sur un appareil destiné à une personne âgée.
+     *
+     * Blanc et 55 % d'opacité maximale (contre doré et 35 % à l'essai
+     * précédent, resté invisible sur la tablette de test) : c'est la couleur
+     * qui contraste le plus, quelle que soit la photo affichée derrière.
+     * La ligne de journal permet de distinguer, si ça reste invisible, un
+     * code qui ne se déclenche pas d'un pulse qui se déclenche mais ne se
+     * voit pas.
      */
     private fun pulseAttentionAppel() {
+        CallTrace.record("APPEL pulse", "déclenché")
         val overlay = findViewById<View>(R.id.pulseAttentionAppel)
-        overlay.animate().alpha(0.35f).setDuration(700L).withEndAction {
+        overlay.animate().alpha(0.55f).setDuration(700L).withEndAction {
             overlay.animate().alpha(0f).setDuration(1300L).start()
         }.start()
     }
@@ -745,11 +728,9 @@ class IncomingCallActivity : AppCompatActivity() {
     private fun showCallerPhoto(photoPath: String?) {
         if (photoPath.isNullOrEmpty()) return
         val imagePhoto = findViewById<ImageView>(R.id.imageCallerPhoto)
-        val scrim = findViewById<View>(R.id.callerPhotoScrim)
         val bitmap = BitmapFactory.decodeFile(photoPath) ?: return
         imagePhoto.setImageBitmap(bitmap)
         imagePhoto.visibility = View.VISIBLE
-        scrim.visibility = View.VISIBLE
     }
 
     /**
@@ -1125,11 +1106,11 @@ class IncomingCallActivity : AppCompatActivity() {
         // dessinées derrière (voir préparerÉcranSousTitres).
         if (!modeSousTitres) zones.setBackground(HomeZonesController.Background.VIDEO)
         findViewById<View>(R.id.alertContent).visibility = View.GONE
-        // La photo et son voile sont des calques plein écran, frères de
-        // alertContent et non ses enfants : sans ça ils resteraient affichés
-        // par-dessus la vidéo une fois l'appel connecté.
+        // La photo est dans la barre basse, fille d'alertContent : sa
+        // visibilité suit déjà celle de son parent, mais elle est aussi
+        // masquée ici par sécurité pour ne jamais réapparaître par-dessus la
+        // vidéo une fois l'appel connecté.
         findViewById<View>(R.id.imageCallerPhoto).visibility = View.GONE
-        findViewById<View>(R.id.callerPhotoScrim).visibility = View.GONE
         val localRenderer = findViewById<SurfaceViewRenderer>(R.id.localRenderer)
         val remoteRenderer = findViewById<SurfaceViewRenderer>(R.id.remoteRenderer)
         // Miniature de Jean masquée par défaut (retirée de l'écran) : ne
@@ -1815,10 +1796,6 @@ class IncomingCallActivity : AppCompatActivity() {
         private const val TAG = "IncomingCallActivity"
 
         /** Cadence de publication de l'état de l'écran de Jean vers le PWA (voir publishScreenStateIfChanged). */
-        /** Piste du décompte : un voile clair sur fond sombre, sombre sur fond clair. */
-        private const val COUNTDOWN_TRACK_ON_DARK = 0x33FFFFFF
-        private const val COUNTDOWN_TRACK_ON_LIGHT = 0x22000000
-
         /**
          * Durée de l'agrandissement de la vidéo quand le texte s'efface.
          *

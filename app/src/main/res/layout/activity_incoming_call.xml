@@ -47,28 +47,6 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
-    <!-- Photo de l'appelant en plein écran, derrière le nom et le décompte :
-         un rond de 160dp était minuscule sur une dalle de dix pouces, alors
-         que reconnaître la personne est précisément le but de cet écran. Le
-         dégradé sombre par-dessus garde le nom et la barre lisibles quelle que
-         soit la photo. Masquée tant qu'aucune photo n'est reçue : le fond du
-         FrameLayout (posé selon la palette, voir ScreenTheme) reprend alors le
-         dessus. -->
-    <ImageView
-        android:id="@+id/imageCallerPhoto"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="centerCrop"
-        android:contentDescription="Photo de l'appelant"
-        android:visibility="gone" />
-
-    <View
-        android:id="@+id/callerPhotoScrim"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@drawable/caller_photo_scrim"
-        android:visibility="gone" />
-
     <!-- Photo du diaporama commenté à distance par le proche (voir
          WebRtcCallEngine.listenForSlideshowPhoto) : c'est lui qui fait défiler
          les photos depuis le PWA, Jean n'a rien à manipuler.
@@ -225,71 +203,104 @@
             android:background="@drawable/fond_bouton_navigation" />
     </LinearLayout>
 
-    <!-- Nom de l'appelant et décompte, le temps de la sonnerie uniquement :
-         masqué dès la connexion. Le repère date/moment/météo qui vivait ici
-         en double a disparu — c'est la zone 1, présente en permanence
-         par-dessus, qui s'en charge maintenant pour les deux écrans. -->
+    <!-- ═══ BARRE BASSE : TEXTE À GAUCHE, PHOTO À DROITE ═══
+
+         Remplace l'ancienne mise en page (photo plein écran, texte centré
+         par-dessus avec un voile sombre pour rester lisible). Les deux
+         informations qui comptent — « il se passe un appel » et « qui
+         appelle » — sont maintenant posées côte à côte dans une bande fixe en
+         bas de l'écran, chacune sur son propre fond, sans se superposer.
+
+         Fond BLANC fixe à gauche, et non teinté selon la palette jour/nuit
+         comme avant : un texte noir sur blanc reste lisible quelle que soit
+         l'heure, sans calcul de contraste à refaire à chaque palette. -->
     <LinearLayout
         android:id="@+id/alertContent"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:padding="32dp">
+        android:layout_height="300dp"
+        android:layout_gravity="bottom"
+        android:orientation="horizontal">
 
-        <!-- Aucune couleur fixée sur ces trois éléments : elles suivent la
-             palette du moment (voir IncomingCallActivity, onPalette). Écrites
-             en dur, elles dataient du fond bleu foncé permanent — sur la
-             palette claire du jour, l'écran de sonnerie devenait du blanc sur
-             blanc, sans nom d'appelant ni barre d'attente visibles. -->
-        <!-- Première chose lisible, même d'un coup d'œil depuis l'autre bout
-             de la pièce : ce qui se passe, avant même de savoir qui appelle.
-             Volontairement plus grand que le nom de l'appelant. -->
-        <TextView
-            android:id="@+id/textAppelEnCours"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Appel en cours"
-            android:textSize="60sp"
-            android:textStyle="bold"
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="#FFFFFF"
+            android:orientation="vertical"
             android:gravity="center"
-            android:layout_marginBottom="12dp" />
+            android:padding="24dp">
 
-        <TextView
-            android:id="@+id/textCallerName"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Appel de..."
-            android:textSize="48sp"
-            android:textStyle="bold"
-            android:gravity="center" />
+            <!-- Première chose lisible, même d'un coup d'œil depuis l'autre
+                 bout de la pièce : ce qui se passe, avant même de savoir qui
+                 appelle. -->
+            <TextView
+                android:id="@+id/textAppelEnCours"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Appel en cours"
+                android:textSize="56sp"
+                android:textStyle="bold"
+                android:textColor="#101A2E"
+                android:gravity="center" />
 
-        <!-- Décompte : la barre qui se remplit doucement porte l'essentiel de
-             l'information visuelle, le chiffre reste discret en dessous
-             (recommandation ergonomique : éviter l'effet de compte à rebours
-             anxiogène d'un gros chiffre qui défile). -->
-        <FrameLayout
-            android:id="@+id/countdownProgressContainer"
-            android:layout_width="280dp"
-            android:layout_height="10dp"
-            android:layout_marginTop="28dp">
+            <TextView
+                android:id="@+id/textCallerName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Appel de..."
+                android:textSize="32sp"
+                android:textStyle="bold"
+                android:textColor="#41506A"
+                android:gravity="center" />
 
-            <View
-                android:id="@+id/countdownProgressFill"
+            <!-- Décompte : la barre qui se remplit doucement porte l'essentiel
+                 de l'information visuelle, le chiffre reste discret en
+                 dessous (recommandation ergonomique : éviter l'effet de
+                 compte à rebours anxiogène d'un gros chiffre qui défile). -->
+            <FrameLayout
+                android:id="@+id/countdownProgressContainer"
                 android:layout_width="280dp"
                 android:layout_height="10dp"
-                android:background="#2ECC71" />
+                android:layout_marginTop="20dp"
+                android:background="#22000000">
+
+                <View
+                    android:id="@+id/countdownProgressFill"
+                    android:layout_width="280dp"
+                    android:layout_height="10dp"
+                    android:background="#2ECC71" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/textCountdownHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="La visio démarre automatiquement"
+                android:textSize="16sp"
+                android:textColor="#41506A"
+                android:gravity="center" />
+        </LinearLayout>
+
+        <!-- Fond neutre tant qu'aucune photo n'est reçue (capture webcam prise
+             à l'ouverture de l'appel, sinon photo déposée à l'avance par le
+             proche — voir showCallerPhoto) : un panneau vide donnerait
+             l'impression d'un écran cassé. -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="#263447">
+
+            <ImageView
+                android:id="@+id/imageCallerPhoto"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:contentDescription="Photo de l'appelant"
+                android:visibility="gone" />
         </FrameLayout>
-
-        <TextView
-            android:id="@+id/textCountdownHint"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="La visio démarre automatiquement"
-            android:textSize="18sp"
-            android:gravity="center" />
-
     </LinearLayout>
 
     <!-- Les trois zones, identiques à celles de l'écran d'accueil. -->
@@ -332,7 +343,7 @@
         android:id="@+id/pulseAttentionAppel"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#FFC107"
+        android:background="#FFFFFF"
         android:alpha="0"
         android:clickable="false"
         android:focusable="false"
