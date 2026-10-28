@@ -19,6 +19,15 @@ class RealCallEngine extends CallEngine {
     this._consignesEnAttente = {};
     this._unsubscribeCallDoc = null;
     this._unsubscribeCalleeCandidates = null;
+    // Vrai pendant qu'on attend l'accusé de réception de la tablette après
+    // avoir écrit "ended" nous-mêmes (voir cancelCall) : empêche le
+    // gestionnaire générique de status "ended" du listener principal de
+    // fermer la connexion en écho de notre propre écriture, avant que
+    // cancelCall n'ait fini d'attendre.
+    this._raccrochéLocalement = false;
+    // Résolu par le listener principal dès que la tablette écrit l'accusé
+    // (voir cancelCall) ; null hors de cette attente.
+    this._ackRaccrochéRésoudre = null;
     // Volontairement hors de _teardown() : cette écoute-là ne suit pas un
     // appel, elle vit tant que la page est ouverte.
     this._unsubscribeDeviceDoc = null;
@@ -733,9 +742,20 @@ class RealCallEngine extends CallEngine {
         this._blockedCb && this._blockedCb(data.status);
         this._teardown();
       }
-      if (data.status === "ended") {
+      // !this._raccrochéLocalement : sans cette garde, l'écriture de
+      // cancelCall() (qui pose elle-même status "ended") redéclenchait ce
+      // bloc en écho de son PROPRE écrit — avant même que la tablette n'ait
+      // eu la moindre chance de répondre — et fermait la connexion tout de
+      // suite, exactement ce que cancelCall() attend maintenant d'éviter
+      // (voir plus bas, et CallSignalingClient.accuserRéceptionRaccroché
+      // côté tablette).
+      if (data.status === "ended" && !this._raccrochéLocalement) {
         this._endedCb && this._endedCb();
         this._teardown();
+      }
+      if (data.calleeHangupAck && this._ackRaccrochéRésoudre) {
+        this._ackRaccrochéRésoudre();
+        this._ackRaccrochéRésoudre = null;
       }
     });
 
@@ -1129,7 +1149,36 @@ class RealCallEngine extends CallEngine {
     // visible tant que la connexion n'avait pas déjà eu lieu — l'exécution
     // en cours continuait en arrière-plan et refaisait sonner Jean.
     this._callGeneration++;
-    await this._envoyerConsigne("raccrocher", { status: "ended" });
+    this._raccrochéLocalement = true;
+    const écrit = await this._envoyerConsigne("raccrocher", { status: "ended" });
+
+    // ═══ ATTENDRE QUE LA TABLETTE AIT REÇU, PAS SEULEMENT ÉCRIT ═══
+    //
+    // _teardown() ferme la connexion WebRTC (pc.close()) juste en dessous.
+    // La fermer avant que la tablette n'ait reçu ce "ended" lui fait perdre
+    // la course : sa propre détection de la coupure ICE peut arriver avant
+    // que l'écouteur Firestore ne livre le statut, et elle met alors jusqu'à
+    // vingt secondes à conclure elle-même à un abandon — observé en
+    // production (journal du 28/10), image figée pendant tout ce temps côté
+    // Jean, tablette déclarée occupée en cas de rappel immédiat. La tablette
+    // garde un filet pour le cas où cet accusé n'arriverait jamais (voir
+    // CallSignalingClient.lireStatutImmédiat côté Android) ; ici, l'attendre
+    // évite même d'avoir à s'y fier.
+    //
+    // Seulement si l'écriture a réussi : si elle a échoué, la tablette n'a
+    // de toute façon rien reçu, attendre un accusé qui ne viendra jamais
+    // ferait juste perdre trois secondes pour rien.
+    if (écrit === true) {
+      await new Promise((résoudre) => {
+        // Pas d'attente indéfinie : la tablette peut être éteinte, hors
+        // ligne, ou une version trop ancienne pour accuser réception.
+        const délai = setTimeout(résoudre, 3000);
+        this._ackRaccrochéRésoudre = () => {
+          clearTimeout(délai);
+          résoudre();
+        };
+      });
+    }
     this._teardown();
   }
 
@@ -1140,6 +1189,8 @@ class RealCallEngine extends CallEngine {
     }
     this._hasNotifiedConnected = false;
     this._hasReportedCalleeError = false;
+    this._raccrochéLocalement = false;
+    this._ackRaccrochéRésoudre = null;
     if (this._unsubscribeCallDoc) this._unsubscribeCallDoc();
     this._unsubscribeCallDoc = null;
     if (this._unsubscribeCalleeCandidates) this._unsubscribeCalleeCandidates();

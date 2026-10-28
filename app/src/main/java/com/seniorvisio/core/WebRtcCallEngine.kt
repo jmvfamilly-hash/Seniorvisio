@@ -1315,6 +1315,12 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
                         "APPEL ICE perdu",
                         "raccroché déjà écrit par le proche — fermeture immédiate, pas d'attente",
                     )
+                    // Ce chemin-ci n'est pas passé par listenForRemoteEnded,
+                    // qui accuse normalement réception : sans cet appel, un
+                    // raccroché détecté seulement ici laisserait le PWA
+                    // attendre son propre délai de repli pour rien (voir
+                    // CallSignalingClient.accuserRéceptionRaccroché).
+                    signaling.accuserRéceptionRaccroché(id)
                     hangUp()
                     connectionLostCb?.invoke()
                 }

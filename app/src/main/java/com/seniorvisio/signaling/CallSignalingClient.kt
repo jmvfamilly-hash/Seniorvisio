@@ -488,11 +488,41 @@ class CallSignalingClient {
      * "Annuler" pendant l'attente, ou "Raccrocher" une fois connecté), pour
      * que la tablette se referme aussi — sans ça, un raccroché côté proche
      * laissait la communication tourner indéfiniment côté tablette.
+     *
+     * Accuse réception tout de suite (voir accuserRéceptionRaccroché) : le
+     * PWA attend ce champ avant de fermer sa propre connexion WebRTC (voir
+     * cancelCall côté web-caller), pour ne jamais fermer l'ICE avant que la
+     * tablette n'ait eu la moindre chance de recevoir ce statut.
      */
     fun listenForRemoteEnded(callId: String, onEnded: () -> Unit): ListenerRegistration {
         return callDoc(callId).addSnapshotListener { snapshot, _ ->
-            if (snapshot?.getString(FIELD_STATUS) == STATUS_ENDED) onEnded()
+            if (snapshot?.getString(FIELD_STATUS) == STATUS_ENDED) {
+                accuserRéceptionRaccroché(callId)
+                onEnded()
+            }
         }
+    }
+
+    /**
+     * Écrit que la tablette a bien reçu le raccroché distant — c'est ce champ
+     * que le PWA attend avant de fermer sa connexion WebRTC (voir
+     * webrtc-engine.js, cancelCall) plutôt que de la fermer dès l'écriture de
+     * "ended", sans savoir si la tablette l'a seulement reçue.
+     *
+     * Appelée des deux endroits qui peuvent détecter un raccroché distant :
+     * l'écouteur normal (listenForRemoteEnded) et le filet posé sur la perte
+     * ICE (voir lireStatutImmédiat côté WebRtcCallEngine) — si l'accusé
+     * n'arrive toujours pas à temps côté PWA, elle a son propre repli
+     * (fermeture après un court délai) plutôt que d'attendre indéfiniment.
+     */
+    fun accuserRéceptionRaccroché(callId: String) {
+        callDoc(callId).update(FIELD_CALLEE_HANGUP_ACK, true)
+            .addOnFailureListener { e ->
+                CallTrace.record(
+                    "APPEL raccroché accusé ÉCHEC",
+                    e.message ?: e.javaClass.simpleName,
+                )
+            }
     }
 
     /**
@@ -561,6 +591,9 @@ class CallSignalingClient {
         private const val CALLEE_CANDIDATES = "calleeCandidates"
 
         private const val FIELD_STATUS = "status"
+
+        /** Voir accuserRéceptionRaccroché. */
+        private const val FIELD_CALLEE_HANGUP_ACK = "calleeHangupAck"
         private const val FIELD_CALLER_NAME = "callerName"
         private const val FIELD_CALLER_PHOTO = "callerPhotoBase64"
         private const val FIELD_OFFER_SDP = "offerSdp"
