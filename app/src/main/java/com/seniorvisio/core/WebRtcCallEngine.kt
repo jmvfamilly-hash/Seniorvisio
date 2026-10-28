@@ -1287,6 +1287,39 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         }
         autoHangupRunnable = runnable
         autoHangupHandler.postDelayed(runnable, ICE_FAILURE_GRACE_MS)
+
+        // ═══ FILET : UN RACCROCHÉ PROPRE PEUT-ÊTRE DÉJÀ ÉCRIT ═══
+        //
+        // Le proche ferme sa connexion WebRTC (pc.close() côté PWA) juste
+        // après avoir écrit "ended" dans Firestore — mais les deux empruntent
+        // des chemins différents (réseau pair-à-pair contre écriture
+        // Firestore), et rien ne garantit que listenForRemoteEnded livre ce
+        // changement avant que l'ICE ne tombe ici. Observé en production
+        // (journal du 28/10) : la tablette attendait les vingt secondes
+        // complètes alors que "ended" était déjà écrit au moment même de la
+        // déconnexion ICE. Une lecture directe, hors cache, tranche tout de
+        // suite plutôt que de laisser l'écouteur — ou le délai de grâce —
+        // seuls juges.
+        //
+        // Lancée APRÈS avoir posé autoHangupRunnable (et non avant) : la garde
+        // ci-dessous doit voir le minuteur déjà en place, pas dépendre de
+        // l'ordre d'exécution entre ce lancement et la réponse de Firestore.
+        callId?.let { id ->
+            signaling.lireStatutImmédiat(id) { statut ->
+                // autoHangupRunnable == null : l'ICE s'est rétabli entre la
+                // demande et sa réponse (voir cancelScheduledAutoHangup) — un
+                // lien qui vient de revenir ne doit pas être refermé sur la
+                // foi d'une lecture lancée pendant qu'il était encore perdu.
+                if (statut == CallSignalingClient.STATUS_ENDED && autoHangupRunnable != null) {
+                    CallTrace.record(
+                        "APPEL ICE perdu",
+                        "raccroché déjà écrit par le proche — fermeture immédiate, pas d'attente",
+                    )
+                    hangUp()
+                    connectionLostCb?.invoke()
+                }
+            }
+        }
     }
 
     /**

@@ -7,6 +7,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
 import com.seniorvisio.BuildConfig
 import com.seniorvisio.core.CallTrace
 
@@ -492,6 +493,25 @@ class CallSignalingClient {
         return callDoc(callId).addSnapshotListener { snapshot, _ ->
             if (snapshot?.getString(FIELD_STATUS) == STATUS_ENDED) onEnded()
         }
+    }
+
+    /**
+     * Lecture ponctuelle du statut, forcée sur le serveur plutôt qu'attendue
+     * d'un écouteur (voir listenForRemoteEnded) — sert de filet quand la
+     * liaison ICE se rompt (voir WebRtcCallEngine.scheduleAutoHangupOnIceFailure) :
+     * un raccroché propre côté PWA ferme la connexion WebRTC juste après avoir
+     * écrit "ended", et rien ne garantit que l'écouteur livre ce changement
+     * avant que l'ICE ne tombe — observé en production, la tablette attendait
+     * alors les vingt secondes de grâce pour un lien qui n'avait jamais été
+     * coupé par accident.
+     *
+     * Source.SERVER et non le cache : c'est justement le cas où le cache
+     * local peut ne pas encore avoir reçu l'écriture.
+     */
+    fun lireStatutImmédiat(callId: String, onRésultat: (String?) -> Unit) {
+        callDoc(callId).get(Source.SERVER)
+            .addOnSuccessListener { snapshot -> onRésultat(snapshot.getString(FIELD_STATUS)) }
+            .addOnFailureListener { onRésultat(null) }
     }
 
     /**
