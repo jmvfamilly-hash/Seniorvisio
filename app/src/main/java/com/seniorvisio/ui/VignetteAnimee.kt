@@ -24,6 +24,16 @@ import com.seniorvisio.core.CallTrace
  * détourage est donc fait une fois pour toutes hors tablette ; cette vue
  * ne fait que dérouler les images obtenues, une seule à la fois en
  * mémoire — la tablette de test tourne avec un tas Java d'à peine 192 Mo.
+ *
+ * ═══ AUCUNE SCÈNE N'EST CÂBLÉE EN DUR ICI ═══
+ *
+ * Le nombre d'images d'une scène n'est jamais passé par l'appelant : il
+ * est compté une fois, au lancement, en listant simplement le dossier
+ * d'assets correspondant (voir jouer). Ajouter une nouvelle scène ne
+ * demande donc jamais de toucher à ce fichier ni à MainActivity — juste
+ * de traiter un nouveau clip avec scripts/traiter_vignette.sh (voir aussi
+ * MainActivity.scenesVignettesDisponibles, qui découvre les dossiers de la
+ * même façon).
  */
 class VignetteAnimee @JvmOverloads constructor(
     context: Context,
@@ -40,16 +50,31 @@ class VignetteAnimee @JvmOverloads constructor(
     private val handler = Handler(Looper.getMainLooper())
     private val tic = Runnable { afficherImageSuivante() }
 
-    /** Démarre la scène [dossier] (voir assets/animations/) ; ignoré si une vignette joue déjà. */
-    fun jouer(dossier: String, nombreImages: Int, imagesParSeconde: Int, onTermine: () -> Unit) {
+    /**
+     * Démarre la scène [dossier] (un sous-dossier de assets/animations/,
+     * voir scripts/traiter_vignette.sh) ; ignoré si une vignette joue déjà.
+     * [imagesParSeconde] doit correspondre au cadencement choisi au
+     * traitement du clip (10 par défaut dans le script).
+     */
+    fun jouer(dossier: String, imagesParSeconde: Int = 10, onTermine: () -> Unit = {}) {
         if (dossierActuel != null) return
+        val compte = try {
+            context.assets.list("animations/$dossier")?.count { it.startsWith("frame_") } ?: 0
+        } catch (e: Exception) {
+            0
+        }
+        if (compte <= 0) {
+            CallTrace.record("ACCUEIL vignette ÉCHEC", "$dossier : dossier introuvable ou vide")
+            onTermine()
+            return
+        }
         dossierActuel = dossier
-        this.nombreImages = nombreImages
+        nombreImages = compte
         délaiMs = 1_000L / imagesParSeconde
         imageActuelle = 0
         onTermineActuel = onTermine
         visibility = VISIBLE
-        CallTrace.record("ACCUEIL vignette", "$dossier démarrée")
+        CallTrace.record("ACCUEIL vignette", "$dossier démarrée ($compte images)")
         handler.post(tic)
     }
 
@@ -90,13 +115,14 @@ class VignetteAnimee @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val bmp = bitmapCourant ?: return
-        // Un quart de la hauteur de l'écran (voir le gabarit de prompt
-        // Gemini), posée dans la bande basse, centrée horizontalement.
-        val hauteurCible = height * 0.25f
+        // Grande part de l'écran (demandé après un premier essai jugé trop
+        // discret à 25 % de la hauteur) : quasi toute la hauteur disponible,
+        // centrée, en conservant les proportions de l'image.
+        val hauteurCible = height * 0.92f
         val échelle = hauteurCible / bmp.height
         val largeurCible = bmp.width * échelle
         val left = (width - largeurCible) / 2f
-        val top = height * 0.65f
+        val top = (height - hauteurCible) / 2f
         canvas.drawBitmap(bmp, null, RectF(left, top, left + largeurCible, top + hauteurCible), null)
     }
 

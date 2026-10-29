@@ -87,6 +87,14 @@ class MainActivity : AppCompatActivity() {
     private var dernièreHeureVignette: Int = -1
 
     /**
+     * Dossiers de assets/animations/ (voir scripts/traiter_vignette.sh),
+     * découverts une fois puis mis en cache — jamais câblés en dur ici :
+     * traiter un nouveau clip avec le script suffit à l'ajouter à la
+     * rotation, sans toucher à ce fichier.
+     */
+    private var scenesVignettes: List<String>? = null
+
+    /**
      * Position par défaut de groupeMomentAccueil, telle que posée dans
      * activity_main.xml (bas gauche de l'écran) — capturée une fois à
      * onCreate, avant toute réécriture dynamique, pour pouvoir y revenir
@@ -251,13 +259,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Joue la vignette animée (écureuil, etc. — voir
+     * Dossiers disponibles dans assets/animations/, un par scène traitée
+     * par scripts/traiter_vignette.sh — lu une seule fois (le contenu des
+     * assets ne change jamais en cours de route) puis mis en cache.
+     */
+    private fun scenesVignettesDisponibles(): List<String> {
+        scenesVignettes?.let { return it }
+        val liste = try {
+            assets.list("animations")?.toList()?.sorted() ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+        scenesVignettes = liste
+        return liste
+    }
+
+    /**
+     * Joue une vignette animée (écureuil, etc. — voir
      * scripts/traiter_vignette.sh) une fois par heure, entre 7h et 20h
      * seulement : un agrément pour les heures où Jean est devant l'écran,
-     * pas pendant son sommeil. Bornée à une seule scène pour l'instant
-     * (VIGNETTES_HORAIRES n'a qu'une entrée) ; ajouter une scène au tableau
-     * suffira à l'inclure dans la rotation le jour où d'autres clips seront
-     * traités.
+     * pas pendant son sommeil. Les scènes tournent dans l'ordre de
+     * scenesVignettesDisponibles ; en ajouter une (un nouveau dossier sous
+     * assets/animations/, produit par le script) l'inclut automatiquement
+     * dans la rotation, sans modifier ce fichier.
      *
      * dernièreHeureVignette garde la trace de l'heure déjà servie, pour ne
      * pas relancer la vignette à chaque battement d'une seconde tant que
@@ -267,10 +291,10 @@ class MainActivity : AppCompatActivity() {
         val heure = java.time.LocalDateTime.now().hour
         if (heure !in 7..20) return
         if (heure == dernièreHeureVignette) return
-        if (VIGNETTES_HORAIRES.isEmpty()) return
+        val scènes = scenesVignettesDisponibles()
+        if (scènes.isEmpty()) return
         dernièreHeureVignette = heure
-        val scène = VIGNETTES_HORAIRES[heure % VIGNETTES_HORAIRES.size]
-        vignetteAccueil.jouer(scène.dossier, scène.nombreImages, scène.imagesParSeconde) {}
+        vignetteAccueil.jouer(scènes[heure % scènes.size])
     }
 
     /**
@@ -918,19 +942,5 @@ class MainActivity : AppCompatActivity() {
         private val COULEUR_TEINTE_APRES_MIDI = Color.parseColor("#64B5F6")
         private val COULEUR_TEINTE_SOIR = Color.parseColor("#FF8A50")
         private val COULEUR_TEINTE_NUIT = Color.parseColor("#5C6BC0")
-
-        /** Une scène traitée par scripts/traiter_vignette.sh (voir ce script). */
-        private data class SceneVignette(val dossier: String, val nombreImages: Int, val imagesParSeconde: Int)
-
-        /**
-         * Scènes disponibles pour appliquerVignetteHoraire, dans l'ordre où
-         * elles tournent (une par heure, voir cette fonction). Une seule
-         * entrée pour l'instant (l'écureuil, premier clip traité) ; les
-         * prochaines scènes annoncées (mouette, écolier, oisillons, carriole)
-         * viendront s'ajouter ici une fois traitées par le script.
-         */
-        private val VIGNETTES_HORAIRES = listOf(
-            SceneVignette(dossier = "ecureuil", nombreImages = 100, imagesParSeconde = 10),
-        )
     }
 }

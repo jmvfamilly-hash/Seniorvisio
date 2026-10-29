@@ -26,6 +26,16 @@
 #
 # Exemple :
 #   scripts/traiter_vignette.sh ecureuil.mp4 ecureuil 0x119646 0.22 0.10
+#
+# ═══ AJOUTER UNE SCÈNE NE DEMANDE RIEN D'AUTRE QUE CE SCRIPT ═══
+#
+# VignetteAnimee.kt et MainActivity.kt ne connaissent aucun nom de scène
+# en dur : ils découvrent les dossiers présents sous
+# app/src/main/assets/animations/ au démarrage de la tablette (un dossier
+# = une scène, le nombre d'images y est compté directement). Traiter un
+# nouveau clip avec ce script, puis committer le dossier produit, suffit
+# donc à l'ajouter à la rotation horaire — aucune ligne de Kotlin à
+# toucher.
 set -euo pipefail
 
 CLIP="${1:?clip source manquant}"
