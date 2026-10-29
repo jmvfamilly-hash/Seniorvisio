@@ -82,6 +82,33 @@ class HorlogeAiguilles @JvmOverloads constructor(
         }
     }
 
+    // Repris à chaque dessin (voir onDraw), pour que positionOpposéeAiguilles
+    // n'ait pas à refaire le calcul du cadran — juste à lire où il en est.
+    private var dernierCentreX = 0f
+    private var dernierCentreY = 0f
+    private var dernierRayon = 0f
+
+    /**
+     * Où poser une étiquette à l'intérieur du cadran sans qu'elle passe
+     * jamais sous les aiguilles : à l'opposé de l'aiguille des minutes (la
+     * plus longue, celle qui balaie tout le cadran en une heure), à une
+     * fraction de son rayon qui la garde nettement en dedans des chiffres
+     * 12/3/6/9 (posés à 0,68 · rayon, voir onDraw).
+     *
+     * Coordonnées dans le repère de CETTE vue (0,0 en haut à gauche) : à
+     * l'appelant de les décaler par la position de la vue elle-même s'il
+     * veut une coordonnée écran (voir MainActivity,
+     * repositionnerMomentDansHorloge).
+     */
+    fun positionOpposéeAiguilles(fractionRayon: Float = 0.4f): Pair<Float, Float> {
+        val minutes = Calendar.getInstance().get(Calendar.MINUTE)
+        val degMinute = minutes * 6f
+        val angle = Math.toRadians((degMinute - 90 + 180).toDouble())
+        val r = dernierRayon * fractionRayon
+        return (dernierCentreX + (r * cos(angle)).toFloat()) to
+            (dernierCentreY + (r * sin(angle)).toFloat())
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         handler.post(tic)
@@ -96,8 +123,14 @@ class HorlogeAiguilles @JvmOverloads constructor(
         super.onDraw(canvas)
         val centreX = width / 2f
         val centreY = height / 2f
-        val rayon = min(width, height) / 2f * 0.97f
+        // 0,873 = 0,97 réduit de 10 %, demandé après un premier essai sur la
+        // tablette — le cadran occupait encore plus de place que prévu une
+        // fois le bandeau réduit à une ligne.
+        val rayon = min(width, height) / 2f * 0.873f
         if (rayon <= 0f) return
+        dernierCentreX = centreX
+        dernierCentreY = centreY
+        dernierRayon = rayon
 
         canvas.drawCircle(centreX, centreY, rayon, traitCadran)
 

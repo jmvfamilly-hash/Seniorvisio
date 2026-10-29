@@ -646,6 +646,12 @@ class DeviceStatusReporter(private val context: Context) {
         snapshot.getLong(FIELD_CAPTION_CLEAR_DELAY)?.let {
             adminConfig.captionClearDelaySeconds = it.toInt()
         }
+
+        // Horloge numérique plutôt qu'à aiguilles sur l'accueil : voir
+        // AdminConfig.horlogeNumerique, appliqué par MainActivity.
+        snapshot.getBoolean(FIELD_HORLOGE_NUMERIQUE)?.let {
+            adminConfig.horlogeNumerique = it
+        }
     }
 
     private fun installUpdate(apkUrl: String) {
@@ -904,6 +910,7 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_COMMANDES_VOCALES = "commandesVocales"
         private const val FIELD_CAPTION_INTERLIGNE = "captionInterligne"
         private const val FIELD_CALL_ENGINE = "callTranscriptionEngine"
+        private const val FIELD_HORLOGE_NUMERIQUE = "horlogeNumerique"
         private const val FIELD_CAPTION_VISIBLE_LINES = "captionVisibleLines"
         private const val FIELD_CAPTION_SCROLL_SPEED = "captionScrollSpeedDp"
         private const val FIELD_CAPTION_CLEAR_DELAY = "captionClearDelaySeconds"

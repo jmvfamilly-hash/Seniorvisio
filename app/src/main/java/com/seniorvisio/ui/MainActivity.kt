@@ -17,6 +17,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -69,6 +70,20 @@ class MainActivity : AppCompatActivity() {
     private val adminConfig by lazy { AdminConfig(this) }
     private lateinit var zones: HomeZonesController
     private lateinit var boutonPauseAppels: Button
+    private lateinit var horlogeAccueil: HorlogeAiguilles
+    private lateinit var horlogeNumeriqueAccueil: HorlogeNumerique
+    private lateinit var groupeMomentAccueil: View
+
+    /**
+     * Position par défaut de groupeMomentAccueil, telle que posée dans
+     * activity_main.xml (bas gauche de l'écran) — capturée une fois à
+     * onCreate, avant toute réécriture dynamique, pour pouvoir y revenir
+     * quand l'horloge numérique est active (voir appliquerChoixHorloge).
+     */
+    private lateinit var margesMomentParDéfaut: FrameLayout.LayoutParams
+
+    /** Dernier choix appliqué, pour ne recaler le groupe que lors d'un vrai changement. */
+    private var dernierChoixHorlogeNumérique: Boolean? = null
     // ═══ LES SOUS-TITRES DE LA PIÈCE SONT DE RETOUR, BORNÉS À L'ÉCRAN ALLUMÉ ═══
     //
     // Les commandes vocales et la bascule automatique sur la voix restent
@@ -107,6 +122,7 @@ class MainActivity : AppCompatActivity() {
     private val screenAwakeTicker = object : Runnable {
         override fun run() {
             applyCaptionErgonomics()
+            appliquerChoixHorloge()
             val hasText = zones.hasTextOnScreen()
             val now = System.currentTimeMillis()
             if (hasText) textGoneSinceMs = 0L
@@ -154,6 +170,56 @@ class MainActivity : AppCompatActivity() {
         policeAppliquée = réappliquerPoliceSiChangée(policeAppliquée)
     }
 
+    /**
+     * Bascule entre l'horloge à aiguilles et l'horloge numérique selon le
+     * réglage de l'administrateur (voir AdminConfig.horlogeNumerique), relu
+     * à chaque battement comme le reste de l'ergonomie — un changement
+     * depuis le PWA doit se voir sur la tablette dans la seconde.
+     *
+     * Le moment de la journée suit : posé à l'intérieur du cadran à
+     * l'opposé des aiguilles quand l'horloge à aiguilles est active (voir
+     * repositionnerMomentDansHorloge), remis à sa place par défaut (bas
+     * gauche de l'écran) sinon — l'horloge numérique n'a pas d'aiguilles à
+     * lui faire éviter.
+     */
+    private fun appliquerChoixHorloge() {
+        val numérique = adminConfig.horlogeNumerique
+        if (numérique != dernierChoixHorlogeNumérique) {
+            dernierChoixHorlogeNumérique = numérique
+            horlogeAccueil.visibility = if (numérique) View.GONE else View.VISIBLE
+            horlogeNumeriqueAccueil.visibility = if (numérique) View.VISIBLE else View.GONE
+            if (numérique) {
+                groupeMomentAccueil.layoutParams = FrameLayout.LayoutParams(margesMomentParDéfaut)
+            }
+        }
+        if (!numérique) repositionnerMomentDansHorloge()
+    }
+
+    /**
+     * Pose groupeMomentAccueil à l'intérieur du cadran, à l'opposé de
+     * l'aiguille des minutes (voir HorlogeAiguilles.positionOpposéeAiguilles).
+     *
+     * Coordonnées écran : la position que renvoie l'horloge est dans SON
+     * propre repère (0,0 en haut à gauche d'elle-même) — horlogeAccueil.left/
+     * top la replacent dans celui de homeRoot, qui les contient tous les
+     * deux. gravity à NO_GRAVITY : avec une marge calculée en absolu, une
+     * gravité restée à "bottom|start" (celle par défaut, voir
+     * activity_main.xml) ajouterait ses propres marges par-dessus les
+     * nôtres.
+     */
+    private fun repositionnerMomentDansHorloge() {
+        if (horlogeAccueil.width == 0 || groupeMomentAccueil.width == 0) return
+        val (xLocal, yLocal) = horlogeAccueil.positionOpposéeAiguilles()
+        val xAbs = horlogeAccueil.left + xLocal
+        val yAbs = horlogeAccueil.top + yLocal
+        val marges = FrameLayout.LayoutParams(groupeMomentAccueil.layoutParams as FrameLayout.LayoutParams).apply {
+            gravity = android.view.Gravity.NO_GRAVITY
+            leftMargin = (xAbs - groupeMomentAccueil.width / 2f).toInt()
+            topMargin = (yAbs - groupeMomentAccueil.height / 2f).toInt()
+        }
+        groupeMomentAccueil.layoutParams = marges
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -171,7 +237,10 @@ class MainActivity : AppCompatActivity() {
         // accéder (Réglages système bloqués), voir KioskManager.
         textBuildRev.setOnLongClickListener { promptAdminPin(); true }
 
-        val horlogeAccueil = findViewById<HorlogeAiguilles>(R.id.horlogeAccueil)
+        horlogeAccueil = findViewById(R.id.horlogeAccueil)
+        horlogeNumeriqueAccueil = findViewById(R.id.horlogeNumeriqueAccueil)
+        groupeMomentAccueil = findViewById(R.id.groupeMomentAccueil)
+        margesMomentParDéfaut = FrameLayout.LayoutParams(groupeMomentAccueil.layoutParams as FrameLayout.LayoutParams)
         val zoneInfo = findViewById<View>(R.id.zoneInfo)
 
         // ═══ UNE SEULE LIGNE, PAS UN TIERS D'ÉCRAN — ICI SEULEMENT ═══
@@ -209,6 +278,7 @@ class MainActivity : AppCompatActivity() {
                 findViewById<View>(R.id.homeRoot).setBackgroundColor(palette.background)
                 textBuildRev.setTextColor(palette.secondaryText)
                 horlogeAccueil.setCouleur(palette.primaryText)
+                horlogeNumeriqueAccueil.setCouleur(palette.primaryText)
                 // Retire le fond semi-opaque que HomeZonesController vient de
                 // poser sur zoneInfo (voir applyPalette) : utile quand la date
                 // flotte sur une photo ou une vidéo quelconques, inutile et

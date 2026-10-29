@@ -604,6 +604,7 @@ const els = {
   roomWakeEnabledToggle: el("roomWakeEnabledToggle"),
   roomWakeThresholdSlider: el("roomWakeThresholdSlider"),
   blockWakeAtNightToggle: el("blockWakeAtNightToggle"),
+  horlogeNumeriqueToggle: el("horlogeNumeriqueToggle"),
   sleepHoursSlider: el("sleepHoursSlider"),
   roomListeningStatus: el("roomListeningStatus"),
   deviceHealth: el("deviceHealth"),
@@ -1188,6 +1189,7 @@ const ADMIN_SLIDER_FIELDS = [
 const ADMIN_TOGGLE_FIELDS = [
   ["roomWakeEnabledToggle", "roomWakeEnabled"],
   ["blockWakeAtNightToggle", "blockWakeAtNight"],
+  ["horlogeNumeriqueToggle", "horlogeNumerique"],
   ["voiceGateToggle", "voiceGateEnabled"],
   ["speechTraceToggle", "speechTraceEnabled"],
 ];

@@ -85,15 +85,39 @@
          plein : toute la hauteur gagnée revient à l'horloge. layout_marginTop
          n'est qu'un repli avant la première mesure — MainActivity le
          réajuste ensuite exactement sur la hauteur réelle de zoneInfo, quelle
-         que soit la police ou la présence de la météo. -->
+         que soit la police ou la présence de la météo.
+
+         ═══ LA MARGE DROITE LAISSE LA PLACE DE colonneBoutonsAccueil ═══
+
+         260dp de large + 32dp de marge + 24dp de respiration = 316dp : le
+         cadran se centre ainsi sur ce qui reste réellement libre à gauche
+         des boutons, pas sur la largeur entière de l'écran — demandé après
+         un essai où il paraissait centré sur tout l'écran, boutons compris. -->
     <com.seniorvisio.ui.HorlogeAiguilles
         android:id="@+id/horlogeAccueil"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_marginStart="8dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="316dp"
         android:layout_marginBottom="8dp"
         android:layout_marginTop="100dp" />
+
+    <!-- ═══ HORLOGE NUMÉRIQUE, ALTERNATIVE AU CHOIX DE L'ADMINISTRATEUR ═══
+
+         Même emplacement que horlogeAccueil (dont elle copie les marges),
+         mais jamais les deux visibles en même temps — voir MainActivity,
+         appliquerChoixHorloge, qui bascule l'une et l'autre selon
+         AdminConfig.horlogeNumerique. GONE par défaut : l'horloge à
+         aiguilles reste le choix de départ. -->
+    <com.seniorvisio.ui.HorlogeNumerique
+        android:id="@+id/horlogeNumeriqueAccueil"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="316dp"
+        android:layout_marginBottom="8dp"
+        android:layout_marginTop="100dp"
+        android:visibility="gone" />
 
     <include layout="@layout/view_home_zones" />
 
@@ -185,13 +209,23 @@
          n'affiche que ce qui le concerne — la date, la météo, le moment de la
          journée et ce qui se dit autour de lui. -->
 
-    <!-- ═══ LE MOMENT DE LA JOURNÉE, EN BAS À GAUCHE DE L'ÉCRAN ═══
+    <!-- ═══ LE MOMENT DE LA JOURNÉE ═══
 
-         Sorti du bandeau de la date (voir view_home_zones.xml) : « en bas »
-         voulait dire en bas de l'ÉCRAN, pas en bas du bandeau — l'horloge,
-         bien plus grande qu'avant, laisse largement la place dans ce coin,
-         le cadran restant centré sur la largeur. -->
+         Position par défaut : en bas à gauche de l'écran (pas du bandeau,
+         voir plus haut) — c'est celle qu'il garde quand l'horloge numérique
+         est active, qui n'a pas d'aiguilles à éviter.
+
+         Quand l'horloge à aiguilles est active, MainActivity
+         (repositionnerMomentDansHorloge) reprend la main sur sa position à
+         chaque minute et la pose À L'INTÉRIEUR du cadran, à l'opposé des
+         aiguilles — demandé pour qu'elle profite de la place du cadran sans
+         jamais passer dessous. gravity="top|start" ici n'a donc d'effet que
+         le temps que ce recalcul n'ait pas encore tourné une première fois
+         (moins d'une seconde après l'affichage de l'écran) ou le temps de
+         basculer vers l'horloge numérique, qui restaure la position
+         ci-dessous. -->
     <LinearLayout
+        android:id="@+id/groupeMomentAccueil"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|start"

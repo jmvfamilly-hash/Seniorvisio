@@ -219,6 +219,16 @@ class AdminConfig(context: Context) {
         get() = prefs.getBoolean(KEY_VOICE_GATE_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_VOICE_GATE_ENABLED, value).apply()
 
+    /**
+     * Horloge numérique plutôt qu'à aiguilles sur l'écran d'accueil (voir
+     * MainActivity, HorlogeNumerique). Faux par défaut : l'horloge à
+     * aiguilles reste le choix de départ, ce réglage est l'exception que
+     * l'administrateur active sciemment depuis le PWA.
+     */
+    var horlogeNumerique: Boolean
+        get() = prefs.getBoolean(KEY_HORLOGE_NUMERIQUE, false)
+        set(value) = prefs.edit().putBoolean(KEY_HORLOGE_NUMERIQUE, value).apply()
+
     fun setMonthlyQuotaHours(engine: TranscriptionEngineChoice, hours: Int) {
         prefs.edit().putInt(KEY_QUOTA_PREFIX + engine.remoteValue, hours.coerceAtLeast(0)).apply()
     }
@@ -492,6 +502,7 @@ class AdminConfig(context: Context) {
         private const val KEY_GLADIA_API_KEY = "gladia_api_key"
         private const val KEY_QUOTA_PREFIX = "monthly_quota_hours_"
         private const val KEY_VOICE_GATE_ENABLED = "voice_gate_enabled"
+        private const val KEY_HORLOGE_NUMERIQUE = "horloge_numerique"
 
         /** Palier gratuit courant de ces services. Voir monthlyQuotaHours. */
         const val DEFAULT_QUOTA_HOURS = 10
