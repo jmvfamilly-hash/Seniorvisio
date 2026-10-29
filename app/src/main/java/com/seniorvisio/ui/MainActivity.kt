@@ -196,8 +196,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Pose groupeMomentAccueil à l'intérieur du cadran, à l'opposé de
-     * l'aiguille des minutes (voir HorlogeAiguilles.positionOpposéeAiguilles).
+     * Pose groupeMomentAccueil à l'intérieur du cadran, au-dessus du chiffre
+     * 6, à une position fixe (voir HorlogeAiguilles.positionAuDessusDuSix) —
+     * ne dépend plus de l'heure, mais reste recalculée à chaque battement
+     * pour s'ajuster d'elle-même dès que le cadran est mesuré (juste après
+     * l'affichage de l'écran) et survivre à une rotation.
      *
      * Coordonnées écran : la position que renvoie l'horloge est dans SON
      * propre repère (0,0 en haut à gauche d'elle-même) — horlogeAccueil.left/
@@ -209,7 +212,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun repositionnerMomentDansHorloge() {
         if (horlogeAccueil.width == 0 || groupeMomentAccueil.width == 0) return
-        val (xLocal, yLocal) = horlogeAccueil.positionOpposéeAiguilles()
+        val (xLocal, yLocal) = horlogeAccueil.positionAuDessusDuSix()
         val xAbs = horlogeAccueil.left + xLocal
         val yAbs = horlogeAccueil.top + yLocal
         val marges = FrameLayout.LayoutParams(groupeMomentAccueil.layoutParams as FrameLayout.LayoutParams).apply {

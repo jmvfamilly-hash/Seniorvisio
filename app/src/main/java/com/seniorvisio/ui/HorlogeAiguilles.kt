@@ -82,31 +82,26 @@ class HorlogeAiguilles @JvmOverloads constructor(
         }
     }
 
-    // Repris à chaque dessin (voir onDraw), pour que positionOpposéeAiguilles
-    // n'ait pas à refaire le calcul du cadran — juste à lire où il en est.
+    // Repris à chaque dessin (voir onDraw), pour que
+    // positionAuDessusDuSix n'ait pas à refaire le calcul du cadran — juste
+    // à lire où il en est.
     private var dernierCentreX = 0f
     private var dernierCentreY = 0f
     private var dernierRayon = 0f
 
     /**
-     * Où poser une étiquette à l'intérieur du cadran sans qu'elle passe
-     * jamais sous les aiguilles : à l'opposé de l'aiguille des minutes (la
-     * plus longue, celle qui balaie tout le cadran en une heure), à une
-     * fraction de son rayon qui la garde nettement en dedans des chiffres
-     * 12/3/6/9 (posés à 0,68 · rayon, voir onDraw).
+     * Où poser une étiquette fixe à l'intérieur du cadran, au-dessus du
+     * chiffre 6 (posé à 0,68 · rayon, voir onDraw) — une position immobile,
+     * demandée après un essai où la suivre à l'opposé des aiguilles (son
+     * premier comportement) paraissait trop animée pour ce qu'elle affiche.
      *
      * Coordonnées dans le repère de CETTE vue (0,0 en haut à gauche) : à
      * l'appelant de les décaler par la position de la vue elle-même s'il
      * veut une coordonnée écran (voir MainActivity,
      * repositionnerMomentDansHorloge).
      */
-    fun positionOpposéeAiguilles(fractionRayon: Float = 0.4f): Pair<Float, Float> {
-        val minutes = Calendar.getInstance().get(Calendar.MINUTE)
-        val degMinute = minutes * 6f
-        val angle = Math.toRadians((degMinute - 90 + 180).toDouble())
-        val r = dernierRayon * fractionRayon
-        return (dernierCentreX + (r * cos(angle)).toFloat()) to
-            (dernierCentreY + (r * sin(angle)).toFloat())
+    fun positionAuDessusDuSix(fractionRayon: Float = 0.4f): Pair<Float, Float> {
+        return dernierCentreX to (dernierCentreY + dernierRayon * fractionRayon)
     }
 
     override fun onAttachedToWindow() {
@@ -174,9 +169,10 @@ class HorlogeAiguilles @JvmOverloads constructor(
         val degHeure = (heures + minutes / 60f) * 30f
         val degMinute = minutes * 6f
 
-        traitAiguille.strokeWidth = 8f * resources.displayMetrics.density
+        // Épaissies (8dp/5dp -> 14dp/10dp) : signalées trop fines à l'essai.
+        traitAiguille.strokeWidth = 14f * resources.displayMetrics.density
         dessinerAiguille(canvas, centreX, centreY, degHeure, rayon * 0.52f)
-        traitAiguille.strokeWidth = 5f * resources.displayMetrics.density
+        traitAiguille.strokeWidth = 10f * resources.displayMetrics.density
         dessinerAiguille(canvas, centreX, centreY, degMinute, rayon * 0.78f)
 
         canvas.drawCircle(centreX, centreY, 6f * resources.displayMetrics.density, fondCentre)
