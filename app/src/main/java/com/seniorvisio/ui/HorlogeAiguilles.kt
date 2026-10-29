@@ -37,6 +37,13 @@ class HorlogeAiguilles @JvmOverloads constructor(
 
     private var couleur = Color.parseColor("#101A2E")
 
+    // Couleur d'accent de l'aiguille des heures et du moyeu central,
+    // distincte du reste du cadran (chiffres, graduations, aiguille des
+    // minutes) — demandé pour égayer un écran jugé trop austère une fois
+    // tout posé dans la même teinte uniforme. Même défaut que couleur tant
+    // que setCouleurAccent n'a pas encore été appelé.
+    private var couleurAccent = couleur
+
     private val traitCadran = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 4f * resources.displayMetrics.density
@@ -47,14 +54,19 @@ class HorlogeAiguilles @JvmOverloads constructor(
         strokeCap = Paint.Cap.ROUND
         color = couleur
     }
-    private val traitAiguille = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val traitAiguilleMinutes = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         color = couleur
     }
+    private val traitAiguilleHeures = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        color = couleurAccent
+    }
     private val fondCentre = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = couleur
+        color = couleurAccent
     }
     private val texteChiffres = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -68,9 +80,20 @@ class HorlogeAiguilles @JvmOverloads constructor(
         couleur = nouvelle
         traitCadran.color = nouvelle
         traitGraduation.color = nouvelle
-        traitAiguille.color = nouvelle
-        fondCentre.color = nouvelle
+        traitAiguilleMinutes.color = nouvelle
         texteChiffres.color = nouvelle
+        invalidate()
+    }
+
+    /**
+     * Couleur de l'aiguille des heures et du moyeu, à part du reste —
+     * voir MainActivity, qui la choisit selon jour/nuit (même logique que
+     * l'icône du moment de la journée dans la maquette d'origine).
+     */
+    fun setCouleurAccent(nouvelle: Int) {
+        couleurAccent = nouvelle
+        traitAiguilleHeures.color = nouvelle
+        fondCentre.color = nouvelle
         invalidate()
     }
 
@@ -170,21 +193,23 @@ class HorlogeAiguilles @JvmOverloads constructor(
         val degMinute = minutes * 6f
 
         // Épaissies (8dp/5dp -> 14dp/10dp) : signalées trop fines à l'essai.
-        traitAiguille.strokeWidth = 14f * resources.displayMetrics.density
-        dessinerAiguille(canvas, centreX, centreY, degHeure, rayon * 0.52f)
-        traitAiguille.strokeWidth = 10f * resources.displayMetrics.density
-        dessinerAiguille(canvas, centreX, centreY, degMinute, rayon * 0.78f)
+        // L'aiguille des heures porte la couleur d'accent, celle des minutes
+        // reste dans la teinte d'encre du reste du cadran.
+        traitAiguilleHeures.strokeWidth = 14f * resources.displayMetrics.density
+        dessinerAiguille(canvas, centreX, centreY, degHeure, rayon * 0.52f, traitAiguilleHeures)
+        traitAiguilleMinutes.strokeWidth = 10f * resources.displayMetrics.density
+        dessinerAiguille(canvas, centreX, centreY, degMinute, rayon * 0.78f, traitAiguilleMinutes)
 
         canvas.drawCircle(centreX, centreY, 6f * resources.displayMetrics.density, fondCentre)
     }
 
-    private fun dessinerAiguille(canvas: Canvas, centreX: Float, centreY: Float, degrés: Float, longueur: Float) {
+    private fun dessinerAiguille(canvas: Canvas, centreX: Float, centreY: Float, degrés: Float, longueur: Float, trait: Paint) {
         val angle = Math.toRadians((degrés - 90).toDouble())
         canvas.drawLine(
             centreX, centreY,
             centreX + (longueur * cos(angle)).toFloat(),
             centreY + (longueur * sin(angle)).toFloat(),
-            traitAiguille,
+            trait,
         )
     }
 }

@@ -1,9 +1,11 @@
 package com.seniorvisio.ui
 
 import android.Manifest
+import android.animation.ArgbEvaluator
 import android.app.AlertDialog
 import android.app.NotificationManager
 import android.content.Intent
+import android.graphics.Color
 import android.text.InputType
 import android.net.Uri
 import android.os.Build
@@ -35,6 +37,8 @@ import com.seniorvisio.core.CompanionApps
 import com.seniorvisio.core.MiseEnVeille
 import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
+import com.seniorvisio.core.ScreenTheme
+import com.seniorvisio.core.TimeContext
 import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.core.PauseAppels
 import com.seniorvisio.core.UsageStats
@@ -84,6 +88,16 @@ class MainActivity : AppCompatActivity() {
 
     /** Dernier choix appliqué, pour ne recaler le groupe que lors d'un vrai changement. */
     private var dernierChoixHorlogeNumérique: Boolean? = null
+
+    /**
+     * Dernière palette reçue de HomeZonesController (voir onPalette), gardée
+     * pour qu'appliquerFondVariable puisse la relire à chaque battement —
+     * elle ne change elle-même que rarement (lever du jour, capteur de
+     * luminosité), alors que le lavis selon le moment de la journée doit se
+     * mettre à jour à chaque frontière (matin/après-midi/soir/nuit), bien
+     * plus fréquente.
+     */
+    private var dernièrePalette: ScreenTheme.Palette? = null
     // ═══ LES SOUS-TITRES DE LA PIÈCE SONT DE RETOUR, BORNÉS À L'ÉCRAN ALLUMÉ ═══
     //
     // Les commandes vocales et la bascule automatique sur la voix restent
@@ -123,6 +137,7 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             applyCaptionErgonomics()
             appliquerChoixHorloge()
+            appliquerFondVariable()
             val hasText = zones.hasTextOnScreen()
             val now = System.currentTimeMillis()
             if (hasText) textGoneSinceMs = 0L
@@ -193,6 +208,37 @@ class MainActivity : AppCompatActivity() {
             }
         }
         if (!numérique) repositionnerMomentDansHorloge()
+    }
+
+    /**
+     * Pose sur homeRoot le fond de la palette (voir ScreenTheme), légèrement
+     * teinté selon le moment de la journée — demandé pour égayer un écran
+     * jugé trop austère, sans toucher à la bascule jour/nuit (qui répond à
+     * un vrai besoin de lisibilité selon la luminosité de la pièce, voir
+     * ScreenTheme.Monitor) : le lavis se superpose à cette palette, il ne la
+     * remplace pas.
+     *
+     * Appelée à chaque battement et non seulement quand la palette change
+     * (voir onPalette) : la frontière entre deux moments de la journée
+     * (ex. 11h59 -> 12h00) ne change pas forcément jour/nuit, donc ne
+     * redéclencherait jamais onPalette toute seule.
+     *
+     * Dosée à 10 % (voir TEINTE_MOMENT_FRACTION) : volontairement discrète,
+     * pour rester un détail et non une couleur qui prend le pas sur le
+     * texte posé par-dessus.
+     */
+    private fun appliquerFondVariable() {
+        val palette = dernièrePalette ?: return
+        val heure = java.time.LocalDateTime.now().hour
+        val teinte = when (TimeContext.momentOfDay(heure)) {
+            TimeContext.Moment.MATIN -> COULEUR_TEINTE_MATIN
+            TimeContext.Moment.APRES_MIDI -> COULEUR_TEINTE_APRES_MIDI
+            TimeContext.Moment.SOIR -> COULEUR_TEINTE_SOIR
+            TimeContext.Moment.NUIT -> COULEUR_TEINTE_NUIT
+        }
+        val fond = ArgbEvaluator()
+            .evaluate(TEINTE_MOMENT_FRACTION, palette.background, teinte) as Int
+        findViewById<View>(R.id.homeRoot).setBackgroundColor(fond)
     }
 
     /**
@@ -278,10 +324,18 @@ class MainActivity : AppCompatActivity() {
         zones = HomeZonesController(
             root = findViewById(R.id.homeRoot),
             onPalette = { palette ->
-                findViewById<View>(R.id.homeRoot).setBackgroundColor(palette.background)
+                // Le fond lui-même n'est plus posé ici : voir
+                // appliquerFondVariable, qui teinte palette.background selon
+                // le moment de la journée et doit pouvoir le refaire à
+                // chaque battement, pas seulement quand la palette change.
+                dernièrePalette = palette
+                appliquerFondVariable()
                 textBuildRev.setTextColor(palette.secondaryText)
                 horlogeAccueil.setCouleur(palette.primaryText)
                 horlogeNumeriqueAccueil.setCouleur(palette.primaryText)
+                horlogeAccueil.setCouleurAccent(
+                    if (palette.isDark) Color.parseColor("#F2C94C") else Color.parseColor("#B8860B")
+                )
                 // Retire le fond semi-opaque que HomeZonesController vient de
                 // poser sur zoneInfo (voir applyPalette) : utile quand la date
                 // flotte sur une photo ou une vidéo quelconques, inutile et
@@ -824,5 +878,12 @@ class MainActivity : AppCompatActivity() {
          * jetait un œil.
          */
         private const val READING_GRACE_MS = 20_000L
+
+        /** Voir appliquerFondVariable : dosage du lavis, délibérément discret. */
+        private const val TEINTE_MOMENT_FRACTION = 0.10f
+        private val COULEUR_TEINTE_MATIN = Color.parseColor("#FFD54F")
+        private val COULEUR_TEINTE_APRES_MIDI = Color.parseColor("#64B5F6")
+        private val COULEUR_TEINTE_SOIR = Color.parseColor("#FF8A50")
+        private val COULEUR_TEINTE_NUIT = Color.parseColor("#5C6BC0")
     }
 }
