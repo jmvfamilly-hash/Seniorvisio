@@ -323,4 +323,20 @@
         android:textSize="11sp"
         android:text="" />
 
+    <!-- ═══ VIGNETTE ANIMÉE HORAIRE ═══
+
+         Petite scène (écureuil, etc., voir scripts/traiter_vignette.sh)
+         qui joue une fois par heure par-dessus tout le reste de l'accueil
+         (voir MainActivity.appliquerVignetteHoraire) — d'où sa position en
+         tout dernier enfant de ce FrameLayout. Non interactive : elle ne
+         fait que passer devant les yeux de Jean, jamais sous ses doigts. -->
+    <com.seniorvisio.ui.VignetteAnimee
+        android:id="@+id/vignetteAccueil"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:clickable="false"
+        android:focusable="false"
+        android:importantForAccessibility="no" />
+
 </FrameLayout>

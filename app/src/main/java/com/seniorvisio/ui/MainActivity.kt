@@ -77,6 +77,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var horlogeAccueil: HorlogeAiguilles
     private lateinit var horlogeNumeriqueAccueil: HorlogeNumerique
     private lateinit var groupeMomentAccueil: View
+    private lateinit var vignetteAccueil: VignetteAnimee
+
+    /**
+     * Dernière heure (0-23) où la vignette horaire a été déclenchée, pour
+     * n'en jouer qu'une par heure — voir appliquerVignetteHoraire. -1 tant
+     * qu'aucune n'a encore joué depuis le démarrage de l'écran.
+     */
+    private var dernièreHeureVignette: Int = -1
 
     /**
      * Position par défaut de groupeMomentAccueil, telle que posée dans
@@ -138,6 +146,7 @@ class MainActivity : AppCompatActivity() {
             applyCaptionErgonomics()
             appliquerChoixHorloge()
             appliquerFondVariable()
+            appliquerVignetteHoraire()
             val hasText = zones.hasTextOnScreen()
             val now = System.currentTimeMillis()
             if (hasText) textGoneSinceMs = 0L
@@ -242,6 +251,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Joue la vignette animée (écureuil, etc. — voir
+     * scripts/traiter_vignette.sh) une fois par heure, entre 7h et 20h
+     * seulement : un agrément pour les heures où Jean est devant l'écran,
+     * pas pendant son sommeil. Bornée à une seule scène pour l'instant
+     * (VIGNETTES_HORAIRES n'a qu'une entrée) ; ajouter une scène au tableau
+     * suffira à l'inclure dans la rotation le jour où d'autres clips seront
+     * traités.
+     *
+     * dernièreHeureVignette garde la trace de l'heure déjà servie, pour ne
+     * pas relancer la vignette à chaque battement d'une seconde tant que
+     * l'heure n'a pas changé.
+     */
+    private fun appliquerVignetteHoraire() {
+        val heure = java.time.LocalDateTime.now().hour
+        if (heure !in 7..20) return
+        if (heure == dernièreHeureVignette) return
+        if (VIGNETTES_HORAIRES.isEmpty()) return
+        dernièreHeureVignette = heure
+        val scène = VIGNETTES_HORAIRES[heure % VIGNETTES_HORAIRES.size]
+        vignetteAccueil.jouer(scène.dossier, scène.nombreImages, scène.imagesParSeconde) {}
+    }
+
+    /**
      * Pose groupeMomentAccueil à l'intérieur du cadran, au-dessus du chiffre
      * 6, à une position fixe (voir HorlogeAiguilles.positionAuDessusDuSix) —
      * ne dépend plus de l'heure, mais reste recalculée à chaque battement
@@ -289,6 +321,7 @@ class MainActivity : AppCompatActivity() {
         horlogeAccueil = findViewById(R.id.horlogeAccueil)
         horlogeNumeriqueAccueil = findViewById(R.id.horlogeNumeriqueAccueil)
         groupeMomentAccueil = findViewById(R.id.groupeMomentAccueil)
+        vignetteAccueil = findViewById(R.id.vignetteAccueil)
         margesMomentParDéfaut = FrameLayout.LayoutParams(groupeMomentAccueil.layoutParams as FrameLayout.LayoutParams)
         val zoneInfo = findViewById<View>(R.id.zoneInfo)
 
@@ -885,5 +918,19 @@ class MainActivity : AppCompatActivity() {
         private val COULEUR_TEINTE_APRES_MIDI = Color.parseColor("#64B5F6")
         private val COULEUR_TEINTE_SOIR = Color.parseColor("#FF8A50")
         private val COULEUR_TEINTE_NUIT = Color.parseColor("#5C6BC0")
+
+        /** Une scène traitée par scripts/traiter_vignette.sh (voir ce script). */
+        private data class SceneVignette(val dossier: String, val nombreImages: Int, val imagesParSeconde: Int)
+
+        /**
+         * Scènes disponibles pour appliquerVignetteHoraire, dans l'ordre où
+         * elles tournent (une par heure, voir cette fonction). Une seule
+         * entrée pour l'instant (l'écureuil, premier clip traité) ; les
+         * prochaines scènes annoncées (mouette, écolier, oisillons, carriole)
+         * viendront s'ajouter ici une fois traitées par le script.
+         */
+        private val VIGNETTES_HORAIRES = listOf(
+            SceneVignette(dossier = "ecureuil", nombreImages = 100, imagesParSeconde = 10),
+        )
     }
 }
