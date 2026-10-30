@@ -83,6 +83,35 @@ service firebase.storage {
       allow delete: if true;
     }
 
+    // Les clips fond vert déposés depuis le panneau admin du PWA, en
+    // attente de détourage (voir scripts/traiter_vignette.sh et
+    // web-caller/vignettes.js) :
+    //   vignettes_brutes/{sceneId}/clip.<extension>
+    //
+    // Pas de séparation par appareil ici, contrairement à /recueils : une
+    // scène traitée est embarquée dans CHAQUE tablette au prochain envoi,
+    // elle n'appartient à aucun appareil en particulier.
+    match /vignettes_brutes/{sceneId}/{fichier} {
+      // Lecture ouverte : c'est le poste de traitement (hors tablette, voir
+      // le script) qui télécharge le clip d'origine, sans jeton ni identité
+      // Firebase, comme pour /recueils.
+      allow read: if true;
+
+      // 60 Mo : un clip de quelques secondes en pleine définition tient
+      // largement en dessous (les clips déjà traités avoisinent plutôt
+      // quelques mégaoctets), la limite ferme seulement la porte à un dépôt
+      // qui viderait le quota du projet. `create, update` et non `write`,
+      // pour la même raison que /recueils : `write` couvre aussi la
+      // suppression, où `request.resource` vaut null et ferait échouer la
+      // règle.
+      allow create, update: if request.resource.size < 60 * 1024 * 1024
+                            && request.resource.contentType.matches('video/.*');
+
+      // Pas de condition possible sans authentification, comme pour
+      // /recueils — voir le commentaire en tête de ce fichier.
+      allow delete: if true;
+    }
+
     // Tout le reste est refusé. Écrit explicitement plutôt que laissé au
     // défaut : une règle absente et une règle qui refuse se comportent
     // pareil, mais seule la seconde dit qu'on y a pensé.

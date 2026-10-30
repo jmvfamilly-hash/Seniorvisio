@@ -598,6 +598,11 @@ const els = {
   recueilEnvoyer: el("recueilEnvoyer"),
   recueilStatut: el("recueilStatut"),
   recueilListe: el("recueilListe"),
+  vignetteNom: el("vignetteNom"),
+  vignetteFichier: el("vignetteFichier"),
+  vignetteEnvoyer: el("vignetteEnvoyer"),
+  vignetteStatut: el("vignetteStatut"),
+  vignetteListe: el("vignetteListe"),
   callEngineSelect: el("callEngineSelect"),
   engineStatus: el("engineStatus"),
   interligneSlider: el("interligneSlider"),
@@ -1524,8 +1529,12 @@ function openAdmin() {
   els.adminPanel.classList.toggle("hidden", !unlocked);
   els.adminLockStatus.textContent = "";
   els.adminPinInput.value = "";
-  if (unlocked) loadUsage();
-  else els.adminPinInput.focus();
+  if (unlocked) {
+    loadUsage();
+    démarrerÉcouteVignettes();
+  } else {
+    els.adminPinInput.focus();
+  }
 }
 
 function closeAdmin() {
@@ -1556,6 +1565,7 @@ async function tryUnlockAdmin() {
     els.adminLock.classList.add("hidden");
     els.adminPanel.classList.remove("hidden");
     loadUsage();
+    démarrerÉcouteVignettes();
   } catch (e) {
     // crypto.subtle n'existe qu'en contexte sécurisé (HTTPS ou localhost). Le
     // PWA est servi en HTTPS, mais le dire explicitement évite de chercher
@@ -2995,6 +3005,105 @@ on("recueilEnvoyer", "click", async () => {
   } finally {
     clearTimeout(minuterieDArrêt);
     els.recueilEnvoyer.disabled = false;
+  }
+});
+
+// --- Vignettes animées : déposer les clips fond vert -----------------------
+// Voir web-caller/vignettes.js et scripts/traiter_vignette.sh. Un dépôt
+// seulement : à la différence des recueils, rien n'est à vérifier côté
+// tablette — le traitement (détourage) et la mise en service se font à part,
+// hors PWA, avant le prochain envoi de l'application.
+
+let vignettesBrutes = null;
+bloc("module des vignettes", () => {
+  vignettesBrutes = new VignettesBrutes(firebase.app());
+});
+
+/** Écoute démarrée une seule fois, au premier déverrouillage du panneau admin
+ * (voir tryUnlockAdmin/openAdmin) : ce dépôt n'intéresse que l'administrateur,
+ * pas la peine d'en payer la lecture Firestore avant que le panneau s'ouvre. */
+let vignettesÉcouteDémarrée = false;
+
+function démarrerÉcouteVignettes() {
+  if (vignettesÉcouteDémarrée) return;
+  vignettesÉcouteDémarrée = true;
+  bloc("écoute des vignettes", () => {
+    if (!vignettesBrutes || !vignettesBrutes.disponible) {
+      if (els.vignetteStatut) {
+        els.vignetteStatut.textContent =
+          "Dépôt de vignettes indisponible sur cette page — rouvrez l'onglet.";
+      }
+      return;
+    }
+    vignettesBrutes.écouter(
+      (liste) => renderVignettes(liste),
+      () => {
+        if (els.vignetteStatut) {
+          els.vignetteStatut.textContent =
+            "La liste des clips ne se met plus à jour. Rechargez la page.";
+        }
+      }
+    );
+  });
+}
+
+function renderVignettes(liste) {
+  if (!els.vignetteListe) return;
+  if (!liste.length) {
+    els.vignetteListe.innerHTML = "";
+    return;
+  }
+  els.vignetteListe.innerHTML = liste
+    .map(
+      (v) => `<div class="recueil">
+        <strong>${v.nom || v.id}</strong>
+        <span class="hint">${Math.round((v.taille || 0) / 1024 / 1024)} Mo · ${v.état || "à traiter"}</span>
+        <button class="secondary vignette-supprimer" data-vignette="${v.id}">🗑️ Retirer</button>
+      </div>`
+    )
+    .join("");
+  els.vignetteListe.querySelectorAll(".vignette-supprimer").forEach((bouton) => {
+    bouton.addEventListener("click", async () => {
+      bouton.disabled = true;
+      try {
+        await vignettesBrutes.supprimer(bouton.dataset.vignette);
+      } catch (e) {
+        els.vignetteStatut.textContent = `Retrait impossible : ${e.message}`;
+        bouton.disabled = false;
+      }
+    });
+  });
+}
+
+on("vignetteEnvoyer", "click", async () => {
+  if (!vignettesBrutes) {
+    els.vignetteStatut.textContent =
+      "Dépôt de vignettes indisponible sur cette page — rouvrez l'onglet.";
+    return;
+  }
+  const fichier = (els.vignetteFichier.files || [])[0];
+  if (!fichier) {
+    els.vignetteStatut.textContent = "Choisissez d'abord un clip.";
+    return;
+  }
+  els.vignetteEnvoyer.disabled = true;
+  els.vignetteStatut.textContent = "Préparation de l'envoi…";
+  try {
+    await vignettesBrutes.déposer(
+      { nom: els.vignetteNom.value.trim(), fichier },
+      (octets) => {
+        const pourcent = fichier.size ? Math.min(100, Math.round((octets / fichier.size) * 100)) : 0;
+        els.vignetteStatut.textContent = `Envoi… ${pourcent} %`;
+      }
+    );
+    els.vignetteStatut.textContent =
+      "Clip déposé. Le détourage et la mise en service se font ensuite, hors PWA.";
+    els.vignetteFichier.value = "";
+    els.vignetteNom.value = "";
+  } catch (e) {
+    els.vignetteStatut.textContent = `Envoi impossible. ${e.message}`;
+  } finally {
+    els.vignetteEnvoyer.disabled = false;
   }
 });
 

@@ -20,6 +20,15 @@ service cloud.firestore {
         allow read, write: if true;
       }
     }
+    // Les clips fond vert déposés depuis le panneau admin du PWA, en attente
+    // de détourage (voir scripts/traiter_vignette.sh et
+    // web-caller/vignettes.js). Collection de premier niveau et non sous
+    // devices/{id} comme /recueils : une scène animée fait partie de
+    // l'application elle-même, pas d'un appareil en particulier.
+    match /vignettes/{sceneId} {
+      allow read, write: if true;
+    }
+
     match /devices/{deviceId} {
       allow read, write: if true;
       // Les règles Firestore ne descendent PAS dans les sous-collections : sans

@@ -835,6 +835,34 @@
           <button id="careBreakCancelButton" class="secondary" hidden>Permettre de nouveau les appels</button>
           <p class="hint" id="careBreakSince" hidden></p>
 
+          <!-- ═══ VIGNETTES ANIMÉES : DÉPOSER LE CLIP D'ORIGINE ═══
+
+               Ne pose rien sur la tablette : ce clip (fond vert, généré par
+               IA) part dans l'espace de stockage, et le détourage/l'envoi
+               vers la tablette restent un geste séparé (voir
+               scripts/traiter_vignette.sh). Ce formulaire remplace seulement
+               le fait de faire passer le fichier autrement d'un clip à
+               l'autre. -->
+          <h3 class="admin-section">Vignettes animées (scènes de l'écran d'accueil)</h3>
+          <p class="hint">
+            Les clips fond vert à partir desquels sont fabriquées les petites
+            scènes qui s'animent sur l'écran d'accueil, une fois par heure
+            (un écureuil qui grimpe, par exemple). Déposer un clip ici ne le
+            met pas tout de suite en service chez Jean : le détourage du fond
+            vert se fait ensuite, à part.
+          </p>
+
+          <label for="vignetteNom">Nom de la scène</label>
+          <input type="text" id="vignetteNom" maxlength="40" placeholder="Écureuil">
+
+          <label for="vignetteFichier">Clip (fond vert)</label>
+          <input type="file" id="vignetteFichier" accept="video/*">
+
+          <button id="vignetteEnvoyer" class="secondary">📤 Déposer le clip</button>
+          <p class="hint" id="vignetteStatut"></p>
+
+          <div id="vignetteListe"></div>
+
           <h3 class="admin-section">Diagnostic</h3>
           <!-- Test décisif pour localiser un écho : s'il disparaît en coupant
                le micro de la tablette, il vient d'elle ; s'il persiste, il
@@ -864,6 +892,7 @@
   <script src="call-engine.js"></script>
   <script src="webrtc-engine.js"></script>
   <script src="recueils.js"></script>
+  <script src="vignettes.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
