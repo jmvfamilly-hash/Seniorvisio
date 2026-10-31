@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.TelechargementHttp
 import java.io.File
 import java.util.zip.ZipInputStream
@@ -84,9 +85,30 @@ class VignetteStore(private val context: Context) {
     @Volatile
     private var dernierÉtat: List<Scène> = emptyList()
 
+    /**
+     * Chaque scène est isolée dans son propre try/catch(Throwable) — et pas
+     * seulement Exception. Constaté à l'essai : sans cette garde, une seule
+     * scène qui échoue (ex. OutOfMemoryError pendant le dézippage, sur une
+     * tablette au tas Java de 192 Mo) arrêtait la boucle avant d'atteindre
+     * `dernierÉtat = scènes`, laissant TOUTES les scènes suivantes bloquées
+     * indéfiniment — alors que seules les scènes d'une taille particulière
+     * posaient problème. Même raison que VerificateurPhoto, qui attrape
+     * explicitement OutOfMemoryError pour ne pas emporter l'installation
+     * entière pour un seul fichier trop lourd.
+     */
     private fun installerCeQuiManque(scènes: List<Scène>) {
         scènes.forEach { scène ->
-            if (scène.prête && !estInstallée(scène)) installer(scène)
+            if (scène.prête && !estInstallée(scène)) {
+                try {
+                    installer(scène)
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Installation impossible pour ${scène.id}", e)
+                    CallTrace.record(
+                        "VIGNETTES installation ÉCHEC",
+                        "${scène.id} : ${e.javaClass.simpleName} ${e.message ?: ""}".trim(),
+                    )
+                }
+            }
         }
         dernierÉtat = scènes
         élaguer(scènes.filter { it.prête }.map { it.id }.toSet())
@@ -102,18 +124,23 @@ class VignetteStore(private val context: Context) {
         return (images?.size ?: 0) == scène.nombreImages
     }
 
+    /**
+     * Laisse volontairement toute erreur remonter à l'appelant (voir
+     * installerCeQuiManque, qui isole chaque scène) : un try/catch ici en
+     * plus de celui de l'appelant masquerait d'où vient réellement un échec.
+     */
     private fun installer(scène: Scène) {
+        CallTrace.record("VIGNETTES installation", "${scène.id} téléchargement démarré")
         val archive = File(context.cacheDir, "vignette-${scène.id}.zip")
         try {
             TelechargementHttp.vers(scène.archive, archive, "vignette ${scène.id}")
             dézipper(archive, dossierDe(scène.id))
-        } catch (e: Exception) {
-            Log.w(TAG, "Installation impossible pour ${scène.id}", e)
         } finally {
             // L'archive ne sert qu'à l'installation : la garder doublerait la
             // place occupée pour un fichier que personne ne relira jamais.
             archive.delete()
         }
+        CallTrace.record("VIGNETTES installation", "${scène.id} installée (${scène.nombreImages} images)")
     }
 
     /**
