@@ -95,6 +95,15 @@ class MainActivity : AppCompatActivity() {
     private var scenesVignettes: List<String>? = null
 
     /**
+     * Dernier état connu de l'écran (allumé/éteint), pour détecter un
+     * RÉVEIL et non juste relire un état — voir détecterRéveilÉcran().
+     * null tant qu'il n'a jamais été observé : le tout premier battement
+     * (donc aussi le tout premier lancement de l'application) compte lui
+     * aussi comme un réveil, pas seulement les suivants.
+     */
+    private var écranAllumé: Boolean? = null
+
+    /**
      * Position par défaut de groupeMomentAccueil, telle que posée dans
      * activity_main.xml (bas gauche de l'écran) — capturée une fois à
      * onCreate, avant toute réécriture dynamique, pour pouvoir y revenir
@@ -155,6 +164,7 @@ class MainActivity : AppCompatActivity() {
             appliquerChoixHorloge()
             appliquerFondVariable()
             appliquerVignetteHoraire()
+            détecterRéveilÉcran()
             val hasText = zones.hasTextOnScreen()
             val now = System.currentTimeMillis()
             if (hasText) textGoneSinceMs = 0L
@@ -295,6 +305,51 @@ class MainActivity : AppCompatActivity() {
         if (scènes.isEmpty()) return
         dernièreHeureVignette = heure
         vignetteAccueil.jouer(scènes[heure % scènes.size])
+    }
+
+    /**
+     * Repère un RÉVEIL d'écran (dalle rallumée après une veille, un appel
+     * qui se termine, etc. — pas seulement le premier affichage) via
+     * PowerManager plutôt que onResume/onPause : cette activité reste au
+     * premier plan tant que la dalle est simplement éteinte, ces deux
+     * méthodes ne voient donc pas un rallumage par le bouton ou par appel
+     * entrant. isInteractive, lui, change bien dans ces cas-là.
+     *
+     * Lu à chaque battement plutôt qu'avec un BroadcastReceiver dédié : un
+     * mécanisme de plus à faire vivre pour un besoin qui tient déjà dans le
+     * battement existant (voir screenAwakeTicker).
+     */
+    private fun détecterRéveilÉcran() {
+        val powerManager = getSystemService(POWER_SERVICE) as? PowerManager ?: return
+        val interactif = powerManager.isInteractive
+        val étaitÉteint = écranAllumé != true
+        écranAllumé = interactif
+        if (interactif && étaitÉteint) démarrerEnchaînementVignettes()
+    }
+
+    /**
+     * Joue toutes les scènes disponibles à la suite, une fois, au réveil de
+     * l'écran — demandé pour que les nouvelles scènes déposées se voient
+     * tout de suite plutôt que d'attendre jusqu'à six heures leur tour dans
+     * la rotation horaire (voir appliquerVignetteHoraire, qui continue de
+     * régir le reste du temps sans changement).
+     *
+     * N'interrompt rien explicitement : VignetteAnimee.jouer() ignore déjà
+     * tout appel pendant qu'une scène joue (voir ce fichier), donc un
+     * chevauchement avec la scène horaire se résout de lui-même — au pire
+     * un tour horaire manqué, sur un agrément décoratif, un compromis
+     * délibéré plutôt qu'une mécanique de priorité à entretenir pour un cas
+     * rarissime.
+     */
+    private fun démarrerEnchaînementVignettes() {
+        val scènes = scenesVignettesDisponibles()
+        if (scènes.isEmpty()) return
+        jouerVignetteEnchaînée(scènes, 0)
+    }
+
+    private fun jouerVignetteEnchaînée(scènes: List<String>, index: Int) {
+        if (index >= scènes.size) return
+        vignetteAccueil.jouer(scènes[index]) { jouerVignetteEnchaînée(scènes, index + 1) }
     }
 
     /**
