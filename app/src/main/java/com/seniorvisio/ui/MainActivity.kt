@@ -47,6 +47,7 @@ import com.seniorvisio.recueil.Element
 import com.seniorvisio.recueil.RecueilStore
 import com.seniorvisio.service.OrdonnanceurPhotos
 import com.seniorvisio.service.RoomPresenceService
+import com.seniorvisio.vignette.VignetteStore
 import com.seniorvisio.signaling.CallSignalingClient
 
 /**
@@ -85,14 +86,6 @@ class MainActivity : AppCompatActivity() {
      * qu'aucune n'a encore joué depuis le démarrage de l'écran.
      */
     private var dernièreHeureVignette: Int = -1
-
-    /**
-     * Dossiers de assets/animations/ (voir scripts/traiter_vignette.sh),
-     * découverts une fois puis mis en cache — jamais câblés en dur ici :
-     * traiter un nouveau clip avec le script suffit à l'ajouter à la
-     * rotation, sans toucher à ce fichier.
-     */
-    private var scenesVignettes: List<String>? = null
 
     /**
      * Dernier état connu de l'écran (allumé/éteint), pour détecter un
@@ -269,29 +262,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Dossiers disponibles dans assets/animations/, un par scène traitée
-     * par scripts/traiter_vignette.sh — lu une seule fois (le contenu des
-     * assets ne change jamais en cours de route) puis mis en cache.
+     * Scènes que la tablette a réellement téléchargées et vérifiées — voir
+     * VignetteStore, qui les obtient depuis Firestore/Storage plutôt que de
+     * l'APK. Jamais mise en cache ici, contrairement à l'ancienne version :
+     * l'ensemble peut grossir pendant que l'écran tourne, au fil des
+     * téléchargements en tâche de fond, là où le contenu de l'APK ne
+     * changeait jamais une fois installé.
      */
-    private fun scenesVignettesDisponibles(): List<String> {
-        scenesVignettes?.let { return it }
-        val liste = try {
-            assets.list("animations")?.toList()?.sorted() ?: emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
-        scenesVignettes = liste
-        return liste
-    }
+    private fun scenesVignettesDisponibles(): List<String> =
+        VignetteStore.actif?.scenesInstallées() ?: emptyList()
 
     /**
      * Joue une vignette animée (écureuil, etc. — voir
      * scripts/traiter_vignette.sh) une fois par heure, entre 7h et 20h
      * seulement : un agrément pour les heures où Jean est devant l'écran,
      * pas pendant son sommeil. Les scènes tournent dans l'ordre de
-     * scenesVignettesDisponibles ; en ajouter une (un nouveau dossier sous
-     * assets/animations/, produit par le script) l'inclut automatiquement
-     * dans la rotation, sans modifier ce fichier.
+     * scenesVignettesDisponibles ; en ajouter une (un nouveau clip traité et
+     * publié, voir scripts/publier_vignette.sh) l'inclut automatiquement
+     * dans la rotation dès que la tablette l'a téléchargée, sans rien
+     * recompiler.
      *
      * dernièreHeureVignette garde la trace de l'heure déjà servie, pour ne
      * pas relancer la vignette à chaque battement d'une seconde tant que

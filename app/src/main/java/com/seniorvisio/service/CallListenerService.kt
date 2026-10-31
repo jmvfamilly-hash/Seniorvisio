@@ -25,6 +25,7 @@ import com.seniorvisio.core.DeviceStatusReporter
 import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.PauseAppels
 import com.seniorvisio.recueil.RecueilStore
+import com.seniorvisio.vignette.VignetteStore
 import com.seniorvisio.core.UsageStats
 import com.seniorvisio.signaling.CallSignalingClient
 
@@ -71,6 +72,9 @@ class CallListenerService : LifecycleService() {
      * se produirait au pire moment, celui où quelqu'un regarde.
      */
     private val recueils = RecueilStore(this)
+
+    /** Même mécanique que recueils, pour les vignettes animées de l'accueil — voir VignetteStore. */
+    private val vignettes = VignetteStore(this)
 
 
     /**
@@ -215,6 +219,7 @@ class CallListenerService : LifecycleService() {
             else "recueil « $recueilChoisi »",
         )
         recueils.démarrer()
+        vignettes.démarrer()
         galerie.démarrer()
         // L'état de départ ne se déduit d'aucune diffusion : elles ne
         // signalent que les changements. Sans cette lecture initiale, tout le
@@ -480,6 +485,7 @@ class CallListenerService : LifecycleService() {
         callListener?.remove()
         callListener = null
         recueils.arrêter()
+        vignettes.arrêter()
         galerie.arrêter()
         if (enService === this) enService = null
         heartbeatHandler.removeCallbacks(heartbeatRunnable)

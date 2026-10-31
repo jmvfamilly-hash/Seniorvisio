@@ -10,6 +10,8 @@ import android.os.Looper
 import android.util.AttributeSet
 import android.view.View
 import com.seniorvisio.core.CallTrace
+import com.seniorvisio.vignette.VignetteStore
+import java.io.File
 
 /**
  * Petite vignette animée (écureuil, mouette, etc.) qui joue par-dessus
@@ -21,19 +23,18 @@ import com.seniorvisio.core.CallTrace
  * Voir scripts/traiter_vignette.sh : Android ne sait pas retirer un fond
  * vert d'une vidéo en temps réel de façon fiable sur toutes les tablettes,
  * et minSdk 26 exclut le support natif du WebP animé (API 28+). Le
- * détourage est donc fait une fois pour toutes hors tablette ; cette vue
- * ne fait que dérouler les images obtenues, une seule à la fois en
- * mémoire — la tablette de test tourne avec un tas Java d'à peine 192 Mo.
+ * détourage est donc fait une fois pour toutes hors tablette ; cette vue ne
+ * fait que dérouler les images obtenues, une seule à la fois en mémoire —
+ * la tablette de test tourne avec un tas Java d'à peine 192 Mo.
  *
- * ═══ AUCUNE SCÈNE N'EST CÂBLÉE EN DUR ICI ═══
+ * ═══ LES IMAGES VIENNENT DU DISQUE, PAS DE L'APK ═══
  *
- * Le nombre d'images d'une scène n'est jamais passé par l'appelant : il
- * est compté une fois, au lancement, en listant simplement le dossier
- * d'assets correspondant (voir jouer). Ajouter une nouvelle scène ne
- * demande donc jamais de toucher à ce fichier ni à MainActivity — juste
- * de traiter un nouveau clip avec scripts/traiter_vignette.sh (voir aussi
- * MainActivity.scenesVignettesDisponibles, qui découvre les dossiers de la
- * même façon).
+ * Voir VignetteStore : une scène est téléchargée et vérifiée par la
+ * tablette elle-même, comme les photos des recueils, plutôt
+ * qu'embarquée dans l'APK. Deux raisons : ajouter une scène ne demande
+ * alors ni recompilation ni réinstallation, et la définition de traitement
+ * n'est plus bridée par le poids de l'APK — elle peut suivre la taille
+ * réelle d'affichage (voir scripts/traiter_vignette.sh).
  */
 class VignetteAnimee @JvmOverloads constructor(
     context: Context,
@@ -41,7 +42,8 @@ class VignetteAnimee @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     private var bitmapCourant: Bitmap? = null
-    private var dossierActuel: String? = null
+    private var dossierActuel: File? = null
+    private var nomScèneActuelle: String? = null
     private var imageActuelle = 0
     private var nombreImages = 0
     private var délaiMs = 100L
@@ -51,30 +53,30 @@ class VignetteAnimee @JvmOverloads constructor(
     private val tic = Runnable { afficherImageSuivante() }
 
     /**
-     * Démarre la scène [dossier] (un sous-dossier de assets/animations/,
-     * voir scripts/traiter_vignette.sh) ; ignoré si une vignette joue déjà.
-     * [imagesParSeconde] doit correspondre au cadencement choisi au
-     * traitement du clip (10 par défaut dans le script).
+     * Démarre la scène [nomScène] (voir VignetteStore.scenesInstallées) ;
+     * ignoré si une vignette joue déjà. N'échoue jamais bruyamment : une
+     * scène pas encore téléchargée, ou disparue entre-temps, passe
+     * simplement son tour — voir démarrerEnchaînementVignettes côté
+     * MainActivity, qui enchaîne sur la suivante sans attendre.
      */
-    fun jouer(dossier: String, imagesParSeconde: Int = 10, onTermine: () -> Unit = {}) {
+    fun jouer(nomScène: String, onTermine: () -> Unit = {}) {
         if (dossierActuel != null) return
-        val compte = try {
-            context.assets.list("animations/$dossier")?.count { it.startsWith("frame_") } ?: 0
-        } catch (e: Exception) {
-            0
-        }
-        if (compte <= 0) {
-            CallTrace.record("ACCUEIL vignette ÉCHEC", "$dossier : dossier introuvable ou vide")
+        val magasin = VignetteStore.actif
+        val dossier = magasin?.dossierDe(nomScène)
+        val compte = dossier?.listFiles { f -> f.name.startsWith("frame_") }?.size ?: 0
+        if (dossier == null || compte <= 0) {
+            CallTrace.record("ACCUEIL vignette ÉCHEC", "$nomScène : pas encore installée sur la tablette")
             onTermine()
             return
         }
         dossierActuel = dossier
+        nomScèneActuelle = nomScène
         nombreImages = compte
-        délaiMs = 1_000L / imagesParSeconde
+        délaiMs = 1_000L / (magasin.imagesParSecondeDe(nomScène).coerceAtLeast(1))
         imageActuelle = 0
         onTermineActuel = onTermine
         visibility = VISIBLE
-        CallTrace.record("ACCUEIL vignette", "$dossier démarrée ($compte images)")
+        CallTrace.record("ACCUEIL vignette", "$nomScène démarrée ($compte images)")
         handler.post(tic)
     }
 
@@ -85,12 +87,11 @@ class VignetteAnimee @JvmOverloads constructor(
             terminer()
             return
         }
+        val fichier = File(dossier, "${"frame_%03d".format(imageActuelle)}.webp")
         val bitmap = try {
-            context.assets.open("animations/$dossier/${"frame_%03d".format(imageActuelle)}.webp").use {
-                BitmapFactory.decodeStream(it)
-            }
+            fichier.inputStream().use { BitmapFactory.decodeStream(it) }
         } catch (e: Exception) {
-            CallTrace.record("ACCUEIL vignette ÉCHEC", "$dossier image $imageActuelle : ${e.message}")
+            CallTrace.record("ACCUEIL vignette ÉCHEC", "$nomScèneActuelle image $imageActuelle : ${e.message}")
             terminer()
             return
         }
@@ -101,12 +102,13 @@ class VignetteAnimee @JvmOverloads constructor(
     }
 
     private fun terminer() {
-        val dossier = dossierActuel
+        val nomScène = nomScèneActuelle
         dossierActuel = null
+        nomScèneActuelle = null
         visibility = GONE
         bitmapCourant?.recycle()
         bitmapCourant = null
-        if (dossier != null) CallTrace.record("ACCUEIL vignette", "$dossier terminée")
+        if (nomScène != null) CallTrace.record("ACCUEIL vignette", "$nomScène terminée")
         val rappel = onTermineActuel
         onTermineActuel = null
         rappel?.invoke()
@@ -129,6 +131,7 @@ class VignetteAnimee @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         handler.removeCallbacks(tic)
         dossierActuel = null
+        nomScèneActuelle = null
         bitmapCourant?.recycle()
         bitmapCourant = null
         super.onDetachedFromWindow()

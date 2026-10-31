@@ -89,8 +89,10 @@ service firebase.storage {
     //   vignettes_brutes/{sceneId}/clip.<extension>
     //
     // Pas de séparation par appareil ici, contrairement à /recueils : une
-    // scène traitée est embarquée dans CHAQUE tablette au prochain envoi,
-    // elle n'appartient à aucun appareil en particulier.
+    // scène traitée est la même pour CHAQUE tablette, qui la télécharge et
+    // la vérifie elle-même une fois publiée (voir /vignettes_pretes
+    // ci-dessous et VignetteStore côté application) — elle n'appartient à
+    // aucun appareil en particulier.
     match /vignettes_brutes/{sceneId}/{fichier} {
       // Lecture ouverte : c'est le poste de traitement (hors tablette, voir
       // le script) qui télécharge le clip d'origine, sans jeton ni identité
@@ -106,6 +108,30 @@ service firebase.storage {
       // règle.
       allow create, update: if request.resource.size < 60 * 1024 * 1024
                             && request.resource.contentType.matches('video/.*');
+
+      // Pas de condition possible sans authentification, comme pour
+      // /recueils — voir le commentaire en tête de ce fichier.
+      allow delete: if true;
+    }
+
+    // L'archive d'une scène déjà traitée (détourée), telle que publiée par
+    // scripts/publier_vignette.sh :
+    //   vignettes_pretes/{sceneId}/cadres.zip
+    //
+    // C'est ce chemin que VignetteStore télécharge sur la tablette — jamais
+    // /vignettes_brutes, qui ne contient qu'un clip fond vert encore à
+    // traiter. Même absence de séparation par appareil que ci-dessus.
+    match /vignettes_pretes/{sceneId}/{fichier} {
+      // Lecture ouverte : c'est VignetteStore, côté tablette, qui télécharge
+      // sans jeton ni identité Firebase, comme pour /recueils.
+      allow read: if true;
+
+      // 30 Mo : cent images WebP à la définition d'affichage réelle (voir
+      // scripts/traiter_vignette.sh) tiennent largement en dessous ; la
+      // limite ferme seulement la porte à un dépôt qui viderait le quota du
+      // projet. Pas de contrainte de type MIME ici — contrairement à
+      // /vignettes_brutes, ce chemin n'est jamais alimenté depuis le PWA.
+      allow create, update: if request.resource.size < 30 * 1024 * 1024;
 
       // Pas de condition possible sans authentification, comme pour
       // /recueils — voir le commentaire en tête de ce fichier.
