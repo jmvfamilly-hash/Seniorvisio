@@ -71,8 +71,11 @@ ARCHIVE_URL="https://firebasestorage.googleapis.com/v0/b/$BUCKET/o/$CHEMIN_ENCOD
 
 echo "→ Mise à jour du document Firestore vignettes/$SCENE…"
 TRAITE_LE=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+# Les chemins de champs non-ASCII doivent être entourés d'accents graves
+# (backtick) dans updateMask — sans ça Firestore les refuse avec
+# INVALID_ARGUMENT (constaté à l'essai, pas deviné). %60 = backtick encodé.
 curl -sS -X PATCH \
-  "https://firestore.googleapis.com/v1/projects/$PROJET/databases/(default)/documents/vignettes/$SCENE?key=$CLE&updateMask.fieldPaths=archive&updateMask.fieldPaths=nombreImages&updateMask.fieldPaths=imagesParSeconde&updateMask.fieldPaths=%C3%A9tat&updateMask.fieldPaths=trait%C3%A9Le" \
+  "https://firestore.googleapis.com/v1/projects/$PROJET/databases/(default)/documents/vignettes/$SCENE?key=$CLE&updateMask.fieldPaths=archive&updateMask.fieldPaths=nombreImages&updateMask.fieldPaths=imagesParSeconde&updateMask.fieldPaths=%60%C3%A9tat%60&updateMask.fieldPaths=%60trait%C3%A9Le%60" \
   -H "Content-Type: application/json" \
   -d "{\"fields\": {
     \"archive\": {\"stringValue\": \"$ARCHIVE_URL\"},
