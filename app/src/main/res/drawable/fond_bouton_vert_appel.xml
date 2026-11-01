@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Fond du bouton « Demander à [nom] de rappeler » — vert, pour qu'il
+     tranche nettement avec les deux autres boutons de la colonne (voir
+     fond_bouton_navigation), demandé explicitement.
+
+     Texte toujours blanc dans cette colonne (voir activity_main.xml) : un
+     vert assez sombre pour le porter, mesuré et non choisi à l'œil —
+     #0F5C2B sous du blanc donne environ 8,1:1, au-dessus du seuil de 7:1
+     visé par les consignes d'accessibilité de ce projet. Même structure que
+     fond_bouton_navigation (bordure plus claire au repos, état pressé plus
+     sombre et sans bordure distincte).
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#0A3F1D" />
+            <corners android:radius="16dp" />
+            <stroke android:width="2dp" android:color="#0A3F1D" />
+        </shape>
+    </item>
+    <item android:state_enabled="false">
+        <shape android:shape="rectangle">
+            <solid android:color="#2E3A33" />
+            <corners android:radius="16dp" />
+            <stroke android:width="3dp" android:color="#4A5A50" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#0F5C2B" />
+            <corners android:radius="16dp" />
+            <stroke android:width="3dp" android:color="#3C9A5C" />
+        </shape>
+    </item>
+</selector>

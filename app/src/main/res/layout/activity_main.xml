@@ -141,6 +141,43 @@
         android:layout_marginEnd="32dp"
         android:orientation="vertical">
 
+        <!-- ═══ « DEMANDER À [NOM] DE RAPPELER » : UN SEUL DESTINATAIRE FIXE ═══
+
+             Exception délibérée à « Jean n'a jamais rien à faire » : il peut
+             vouloir joindre quelqu'un sans attendre d'être appelé, et c'est
+             ce bouton — pas une liste, pas un répertoire, un seul nom réglé
+             une fois par l'administrateur (voir AdminConfig.aidantNom). Pas
+             de décision à prendre, seulement un geste.
+
+             En tête de la colonne et en vert, pour qu'il tranche sur les deux
+             autres — demandé explicitement (voir fond_bouton_vert_appel).
+             Masqué tant qu'aucun nom n'est réglé (voir MainActivity,
+             rafraîchirBoutonAppelerAidant) : une cible qui ne mène nulle
+             part est pire qu'une absence.
+
+             Reste visible mais INACTIF une minute après une pression (voir
+             MainActivity) : la confirmation, elle, s'affiche dans la bande
+             du bas de l'écran (voir textStatutRappelAidant), pas sur ce
+             bouton — qui garde donc toujours le même texte. -->
+        <Button
+            android:id="@+id/boutonAppelerAidant"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="150dp"
+            android:textSize="22sp"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:drawableTop="@drawable/ic_appeler"
+            android:drawablePadding="10dp"
+            android:gravity="center"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="22dp"
+            android:paddingBottom="22dp"
+            android:elevation="6dp"
+            android:visibility="gone"
+            android:background="@drawable/fond_bouton_vert_appel" />
+
         <!-- ═══ « SOUS-TITRES » : JEAN APPELLE LA TRANSCRIPTION QUAND IL VEUT ═══
 
              Bascule vers « Transcription instantanée » de Google, SANS AUCUNE
@@ -161,6 +198,7 @@
             android:id="@+id/boutonTranscription"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
             android:minHeight="150dp"
             android:text="Sous-titres"
             android:textSize="22sp"
@@ -202,36 +240,6 @@
             android:elevation="6dp"
             android:background="@drawable/fond_bouton_navigation" />
 
-        <!-- ═══ « APPELER [PRÉNOM] » : UN SEUL DESTINATAIRE FIXE ═══
-
-             Exception délibérée à « Jean n'a jamais rien à faire » : il peut
-             vouloir joindre quelqu'un sans attendre d'être appelé, et c'est
-             ce bouton — pas une liste, pas un répertoire, un seul nom réglé
-             une fois par l'administrateur (voir AdminConfig.aidantNom). Pas
-             de décision à prendre, seulement un geste.
-
-             Masqué tant qu'aucun nom n'est réglé (voir MainActivity,
-             rafraîchirBoutonAppelerAidant) : une cible qui ne mène nulle
-             part est pire qu'une absence. -->
-        <Button
-            android:id="@+id/boutonAppelerAidant"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:minHeight="150dp"
-            android:textSize="22sp"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            android:drawableTop="@drawable/ic_appeler"
-            android:drawablePadding="10dp"
-            android:gravity="center"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:paddingTop="22dp"
-            android:paddingBottom="22dp"
-            android:elevation="6dp"
-            android:visibility="gone"
-            android:background="@drawable/fond_bouton_navigation" />
     </LinearLayout>
 
     <!-- Plus aucun QR code sur cet écran. Il en a porté un, puis les réglages

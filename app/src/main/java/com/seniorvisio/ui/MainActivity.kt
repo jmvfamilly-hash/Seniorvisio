@@ -78,8 +78,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var boutonAppelerAidant: Button
     private lateinit var textStatutRappelAidant: TextView
 
-    /** Vrai pendant le court répit après une pression, le temps d'afficher
-     *  « Demande envoyée » sans que rafraîchirBoutonAppelerAidant ne l'efface. */
+    /** Vrai pendant la minute qui suit une pression : le bouton reste
+     *  inactif et la bande du bas affiche « DEMANDE À [NOM] FAITE » — voir
+     *  rafraîchirStatutRappelAidant. */
     private var appelAidantEnRefroidissement = false
     private lateinit var horlogeAccueil: HorlogeAiguilles
     private lateinit var horlogeNumeriqueAccueil: HorlogeNumerique
@@ -376,11 +377,11 @@ class MainActivity : AppCompatActivity() {
             adminConfig.aidantRappelPrévuLeMs = 0L
             appelAidantEnRefroidissement = true
             boutonAppelerAidant.isEnabled = false
-            boutonAppelerAidant.text = "Demande envoyée"
+            rafraîchirStatutRappelAidant()
             screenAwakeHandler.postDelayed({
                 appelAidantEnRefroidissement = false
                 boutonAppelerAidant.isEnabled = true
-                rafraîchirBoutonAppelerAidant()
+                rafraîchirStatutRappelAidant()
             }, DÉLAI_REFROIDISSEMENT_APPEL_AIDANT_MS)
         }
 
@@ -514,26 +515,31 @@ class MainActivity : AppCompatActivity() {
      * chaque battement comme le reste de l'ergonomie, pour qu'un réglage
      * fait depuis le PWA apparaisse sans attendre un redémarrage.
      *
-     * N'écrase pas le texte pendant le refroidissement qui suit une
-     * pression (voir le clic ci-dessus) : « Demande envoyée » doit rester
-     * lisible le temps annoncé, pas se faire remplacer par « Appeler X » au
-     * battement suivant.
+     * Le texte lui-même ne change jamais après une pression — contrairement
+     * à la première version de ce bouton : seul son état actif/inactif
+     * bouge (voir le clic ci-dessus), la confirmation vivant désormais dans
+     * la bande du bas (voir rafraîchirStatutRappelAidant).
      */
     private fun rafraîchirBoutonAppelerAidant() {
         val nom = adminConfig.aidantNom
         boutonAppelerAidant.visibility = if (nom.isBlank()) View.GONE else View.VISIBLE
-        if (!appelAidantEnRefroidissement && nom.isNotBlank()) {
-            boutonAppelerAidant.text = "Appeler $nom"
+        if (nom.isNotBlank()) {
+            boutonAppelerAidant.text = "DEMANDER À ${nom.uppercase()} DE RAPPELER"
         }
     }
 
     /**
-     * Trois états possibles, du moment où Jean presse le bouton jusqu'à ce
-     * que l'aidant ait réagi — voir web-caller/app.js, qui écrit les deux
-     * repères lus ici dès que l'aidant ouvre le lien du SMS (accusé de
-     * lecture) et quand il choisit un délai.
+     * Juste après une pression, la bande du bas dit simplement que la
+     * demande est partie (voir le clic ci-dessus, pendant le
+     * refroidissement d'une minute) — un fait immédiat, garanti vrai sans
+     * attendre aucun aller-retour réseau.
      *
-     * Masqué passé un délai généreux (voir DÉLAI_EXPIRATION_STATUT_RAPPEL_MS) :
+     * Passé ce délai, elle reprend le fil des trois états réels venus du
+     * PWA (voir web-caller/app.js, qui écrit les deux repères lus ici dès
+     * que l'aidant ouvre le lien du SMS — accusé de lecture — et quand il
+     * choisit un délai).
+     *
+     * Masquée passé un délai généreux (voir DÉLAI_EXPIRATION_STATUT_RAPPEL_MS) :
      * un message resté « pas encore lu » toute la journée n'a plus rien
      * d'utile à dire à Jean, et deviendrait juste un texte figé de plus.
      */
@@ -546,9 +552,15 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val nom = adminConfig.aidantNom.ifBlank { "l'aidant" }
+        textStatutRappelAidant.visibility = View.VISIBLE
+
+        if (appelAidantEnRefroidissement) {
+            textStatutRappelAidant.text = "DEMANDE À ${nom.uppercase()} FAITE"
+            return
+        }
+
         val luLe = adminConfig.aidantMessageLuLeMs
         val rappelPrévuLe = adminConfig.aidantRappelPrévuLeMs
-        textStatutRappelAidant.visibility = View.VISIBLE
         textStatutRappelAidant.text = when {
             luLe < demandéLe -> "Message envoyé à $nom, pas encore lu"
             rappelPrévuLe > demandéLe -> {
