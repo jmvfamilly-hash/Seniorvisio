@@ -282,6 +282,24 @@
             android:text="" />
     </LinearLayout>
 
+    <!-- ═══ OÙ EN EST LA DEMANDE DE RAPPEL ═══
+
+         Voir MainActivity.rafraîchirStatutRappelAidant : masqué tant que
+         Jean n'a rien demandé, puis « message envoyé » jusqu'à ce que
+         web-caller/app.js signale que l'aidant a ouvert le SMS, puis
+         « rappelle vers HH:MM » s'il l'a indiqué. Centré tout en bas, sous
+         le moment de la journée et le bouton de sommeil — aucun des deux
+         n'occupe cette bande. -->
+    <TextView
+        android:id="@+id/textStatutRappelAidant"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="24dp"
+        android:textSize="22sp"
+        android:visibility="gone"
+        android:text="" />
+
     <!-- ═══ « ÉCRAN NOIR » : RETIRÉ DE L'ÉCRAN DE JEAN ═══
 
          GONE et non supprimé : HomeZonesController le cherche sans condition

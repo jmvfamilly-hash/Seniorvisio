@@ -134,7 +134,7 @@ const TWILIO_FROM_NUMBER = defineSecret("TWILIO_FROM_NUMBER");
 /** Entre deux SMS envoyés pour une même tablette, quoi qu'il arrive côté boutons. */
 const DÉLAI_MINIMUM_ENTRE_RAPPELS_MS = 10 * 60 * 1000;
 
-async function envoyerRappel(environnement, lienPwa) {
+async function envoyerRappel(environnement, baseUrl) {
   const db = getFirestore();
   const deviceRef = db.doc(environnement.deviceDoc);
   const deviceSnap = await deviceRef.get();
@@ -168,7 +168,15 @@ async function envoyerRappel(environnement, lienPwa) {
       body: new URLSearchParams({
         To: téléphone,
         From: TWILIO_FROM_NUMBER.value(),
-        Body: `Jean aimerait que vous le rappeliez : ${lienPwa}`,
+        // Deux liens : le premier ouvre l'appel tout de suite, sans même le
+        // décompte habituel de 30 s (voir ?rappel=1, traité par
+        // web-caller/app.js, traiterLienRappel) ; le second laisse l'aidant
+        // dire à Jean qu'il rappellera plus tard, sans démarrer d'appel
+        // (?differe=1). Ouvrir l'un ou l'autre vaut accusé de lecture.
+        Body:
+          `Jean aimerait vous parler.\n` +
+          `Appeler maintenant : ${baseUrl}/?mode=aidant&rappel=1\n` +
+          `Pas tout de suite ? Dites-lui quand : ${baseUrl}/?mode=aidant&differe=1`,
       }),
     }
   );

@@ -550,6 +550,17 @@ class DeviceStatusReporter(private val context: Context) {
             if (adminConfig.aidantNom != it) adminConfig.aidantNom = it
         }
 
+        // Les deux repères écrits par le PWA DEPUIS LE TÉLÉPHONE DE L'AIDANT
+        // (voir web-caller/app.js) : quand le SMS a été ouvert, et à quelle
+        // heure il a indiqué rappeler — voir MainActivity,
+        // rafraîchirStatutRappelAidant.
+        snapshot.getLong(FIELD_AIDANT_MESSAGE_LU_LE_MS)?.let {
+            if (adminConfig.aidantMessageLuLeMs != it) adminConfig.aidantMessageLuLeMs = it
+        }
+        snapshot.getLong(FIELD_AIDANT_RAPPEL_PRÉVU_LE_MS)?.let {
+            if (adminConfig.aidantRappelPrévuLeMs != it) adminConfig.aidantRappelPrévuLeMs = it
+        }
+
         // Bornée ICI EN PLUS de l'ordonnanceur, et les deux comptent : ce
         // document est ouvert en écriture à qui en connaît l'adresse, et une
         // cadence de zéro ferait tourner les photos à chaque battement. La
@@ -913,6 +924,12 @@ class DeviceStatusReporter(private val context: Context) {
         /** L'identifiant de la galerie photo préférée, ou vide pour le fond uni. */
         private const val FIELD_RECUEIL_PHOTOS = "recueilPhotos"
         private const val FIELD_AIDANT_NOM = "aidantNom"
+        // Noms de champs SANS "Ms" : c'est ainsi que web-caller/app.js les
+        // écrit (Date.now(), un nombre brut de millisecondes) — seuls les
+        // noms des constantes Kotlin et des propriétés AdminConfig portent
+        // ce suffixe, pour rester clairs sur l'unité côté lecture.
+        private const val FIELD_AIDANT_MESSAGE_LU_LE_MS = "aidantMessageLuLe"
+        private const val FIELD_AIDANT_RAPPEL_PRÉVU_LE_MS = "aidantRappelPrévuLe"
 
         /** Combien de minutes chaque photo de la galerie tient l'écran. */
         private const val FIELD_CADENCE_PHOTOS = "cadencePhotosMinutes"

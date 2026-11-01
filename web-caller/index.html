@@ -42,6 +42,21 @@
 
       <button id="callButton">📹 Démarrer l'appel</button>
 
+      <!-- ═══ « JE RAPPELLE DANS UN MOMENT » ═══
+
+           Affiché UNIQUEMENT quand le lien du SMS de rappel portait
+           ?differe=1 (voir web-caller/app.js, traiterLienRappel) : l'aidant
+           ne peut pas répondre tout de suite, mais peut dire à Jean quand.
+           Chaque bouton écrit l'heure annoncée sur le document d'appareil ;
+           la tablette l'affiche dans sa bande du bas (voir MainActivity,
+           rafraîchirStatutRappelAidant). -->
+      <div class="hidden" id="rappelDiffereBloc">
+        <p class="hint">Vous ne pouvez pas répondre tout de suite ? Dites à Jean quand vous le rappellerez.</p>
+        <button class="secondary" id="rappelDiffere15" data-minutes="15">Dans 15 minutes</button>
+        <button class="secondary" id="rappelDiffere60" data-minutes="60">Dans 1 heure</button>
+        <p class="hint" id="rappelDiffereStatut"></p>
+      </div>
+
       <!-- ═══ « SOUS-TITRES » : QUAND ON EST DÉJÀ DANS LA PIÈCE ═══
 
            Techniquement un appel, et rien à l'écran de Jean n'en a l'air :

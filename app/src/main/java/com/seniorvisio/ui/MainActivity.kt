@@ -76,6 +76,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var zones: HomeZonesController
     private lateinit var boutonPauseAppels: Button
     private lateinit var boutonAppelerAidant: Button
+    private lateinit var textStatutRappelAidant: TextView
 
     /** Vrai pendant le court répit après une pression, le temps d'afficher
      *  « Demande envoyée » sans que rafraîchirBoutonAppelerAidant ne l'efface. */
@@ -145,6 +146,7 @@ class MainActivity : AppCompatActivity() {
             appliquerChoixHorloge()
             appliquerFondVariable()
             rafraîchirBoutonAppelerAidant()
+            rafraîchirStatutRappelAidant()
             val hasText = zones.hasTextOnScreen()
             val now = System.currentTimeMillis()
             if (hasText) textGoneSinceMs = 0L
@@ -338,6 +340,7 @@ class MainActivity : AppCompatActivity() {
                 dernièrePalette = palette
                 appliquerFondVariable()
                 textBuildRev.setTextColor(palette.secondaryText)
+                textStatutRappelAidant.setTextColor(palette.secondaryText)
                 horlogeAccueil.setCouleur(palette.primaryText)
                 horlogeNumeriqueAccueil.setCouleur(palette.primaryText)
                 horlogeAccueil.setCouleurAccent(
@@ -362,8 +365,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         boutonAppelerAidant = findViewById(R.id.boutonAppelerAidant)
+        textStatutRappelAidant = findViewById(R.id.textStatutRappelAidant)
         boutonAppelerAidant.setOnClickListener {
             RappelAidant.demander()
+            adminConfig.dernierRappelDemandéLeMs = System.currentTimeMillis()
+            // Repart de zéro : un ancien accusé de lecture ou une ancienne
+            // heure annoncée appartiennent à la demande précédente, les
+            // montrer ici ferait croire cette demande-ci déjà vue.
+            adminConfig.aidantMessageLuLeMs = 0L
+            adminConfig.aidantRappelPrévuLeMs = 0L
             appelAidantEnRefroidissement = true
             boutonAppelerAidant.isEnabled = false
             boutonAppelerAidant.text = "Demande envoyée"
@@ -480,6 +490,7 @@ class MainActivity : AppCompatActivity() {
         // pas affiché : depuis le PWA, ou l'expiration naturelle des 30 min.
         rafraîchirBoutonPauseAppels()
         rafraîchirBoutonAppelerAidant()
+        rafraîchirStatutRappelAidant()
         // Et tant que cet écran reste au premier plan, toute bascule — y
         // compris celle déclenchée à distance pendant qu'on le regarde — met
         // le bouton à jour tout de suite, sans attendre le prochain passage
@@ -513,6 +524,39 @@ class MainActivity : AppCompatActivity() {
         boutonAppelerAidant.visibility = if (nom.isBlank()) View.GONE else View.VISIBLE
         if (!appelAidantEnRefroidissement && nom.isNotBlank()) {
             boutonAppelerAidant.text = "Appeler $nom"
+        }
+    }
+
+    /**
+     * Trois états possibles, du moment où Jean presse le bouton jusqu'à ce
+     * que l'aidant ait réagi — voir web-caller/app.js, qui écrit les deux
+     * repères lus ici dès que l'aidant ouvre le lien du SMS (accusé de
+     * lecture) et quand il choisit un délai.
+     *
+     * Masqué passé un délai généreux (voir DÉLAI_EXPIRATION_STATUT_RAPPEL_MS) :
+     * un message resté « pas encore lu » toute la journée n'a plus rien
+     * d'utile à dire à Jean, et deviendrait juste un texte figé de plus.
+     */
+    private fun rafraîchirStatutRappelAidant() {
+        val demandéLe = adminConfig.dernierRappelDemandéLeMs
+        val expiré = demandéLe == 0L ||
+            System.currentTimeMillis() - demandéLe > DÉLAI_EXPIRATION_STATUT_RAPPEL_MS
+        if (expiré) {
+            textStatutRappelAidant.visibility = View.GONE
+            return
+        }
+        val nom = adminConfig.aidantNom.ifBlank { "l'aidant" }
+        val luLe = adminConfig.aidantMessageLuLeMs
+        val rappelPrévuLe = adminConfig.aidantRappelPrévuLeMs
+        textStatutRappelAidant.visibility = View.VISIBLE
+        textStatutRappelAidant.text = when {
+            luLe < demandéLe -> "Message envoyé à $nom, pas encore lu"
+            rappelPrévuLe > demandéLe -> {
+                val heure = java.text.SimpleDateFormat("HH:mm", java.util.Locale.FRANCE)
+                    .format(java.util.Date(rappelPrévuLe))
+                "$nom rappelle vers $heure"
+            }
+            else -> "$nom a vu le message"
         }
     }
 
@@ -928,5 +972,8 @@ class MainActivity : AppCompatActivity() {
 
         /** Voir le clic de boutonAppelerAidant : le temps que « Demande envoyée » reste lisible. */
         private const val DÉLAI_REFROIDISSEMENT_APPEL_AIDANT_MS = 60_000L
+
+        /** Voir rafraîchirStatutRappelAidant : au-delà, un statut figé n'a plus rien à dire. */
+        private const val DÉLAI_EXPIRATION_STATUT_RAPPEL_MS = 3 * 60 * 60 * 1000L
     }
 }

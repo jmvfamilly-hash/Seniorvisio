@@ -626,6 +626,10 @@ const els = {
   aidantTelephone: el("aidantTelephone"),
   aidantEnregistrer: el("aidantEnregistrer"),
   aidantStatut: el("aidantStatut"),
+  rappelDiffereBloc: el("rappelDiffereBloc"),
+  rappelDiffere15: el("rappelDiffere15"),
+  rappelDiffere60: el("rappelDiffere60"),
+  rappelDiffereStatut: el("rappelDiffereStatut"),
   captionOverflowIndicator: el("captionOverflowIndicator"),
   // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
   jeanScreen: el("jeanScreen"),
@@ -1023,6 +1027,62 @@ async function lancerAppel({ sousTitres = false } = {}) {
 }
 
 on("callButton", "click", () => lancerAppel());
+
+// ═══ ARRIVÉE DEPUIS LE SMS DE RAPPEL (voir functions/index.js) ═══
+//
+// Deux liens possibles dans le SMS :
+//   ?mode=aidant&rappel=1    appelle tout de suite, sans même le bouton ni
+//                            le décompte de 30 s habituel (voir
+//                            engine.forceConnect, déjà utilisé ailleurs par
+//                            l'appui secret de l'administrateur).
+//   ?mode=aidant&differe=1   l'aidant ne peut pas répondre tout de suite ;
+//                            affiche seulement le choix d'un délai.
+//
+// Dans les deux cas, le simple chargement de la page vaut accusé de
+// lecture — un SMS ordinaire n'a pas d'accusé de lecture natif, mais
+// quelqu'un qui a cliqué le lien a, par définition, vu le message.
+function traiterLienRappel() {
+  let params;
+  try {
+    params = new URLSearchParams(location.search);
+  } catch (e) {
+    return;
+  }
+  const immédiat = params.get("rappel") === "1";
+  const différé = params.get("differe") === "1";
+  if (!immédiat && !différé) return;
+
+  engine.setDeviceSetting(CONFIG.deviceDocId, "aidantMessageLuLe", Date.now());
+
+  if (immédiat) {
+    lancerAppel().then(() => engine.forceConnect());
+    return;
+  }
+
+  els.rappelDiffereBloc.classList.remove("hidden");
+}
+traiterLienRappel();
+
+on("rappelDiffere15", "click", () => choisirDélaiRappel(15));
+on("rappelDiffere60", "click", () => choisirDélaiRappel(60));
+
+async function choisirDélaiRappel(minutes) {
+  els.rappelDiffere15.disabled = true;
+  els.rappelDiffere60.disabled = true;
+  try {
+    await engine.setDeviceSetting(
+      CONFIG.deviceDocId,
+      "aidantRappelPrévuLe",
+      Date.now() + minutes * 60 * 1000
+    );
+    els.rappelDiffereStatut.textContent = "C'est noté, merci — Jean le sait maintenant.";
+  } catch (e) {
+    console.warn("[app] Délai de rappel non transmis :", e);
+    els.rappelDiffereStatut.textContent = "Non transmis — vérifiez votre connexion et réessayez.";
+    els.rappelDiffere15.disabled = false;
+    els.rappelDiffere60.disabled = false;
+  }
+}
 
 // Le proche est auprès de Jean et veut simplement que ses paroles s'écrivent
 // sur la tablette : ni sonnerie, ni vidéo, ni son — Jean l'entend, il est à

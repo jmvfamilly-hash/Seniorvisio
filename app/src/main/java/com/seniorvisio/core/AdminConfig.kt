@@ -403,6 +403,32 @@ class AdminConfig(context: Context) {
         set(value) = prefs.edit().putString(KEY_AIDANT_NOM, value).apply()
 
     /**
+     * Quand Jean a pressé le bouton « Appeler [prénom] » — purement local,
+     * jamais publié : c'est le repère que MainActivity utilise pour savoir
+     * depuis combien de temps un message attend une réaction (voir
+     * rafraîchirStatutRappelAidant), pas une donnée que quelqu'un d'autre a
+     * besoin de lire.
+     */
+    var dernierRappelDemandéLeMs: Long
+        get() = prefs.getLong(KEY_DERNIER_RAPPEL_DEMANDÉ_LE_MS, 0L)
+        set(value) = prefs.edit().putLong(KEY_DERNIER_RAPPEL_DEMANDÉ_LE_MS, value).apply()
+
+    /**
+     * Quand l'aidant a ouvert le SMS (voir web-caller/app.js, qui écrit ce
+     * champ dès le chargement de la page, lien direct ou lien « je rappelle
+     * plus tard ») — le seul signal fiable disponible : un SMS ordinaire n'a
+     * pas d'accusé de lecture, contrairement à certaines messageries.
+     */
+    var aidantMessageLuLeMs: Long
+        get() = prefs.getLong(KEY_AIDANT_MESSAGE_LU_LE_MS, 0L)
+        set(value) = prefs.edit().putLong(KEY_AIDANT_MESSAGE_LU_LE_MS, value).apply()
+
+    /** Heure à laquelle l'aidant a indiqué qu'il rappellerait (0 = pas indiqué). */
+    var aidantRappelPrévuLeMs: Long
+        get() = prefs.getLong(KEY_AIDANT_RAPPEL_PRÉVU_LE_MS, 0L)
+        set(value) = prefs.edit().putLong(KEY_AIDANT_RAPPEL_PRÉVU_LE_MS, value).apply()
+
+    /**
      * Combien de minutes chaque photo tient l'écran.
      *
      * Quinze par défaut. Le bon rythme dépend de la galerie et de la personne
@@ -530,6 +556,9 @@ class AdminConfig(context: Context) {
         private const val KEY_POLICE_SENIOR = "police_senior"
         private const val KEY_RECUEIL_PHOTOS = "recueil_photos"
         private const val KEY_AIDANT_NOM = "aidant_nom"
+        private const val KEY_DERNIER_RAPPEL_DEMANDÉ_LE_MS = "dernier_rappel_demande_le_ms"
+        private const val KEY_AIDANT_MESSAGE_LU_LE_MS = "aidant_message_lu_le_ms"
+        private const val KEY_AIDANT_RAPPEL_PRÉVU_LE_MS = "aidant_rappel_prevu_le_ms"
         private const val KEY_CADENCE_PHOTOS = "cadence_photos_minutes"
         private const val KEY_COMMANDES_VOCALES = "commandes_vocales_actives"
         private const val KEY_CAPTION_INTERLIGNE = "caption_interligne"
