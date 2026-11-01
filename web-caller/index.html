@@ -835,6 +835,29 @@
           <button id="careBreakCancelButton" class="secondary" hidden>Permettre de nouveau les appels</button>
           <p class="hint" id="careBreakSince" hidden></p>
 
+          <!-- ═══ RAPPEL PAR SMS ═══
+
+               Jean peut demander, depuis sa tablette, qu'on le rappelle — un
+               bouton qui déclenche un SMS vers CE numéro, avec le lien du
+               PWA. Celui qui le reçoit clique et se retrouve dans le flux
+               d'appel habituel (proche appelle Jean) : rien de neuf côté
+               visiophonie, seul le déclenchement change.
+
+               Un seul destinataire fixe, réglé ici une fois, et non une liste
+               que Jean devrait parcourir. -->
+          <h3 class="admin-section">Rappel par SMS</h3>
+          <p class="hint">
+            La personne que Jean peut demander de rappeler, depuis un bouton
+            sur sa tablette. Elle reçoit un SMS avec un lien ; en cliquant
+            dessus, elle appelle Jean normalement.
+          </p>
+          <label for="aidantNom">Nom (affiché sur le bouton de Jean)</label>
+          <input type="text" id="aidantNom" maxlength="20" placeholder="Marie">
+          <label for="aidantTelephone">Téléphone (SMS)</label>
+          <input type="tel" id="aidantTelephone" maxlength="20" placeholder="+33612345678">
+          <button id="aidantEnregistrer" class="secondary">💾 Enregistrer</button>
+          <p class="hint" id="aidantStatut"></p>
+
           <h3 class="admin-section">Diagnostic</h3>
           <!-- Test décisif pour localiser un écho : s'il disparaît en coupant
                le micro de la tablette, il vient d'elle ; s'il persiste, il

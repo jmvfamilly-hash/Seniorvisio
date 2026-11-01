@@ -542,6 +542,14 @@ class DeviceStatusReporter(private val context: Context) {
             }
         }
 
+        // Prénom affiché sur le bouton « Appeler [prénom] » (voir
+        // RappelAidant.kt) — le téléphone, lui, ne vit jamais sur la
+        // tablette, seulement côté Cloud Function, qui le lit directement
+        // dans le document au moment d'envoyer le SMS.
+        snapshot.getString(FIELD_AIDANT_NOM)?.let {
+            if (adminConfig.aidantNom != it) adminConfig.aidantNom = it
+        }
+
         // Bornée ICI EN PLUS de l'ordonnanceur, et les deux comptent : ce
         // document est ouvert en écriture à qui en connaît l'adresse, et une
         // cadence de zéro ferait tourner les photos à chaque battement. La
@@ -904,6 +912,7 @@ class DeviceStatusReporter(private val context: Context) {
 
         /** L'identifiant de la galerie photo préférée, ou vide pour le fond uni. */
         private const val FIELD_RECUEIL_PHOTOS = "recueilPhotos"
+        private const val FIELD_AIDANT_NOM = "aidantNom"
 
         /** Combien de minutes chaque photo de la galerie tient l'écran. */
         private const val FIELD_CADENCE_PHOTOS = "cadencePhotosMinutes"

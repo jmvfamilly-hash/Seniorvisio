@@ -41,6 +41,7 @@ import com.seniorvisio.core.ScreenTheme
 import com.seniorvisio.core.TimeContext
 import com.seniorvisio.core.TranscriptionSource
 import com.seniorvisio.core.PauseAppels
+import com.seniorvisio.core.RappelAidant
 import com.seniorvisio.core.UsageStats
 import com.seniorvisio.service.CallListenerService
 import com.seniorvisio.recueil.Element
@@ -74,6 +75,11 @@ class MainActivity : AppCompatActivity() {
     private val adminConfig by lazy { AdminConfig(this) }
     private lateinit var zones: HomeZonesController
     private lateinit var boutonPauseAppels: Button
+    private lateinit var boutonAppelerAidant: Button
+
+    /** Vrai pendant le court répit après une pression, le temps d'afficher
+     *  « Demande envoyée » sans que rafraîchirBoutonAppelerAidant ne l'efface. */
+    private var appelAidantEnRefroidissement = false
     private lateinit var horlogeAccueil: HorlogeAiguilles
     private lateinit var horlogeNumeriqueAccueil: HorlogeNumerique
     private lateinit var groupeMomentAccueil: View
@@ -138,6 +144,7 @@ class MainActivity : AppCompatActivity() {
             applyCaptionErgonomics()
             appliquerChoixHorloge()
             appliquerFondVariable()
+            rafraîchirBoutonAppelerAidant()
             val hasText = zones.hasTextOnScreen()
             val now = System.currentTimeMillis()
             if (hasText) textGoneSinceMs = 0L
@@ -354,6 +361,19 @@ class MainActivity : AppCompatActivity() {
             CallListenerService.enService?.publierPauseAppelsMaintenant()
         }
 
+        boutonAppelerAidant = findViewById(R.id.boutonAppelerAidant)
+        boutonAppelerAidant.setOnClickListener {
+            RappelAidant.demander()
+            appelAidantEnRefroidissement = true
+            boutonAppelerAidant.isEnabled = false
+            boutonAppelerAidant.text = "Demande envoyée"
+            screenAwakeHandler.postDelayed({
+                appelAidantEnRefroidissement = false
+                boutonAppelerAidant.isEnabled = true
+                rafraîchirBoutonAppelerAidant()
+            }, DÉLAI_REFROIDISSEMENT_APPEL_AIDANT_MS)
+        }
+
         permissionLauncher.launch(
             arrayOf(
                 Manifest.permission.CAMERA,
@@ -459,6 +479,7 @@ class MainActivity : AppCompatActivity() {
         // Reflète un éventuel déblocage survenu pendant que cet écran n'était
         // pas affiché : depuis le PWA, ou l'expiration naturelle des 30 min.
         rafraîchirBoutonPauseAppels()
+        rafraîchirBoutonAppelerAidant()
         // Et tant que cet écran reste au premier plan, toute bascule — y
         // compris celle déclenchée à distance pendant qu'on le regarde — met
         // le bouton à jour tout de suite, sans attendre le prochain passage
@@ -473,6 +494,25 @@ class MainActivity : AppCompatActivity() {
             "Permettre de nouveau les appels"
         } else {
             "Bloquer les appels 30 minutes"
+        }
+    }
+
+    /**
+     * Masqué tant qu'aucun prénom n'est réglé (voir AdminConfig.aidantNom) :
+     * une cible qui ne mène nulle part est pire qu'une absence. Relu à
+     * chaque battement comme le reste de l'ergonomie, pour qu'un réglage
+     * fait depuis le PWA apparaisse sans attendre un redémarrage.
+     *
+     * N'écrase pas le texte pendant le refroidissement qui suit une
+     * pression (voir le clic ci-dessus) : « Demande envoyée » doit rester
+     * lisible le temps annoncé, pas se faire remplacer par « Appeler X » au
+     * battement suivant.
+     */
+    private fun rafraîchirBoutonAppelerAidant() {
+        val nom = adminConfig.aidantNom
+        boutonAppelerAidant.visibility = if (nom.isBlank()) View.GONE else View.VISIBLE
+        if (!appelAidantEnRefroidissement && nom.isNotBlank()) {
+            boutonAppelerAidant.text = "Appeler $nom"
         }
     }
 
@@ -885,5 +925,8 @@ class MainActivity : AppCompatActivity() {
         private val COULEUR_TEINTE_APRES_MIDI = Color.parseColor("#64B5F6")
         private val COULEUR_TEINTE_SOIR = Color.parseColor("#FF8A50")
         private val COULEUR_TEINTE_NUIT = Color.parseColor("#5C6BC0")
+
+        /** Voir le clic de boutonAppelerAidant : le temps que « Demande envoyée » reste lisible. */
+        private const val DÉLAI_REFROIDISSEMENT_APPEL_AIDANT_MS = 60_000L
     }
 }

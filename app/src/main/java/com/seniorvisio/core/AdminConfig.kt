@@ -392,6 +392,17 @@ class AdminConfig(context: Context) {
         set(value) = prefs.edit().putString(KEY_RECUEIL_PHOTOS, value).apply()
 
     /**
+     * Prénom affiché sur le bouton « Appeler [prénom] » — voir
+     * RappelAidant.kt. Vide par défaut, et c'est ce qui masque le bouton :
+     * tant que l'administrateur n'a pas rempli ce champ (et le téléphone,
+     * qui ne vit que côté Cloud Function, jamais sur la tablette), rien ne
+     * propose à Jean d'appuyer sur quoi que ce soit.
+     */
+    var aidantNom: String
+        get() = prefs.getString(KEY_AIDANT_NOM, null).orEmpty()
+        set(value) = prefs.edit().putString(KEY_AIDANT_NOM, value).apply()
+
+    /**
      * Combien de minutes chaque photo tient l'écran.
      *
      * Quinze par défaut. Le bon rythme dépend de la galerie et de la personne
@@ -518,6 +529,7 @@ class AdminConfig(context: Context) {
         private const val KEY_ROOM_HANDOFF_RETURN_MINUTES = "room_handoff_return_minutes"
         private const val KEY_POLICE_SENIOR = "police_senior"
         private const val KEY_RECUEIL_PHOTOS = "recueil_photos"
+        private const val KEY_AIDANT_NOM = "aidant_nom"
         private const val KEY_CADENCE_PHOTOS = "cadence_photos_minutes"
         private const val KEY_COMMANDES_VOCALES = "commandes_vocales_actives"
         private const val KEY_CAPTION_INTERLIGNE = "caption_interligne"

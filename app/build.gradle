@@ -120,6 +120,12 @@ android {
             buildConfigField "String", "ENVIRONMENT", "\"production\""
             buildConfigField "String", "DEVICE_ID", "\"jean_tablet\""
             buildConfigField "String", "CALLS_COLLECTION", "\"calls\""
+            // Boîte aux lettres des demandes de rappel (voir
+            // RappelAidant.kt côté application et functions/index.js côté
+            // Cloud Function) — même séparation que CALLS_COLLECTION, pour
+            // la même raison : un essai ne doit jamais pouvoir faire
+            // recevoir un SMS à l'aidant de Jean.
+            buildConfigField "String", "RAPPELS_COLLECTION", "\"rappels\""
             buildConfigField "boolean", "KIOSK_ENABLED", "true"
             // VIDE PAR DÉFAUT — UN RÉGLAGE D'USINE, PAS UN VERROU.
             //
@@ -157,6 +163,7 @@ android {
             buildConfigField "String", "ENVIRONMENT", "\"validation\""
             buildConfigField "String", "DEVICE_ID", "\"test_tablet\""
             buildConfigField "String", "CALLS_COLLECTION", "\"calls_test\""
+            buildConfigField "String", "RAPPELS_COLLECTION", "\"rappels_test\""
             buildConfigField "boolean", "KIOSK_ENABLED", "false"
             // UNE LISTE, séparée par des virgules. L'administrateur peut la
             // remplacer à distance sans reconstruire (voir

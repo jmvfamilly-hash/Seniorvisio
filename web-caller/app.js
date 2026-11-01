@@ -622,6 +622,10 @@ const els = {
   careBreakStatus: el("careBreakStatus"),
   careBreakCancelButton: el("careBreakCancelButton"),
   careBreakSince: el("careBreakSince"),
+  aidantNom: el("aidantNom"),
+  aidantTelephone: el("aidantTelephone"),
+  aidantEnregistrer: el("aidantEnregistrer"),
+  aidantStatut: el("aidantStatut"),
   captionOverflowIndicator: el("captionOverflowIndicator"),
   // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
   jeanScreen: el("jeanScreen"),
@@ -1819,6 +1823,26 @@ on("careBreakCancelButton", "click", async () => {
   }
 });
 
+/**
+ * Deux champs, un seul bouton : enregistrer l'un sans l'autre n'aurait pas de
+ * sens (un numéro sans nom affiché, ou l'inverse) — pas la peine d'écrire à
+ * chaque perte de focus comme pour un simple réglage isolé.
+ */
+on("aidantEnregistrer", "click", async () => {
+  els.aidantEnregistrer.disabled = true;
+  els.aidantStatut.textContent = "Enregistrement…";
+  try {
+    await engine.setDeviceSetting(CONFIG.deviceDocId, "aidantNom", els.aidantNom.value.trim());
+    await engine.setDeviceSetting(CONFIG.deviceDocId, "aidantTelephone", els.aidantTelephone.value.trim());
+    els.aidantStatut.textContent = "Enregistré.";
+  } catch (e) {
+    console.warn("[app] Enregistrement de l'aidant impossible :", e);
+    els.aidantStatut.textContent = "Enregistrement impossible — réessayez.";
+  } finally {
+    els.aidantEnregistrer.disabled = false;
+  }
+});
+
 /** Affiché avec le reste de l'état de la tablette, voir renderDeviceHealth. */
 function renderCareBreak(data) {
   if (els.careBreakStatus) els.careBreakStatus.textContent = data.careBreakStatus || "—";
@@ -1915,6 +1939,15 @@ function applyDeviceSettings(data) {
   if (data.policeSenior) {
     els.policeSelect.value = data.policeSenior;
     els.policeSelect.dataset.appliedValue = data.policeSenior;
+  }
+
+  // Comme la galerie ou la cadence : l'état réel vient du document, jamais
+  // réécrit pendant que l'administrateur a le doigt sur le champ.
+  if (typeof data.aidantNom === "string" && document.activeElement !== els.aidantNom) {
+    els.aidantNom.value = data.aidantNom;
+  }
+  if (typeof data.aidantTelephone === "string" && document.activeElement !== els.aidantTelephone) {
+    els.aidantTelephone.value = data.aidantTelephone;
   }
 
   // Empreinte du mot de passe d'accès au PWA (voir

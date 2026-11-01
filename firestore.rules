@@ -20,6 +20,15 @@ service cloud.firestore {
         allow read, write: if true;
       }
     }
+    // Les demandes de rappel par SMS (voir RappelAidant.kt côté tablette et
+    // functions/index.js, exports.envoyerRappelAidantTest). UNIQUEMENT la
+    // variante de test pour l'instant : ce chantier s'éprouve sur le banc
+    // d'essai avant d'exister pour de vrai chez Jean — pas de collection
+    // `rappels` (production) tant que ce n'est pas demandé.
+    match /rappels_test/{id} {
+      allow read, write: if true;
+    }
+
     match /devices/{deviceId} {
       allow read, write: if true;
       // Les règles Firestore ne descendent PAS dans les sous-collections : sans
