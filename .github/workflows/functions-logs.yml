@@ -41,7 +41,9 @@ jobs:
         run: |
           gcloud auth activate-service-account --key-file=/tmp/firebase-key.json
           gcloud config set project seniorvisio
-          echo "--- Eventarc triggers (europe-west1) ---"
-          gcloud eventarc triggers list --location=europe-west1 --format="table(name,state,eventFilters,destination.cloudRun.service)" || true
-          echo "--- Cloud Functions (gen2) ---"
-          gcloud functions list --regions=europe-west1 --v2 --format="table(name,state,eventTrigger.eventType,eventTrigger.resource)" || true
+          echo "--- Eventarc triggers (toutes régions) ---"
+          gcloud eventarc triggers list --location=- --format="table(name,state,eventFilters,destination.cloudRun.service,destination.cloudRun.region)"
+          echo "--- notifyIncomingCall : describe complet ---"
+          gcloud functions describe notifyIncomingCall --region=europe-west1 --gen2 --format=json | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('eventTrigger', d), indent=2))"
+          echo "--- envoyerRappelAidantTest : describe complet ---"
+          gcloud functions describe envoyerRappelAidantTest --region=europe-west1 --gen2 --format=json | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('eventTrigger', d), indent=2))"
