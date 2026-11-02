@@ -982,8 +982,13 @@ class MainActivity : AppCompatActivity() {
         private val COULEUR_TEINTE_SOIR = Color.parseColor("#FF8A50")
         private val COULEUR_TEINTE_NUIT = Color.parseColor("#5C6BC0")
 
-        /** Voir le clic de boutonAppelerAidant : le temps que « Demande envoyée » reste lisible. */
-        private const val DÉLAI_REFROIDISSEMENT_APPEL_AIDANT_MS = 60_000L
+        /**
+         * Voir le clic de boutonAppelerAidant : le temps que « Demande envoyée »
+         * reste lisible — mais surtout pas plus. On ne peut pas empêcher Jean
+         * d'appuyer à nouveau s'il a besoin d'aide ; 30 secondes au maximum
+         * avant que le bouton redevienne actif, jamais une minute pleine.
+         */
+        private const val DÉLAI_REFROIDISSEMENT_APPEL_AIDANT_MS = 30_000L
 
         /** Voir rafraîchirStatutRappelAidant : au-delà, un statut figé n'a plus rien à dire. */
         private const val DÉLAI_EXPIRATION_STATUT_RAPPEL_MS = 3 * 60 * 60 * 1000L
