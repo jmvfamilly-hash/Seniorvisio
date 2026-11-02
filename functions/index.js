@@ -2,7 +2,6 @@ const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
-const { FieldValue } = require("firebase-admin/firestore");
 
 initializeApp();
 
@@ -119,18 +118,10 @@ exports.notifyIncomingTestCall = onDocumentCreated(
  * porte qu'une entrée VALIDATION pour cette fonction-ci, contrairement à
  * notifyIncomingCall/notifyIncomingTestCall qui couvrent les deux.
  *
- * ═══ UN GARDE-FOU DE FRÉQUENCE, PAS SEULEMENT CÔTÉ TABLETTE ═══
- *
- * Le bouton se désactive déjà une minute côté tablette (confort, évite le
- * double-appui) — mais c'est ICI que doit vivre la vraie limite, celle qui
- * protège l'aidant d'une rafale de notifications si un bug republiait le
- * même document. dernièreAlerteEnvoyéeLe, écrit après chaque envoi réussi,
- * sert de mémoire pour cette limite.
+ * Pas de garde-fou de fréquence ici : le bouton se désactive déjà une
+ * minute côté tablette (voir MainActivity, DÉLAI_REFROIDISSEMENT_APPEL_AIDANT_MS),
+ * et les alertes sont gratuites — rien à protéger d'un double envoi.
  */
-
-/** Entre deux alertes envoyées pour une même tablette, quoi qu'il arrive côté boutons. */
-const DÉLAI_MINIMUM_ENTRE_RAPPELS_MS = 10 * 60 * 1000;
-
 async function envoyerRappel(environnement, baseUrl) {
   const db = getFirestore();
   const deviceRef = db.doc(environnement.deviceDoc);
@@ -141,13 +132,6 @@ async function envoyerRappel(environnement, baseUrl) {
       `[${environnement.nom}] Aucun jeton d'alerte enregistré dans ` +
         `${environnement.deviceDoc} : rappel ignoré.`
     );
-    return;
-  }
-
-  const dernierEnvoi = deviceSnap.get("dernièreAlerteEnvoyéeLe");
-  const dernierEnvoiMs = dernierEnvoi ? dernierEnvoi.toMillis() : 0;
-  if (Date.now() - dernierEnvoiMs < DÉLAI_MINIMUM_ENTRE_RAPPELS_MS) {
-    console.log(`[${environnement.nom}] Rappel ignoré : trop proche du précédent.`);
     return;
   }
 
@@ -165,13 +149,10 @@ async function envoyerRappel(environnement, baseUrl) {
         urlDiffere: `${baseUrl}/?mode=aidant&differe=1`,
       },
     });
+    console.log(`[${environnement.nom}] Alerte de rappel envoyée.`);
   } catch (e) {
     console.error(`[${environnement.nom}] Envoi de l'alerte refusé :`, e.message || e);
-    return;
   }
-
-  await deviceRef.set({ dernièreAlerteEnvoyéeLe: FieldValue.serverTimestamp() }, { merge: true });
-  console.log(`[${environnement.nom}] Alerte de rappel envoyée.`);
 }
 
 exports.envoyerRappelAidantTest = onDocumentCreated(
