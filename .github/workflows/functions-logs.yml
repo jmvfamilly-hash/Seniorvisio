@@ -40,3 +40,15 @@ jobs:
           gcloud config set project seniorvisio
           gcloud logging read 'resource.type="cloud_run_revision"' \
             --project=seniorvisio --freshness=1h --format="table(resource.labels.service_name,timestamp,severity,textPayload)" --limit=100
+
+      # Diagnostic temporaire : la dernière invocation de
+      # envoyerrappelaidanttest (après la levée du mode essai Twilio)
+      # n'a produit NI succès NI erreur dans le flux ci-dessus, alors que
+      # la même révision avait loggé une erreur Twilio proprement lors de
+      # l'essai précédent. Vue complète (code HTTP, jsonPayload inclus,
+      # sévérité DEFAULT et plus) pour voir si l'exécution a planté ou
+      # expiré sans rien écrire dans textPayload.
+      - name: Diagnostic détaillé envoyerrappelaidanttest
+        run: |
+          gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="envoyerrappelaidanttest" AND severity>=DEFAULT' \
+            --project=seniorvisio --freshness=15m --format=json --limit=50
