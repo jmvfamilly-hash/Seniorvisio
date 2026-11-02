@@ -30,23 +30,13 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
         run: npx firebase-tools functions:log --project seniorvisio -n 200
 
-      # Diagnostic temporaire (voir « pas de sms », branche
-      # travail/appel-sortant-aidant) : les logs ne montrent plus aucune
-      # invocation d'AUCUNE des trois fonctions déclenchées par Firestore,
-      # pas seulement envoyerRappelAidantTest, depuis le déploiement qui a
-      # introduit cette dernière. Interroge directement Eventarc pour voir
-      # si les déclencheurs existent et sont en état ACTIVE, plutôt que de
-      # continuer à deviner depuis l'absence de logs.
-      - name: Diagnostic Eventarc
+      # firebase-tools functions:log n'affiche pas les logs de niveau
+      # erreur (console.error) de toutes les fonctions — vu en pratique en
+      # diagnostiquant « pas de sms » : les échecs Twilio n'apparaissaient
+      # que via les logs Cloud Run bruts, jamais via la commande ci-dessus.
+      - name: Fetch raw Cloud Run logs (dernière heure, toutes sévérités)
         run: |
           gcloud auth activate-service-account --key-file=/tmp/firebase-key.json
           gcloud config set project seniorvisio
-          echo "--- Logs Cloud Run bruts (toutes sévérités, pas seulement les logs structurés de la fonction) : envoyerrappelaidanttest, dernière heure ---"
-          gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="envoyerrappelaidanttest"' \
-            --project=seniorvisio --freshness=1h --format="table(timestamp,severity,textPayload,httpRequest.status)" --limit=100
-          echo "--- Même requête pour notifyincomingcall, dernière heure (pour comparaison) ---"
-          gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="notifyincomingcall"' \
-            --project=seniorvisio --freshness=1h --format="table(timestamp,severity,textPayload,httpRequest.status)" --limit=100
-          echo "--- Messages Pub/Sub non livrés (dead-letter / nack) sur l'abonnement envoyerrappelaidanttest ---"
-          gcloud logging read 'resource.type="pubsub_subscription" AND resource.labels.subscription_id:"envoyerrappelaidanttest"' \
-            --project=seniorvisio --freshness=1h --format="table(timestamp,severity,jsonPayload,textPayload)" --limit=50
+          gcloud logging read 'resource.type="cloud_run_revision"' \
+            --project=seniorvisio --freshness=1h --format="table(resource.labels.service_name,timestamp,severity,textPayload)" --limit=100
