@@ -29,3 +29,19 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
         run: npx firebase-tools functions:log --project seniorvisio -n 200
+
+      # Diagnostic temporaire (voir « pas de sms », branche
+      # travail/appel-sortant-aidant) : les logs ne montrent plus aucune
+      # invocation d'AUCUNE des trois fonctions déclenchées par Firestore,
+      # pas seulement envoyerRappelAidantTest, depuis le déploiement qui a
+      # introduit cette dernière. Interroge directement Eventarc pour voir
+      # si les déclencheurs existent et sont en état ACTIVE, plutôt que de
+      # continuer à deviner depuis l'absence de logs.
+      - name: Diagnostic Eventarc
+        run: |
+          gcloud auth activate-service-account --key-file=/tmp/firebase-key.json
+          gcloud config set project seniorvisio
+          echo "--- Eventarc triggers (europe-west1) ---"
+          gcloud eventarc triggers list --location=europe-west1 --format="table(name,state,eventFilters,destination.cloudRun.service)" || true
+          echo "--- Cloud Functions (gen2) ---"
+          gcloud functions list --regions=europe-west1 --v2 --format="table(name,state,eventTrigger.eventType,eventTrigger.resource)" || true
