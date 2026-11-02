@@ -17,5 +17,5 @@ const FIREBASE_CONFIG = {
   // (Paramètres du projet → Cloud Messaging → Web configuration → Web Push
   // certificates → Générer une paire de clés). Pas secrète non plus, mais
   // propre à cette fonctionnalité — sans elle, l'abonnement aux alertes échoue.
-  vapidKey: "À_REMPLACER_AVEC_LA_CLÉ_WEB_PUSH",
+  vapidKey: "BEJ50JPiLXzRes9ckg__IBNj7FA__feUnEYymrc8WqEps3U2byrPiM4ScnwzUsl1PrsbwitxJzdHi3nguH5Zy5Y",
 };
