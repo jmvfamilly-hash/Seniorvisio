@@ -41,11 +41,12 @@ jobs:
         run: |
           gcloud auth activate-service-account --key-file=/tmp/firebase-key.json
           gcloud config set project seniorvisio
-          echo "--- IAM Cloud Run : notifyincomingcall (connu fonctionnel) ---"
-          gcloud run services get-iam-policy notifyincomingcall --region=europe-west1 --format=json
-          echo "--- IAM Cloud Run : envoyerrappelaidanttest (nouveau) ---"
-          gcloud run services get-iam-policy envoyerrappelaidanttest --region=europe-west1 --format=json
-          echo "--- Pub/Sub : abonnement eventarc envoyerrappelaidanttest ---"
-          gcloud pubsub subscriptions list --format="table(name,pushConfig.pushEndpoint,deadLetterPolicy)" --filter="name~envoyerrappelaidanttest"
-          echo "--- Pub/Sub : abonnement eventarc notifyincomingcall ---"
-          gcloud pubsub subscriptions list --format="table(name,pushConfig.pushEndpoint,deadLetterPolicy)" --filter="name~notifyincomingcall"
+          echo "--- Logs Cloud Run bruts (toutes sévérités, pas seulement les logs structurés de la fonction) : envoyerrappelaidanttest, dernière heure ---"
+          gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="envoyerrappelaidanttest"' \
+            --project=seniorvisio --freshness=1h --format="table(timestamp,severity,textPayload,httpRequest.status)" --limit=100
+          echo "--- Même requête pour notifyincomingcall, dernière heure (pour comparaison) ---"
+          gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="notifyincomingcall"' \
+            --project=seniorvisio --freshness=1h --format="table(timestamp,severity,textPayload,httpRequest.status)" --limit=100
+          echo "--- Messages Pub/Sub non livrés (dead-letter / nack) sur l'abonnement envoyerrappelaidanttest ---"
+          gcloud logging read 'resource.type="pubsub_subscription" AND resource.labels.subscription_id:"envoyerrappelaidanttest"' \
+            --project=seniorvisio --freshness=1h --format="table(timestamp,severity,jsonPayload,textPayload)" --limit=50
