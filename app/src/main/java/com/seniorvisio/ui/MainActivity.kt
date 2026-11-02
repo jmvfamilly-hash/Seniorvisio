@@ -536,7 +536,7 @@ class MainActivity : AppCompatActivity() {
      *
      * Passé ce délai, elle reprend le fil des trois états réels venus du
      * PWA (voir web-caller/app.js, qui écrit les deux repères lus ici dès
-     * que l'aidant ouvre le lien du SMS — accusé de lecture — et quand il
+     * que l'aidant ouvre la notification — accusé de lecture — et quand il
      * choisit un délai).
      *
      * Masquée passé un délai généreux (voir DÉLAI_EXPIRATION_STATUT_RAPPEL_MS) :

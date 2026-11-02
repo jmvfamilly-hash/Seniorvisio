@@ -623,9 +623,10 @@ const els = {
   careBreakCancelButton: el("careBreakCancelButton"),
   careBreakSince: el("careBreakSince"),
   aidantNom: el("aidantNom"),
-  aidantTelephone: el("aidantTelephone"),
   aidantEnregistrer: el("aidantEnregistrer"),
   aidantStatut: el("aidantStatut"),
+  activerAlertesButton: el("activerAlertesButton"),
+  alertesStatut: el("alertesStatut"),
   rappelDiffereBloc: el("rappelDiffereBloc"),
   rappelDiffere15: el("rappelDiffere15"),
   rappelDiffere60: el("rappelDiffere60"),
@@ -1028,9 +1029,10 @@ async function lancerAppel({ sousTitres = false } = {}) {
 
 on("callButton", "click", () => lancerAppel());
 
-// ═══ ARRIVÉE DEPUIS LE SMS DE RAPPEL (voir functions/index.js) ═══
+// ═══ ARRIVÉE DEPUIS LA NOTIFICATION DE RAPPEL (voir functions/index.js et
+//     firebase-messaging-sw.js) ═══
 //
-// Deux liens possibles dans le SMS :
+// Deux actions possibles dans la notification :
 //   ?mode=aidant&rappel=1    appelle tout de suite, sans même le bouton ni
 //                            le décompte de 30 s habituel (voir
 //                            engine.forceConnect, déjà utilisé ailleurs par
@@ -1039,8 +1041,8 @@ on("callButton", "click", () => lancerAppel());
 //                            affiche seulement le choix d'un délai.
 //
 // Dans les deux cas, le simple chargement de la page vaut accusé de
-// lecture — un SMS ordinaire n'a pas d'accusé de lecture natif, mais
-// quelqu'un qui a cliqué le lien a, par définition, vu le message.
+// lecture — une notification n'a pas d'accusé de lecture natif, mais
+// quelqu'un qui a cliqué dessus a, par définition, vu le message.
 function traiterLienRappel() {
   let params;
   try {
@@ -1883,23 +1885,52 @@ on("careBreakCancelButton", "click", async () => {
   }
 });
 
-/**
- * Deux champs, un seul bouton : enregistrer l'un sans l'autre n'aurait pas de
- * sens (un numéro sans nom affiché, ou l'inverse) — pas la peine d'écrire à
- * chaque perte de focus comme pour un simple réglage isolé.
- */
 on("aidantEnregistrer", "click", async () => {
   els.aidantEnregistrer.disabled = true;
   els.aidantStatut.textContent = "Enregistrement…";
   try {
     await engine.setDeviceSetting(CONFIG.deviceDocId, "aidantNom", els.aidantNom.value.trim());
-    await engine.setDeviceSetting(CONFIG.deviceDocId, "aidantTelephone", els.aidantTelephone.value.trim());
     els.aidantStatut.textContent = "Enregistré.";
   } catch (e) {
     console.warn("[app] Enregistrement de l'aidant impossible :", e);
     els.aidantStatut.textContent = "Enregistrement impossible — réessayez.";
   } finally {
     els.aidantEnregistrer.disabled = false;
+  }
+});
+
+// ═══ ABONNEMENT AUX ALERTES (voir web-caller/firebase-messaging-sw.js) ═══
+//
+// Bouton visible UNIQUEMENT en ?mode=aidant (voir style.css) : c'est
+// Marie-Thérèse qui clique ici, sur SON téléphone, une seule fois après
+// avoir ouvert le lien que la famille lui a envoyé. Le jeton obtenu
+// identifie CE navigateur-ci auprès de Firebase Cloud Messaging ; la Cloud
+// Function (functions/index.js, envoyerRappel) s'en sert pour la notifier
+// quand Jean presse son bouton, sans numéro de téléphone ni SMS.
+on("activerAlertesButton", "click", async () => {
+  if (!els.activerAlertesButton) return;
+  els.activerAlertesButton.disabled = true;
+  els.alertesStatut.textContent = "Activation…";
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      els.alertesStatut.textContent = "Permission refusée — les alertes ne fonctionneront pas.";
+      return;
+    }
+    const registration = await navigator.serviceWorker.register("firebase-messaging-sw.js");
+    const messaging = firebase.messaging();
+    const token = await messaging.getToken({
+      vapidKey: FIREBASE_CONFIG.vapidKey,
+      serviceWorkerRegistration: registration,
+    });
+    if (!token) throw new Error("Aucun jeton obtenu");
+    await engine.setDeviceSetting(CONFIG.deviceDocId, "aidantPushToken", token);
+    els.alertesStatut.textContent = "Alertes activées — vous recevrez une notification quand Jean vous demandera.";
+  } catch (e) {
+    console.warn("[app] Activation des alertes impossible :", e);
+    els.alertesStatut.textContent = "Activation impossible — vérifiez les réglages de notification de votre navigateur.";
+  } finally {
+    els.activerAlertesButton.disabled = false;
   }
 });
 
@@ -2005,9 +2036,6 @@ function applyDeviceSettings(data) {
   // réécrit pendant que l'administrateur a le doigt sur le champ.
   if (typeof data.aidantNom === "string" && document.activeElement !== els.aidantNom) {
     els.aidantNom.value = data.aidantNom;
-  }
-  if (typeof data.aidantTelephone === "string" && document.activeElement !== els.aidantTelephone) {
-    els.aidantTelephone.value = data.aidantTelephone;
   }
 
   // Empreinte du mot de passe d'accès au PWA (voir

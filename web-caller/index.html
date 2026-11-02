@@ -42,9 +42,20 @@
 
       <button id="callButton">📹 Démarrer l'appel</button>
 
+      <!-- ═══ ABONNEMENT AUX ALERTES (aidant uniquement) ═══
+
+           Visible UNIQUEMENT en ?mode=aidant (voir style.css) : c'est ici que
+           Marie-Thérèse clique, une seule fois depuis son propre téléphone,
+           après avoir ouvert le lien envoyé par la famille. Voir app.js,
+           activerAlertesButton et firebase-messaging-sw.js. -->
+      <div id="activerAlertesBloc">
+        <button id="activerAlertesButton" class="secondary">🔔 Activer les alertes de Jean</button>
+        <p class="hint" id="alertesStatut"></p>
+      </div>
+
       <!-- ═══ « JE RAPPELLE DANS UN MOMENT » ═══
 
-           Affiché UNIQUEMENT quand le lien du SMS de rappel portait
+           Affiché UNIQUEMENT quand l'action de notification choisie portait
            ?differe=1 (voir web-caller/app.js, traiterLienRappel) : l'aidant
            ne peut pas répondre tout de suite, mais peut dire à Jean quand.
            Chaque bouton écrit l'heure annoncée sur le document d'appareil ;
@@ -850,26 +861,27 @@
           <button id="careBreakCancelButton" class="secondary" hidden>Permettre de nouveau les appels</button>
           <p class="hint" id="careBreakSince" hidden></p>
 
-          <!-- ═══ RAPPEL PAR SMS ═══
+          <!-- ═══ RAPPEL PAR NOTIFICATION ═══
 
-               Jean peut demander, depuis sa tablette, qu'on le rappelle — un
-               bouton qui déclenche un SMS vers CE numéro, avec le lien du
-               PWA. Celui qui le reçoit clique et se retrouve dans le flux
-               d'appel habituel (proche appelle Jean) : rien de neuf côté
-               visiophonie, seul le déclenchement change.
+               Jean peut demander, depuis sa tablette, qu'on le rappelle — une
+               notification part vers le téléphone de l'aidant (via Firebase
+               Cloud Messaging, voir functions/index.js). En l'ouvrant, elle se
+               retrouve dans le flux d'appel habituel (proche appelle Jean) :
+               rien de neuf côté visiophonie, seul le déclenchement change.
 
-               Un seul destinataire fixe, réglé ici une fois, et non une liste
-               que Jean devrait parcourir. -->
-          <h3 class="admin-section">Rappel par SMS</h3>
+               Un seul destinataire fixe. Le nom se règle ici, une fois ; mais
+               c'est l'aidant elle-même qui active les alertes depuis SON
+               téléphone, sur la page ?mode=aidant (voir activerAlertesButton
+               dans app.js) — aucun numéro à saisir ici. -->
+          <h3 class="admin-section">Rappel par notification</h3>
           <p class="hint">
             La personne que Jean peut demander de rappeler, depuis un bouton
-            sur sa tablette. Elle reçoit un SMS avec un lien ; en cliquant
-            dessus, elle appelle Jean normalement.
+            sur sa tablette. Donnez-lui une fois le lien de la page
+            « ?mode=aidant » : elle y active elle-même les alertes, depuis son
+            propre téléphone.
           </p>
           <label for="aidantNom">Nom (affiché sur le bouton de Jean)</label>
           <input type="text" id="aidantNom" maxlength="20" placeholder="Marie">
-          <label for="aidantTelephone">Téléphone (SMS)</label>
-          <input type="tel" id="aidantTelephone" maxlength="20" placeholder="+33612345678">
           <button id="aidantEnregistrer" class="secondary">💾 Enregistrer</button>
           <p class="hint" id="aidantStatut"></p>
 
@@ -896,6 +908,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="version.js"></script>
   <script src="environment.js"></script>

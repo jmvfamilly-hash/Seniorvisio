@@ -901,6 +901,11 @@ body.verrouille { overflow: hidden; }
 body.mode-proches #openSettingsButton,
 body.mode-proches #openAdminIdleButton { display: none; }
 
+/* Le bloc d'abonnement aux alertes (voir app.js, activerAlertesButton) n'a de
+   sens que pour l'aidant, sur sa propre page ?mode=aidant ci-dessous : les
+   proches qui appellent normalement n'ont rien à y activer. */
+body:not(.mode-aidant) #activerAlertesBloc { display: none; }
+
 
 /* ═══ PAGE NUE POUR L'AIDANT (?mode=aidant) ═══
 

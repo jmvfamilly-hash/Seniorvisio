@@ -1,5 +1,4 @@
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
-const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
@@ -97,12 +96,20 @@ exports.notifyIncomingTestCall = onDocumentCreated(
 );
 
 /**
- * Rappel par SMS : Jean presse un bouton sur sa tablette (voir
- * RappelAidant.kt), qui dépose un document ici. Cette fonction lit le
- * téléphone de l'aidant sur le document d'appareil et lui envoie un SMS avec
- * le lien du PWA — en cliquant dessus, il se retrouve dans le flux d'appel
- * HABITUEL (proche appelle Jean). Rien de neuf côté visiophonie ni côté
- * transcription, qui s'active pareil une fois l'appel connecté.
+ * Rappel par notification : Jean presse un bouton sur sa tablette (voir
+ * RappelAidant.kt), qui dépose un document ici. Cette fonction lit le jeton
+ * de notification (FCM) que l'aidant a enregistré depuis son propre
+ * téléphone (voir web-caller/app.js, activerAlertesButton) et lui envoie une
+ * alerte avec deux actions — en l'ouvrant, elle se retrouve dans le flux
+ * d'appel HABITUEL (proche appelle Jean). Rien de neuf côté visiophonie ni
+ * côté transcription, qui s'active pareil une fois l'appel connecté.
+ *
+ * Remplace l'essai précédent par SMS (Twilio) : bloqué par un numéro à
+ * acheter et une vérification d'identité (KYC) côté Twilio, pour un service
+ * qui n'a jamais eu besoin d'envoyer un texte — seulement de réveiller un
+ * téléphone précis. Firebase Cloud Messaging fait exactement ça, déjà
+ * utilisé par ce projet pour réveiller la tablette (voir réveillerTablette
+ * ci-dessus), gratuitement et sans démarche.
  *
  * ═══ UNIQUEMENT EN VALIDATION, POUR L'INSTANT ═══
  *
@@ -112,89 +119,62 @@ exports.notifyIncomingTestCall = onDocumentCreated(
  * porte qu'une entrée VALIDATION pour cette fonction-ci, contrairement à
  * notifyIncomingCall/notifyIncomingTestCall qui couvrent les deux.
  *
- * ═══ LE TÉLÉPHONE NE VIT QUE CÔTÉ FONCTION ═══
- *
- * La tablette ne connaît que le prénom affiché sur son bouton (voir
- * AdminConfig.aidantNom) ; le numéro, lui, est lu ici, directement dans le
- * document — jamais transporté jusqu'à l'Android, qui n'en a aucun besoin.
- *
  * ═══ UN GARDE-FOU DE FRÉQUENCE, PAS SEULEMENT CÔTÉ TABLETTE ═══
  *
  * Le bouton se désactive déjà une minute côté tablette (confort, évite le
  * double-appui) — mais c'est ICI que doit vivre la vraie limite, celle qui
- * protège le coût réel : chaque SMS est payant, et rien n'empêche un
- * deuxième appareil, un autre onglet, ou un bug de republier le même
- * document. dernierRappelEnvoyéLe, écrit après chaque envoi réussi, sert de
- * mémoire pour cette limite.
+ * protège l'aidant d'une rafale de notifications si un bug republiait le
+ * même document. dernièreAlerteEnvoyéeLe, écrit après chaque envoi réussi,
+ * sert de mémoire pour cette limite.
  */
-const TWILIO_ACCOUNT_SID = defineSecret("TWILIO_ACCOUNT_SID");
-const TWILIO_AUTH_TOKEN = defineSecret("TWILIO_AUTH_TOKEN");
-const TWILIO_FROM_NUMBER = defineSecret("TWILIO_FROM_NUMBER");
 
-/** Entre deux SMS envoyés pour une même tablette, quoi qu'il arrive côté boutons. */
+/** Entre deux alertes envoyées pour une même tablette, quoi qu'il arrive côté boutons. */
 const DÉLAI_MINIMUM_ENTRE_RAPPELS_MS = 10 * 60 * 1000;
 
 async function envoyerRappel(environnement, baseUrl) {
   const db = getFirestore();
   const deviceRef = db.doc(environnement.deviceDoc);
   const deviceSnap = await deviceRef.get();
-  const téléphone = deviceSnap.get("aidantTelephone");
-  if (!téléphone) {
+  const jeton = deviceSnap.get("aidantPushToken");
+  if (!jeton) {
     console.warn(
-      `[${environnement.nom}] Aucun téléphone d'aidant enregistré dans ` +
+      `[${environnement.nom}] Aucun jeton d'alerte enregistré dans ` +
         `${environnement.deviceDoc} : rappel ignoré.`
     );
     return;
   }
 
-  const dernierEnvoi = deviceSnap.get("dernierRappelEnvoyéLe");
+  const dernierEnvoi = deviceSnap.get("dernièreAlerteEnvoyéeLe");
   const dernierEnvoiMs = dernierEnvoi ? dernierEnvoi.toMillis() : 0;
   if (Date.now() - dernierEnvoiMs < DÉLAI_MINIMUM_ENTRE_RAPPELS_MS) {
     console.log(`[${environnement.nom}] Rappel ignoré : trop proche du précédent.`);
     return;
   }
 
-  const identifiants = Buffer.from(
-    `${TWILIO_ACCOUNT_SID.value()}:${TWILIO_AUTH_TOKEN.value()}`
-  ).toString("base64");
-  const réponse = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID.value()}/Messages.json`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${identifiants}`,
-        "Content-Type": "application/x-www-form-urlencoded",
+  try {
+    // Message de DONNÉES pur, sans bloc "notification" — voir
+    // firebase-messaging-sw.js pour pourquoi : c'est lui qui affiche la
+    // notification et pose les deux actions (appeler maintenant / plus tard).
+    await getMessaging().send({
+      token: jeton,
+      webpush: { headers: { Urgency: "high" } },
+      data: {
+        titre: "Jean aimerait vous parler",
+        corps: "Appuyez pour le rappeler, ou dites-lui quand.",
+        urlRappel: `${baseUrl}/?mode=aidant&rappel=1`,
+        urlDiffere: `${baseUrl}/?mode=aidant&differe=1`,
       },
-      body: new URLSearchParams({
-        To: téléphone,
-        From: TWILIO_FROM_NUMBER.value(),
-        // Deux liens : le premier ouvre l'appel tout de suite, sans même le
-        // décompte habituel de 30 s (voir ?rappel=1, traité par
-        // web-caller/app.js, traiterLienRappel) ; le second laisse l'aidant
-        // dire à Jean qu'il rappellera plus tard, sans démarrer d'appel
-        // (?differe=1). Ouvrir l'un ou l'autre vaut accusé de lecture.
-        Body:
-          `Jean aimerait vous parler.\n` +
-          `Appeler maintenant : ${baseUrl}/?mode=aidant&rappel=1\n` +
-          `Pas tout de suite ? Dites-lui quand : ${baseUrl}/?mode=aidant&differe=1`,
-      }),
-    }
-  );
-
-  if (!réponse.ok) {
-    const détail = await réponse.text();
-    console.error(`[${environnement.nom}] Envoi du SMS refusé par Twilio :`, détail);
+    });
+  } catch (e) {
+    console.error(`[${environnement.nom}] Envoi de l'alerte refusé :`, e.message || e);
     return;
   }
 
-  await deviceRef.set({ dernierRappelEnvoyéLe: FieldValue.serverTimestamp() }, { merge: true });
-  console.log(`[${environnement.nom}] SMS de rappel envoyé.`);
+  await deviceRef.set({ dernièreAlerteEnvoyéeLe: FieldValue.serverTimestamp() }, { merge: true });
+  console.log(`[${environnement.nom}] Alerte de rappel envoyée.`);
 }
 
 exports.envoyerRappelAidantTest = onDocumentCreated(
-  {
-    document: "rappels_test/{id}",
-    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER],
-  },
+  "rappels_test/{id}",
   () => envoyerRappel(VALIDATION, "https://seniorvisio-test.web.app")
 );

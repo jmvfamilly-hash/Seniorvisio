@@ -5,14 +5,15 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.seniorvisio.BuildConfig
 
 /**
- * Demande de rappel par SMS : Jean presse un bouton, un document part dans
- * BuildConfig.RAPPELS_COLLECTION, et une Cloud Function (voir
- * functions/index.js) lit le téléphone de l'aidant sur le document
- * d'appareil et envoie le SMS — voir docs du bouton dans activity_main.xml.
+ * Demande de rappel par notification push : Jean presse un bouton, un
+ * document part dans BuildConfig.RAPPELS_COLLECTION, et une Cloud Function
+ * (voir functions/index.js) lit le jeton de notification de l'aidant sur le
+ * document d'appareil et lui envoie une alerte — voir docs du bouton dans
+ * activity_main.xml.
  *
- * Ne sait rien de Twilio ni du numéro de l'aidant, volontairement : le
- * numéro ne vit que côté Cloud Function (voir AdminConfig.aidantNom, qui ne
- * porte que le prénom affiché sur le bouton, jamais le téléphone).
+ * Ne sait rien du jeton de l'aidant, volontairement : il ne vit que côté
+ * Cloud Function et navigateur de l'aidant (voir AdminConfig.aidantNom, qui
+ * ne porte que le prénom affiché sur le bouton, jamais le jeton).
  */
 object RappelAidant {
     fun demander() {
