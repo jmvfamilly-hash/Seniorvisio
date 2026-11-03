@@ -2166,6 +2166,37 @@ on("activerAlertesButton", "click", async () => {
   }
 });
 
+// ═══ RÉCEPTION AU PREMIER PLAN (voir firebase-messaging-sw.js) ═══
+//
+// onBackgroundMessage, dans le service worker, ne se déclenche QUE si cet
+// onglet n'est PAS au premier plan — c'est Firebase qui décide, pas ce
+// projet. Un proche qui garde la page ouverte juste après avoir activé
+// ses alertes (le cas le plus probable, et celui qui a fait croire à une
+// panne lors des premiers essais) ne recevrait donc RIEN sans ce second
+// gestionnaire, qui couvre exactement le cas contraire : la page ouverte
+// et visible au moment où l'alerte arrive. Même mise en forme que le
+// service worker, par registration.showNotification() — appelable depuis
+// la page tout autant que depuis le worker lui-même.
+try {
+  firebase.messaging().onMessage((payload) => {
+    const data = payload.data || {};
+    navigator.serviceWorker.ready.then((registration) => {
+      registration.showNotification(data.titre || "Jean aimerait vous parler", {
+        body: data.corps || "Appuyez pour le rappeler.",
+        tag: "rappel-aidant",
+        requireInteraction: true,
+        data: { urlRappel: data.urlRappel, urlDiffere: data.urlDiffere },
+        actions: [
+          { action: "rappeler", title: "Appeler maintenant" },
+          { action: "plus_tard", title: "Plus tard" },
+        ],
+      });
+    });
+  });
+} catch (e) {
+  console.warn("[app] Réception au premier plan indisponible :", e);
+}
+
 /** Affiché avec le reste de l'état de la tablette, voir renderDeviceHealth. */
 function renderCareBreak(data) {
   if (els.careBreakStatus) els.careBreakStatus.textContent = data.careBreakStatus || "—";
