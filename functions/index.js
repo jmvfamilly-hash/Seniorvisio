@@ -256,11 +256,16 @@ async function créerEtNotifier(environnement, baseUrl, incidentRef) {
       journal.push(journalEntrée(`push envoyé à ${nom}`));
     }
   }
-  if (Object.keys(contactsMisÀJour).length > 0 || journal.length > 0) {
-    await incidentRef.set(
-      { contacts: contactsMisÀJour, journal: FieldValue.arrayUnion(...journal) },
-      { merge: true }
-    );
+  if (journal.length > 0) {
+    // « contacts » n'est inclus QUE s'il y a vraiment un statut à corriger
+    // (échec ou jeton mort) : l'écrire à {} quand tout a réussi EFFACERAIT
+    // la carte contacts tout juste posée par le set() précédent — un
+    // champ présent dans l'objet écrit n'est pas un no-op pour Firestore,
+    // même vide (piège réel, repéré en re-testant : plus aucun contact
+    // n'apparaissait dans l'incident après un envoi pourtant réussi).
+    const correctif = { journal: FieldValue.arrayUnion(...journal) };
+    if (Object.keys(contactsMisÀJour).length > 0) correctif.contacts = contactsMisÀJour;
+    await incidentRef.set(correctif, { merge: true });
   }
 }
 
