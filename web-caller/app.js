@@ -1070,9 +1070,38 @@ function paramètresURL() {
   }
 }
 
+// ═══ POURQUOI MÉMORISÉ, COMME « mode » CI-DESSUS ═══
+//
+// Sur iPhone/iPad, les notifications web n'existent QUE dans une PWA
+// installée sur l'écran d'accueil (jamais dans un onglet Safari ordinaire,
+// même avec la permission accordée) — Apple l'impose, ce n'est pas un choix
+// de ce projet. Or le manifeste déclare start_url "./index.html" : l'icône
+// installée rouvre TOUJOURS cette adresse nue, quel que soit le lien ouvert
+// au moment d'« Ajouter à l'écran d'accueil ». Sans mémorisation, ?contact=c1
+// se perdrait exactement à l'étape où iOS oblige à installer — la seule
+// différence avec « mode » est que celui-ci a TOUJOURS eu ce problème, pas
+// seulement découvert après coup.
+const CONTACT_STORAGE_KEY = "seniorvisio_contact_rappel";
+
 function contactCourant() {
-  const clé = paramètresURL().get("contact");
-  return CLÉS_CONTACTS.includes(clé) ? clé : null;
+  let demandé = null;
+  try {
+    demandé = paramètresURL().get("contact");
+  } catch (e) {
+    demandé = null;
+  }
+  try {
+    if (CLÉS_CONTACTS.includes(demandé)) {
+      localStorage.setItem(CONTACT_STORAGE_KEY, demandé);
+      return demandé;
+    }
+    const mémorisé = localStorage.getItem(CONTACT_STORAGE_KEY);
+    return CLÉS_CONTACTS.includes(mémorisé) ? mémorisé : null;
+  } catch (e) {
+    // Navigation privée, stockage refusé : on rend ce que l'adresse demande,
+    // et à défaut rien — jamais une mauvaise supposition sur qui répond.
+    return CLÉS_CONTACTS.includes(demandé) ? demandé : null;
+  }
 }
 
 let désabonnerRoster = null;
