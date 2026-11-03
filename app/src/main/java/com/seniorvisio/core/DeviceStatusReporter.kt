@@ -560,6 +560,12 @@ class DeviceStatusReporter(private val context: Context) {
         snapshot.getLong(FIELD_AIDANT_RAPPEL_PRÉVU_LE_MS)?.let {
             if (adminConfig.aidantRappelPrévuLeMs != it) adminConfig.aidantRappelPrévuLeMs = it
         }
+        // Les trois proches contactés ont tous répondu « je ne peux pas » —
+        // voir web-caller/app.js, qui vérifie les trois statuts de l'incident
+        // après chaque déclin avant d'écrire ce champ.
+        snapshot.getLong(FIELD_AIDANT_INDISPONIBLE_LE_MS)?.let {
+            if (adminConfig.aidantIndisponibleLeMs != it) adminConfig.aidantIndisponibleLeMs = it
+        }
 
         // Bornée ICI EN PLUS de l'ordonnanceur, et les deux comptent : ce
         // document est ouvert en écriture à qui en connaît l'adresse, et une
@@ -930,6 +936,7 @@ class DeviceStatusReporter(private val context: Context) {
         // ce suffixe, pour rester clairs sur l'unité côté lecture.
         private const val FIELD_AIDANT_MESSAGE_LU_LE_MS = "aidantMessageLuLe"
         private const val FIELD_AIDANT_RAPPEL_PRÉVU_LE_MS = "aidantRappelPrévuLe"
+        private const val FIELD_AIDANT_INDISPONIBLE_LE_MS = "aidantIndisponibleLe"
 
         /** Combien de minutes chaque photo de la galerie tient l'écran. */
         private const val FIELD_CADENCE_PHOTOS = "cadencePhotosMinutes"

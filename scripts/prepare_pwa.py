@@ -35,11 +35,13 @@ ENVIRONNEMENTS = {
     "production": {
         "deviceDocId": "jean_tablet",
         "callsCollection": "calls",
+        "rappelsCollection": "rappels",
         "nomRaccourci": "Appeler Jean",
     },
     "validation": {
         "deviceDocId": "test_tablet",
         "callsCollection": "calls_test",
+        "rappelsCollection": "rappels_test",
         # Nom distinct, et ce n'est pas cosmétique : installé sur l'écran
         # d'accueil, un raccourci nommé « Appeler Jean » qui appelle en
         # réalité la tablette d'essai est un piège. Le bandeau dans la page
@@ -67,6 +69,7 @@ def écrire_environnement(dossier: Path, nom: str) -> None:
         f'  name: "{nom}",\n'
         f'  deviceDocId: "{env["deviceDocId"]}",\n'
         f'  callsCollection: "{env["callsCollection"]}",\n'
+        f'  rappelsCollection: "{env["rappelsCollection"]}",\n'
         "};\n",
         encoding="utf-8",
     )

@@ -429,6 +429,17 @@ class AdminConfig(context: Context) {
         set(value) = prefs.edit().putLong(KEY_AIDANT_RAPPEL_PRÉVU_LE_MS, value).apply()
 
     /**
+     * Heure à laquelle TOUS les proches contactés ont répondu « je ne peux
+     * pas » (0 = pas le cas) — voir web-caller/app.js, qui vérifie les trois
+     * statuts après chaque déclin avant d'écrire ce champ. Jean a le droit de
+     * savoir que personne n'est disponible plutôt que de continuer à croire
+     * qu'un message attend simplement d'être lu.
+     */
+    var aidantIndisponibleLeMs: Long
+        get() = prefs.getLong(KEY_AIDANT_INDISPONIBLE_LE_MS, 0L)
+        set(value) = prefs.edit().putLong(KEY_AIDANT_INDISPONIBLE_LE_MS, value).apply()
+
+    /**
      * Combien de minutes chaque photo tient l'écran.
      *
      * Quinze par défaut. Le bon rythme dépend de la galerie et de la personne
@@ -559,6 +570,7 @@ class AdminConfig(context: Context) {
         private const val KEY_DERNIER_RAPPEL_DEMANDÉ_LE_MS = "dernier_rappel_demande_le_ms"
         private const val KEY_AIDANT_MESSAGE_LU_LE_MS = "aidant_message_lu_le_ms"
         private const val KEY_AIDANT_RAPPEL_PRÉVU_LE_MS = "aidant_rappel_prevu_le_ms"
+        private const val KEY_AIDANT_INDISPONIBLE_LE_MS = "aidant_indisponible_le_ms"
         private const val KEY_CADENCE_PHOTOS = "cadence_photos_minutes"
         private const val KEY_COMMANDES_VOCALES = "commandes_vocales_actives"
         private const val KEY_CAPTION_INTERLIGNE = "caption_interligne"

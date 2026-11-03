@@ -45,27 +45,32 @@
       <!-- ═══ ABONNEMENT AUX ALERTES (aidant uniquement) ═══
 
            Visible UNIQUEMENT en ?mode=aidant (voir style.css) : c'est ici que
-           Marie-Thérèse clique, une seule fois depuis son propre téléphone,
-           après avoir ouvert le lien envoyé par la famille. Voir app.js,
-           activerAlertesButton et firebase-messaging-sw.js. -->
+           chaque proche clique, une seule fois depuis son propre téléphone,
+           après avoir ouvert SON lien personnalisé (?contact=c1/c2/c3,
+           copié depuis le panneau admin). Voir app.js, activerAlertesButton
+           et firebase-messaging-sw.js. -->
       <div id="activerAlertesBloc">
         <button id="activerAlertesButton" class="secondary">🔔 Activer les alertes de Jean</button>
         <p class="hint" id="alertesStatut"></p>
       </div>
 
-      <!-- ═══ « JE RAPPELLE DANS UN MOMENT » ═══
+      <!-- ═══ INCIDENT DE RAPPEL (jusqu'à trois proches) ═══
 
-           Affiché UNIQUEMENT quand l'action de notification choisie portait
-           ?differe=1 (voir web-caller/app.js, traiterLienRappel) : l'aidant
-           ne peut pas répondre tout de suite, mais peut dire à Jean quand.
-           Chaque bouton écrit l'heure annoncée sur le document d'appareil ;
-           la tablette l'affiche dans sa bande du bas (voir MainActivity,
-           rafraîchirStatutRappelAidant). -->
-      <div class="hidden" id="rappelDiffereBloc">
-        <p class="hint">Vous ne pouvez pas répondre tout de suite ? Dites à Jean quand vous le rappellerez.</p>
-        <button class="secondary" id="rappelDiffere15" data-minutes="15">Dans 15 minutes</button>
-        <button class="secondary" id="rappelDiffere60" data-minutes="60">Dans 1 heure</button>
-        <p class="hint" id="rappelDiffereStatut"></p>
+           Affiché UNIQUEMENT quand l'adresse porte ?incident=...&contact=...
+           (voir web-caller/app.js, ouvrirIncidentRappel) — c'est-à-dire
+           quand on arrive depuis une notification. Le roster montre en
+           direct ce que les DEUX AUTRES proches ont déjà répondu (voir
+           app.js, abonnerRosterIncident) : personne n'a besoin d'appeler
+           les autres pour savoir qui s'en occupe déjà. -->
+      <div class="hidden" id="rappelIncidentBloc">
+        <p class="hint">Jean aimerait qu'on le rappelle.</p>
+        <div id="rappelRoster"></div>
+
+        <button id="rappelRépondreButton">📹 Répondre maintenant</button>
+        <button class="secondary" id="rappelPlusTard15" data-minutes="15">Je rappelle dans 15 minutes</button>
+        <button class="secondary" id="rappelPlusTard60" data-minutes="60">Je rappelle dans 1 heure</button>
+        <button class="secondary" id="rappelIndisponibleButton">Je ne peux pas répondre</button>
+        <p class="hint" id="rappelIncidentStatut"></p>
       </div>
 
       <!-- ═══ « SOUS-TITRES » : QUAND ON EST DÉJÀ DANS LA PIÈCE ═══
@@ -861,28 +866,58 @@
           <button id="careBreakCancelButton" class="secondary" hidden>Permettre de nouveau les appels</button>
           <p class="hint" id="careBreakSince" hidden></p>
 
-          <!-- ═══ RAPPEL PAR NOTIFICATION ═══
+          <!-- ═══ RAPPEL D'URGENCE (jusqu'à trois proches) ═══
 
                Jean peut demander, depuis sa tablette, qu'on le rappelle — une
-               notification part vers le téléphone de l'aidant (via Firebase
-               Cloud Messaging, voir functions/index.js). En l'ouvrant, elle se
-               retrouve dans le flux d'appel habituel (proche appelle Jean) :
-               rien de neuf côté visiophonie, seul le déclenchement change.
+               notification part EN MÊME TEMPS vers les téléphones des trois
+               proches réglés ici (voir functions/index.js, créerEtNotifier),
+               et chacun voit en direct si un autre a déjà répondu. En
+               l'ouvrant, on se retrouve dans le flux d'appel habituel
+               (proche appelle Jean) : rien de neuf côté visiophonie, seul le
+               déclenchement change.
 
-               Un seul destinataire fixe. Le nom se règle ici, une fois ; mais
-               c'est l'aidant elle-même qui active les alertes depuis SON
-               téléphone, sur la page ?mode=aidant (voir activerAlertesButton
-               dans app.js) — aucun numéro à saisir ici. -->
-          <h3 class="admin-section">Rappel par notification</h3>
+               Un contact n'est pas obligatoire — un ou deux suffisent déjà à
+               déclencher les notifications. Chaque proche active lui-même ses
+               alertes depuis SON téléphone, en ouvrant le lien personnalisé
+               copié ici (voir app.js, activerAlertesButton) : le numéro saisi
+               ci-dessous ne sert JAMAIS à ça — seulement de secours SMS si,
+               après cinq minutes, personne n'a répondu (voir
+               functions/index.js, relancerEtSecourirRappel). -->
+          <h3 class="admin-section">Rappel d'urgence (jusqu'à trois proches)</h3>
           <p class="hint">
-            La personne que Jean peut demander de rappeler, depuis un bouton
-            sur sa tablette. Donnez-lui une fois le lien de la page
-            « ?mode=aidant » : elle y active elle-même les alertes, depuis son
-            propre téléphone.
+            Un bouton sur la tablette de Jean alerte en même temps jusqu'à
+            trois proches. Donnez à chacun SON lien personnalisé (bouton
+            « copier » ci-dessous) : il l'ouvre une fois sur son téléphone et
+            active ses propres alertes.
           </p>
-          <label for="aidantNom">Nom (affiché sur le bouton de Jean)</label>
-          <input type="text" id="aidantNom" maxlength="20" placeholder="Marie">
-          <button id="aidantEnregistrer" class="secondary">💾 Enregistrer</button>
+          <label for="aidantNom">Mot affiché sur le bouton de Jean (ex. « vos proches »)</label>
+          <input type="text" id="aidantNom" maxlength="20" placeholder="vos proches">
+
+          <h4>1er proche</h4>
+          <label for="contactNom1">Nom</label>
+          <input type="text" id="contactNom1" maxlength="20" placeholder="Marie">
+          <label for="contactTel1">Téléphone (secours SMS uniquement)</label>
+          <input type="tel" id="contactTel1" maxlength="20" placeholder="+33612345678">
+          <button class="secondary" id="contactLien1">🔗 Copier son lien personnalisé</button>
+          <p class="hint" id="contactStatut1"></p>
+
+          <h4>2ᵉ proche</h4>
+          <label for="contactNom2">Nom</label>
+          <input type="text" id="contactNom2" maxlength="20" placeholder="Paul">
+          <label for="contactTel2">Téléphone (secours SMS uniquement)</label>
+          <input type="tel" id="contactTel2" maxlength="20" placeholder="+33612345678">
+          <button class="secondary" id="contactLien2">🔗 Copier son lien personnalisé</button>
+          <p class="hint" id="contactStatut2"></p>
+
+          <h4>3ᵉ proche</h4>
+          <label for="contactNom3">Nom</label>
+          <input type="text" id="contactNom3" maxlength="20" placeholder="Julie">
+          <label for="contactTel3">Téléphone (secours SMS uniquement)</label>
+          <input type="tel" id="contactTel3" maxlength="20" placeholder="+33612345678">
+          <button class="secondary" id="contactLien3">🔗 Copier son lien personnalisé</button>
+          <p class="hint" id="contactStatut3"></p>
+
+          <button id="aidantEnregistrer" class="secondary">💾 Enregistrer les trois proches</button>
           <p class="hint" id="aidantStatut"></p>
 
           <h3 class="admin-section">Diagnostic</h3>

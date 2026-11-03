@@ -375,6 +375,7 @@ class MainActivity : AppCompatActivity() {
             // montrer ici ferait croire cette demande-ci déjà vue.
             adminConfig.aidantMessageLuLeMs = 0L
             adminConfig.aidantRappelPrévuLeMs = 0L
+            adminConfig.aidantIndisponibleLeMs = 0L
             appelAidantEnRefroidissement = true
             boutonAppelerAidant.isEnabled = false
             rafraîchirStatutRappelAidant()
@@ -510,10 +511,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Masqué tant qu'aucun prénom n'est réglé (voir AdminConfig.aidantNom) :
+     * Masqué tant qu'aucun texte n'est réglé (voir AdminConfig.aidantNom) :
      * une cible qui ne mène nulle part est pire qu'une absence. Relu à
      * chaque battement comme le reste de l'ergonomie, pour qu'un réglage
      * fait depuis le PWA apparaisse sans attendre un redémarrage.
+     *
+     * Ce champ désigne maintenant un groupe (jusqu'à trois proches, voir
+     * web-caller/index.html, panneau « Rappel par notification »), pas une
+     * seule personne — l'administrateur y met un mot générique («&nbsp;vos
+     * proches&nbsp;», «&nbsp;la famille&nbsp;»...), pas un prénom isolé.
      *
      * Le texte lui-même ne change jamais après une pression — contrairement
      * à la première version de ce bouton : seul son état actif/inactif
@@ -534,10 +540,13 @@ class MainActivity : AppCompatActivity() {
      * refroidissement d'une minute) — un fait immédiat, garanti vrai sans
      * attendre aucun aller-retour réseau.
      *
-     * Passé ce délai, elle reprend le fil des trois états réels venus du
-     * PWA (voir web-caller/app.js, qui écrit les deux repères lus ici dès
-     * que l'aidant ouvre la notification — accusé de lecture — et quand il
-     * choisit un délai).
+     * Passé ce délai, elle reprend le fil des états réels venus du PWA (voir
+     * web-caller/app.js, qui écrit ces repères dès qu'un des proches
+     * contactés ouvre la notification — accusé de lecture — choisit un
+     * délai, ou répond qu'il ne peut pas). Jean voit une ligne AGRÉGÉE,
+     * jamais les trois statuts en détail un par un : c'est le PWA qui décide
+     * côté proches qui a répondu quoi, pas cet écran-ci (voir
+     * activerAlertesButton / roster dans web-caller/app.js).
      *
      * Masquée passé un délai généreux (voir DÉLAI_EXPIRATION_STATUT_RAPPEL_MS) :
      * un message resté « pas encore lu » toute la journée n'a plus rien
@@ -561,13 +570,15 @@ class MainActivity : AppCompatActivity() {
 
         val luLe = adminConfig.aidantMessageLuLeMs
         val rappelPrévuLe = adminConfig.aidantRappelPrévuLeMs
+        val indisponibleLe = adminConfig.aidantIndisponibleLeMs
         textStatutRappelAidant.text = when {
-            luLe < demandéLe -> "Message envoyé à $nom, pas encore lu"
             rappelPrévuLe > demandéLe -> {
                 val heure = java.text.SimpleDateFormat("HH:mm", java.util.Locale.FRANCE)
                     .format(java.util.Date(rappelPrévuLe))
                 "$nom rappelle vers $heure"
             }
+            indisponibleLe > demandéLe -> "Personne ne peut répondre pour l'instant"
+            luLe < demandéLe -> "Message envoyé à $nom, pas encore lu"
             else -> "$nom a vu le message"
         }
     }

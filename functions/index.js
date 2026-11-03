@@ -1,6 +1,8 @@
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
-const { getFirestore } = require("firebase-admin/firestore");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 
 initializeApp();
@@ -95,67 +97,273 @@ exports.notifyIncomingTestCall = onDocumentCreated(
 );
 
 /**
- * Rappel par notification : Jean presse un bouton sur sa tablette (voir
- * RappelAidant.kt), qui dépose un document ici. Cette fonction lit le jeton
- * de notification (FCM) que l'aidant a enregistré depuis son propre
- * téléphone (voir web-caller/app.js, activerAlertesButton) et lui envoie une
- * alerte avec deux actions — en l'ouvrant, elle se retrouve dans le flux
- * d'appel HABITUEL (proche appelle Jean). Rien de neuf côté visiophonie ni
- * côté transcription, qui s'active pareil une fois l'appel connecté.
+ * ═══════════════════════════════════════════════════════════════════════
+ * RAPPEL D'URGENCE : TROIS PROCHES, UN INCIDENT PARTAGÉ
+ * ═══════════════════════════════════════════════════════════════════════
  *
- * Remplace l'essai précédent par SMS (Twilio) : bloqué par un numéro à
- * acheter et une vérification d'identité (KYC) côté Twilio, pour un service
- * qui n'a jamais eu besoin d'envoyer un texte — seulement de réveiller un
- * téléphone précis. Firebase Cloud Messaging fait exactement ça, déjà
- * utilisé par ce projet pour réveiller la tablette (voir réveillerTablette
- * ci-dessus), gratuitement et sans démarche.
+ * Jean presse un bouton sur sa tablette (voir RappelAidant.kt), qui dépose
+ * un document ici — un INCIDENT, pas un message jetable : jusqu'à trois
+ * proches le reçoivent en même temps, et les trois voient en direct qui a
+ * répondu quoi (voir web-caller/app.js, le roster affiché sur ?mode=aidant).
+ * C'est potentiellement un appel de détresse ; la conception suppose que
+ * n'importe quel maillon peut échouer (jeton mort, téléphone éteint,
+ * notification jamais vue) et prévoit une relance puis un secours par SMS,
+ * plutôt que d'espérer qu'un seul envoi suffise.
+ *
+ * ═══ LE DOCUMENT D'INCIDENT (rappels_test/{id}) ═══
+ *
+ *   demandéLe     : posé par Android (RappelAidant.kt), inchangé.
+ *   statut        : "en_attente" → "pris_en_charge" (quelqu'un répond) ou
+ *                   "expiré" (personne, après cinq minutes).
+ *   résoluPar     : la clé (c1/c2/c3) de qui a répondu, une fois pris en charge.
+ *   contacts.cN   : { nom, statut, rappelPrévuLe?, luLe? } — statut parmi
+ *                   "non_lu" | "lu" | "rappel_prévu" | "indisponible" |
+ *                   "en_appel" | "jeton_manquant" | "jeton_invalide".
+ *   journal       : trace horodatée en texte clair, pour qu'un regard
+ *                   extérieur puisse juger après coup si le système a tenu
+ *                   ses promesses sur UN incident donné.
+ *
+ * ═══ LES CONTACTS (devices/{id}.rappelContacts) ═══
+ *
+ * Jusqu'à trois entrées { nom, pushToken, téléphone }, réglées depuis le
+ * panneau admin du PWA (nom, téléphone) et complétées par chaque proche
+ * lui-même depuis SON téléphone (pushToken, voir activerAlertesButton) — un
+ * slot sans jeton encore enregistré est seulement MOINS couvert, jamais
+ * bloquant pour les deux autres.
  *
  * ═══ UNIQUEMENT EN VALIDATION, POUR L'INSTANT ═══
  *
- * Volontairement : ce chantier se construit et s'éprouve sur le banc d'essai
- * avant d'exister pour de vrai chez Jean. Pas de déclencheur « rappels »
- * (production) tant que ce n'est pas demandé — voir ENVIRONNEMENTS, qui ne
- * porte qu'une entrée VALIDATION pour cette fonction-ci, contrairement à
- * notifyIncomingCall/notifyIncomingTestCall qui couvrent les deux.
- *
- * Pas de garde-fou de fréquence ici : le bouton se désactive déjà une
- * minute côté tablette (voir MainActivity, DÉLAI_REFROIDISSEMENT_APPEL_AIDANT_MS),
- * et les alertes sont gratuites — rien à protéger d'un double envoi.
+ * Voir ENVIRONNEMENTS, qui ne porte qu'une entrée VALIDATION pour ce
+ * chantier — pas de déclencheur « rappels » de production tant que ce
+ * n'est pas demandé.
  */
-async function envoyerRappel(environnement, baseUrl) {
-  const db = getFirestore();
-  const deviceRef = db.doc(environnement.deviceDoc);
-  const deviceSnap = await deviceRef.get();
-  const jeton = deviceSnap.get("aidantPushToken");
-  if (!jeton) {
-    console.warn(
-      `[${environnement.nom}] Aucun jeton d'alerte enregistré dans ` +
-        `${environnement.deviceDoc} : rappel ignoré.`
-    );
-    return;
-  }
 
+const TWILIO_ACCOUNT_SID = defineSecret("TWILIO_ACCOUNT_SID");
+const TWILIO_AUTH_TOKEN = defineSecret("TWILIO_AUTH_TOKEN");
+const TWILIO_FROM_NUMBER = defineSecret("TWILIO_FROM_NUMBER");
+
+const CLÉS_CONTACTS = ["c1", "c2", "c3"];
+const DÉLAI_RELANCE_MS = 90 * 1000;
+const DÉLAI_EXPIRATION_MS = 5 * 60 * 1000;
+
+function journalEntrée(événement) {
+  return { horodatage: Date.now(), événement };
+}
+
+/**
+ * Envoie l'alerte à un contact donné. Message de DONNÉES pur, sans bloc
+ * "notification" — voir firebase-messaging-sw.js pour pourquoi : c'est lui
+ * qui affiche la notification et pose les deux actions (appeler maintenant
+ * / plus tard), ce qu'un bloc "notification" géré par défaut par FCM ne
+ * permet pas de distinguer au clic.
+ *
+ * Retourne "ok", "jeton_invalide" (jeton mort, confirmé par FCM lui-même —
+ * pas une supposition) ou "échec" (tout le reste : réseau, quota...).
+ */
+async function envoyerPushContact({ jeton, incidentId, contactKey, baseUrl }) {
+  if (!jeton) return "jeton_manquant";
   try {
-    // Message de DONNÉES pur, sans bloc "notification" — voir
-    // firebase-messaging-sw.js pour pourquoi : c'est lui qui affiche la
-    // notification et pose les deux actions (appeler maintenant / plus tard).
     await getMessaging().send({
       token: jeton,
       webpush: { headers: { Urgency: "high" } },
       data: {
         titre: "Jean aimerait vous parler",
         corps: "Appuyez pour le rappeler, ou dites-lui quand.",
-        urlRappel: `${baseUrl}/?mode=aidant&rappel=1`,
-        urlDiffere: `${baseUrl}/?mode=aidant&differe=1`,
+        incidentId,
+        contactKey,
+        urlRappel: `${baseUrl}/?mode=aidant&incident=${incidentId}&contact=${contactKey}&rappel=1`,
+        urlDiffere: `${baseUrl}/?mode=aidant&incident=${incidentId}&contact=${contactKey}&differe=1`,
       },
     });
-    console.log(`[${environnement.nom}] Alerte de rappel envoyée.`);
+    return "ok";
   } catch (e) {
-    console.error(`[${environnement.nom}] Envoi de l'alerte refusé :`, e.message || e);
+    if (e.code === "messaging/registration-token-not-registered") return "jeton_invalide";
+    console.error(`Envoi push refusé pour ${contactKey} :`, e.message || e);
+    return "échec";
+  }
+}
+
+/**
+ * À la création de l'incident : copie les contacts configurés côté
+ * appareil (nom, jeton) dans l'incident lui-même — une PHOTO au moment de
+ * la demande, pas une référence vivante, pour qu'un changement ultérieur de
+ * contact n'altère pas l'historique d'un incident déjà envoyé — puis
+ * envoie le push à chacun.
+ */
+async function créerEtNotifier(environnement, baseUrl, incidentRef) {
+  const db = getFirestore();
+  const deviceSnap = await db.doc(environnement.deviceDoc).get();
+  const rappelContacts = deviceSnap.get("rappelContacts") || {};
+
+  const contacts = {};
+  for (const clé of CLÉS_CONTACTS) {
+    const brut = rappelContacts[clé];
+    if (!brut || !brut.nom) continue;
+    contacts[clé] = { nom: brut.nom, statut: "non_lu", téléphone: brut.téléphone || null };
+  }
+
+  if (Object.keys(contacts).length === 0) {
+    console.warn(
+      `[${environnement.nom}] Aucun contact de rappel configuré dans ${environnement.deviceDoc}.`
+    );
+    await incidentRef.set(
+      { statut: "expiré", contacts: {}, journal: [journalEntrée("aucun contact configuré")] },
+      { merge: true }
+    );
+    return;
+  }
+
+  await incidentRef.set(
+    { statut: "en_attente", contacts, journal: [journalEntrée("incident créé")] },
+    { merge: true }
+  );
+
+  const résultats = await Promise.all(
+    Object.entries(contacts).map(async ([clé, c]) => {
+      const brut = rappelContacts[clé];
+      const résultat = await envoyerPushContact({
+        jeton: brut.pushToken,
+        incidentId: incidentRef.id,
+        contactKey: clé,
+        baseUrl,
+      });
+      return { clé, nom: c.nom, résultat };
+    })
+  );
+
+  const misesÀJour = {};
+  const journal = [];
+  for (const { clé, nom, résultat } of résultats) {
+    if (résultat !== "ok") {
+      misesÀJour[`contacts.${clé}.statut`] = résultat;
+      journal.push(journalEntrée(`push vers ${nom} : ${résultat}`));
+    } else {
+      journal.push(journalEntrée(`push envoyé à ${nom}`));
+    }
+  }
+  if (Object.keys(misesÀJour).length > 0 || journal.length > 0) {
+    await incidentRef.set(
+      { ...misesÀJour, journal: FieldValue.arrayUnion(...journal) },
+      { merge: true }
+    );
   }
 }
 
 exports.envoyerRappelAidantTest = onDocumentCreated(
   "rappels_test/{id}",
-  () => envoyerRappel(VALIDATION, "https://seniorvisio-test.web.app")
+  (event) => créerEtNotifier(VALIDATION, "https://seniorvisio-test.web.app", event.data.ref)
+);
+
+/**
+ * ═══ RELANCE ET SECOURS, MÊME SANS QUE PERSONNE N'OUVRE L'APPLICATION ═══
+ *
+ * Tourne toutes les minutes, indépendamment de toute action côté client :
+ * un incident de détresse ne doit pas dépendre du fait que quelqu'un ait
+ * un onglet ouvert pour que la relance parte.
+ *
+ *   à  90 s sans réponse : renvoie le push à qui ne l'a toujours pas ouvert.
+ *   à 300 s sans réponse : marque l'incident expiré, ET envoie un SMS de
+ *                          DERNIER RECOURS (Twilio) à qui a un numéro
+ *                          enregistré — seul canal qui ne dépend ni d'une
+ *                          app installée, ni d'un jeton valide, ni même
+ *                          d'une connexion data. Volontairement rare :
+ *                          jamais à chaque demande, seulement quand les
+ *                          trois pushs ont, en pratique, échoué.
+ */
+exports.relancerEtSecourirRappel = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER],
+  },
+  async () => {
+    const db = getFirestore();
+    const enAttente = await db
+      .collection("rappels_test")
+      .where("statut", "==", "en_attente")
+      .get();
+    if (enAttente.empty) return;
+
+    const deviceSnap = await db.doc(VALIDATION.deviceDoc).get();
+    const rappelContacts = deviceSnap.get("rappelContacts") || {};
+
+    for (const doc of enAttente.docs) {
+      const incident = doc.data();
+      const demandéLeMs = incident.demandéLe ? incident.demandéLe.toMillis() : 0;
+      if (!demandéLeMs) continue;
+      const âgeMs = Date.now() - demandéLeMs;
+      const contacts = incident.contacts || {};
+
+      const enAttenteDeLecture = (clé) => {
+        const statut = contacts[clé] && contacts[clé].statut;
+        return statut === "non_lu" || statut === "jeton_invalide" || statut === "jeton_manquant";
+      };
+
+      if (âgeMs >= DÉLAI_RELANCE_MS && !incident.relanceEnvoyéeLe) {
+        const relances = [];
+        for (const clé of Object.keys(contacts)) {
+          if (!enAttenteDeLecture(clé)) continue;
+          const brut = rappelContacts[clé];
+          const résultat = await envoyerPushContact({
+            jeton: brut && brut.pushToken,
+            incidentId: doc.id,
+            contactKey: clé,
+            baseUrl: "https://seniorvisio-test.web.app",
+          });
+          relances.push(journalEntrée(`relance vers ${contacts[clé].nom} : ${résultat}`));
+        }
+        await doc.ref.set(
+          { relanceEnvoyéeLe: Date.now(), journal: FieldValue.arrayUnion(...relances) },
+          { merge: true }
+        );
+      }
+
+      if (âgeMs >= DÉLAI_EXPIRATION_MS) {
+        const journal = [journalEntrée("incident expiré, aucune réponse")];
+        const secours = Object.keys(contacts).filter(enAttenteDeLecture);
+
+        for (const clé of secours) {
+          const téléphone = contacts[clé].téléphone;
+          if (!téléphone) {
+            journal.push(journalEntrée(`pas de secours SMS pour ${contacts[clé].nom} : aucun numéro`));
+            continue;
+          }
+          try {
+            const identifiants = Buffer.from(
+              `${TWILIO_ACCOUNT_SID.value()}:${TWILIO_AUTH_TOKEN.value()}`
+            ).toString("base64");
+            const réponse = await fetch(
+              `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID.value()}/Messages.json`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Basic ${identifiants}`,
+                  "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: new URLSearchParams({
+                  To: téléphone,
+                  From: TWILIO_FROM_NUMBER.value(),
+                  Body:
+                    `Jean a besoin d'aide et personne n'a encore répondu.\n` +
+                    `Appeler maintenant : https://seniorvisio-test.web.app/?mode=aidant&incident=${doc.id}&contact=${clé}&rappel=1`,
+                }),
+              }
+            );
+            if (!réponse.ok) {
+              const détail = await réponse.text();
+              journal.push(journalEntrée(`SMS de secours refusé pour ${contacts[clé].nom} : ${détail}`));
+            } else {
+              journal.push(journalEntrée(`SMS de secours envoyé à ${contacts[clé].nom}`));
+            }
+          } catch (e) {
+            journal.push(journalEntrée(`SMS de secours en erreur pour ${contacts[clé].nom} : ${e.message || e}`));
+          }
+        }
+
+        await doc.ref.set(
+          { statut: "expiré", journal: FieldValue.arrayUnion(...journal) },
+          { merge: true }
+        );
+      }
+    }
+  }
 );

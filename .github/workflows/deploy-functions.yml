@@ -28,6 +28,22 @@ jobs:
       - name: Write service account key
         run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
 
+      # Réintroduit (voir rappel d'urgence à trois contacts, functions/index.js
+      # relancerEtSecourirRappel) : Twilio sert maintenant de SECOURS rare —
+      # un SMS seulement si les trois pushs ont échoué après cinq minutes —
+      # et non plus de canal principal. Réécrits à chaque déploiement,
+      # qu'ils aient changé ou non : functions:secrets:set est idempotent.
+      - name: Provisionne les secrets Twilio
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+        run: |
+          printf '%s' "$TWILIO_ACCOUNT_SID" | npx firebase-tools functions:secrets:set TWILIO_ACCOUNT_SID --project seniorvisio --data-file -
+          printf '%s' "$TWILIO_AUTH_TOKEN" | npx firebase-tools functions:secrets:set TWILIO_AUTH_TOKEN --project seniorvisio --data-file -
+          printf '%s' "$TWILIO_FROM_NUMBER" | npx firebase-tools functions:secrets:set TWILIO_FROM_NUMBER --project seniorvisio --data-file -
+
       - name: Deploy functions
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json

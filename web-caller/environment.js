@@ -37,4 +37,6 @@ window.SENIORVISIO_ENV = {
   deviceDocId: "jean_tablet",
   /** Collection Firestore où déposer les appels. */
   callsCollection: "calls",
+  /** Collection Firestore des incidents de rappel d'urgence (trois proches). */
+  rappelsCollection: "rappels",
 };

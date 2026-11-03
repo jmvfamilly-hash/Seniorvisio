@@ -298,6 +298,10 @@ const CONFIG = {
   // est ajouté au déploiement, et une page mise en cache avant son arrivée
   // doit continuer de fonctionner (voir environment.js).
   deviceDocId: (window.SENIORVISIO_ENV && window.SENIORVISIO_ENV.deviceDocId) || "jean_tablet",
+  // Collection des incidents de rappel d'urgence (voir functions/index.js,
+  // créerEtNotifier) — doit rester identique à RAPPELS_COLLECTION dans
+  // app/build.gradle.
+  rappelsCollection: (window.SENIORVISIO_ENV && window.SENIORVISIO_ENV.rappelsCollection) || "rappels",
   callerName: "Un proche",
 };
 
@@ -627,10 +631,25 @@ const els = {
   aidantStatut: el("aidantStatut"),
   activerAlertesButton: el("activerAlertesButton"),
   alertesStatut: el("alertesStatut"),
-  rappelDiffereBloc: el("rappelDiffereBloc"),
-  rappelDiffere15: el("rappelDiffere15"),
-  rappelDiffere60: el("rappelDiffere60"),
-  rappelDiffereStatut: el("rappelDiffereStatut"),
+  contactNom1: el("contactNom1"),
+  contactTel1: el("contactTel1"),
+  contactLien1: el("contactLien1"),
+  contactStatut1: el("contactStatut1"),
+  contactNom2: el("contactNom2"),
+  contactTel2: el("contactTel2"),
+  contactLien2: el("contactLien2"),
+  contactStatut2: el("contactStatut2"),
+  contactNom3: el("contactNom3"),
+  contactTel3: el("contactTel3"),
+  contactLien3: el("contactLien3"),
+  contactStatut3: el("contactStatut3"),
+  rappelIncidentBloc: el("rappelIncidentBloc"),
+  rappelRoster: el("rappelRoster"),
+  rappelRépondreButton: el("rappelRépondreButton"),
+  rappelPlusTard15: el("rappelPlusTard15"),
+  rappelPlusTard60: el("rappelPlusTard60"),
+  rappelIndisponibleButton: el("rappelIndisponibleButton"),
+  rappelIncidentStatut: el("rappelIncidentStatut"),
   captionOverflowIndicator: el("captionOverflowIndicator"),
   // Réplique de l'écran de Jean (voir applyScreenLayout / applyScreenState).
   jeanScreen: el("jeanScreen"),
@@ -1029,62 +1048,217 @@ async function lancerAppel({ sousTitres = false } = {}) {
 
 on("callButton", "click", () => lancerAppel());
 
-// ═══ ARRIVÉE DEPUIS LA NOTIFICATION DE RAPPEL (voir functions/index.js et
+// Les trois proches, par clé interne (jamais montrée à l'écran) — voir
+// functions/index.js, CLÉS_CONTACTS, qui doit rester identique.
+const CLÉS_CONTACTS = ["c1", "c2", "c3"];
+
+// ═══ ARRIVÉE DEPUIS LA NOTIFICATION DE RAPPEL D'URGENCE (voir
+//     functions/index.js, créerEtNotifier/relancerEtSecourirRappel, et
 //     firebase-messaging-sw.js) ═══
 //
-// Deux actions possibles dans la notification :
-//   ?mode=aidant&rappel=1    appelle tout de suite, sans même le bouton ni
-//                            le décompte de 30 s habituel (voir
-//                            engine.forceConnect, déjà utilisé ailleurs par
-//                            l'appui secret de l'administrateur).
-//   ?mode=aidant&differe=1   l'aidant ne peut pas répondre tout de suite ;
-//                            affiche seulement le choix d'un délai.
-//
-// Dans les deux cas, le simple chargement de la page vaut accusé de
-// lecture — une notification n'a pas d'accusé de lecture natif, mais
-// quelqu'un qui a cliqué dessus a, par définition, vu le message.
-function traiterLienRappel() {
-  let params;
+// L'adresse porte toujours ?contact=c1/c2/c3 (qui est-ce), et souvent
+// ?incident=... (quel incident précis, absent sur le lien d'abonnement
+// initial) avec ?rappel=1 ou ?differe=1 (quelle action a été choisie dans
+// la notification). Les TROIS proches configurés voient le MÊME document
+// d'incident en direct (voir abonnerRosterIncident) : personne n'a besoin
+// d'appeler les deux autres pour savoir qui s'en occupe déjà.
+function paramètresURL() {
   try {
-    params = new URLSearchParams(location.search);
+    return new URLSearchParams(location.search);
   } catch (e) {
-    return;
+    return new URLSearchParams();
   }
-  const immédiat = params.get("rappel") === "1";
-  const différé = params.get("differe") === "1";
-  if (!immédiat && !différé) return;
-
-  engine.setDeviceSetting(CONFIG.deviceDocId, "aidantMessageLuLe", Date.now());
-
-  if (immédiat) {
-    lancerAppel().then(() => engine.forceConnect());
-    return;
-  }
-
-  els.rappelDiffereBloc.classList.remove("hidden");
 }
-traiterLienRappel();
 
-on("rappelDiffere15", "click", () => choisirDélaiRappel(15));
-on("rappelDiffere60", "click", () => choisirDélaiRappel(60));
+function contactCourant() {
+  const clé = paramètresURL().get("contact");
+  return CLÉS_CONTACTS.includes(clé) ? clé : null;
+}
+
+let désabonnerRoster = null;
+
+function ouvrirIncidentRappel() {
+  const params = paramètresURL();
+  const incidentId = params.get("incident");
+  const clé = contactCourant();
+  if (!incidentId || !clé) return;
+
+  els.rappelIncidentBloc.classList.remove("hidden");
+  abonnerRosterIncident(incidentId, clé);
+
+  // Le simple chargement de la page vaut accusé de lecture — une
+  // notification n'a pas d'accusé de lecture natif, mais quelqu'un qui a
+  // cliqué dessus a, par définition, vu le message. Agrégé pour Jean (voir
+  // MainActivity, rafraîchirStatutRappelAidant) : peu importe LEQUEL des
+  // trois a regardé, Jean sait seulement que quelqu'un l'a fait.
+  engine.setDeviceSetting(CONFIG.deviceDocId, "aidantMessageLuLe", Date.now());
+  marquerLu(incidentId, clé);
+
+  if (params.get("rappel") === "1") {
+    tenterRépondre(incidentId, clé);
+  }
+  // ?differe=1 n'a rien de plus à faire ici : le roster et les trois
+  // actions sont déjà affichés par abonnerRosterIncident ci-dessus.
+}
+ouvrirIncidentRappel();
+
+async function marquerLu(incidentId, clé) {
+  try {
+    await firebase
+      .firestore()
+      .collection(CONFIG.rappelsCollection)
+      .doc(incidentId)
+      .set({ contacts: { [clé]: { statut: "lu", luLe: Date.now() } } }, { merge: true });
+  } catch (e) {
+    console.warn("[app] Accusé de lecture non transmis :", e);
+  }
+}
+
+const LIBELLÉS_STATUT = {
+  non_lu: "pas encore vu",
+  lu: "a vu le message",
+  rappel_prévu: "va rappeler",
+  indisponible: "ne peut pas répondre",
+  en_appel: "est en train d'appeler Jean",
+  jeton_manquant: "n'a pas encore activé ses alertes",
+  jeton_invalide: "alertes à réactiver",
+};
+
+/**
+ * Roster en direct : les trois proches voient en temps réel qui a répondu
+ * quoi, sans avoir à se téléphoner entre eux pour savoir qui s'en occupe.
+ * Désactive aussi les boutons d'action dès qu'un AUTRE proche a répondu —
+ * le verrou réel vit côté transaction (voir tenterRépondre), ceci n'est que
+ * le reflet visuel, pour ne pas laisser quelqu'un appuyer pour rien.
+ */
+function abonnerRosterIncident(incidentId, clé) {
+  if (désabonnerRoster) désabonnerRoster();
+  désabonnerRoster = firebase
+    .firestore()
+    .collection(CONFIG.rappelsCollection)
+    .doc(incidentId)
+    .onSnapshot((snap) => {
+      const incident = snap.data();
+      if (!incident) return;
+      const contacts = incident.contacts || {};
+
+      els.rappelRoster.innerHTML = "";
+      for (const [c, info] of Object.entries(contacts)) {
+        const ligne = document.createElement("p");
+        ligne.className = "hint";
+        ligne.textContent = `${info.nom} : ${LIBELLÉS_STATUT[info.statut] || info.statut}`;
+        els.rappelRoster.appendChild(ligne);
+      }
+
+      const priseEnChargeParAutrui =
+        incident.statut === "pris_en_charge" && incident.résoluPar !== clé;
+      els.rappelRépondreButton.disabled = priseEnChargeParAutrui;
+      els.rappelPlusTard15.disabled = priseEnChargeParAutrui;
+      els.rappelPlusTard60.disabled = priseEnChargeParAutrui;
+      els.rappelIndisponibleButton.disabled = priseEnChargeParAutrui;
+      if (priseEnChargeParAutrui) {
+        const nomAutre = (contacts[incident.résoluPar] || {}).nom || "Quelqu'un d'autre";
+        els.rappelIncidentStatut.textContent = `${nomAutre} s'en occupe déjà.`;
+      } else if (incident.statut === "expiré") {
+        els.rappelIncidentStatut.textContent = "Cet incident a expiré — personne n'a répondu à temps.";
+      }
+    });
+}
+
+/**
+ * Verrou réel : une transaction Firestore, pas une simple écriture — deux
+ * proches peuvent cliquer « Répondre » à la même seconde, et un seul doit
+ * déclencher l'appel vers la tablette de Jean, qui n'en gère qu'un à la
+ * fois. Celui qui perd la course voit « s'en occupe déjà » au lieu de
+ * lancer un appel qui échouerait silencieusement côté tablette.
+ */
+async function tenterRépondre(incidentId, clé) {
+  const db = firebase.firestore();
+  const ref = db.collection(CONFIG.rappelsCollection).doc(incidentId);
+  try {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const incident = snap.data() || {};
+      if (incident.statut === "pris_en_charge") {
+        throw new Error("DÉJÀ_PRIS_EN_CHARGE");
+      }
+      tx.set(
+        ref,
+        { statut: "pris_en_charge", résoluPar: clé, contacts: { [clé]: { statut: "en_appel" } } },
+        { merge: true }
+      );
+    });
+    await lancerAppel();
+    engine.forceConnect();
+  } catch (e) {
+    if (e.message !== "DÉJÀ_PRIS_EN_CHARGE") {
+      console.warn("[app] Prise en charge impossible :", e);
+      els.rappelIncidentStatut.textContent = "Non transmis — vérifiez votre connexion et réessayez.";
+    }
+  }
+}
+on("rappelRépondreButton", "click", () => {
+  const incidentId = paramètresURL().get("incident");
+  const clé = contactCourant();
+  if (incidentId && clé) tenterRépondre(incidentId, clé);
+});
+
+on("rappelPlusTard15", "click", () => choisirDélaiRappel(15));
+on("rappelPlusTard60", "click", () => choisirDélaiRappel(60));
 
 async function choisirDélaiRappel(minutes) {
-  els.rappelDiffere15.disabled = true;
-  els.rappelDiffere60.disabled = true;
+  const incidentId = paramètresURL().get("incident");
+  const clé = contactCourant();
+  if (!incidentId || !clé) return;
+  els.rappelPlusTard15.disabled = true;
+  els.rappelPlusTard60.disabled = true;
+  const rappelPrévuLe = Date.now() + minutes * 60 * 1000;
   try {
-    await engine.setDeviceSetting(
-      CONFIG.deviceDocId,
-      "aidantRappelPrévuLe",
-      Date.now() + minutes * 60 * 1000
-    );
-    els.rappelDiffereStatut.textContent = "C'est noté, merci — Jean le sait maintenant.";
+    await firebase
+      .firestore()
+      .collection(CONFIG.rappelsCollection)
+      .doc(incidentId)
+      .set({ contacts: { [clé]: { statut: "rappel_prévu", rappelPrévuLe } } }, { merge: true });
+    // Agrégé pour Jean (voir MainActivity) : le premier engagement précis
+    // l'emporte sur un « pas encore lu » générique.
+    await engine.setDeviceSetting(CONFIG.deviceDocId, "aidantRappelPrévuLe", rappelPrévuLe);
+    els.rappelIncidentStatut.textContent = "C'est noté, merci — Jean le sait maintenant.";
   } catch (e) {
     console.warn("[app] Délai de rappel non transmis :", e);
-    els.rappelDiffereStatut.textContent = "Non transmis — vérifiez votre connexion et réessayez.";
-    els.rappelDiffere15.disabled = false;
-    els.rappelDiffere60.disabled = false;
+    els.rappelIncidentStatut.textContent = "Non transmis — vérifiez votre connexion et réessayez.";
+  } finally {
+    els.rappelPlusTard15.disabled = false;
+    els.rappelPlusTard60.disabled = false;
   }
 }
+
+// « Je ne peux pas » est un geste explicite, distinct du silence — les deux
+// autres le voient tout de suite (voir abonnerRosterIncident) au lieu
+// d'attendre un délai d'expiration pour comprendre que ce proche est hors
+// jeu. Si les TROIS proches configurés ont répondu ça, Jean a le droit de
+// le savoir plutôt que de continuer à croire qu'un message attend d'être lu
+// (voir MainActivity, aidantIndisponibleLeMs).
+on("rappelIndisponibleButton", "click", async () => {
+  const incidentId = paramètresURL().get("incident");
+  const clé = contactCourant();
+  if (!incidentId || !clé) return;
+  els.rappelIndisponibleButton.disabled = true;
+  const ref = firebase.firestore().collection(CONFIG.rappelsCollection).doc(incidentId);
+  try {
+    await ref.set({ contacts: { [clé]: { statut: "indisponible" } } }, { merge: true });
+    const snap = await ref.get();
+    const contacts = (snap.data() || {}).contacts || {};
+    const tousIndisponibles = Object.values(contacts).every((c) => c.statut === "indisponible");
+    if (tousIndisponibles) {
+      await engine.setDeviceSetting(CONFIG.deviceDocId, "aidantIndisponibleLe", Date.now());
+    }
+    els.rappelIncidentStatut.textContent = "C'est transmis.";
+  } catch (e) {
+    console.warn("[app] Réponse non transmise :", e);
+    els.rappelIncidentStatut.textContent = "Non transmis — vérifiez votre connexion et réessayez.";
+    els.rappelIndisponibleButton.disabled = false;
+  }
+});
 
 // Le proche est auprès de Jean et veut simplement que ses paroles s'écrivent
 // sur la tablette : ni sonnerie, ni vidéo, ni son — Jean l'entend, il est à
@@ -1890,25 +2064,54 @@ on("aidantEnregistrer", "click", async () => {
   els.aidantStatut.textContent = "Enregistrement…";
   try {
     await engine.setDeviceSetting(CONFIG.deviceDocId, "aidantNom", els.aidantNom.value.trim());
+    for (const clé of CLÉS_CONTACTS) {
+      const nom = els[`contactNom${clé.slice(1)}`].value.trim();
+      const téléphone = els[`contactTel${clé.slice(1)}`].value.trim();
+      await engine.setDeviceSetting(CONFIG.deviceDocId, `rappelContacts.${clé}.nom`, nom);
+      await engine.setDeviceSetting(CONFIG.deviceDocId, `rappelContacts.${clé}.téléphone`, téléphone);
+    }
     els.aidantStatut.textContent = "Enregistré.";
   } catch (e) {
-    console.warn("[app] Enregistrement de l'aidant impossible :", e);
+    console.warn("[app] Enregistrement des proches impossible :", e);
     els.aidantStatut.textContent = "Enregistrement impossible — réessayez.";
   } finally {
     els.aidantEnregistrer.disabled = false;
   }
 });
 
+// Lien personnalisé par proche : porte sa clé (?contact=c1), pour que SON
+// jeton de notification aille dans SON slot, pas dans un autre (voir
+// activerAlertesButton ci-dessous et functions/index.js, créerEtNotifier).
+for (const clé of CLÉS_CONTACTS) {
+  const num = clé.slice(1);
+  on(`contactLien${num}`, "click", async () => {
+    const lien = `${location.origin}${location.pathname}?mode=aidant&contact=${clé}`;
+    const statutEl = els[`contactStatut${num}`];
+    try {
+      await navigator.clipboard.writeText(lien);
+      statutEl.textContent = "Lien copié — envoyez-le-lui une seule fois.";
+    } catch (e) {
+      statutEl.textContent = lien;
+    }
+  });
+}
+
 // ═══ ABONNEMENT AUX ALERTES (voir web-caller/firebase-messaging-sw.js) ═══
 //
-// Bouton visible UNIQUEMENT en ?mode=aidant (voir style.css) : c'est
-// Marie-Thérèse qui clique ici, sur SON téléphone, une seule fois après
-// avoir ouvert le lien que la famille lui a envoyé. Le jeton obtenu
-// identifie CE navigateur-ci auprès de Firebase Cloud Messaging ; la Cloud
-// Function (functions/index.js, envoyerRappel) s'en sert pour la notifier
-// quand Jean presse son bouton, sans numéro de téléphone ni SMS.
+// Bouton visible UNIQUEMENT en ?mode=aidant (voir style.css) : chaque
+// proche clique ici, sur SON téléphone, une seule fois après avoir ouvert
+// SON lien personnalisé (?contact=c1/c2/c3, copié depuis le panneau admin).
+// Le jeton obtenu identifie CE navigateur-ci auprès de Firebase Cloud
+// Messaging ; la Cloud Function (functions/index.js, créerEtNotifier) s'en
+// sert pour notifier ce proche précis quand Jean presse son bouton.
 on("activerAlertesButton", "click", async () => {
   if (!els.activerAlertesButton) return;
+  const clé = contactCourant();
+  if (!clé) {
+    els.alertesStatut.textContent =
+      "Lien incomplet — ouvrez le lien personnalisé copié depuis le panneau admin.";
+    return;
+  }
   els.activerAlertesButton.disabled = true;
   els.alertesStatut.textContent = "Activation…";
   try {
@@ -1924,7 +2127,7 @@ on("activerAlertesButton", "click", async () => {
       serviceWorkerRegistration: registration,
     });
     if (!token) throw new Error("Aucun jeton obtenu");
-    await engine.setDeviceSetting(CONFIG.deviceDocId, "aidantPushToken", token);
+    await engine.setDeviceSetting(CONFIG.deviceDocId, `rappelContacts.${clé}.pushToken`, token);
     els.alertesStatut.textContent = "Alertes activées — vous recevrez une notification quand Jean vous demandera.";
   } catch (e) {
     console.warn("[app] Activation des alertes impossible :", e);
@@ -2036,6 +2239,15 @@ function applyDeviceSettings(data) {
   // réécrit pendant que l'administrateur a le doigt sur le champ.
   if (typeof data.aidantNom === "string" && document.activeElement !== els.aidantNom) {
     els.aidantNom.value = data.aidantNom;
+  }
+  const rappelContacts = data.rappelContacts || {};
+  for (const clé of CLÉS_CONTACTS) {
+    const num = clé.slice(1);
+    const c = rappelContacts[clé] || {};
+    const nomEl = els[`contactNom${num}`];
+    const telEl = els[`contactTel${num}`];
+    if (typeof c.nom === "string" && document.activeElement !== nomEl) nomEl.value = c.nom;
+    if (typeof c.téléphone === "string" && document.activeElement !== telEl) telEl.value = c.téléphone;
   }
 
   // Empreinte du mot de passe d'accès au PWA (voir
