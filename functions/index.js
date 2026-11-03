@@ -195,11 +195,21 @@ async function créerEtNotifier(environnement, baseUrl, incidentRef) {
   const deviceSnap = await db.doc(environnement.deviceDoc).get();
   const rappelContacts = deviceSnap.get("rappelContacts") || {};
 
+  // Un jeton SEUL suffit à considérer le contact configuré — le nom ne
+  // sert qu'à l'affichage (bouton de Jean, roster des proches), le jeton
+  // à l'envoi lui-même. Exiger les deux aurait ignoré en silence un
+  // proche qui a activé ses alertes avant que l'administrateur ait pris
+  // le temps de lui donner un nom dans le panneau admin — repéré en
+  // testant : les jetons étaient bien là, mais personne n'était notifié.
   const contacts = {};
   for (const clé of CLÉS_CONTACTS) {
     const brut = rappelContacts[clé];
-    if (!brut || !brut.nom) continue;
-    contacts[clé] = { nom: brut.nom, statut: "non_lu", téléphone: brut.téléphone || null };
+    if (!brut || (!brut.nom && !brut.pushToken)) continue;
+    contacts[clé] = {
+      nom: brut.nom || "Un proche",
+      statut: "non_lu",
+      téléphone: brut.téléphone || null,
+    };
   }
 
   if (Object.keys(contacts).length === 0) {
