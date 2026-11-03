@@ -19,18 +19,18 @@ PROJET="seniorvisio"
 BASE_URL="https://seniorvisio-test.web.app"
 HORODATAGE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-RÉPONSE=$(curl -s -X POST \
+REPONSE=$(curl -s -X POST \
   "https://firestore.googleapis.com/v1/projects/${PROJET}/databases/(default)/documents/rappels_test?key=${API_KEY}" \
   -H "Content-Type: application/json" \
   -d "{\"fields\":{\"demandéLe\":{\"timestampValue\":\"${HORODATAGE}\"},\"origine\":{\"stringValue\":\"simulation\"}}}")
 
-ID=$(python3 -c "import json,sys; print(json.loads('''$RÉPONSE''')['name'].split('/')[-1])")
+ID=$(python3 -c "import json,sys; print(json.loads('''$REPONSE''')['name'].split('/')[-1])")
 
 echo "Incident simulé créé : ${ID}"
 echo
 echo "Liens de test, un par proche (ouvrir chacun dans un navigateur distinct) :"
-for clé in c1 c2 c3; do
-  echo "  ${clé} : ${BASE_URL}/?mode=aidant&incident=${ID}&contact=${clé}&rappel=1"
+for cle in c1 c2 c3; do
+  echo "  ${cle} : ${BASE_URL}/?mode=aidant&incident=${ID}&contact=${cle}&rappel=1"
 done
 echo
 echo "Pour simuler « rappeler plus tard » ou « je ne peux pas », remplacer"
