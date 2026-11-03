@@ -231,19 +231,24 @@ async function créerEtNotifier(environnement, baseUrl, incidentRef) {
     })
   );
 
-  const misesÀJour = {};
+  // Objet imbriqué, PAS des clés pointées : .set(…, {merge:true}) ne
+  // découpe pas une clé "contacts.c1.statut" en chemin comme le ferait
+  // .update() — elle créerait un champ littéralement nommé ainsi, points
+  // compris, au lieu de nicher statut sous contacts.c1 (piège réel, repéré
+  // en re-testant : voir webrtc-engine.js, setDeviceSetting, même défaut).
+  const contactsMisÀJour = {};
   const journal = [];
   for (const { clé, nom, résultat } of résultats) {
     if (résultat !== "ok") {
-      misesÀJour[`contacts.${clé}.statut`] = résultat;
+      contactsMisÀJour[clé] = { statut: résultat };
       journal.push(journalEntrée(`push vers ${nom} : ${résultat}`));
     } else {
       journal.push(journalEntrée(`push envoyé à ${nom}`));
     }
   }
-  if (Object.keys(misesÀJour).length > 0 || journal.length > 0) {
+  if (Object.keys(contactsMisÀJour).length > 0 || journal.length > 0) {
     await incidentRef.set(
-      { ...misesÀJour, journal: FieldValue.arrayUnion(...journal) },
+      { contacts: contactsMisÀJour, journal: FieldValue.arrayUnion(...journal) },
       { merge: true }
     );
   }

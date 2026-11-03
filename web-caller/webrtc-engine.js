@@ -1073,13 +1073,29 @@ class RealCallEngine extends CallEngine {
    * Écrit un réglage de transcription. `merge` et non `update` : le document
    * d'appareil n'existe pas encore tant que la tablette n'a pas envoyé son
    * premier signe de vie, et un update échouerait alors silencieusement.
+   *
+   * `field` peut porter des points (ex. "rappelContacts.c1.nom") pour viser
+   * un champ imbriqué — mais PAS comme le ferait .update(), qui découpe
+   * lui-même une clé pointée en chemin. .set(…, {merge:true}) ne le fait
+   * PAS : une clé littérale "a.b" y crée un champ nommé « a.b », points
+   * compris, pas un champ b niché dans a (piège réel, repéré en re-testant
+   * le rappel à trois contacts — rappelContacts.c1.pushToken existait tel
+   * quel, pointillés inclus, au lieu d'être niché). On construit donc
+   * l'objet imbriqué nous-mêmes avant l'écriture ; le merge profond de
+   * Firestore fait alors le reste correctement (il ne touche pas aux clés
+   * sœurs, contrairement à un remplacement complet du champ racine).
    */
   async setDeviceSetting(deviceId, field, value) {
     if (!this._available) return;
+    const chemin = field.split(".");
+    let donnée = value;
+    for (let i = chemin.length - 1; i > 0; i--) {
+      donnée = { [chemin[i]]: donnée };
+    }
     await this._db
       .collection("devices")
       .doc(deviceId)
-      .set({ [field]: value }, { merge: true });
+      .set({ [chemin[0]]: donnée }, { merge: true });
   }
 
   /**
