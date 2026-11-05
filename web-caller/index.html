@@ -774,47 +774,6 @@
           <p class="hint" id="callLogStatus"></p>
           <pre id="callLogText" class="call-log" hidden></pre>
 
-          <h3 class="admin-section">Sous-titres par l'application de Google</h3>
-          <p class="hint">
-            Jean — ou qui se trouve dans la pièce — appuie sur le bouton
-            <strong>« Sous-titres »</strong>, en haut à gauche de son écran, et
-            la tablette passe à « Transcription instantanée » de Google, qui
-            écrit en continu ce qui se dit autour de lui.
-          </p>
-          <p class="hint">
-            <strong>Il n'y a plus de déclenchement automatique à la voix.</strong>
-            C'est un geste, et rien d'autre ne le provoque : la tablette
-            n'écoute plus les paroles de la pièce. Un appel entrant ramène
-            l'écran de Jean par-dessus.
-          </p>
-          <p class="hint">
-            Le retour se fait par le bandeau posé sur l'écran de Google, par le
-            bouton Accueil, ou à l'extinction de la dalle. Le bandeau demande
-            une autorisation à donner UNE FOIS depuis l'écran d'administration
-            de la tablette — sans elle, seul le bouton Accueil ramène Jean, et
-            il n'a aucune raison de le connaître.
-          </p>
-
-          <div class="caption-control">
-            <label for="handoffReturnSlider">Filet de sécurité : retour forcé après</label>
-            <input type="range" id="handoffReturnSlider"
-                   min="0" max="120" step="5" value="30" data-unit=" min">
-          </div>
-          <p class="hint">
-            Un filet, pas le chemin normal : il ne sert que si l'écran ne
-            s'éteint jamais — Transcription instantanée est faite pour être lue
-            en continu et pourrait le maintenir allumé. Le diagnostic compte
-            désormais les retours par cause : si tous se font par « écran
-            éteint », ce curseur peut être mis à zéro ; si tous se font par
-            « durée écoulée », c'est que la veille ne vient pas.
-          </p>
-          <p class="hint">
-            Après un retour, deux minutes s'écoulent avant qu'une nouvelle
-            bascule soit possible — sans quoi un mot prononcé renverrait Jean
-            aussitôt sur l'autre écran, et il ne pourrait jamais récupérer le
-            sien.
-          </p>
-
           <h3 class="admin-section">Plafond des services payants</h3>
           <p class="hint">
             Garde-fou de dernier recours : aucune détection de voix ne

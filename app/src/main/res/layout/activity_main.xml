@@ -178,22 +178,9 @@
             android:visibility="gone"
             android:background="@drawable/fond_bouton_vert_appel" />
 
-        <!-- ═══ « SOUS-TITRES » : JEAN APPELLE LA TRANSCRIPTION QUAND IL VEUT ═══
-
-             Bascule vers « Transcription instantanée » de Google, SANS AUCUNE
-             CONDITION : ni le mode automatique armé, ni une voix détectée, ni
-             les gardes qui retiennent la bascule automatique (voir
-             RoomHandoffController.forceHandOff). Jean appuie, l'écran change.
-
-             Le mode automatique répond à « quelqu'un parle, écris-le ». Ce
-             bouton répond à une autre question, et elle est à lui : « je veux
-             lire, tout de suite ». Les conditions qui protègent le premier —
-             ne pas basculer sur un aspirateur, ne pas repartir trois secondes
-             après un retour — n'ont aucun sens quand c'est lui qui demande.
-
-             Masqué quand l'application de Google n'est pas installée (voir
-             MainActivity) : une cible qui ne peut rien faire est pire qu'une
-             absence, parce qu'on y revient. -->
+        <!-- Bouton « Sous-titres » retiré (voir MainActivity.brancherGalerie) :
+             masqué en permanence (visibility="gone"), conservé ici tel quel
+             pour ne pas toucher à HomeZonesController. -->
         <Button
             android:id="@+id/boutonTranscription"
             android:layout_width="match_parent"

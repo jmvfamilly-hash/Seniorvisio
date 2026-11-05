@@ -23,7 +23,6 @@ import androidx.core.content.ContextCompat
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.CallTrace
 import com.seniorvisio.core.AndroidSpeechSession
-import com.seniorvisio.core.RoomHandoffController
 import com.seniorvisio.ui.MainActivity
 import java.time.LocalDateTime
 import kotlin.math.sqrt
@@ -80,26 +79,6 @@ class RoomPresenceService : Service() {
      * startListening).
      */
     private var androidSpeech: AndroidSpeechSession? = null
-
-    /**
-     * Bascule vers Transcription instantanée sur voix entendue (voir
-     * RoomHandoffController). Créé paresseusement : inutile tant que le mode
-     * n'est pas armé.
-     */
-    private var handoff: RoomHandoffController? = null
-
-    /**
-     * Vrai quand on a relâché le micro exprès, au profit d'une autre
-     * application.
-     *
-     * Sans ce drapeau, scheduleCaptureRetry — qui par conception n'abandonne
-     * JAMAIS — reprendrait le micro à Transcription instantanée toutes les
-     * quelques secondes et la rendrait inutilisable. Cette obstination est une
-     * qualité dans tous les autres cas : une tablette dont le métier est
-     * d'écouter ne doit pas renoncer à écouter. Il faut donc lui dire
-     * explicitement que ce silence-ci est voulu.
-     */
-    @Volatile private var micYieldedToCompanion = false
 
     /** Vrai le temps d'un vrai appel : aucun des deux mécanismes d'écoute ne doit redémarrer tout seul. */
     @Volatile private var pausedForCall = false
@@ -278,7 +257,6 @@ class RoomPresenceService : Service() {
         when (intent?.action) {
             ACTION_PAUSE -> {
                 pausedForCall = true
-                endHandoffForCall()
                 stopListening()
             }
             ACTION_RESUME -> {
@@ -293,11 +271,6 @@ class RoomPresenceService : Service() {
     override fun onDestroy() {
         stopListening()
         unregisterReceiver(screenStateReceiver)
-        // Le bandeau de retour est une fenêtre système : la laisser derrière
-        // soi la ferait flotter sur la tablette sans plus personne pour la
-        // retirer.
-        handoff?.close()
-        handoff = null
         if (running === this) running = null
         super.onDestroy()
     }
@@ -366,9 +339,6 @@ class RoomPresenceService : Service() {
 
     private fun startAndroidSpeech() {
         if (androidSpeech?.isRunning() == true) return
-        // Même garde que pour notre capture : Transcription instantanée tient
-        // le micro, et le lui reprendre la rendrait inutilisable.
-        if (micYieldedToCompanion) return
         val session = AndroidSpeechSession(
             context = this,
             onText = { text, isFinal ->
@@ -397,9 +367,6 @@ class RoomPresenceService : Service() {
 
     private fun startCapture() {
         if (isCapturing) return
-        // Micro cédé volontairement à une application compagne : ne pas le lui
-        // reprendre. C'est le seul cas où cette boucle doit se taire.
-        if (micYieldedToCompanion) return
         retryHandler.removeCallbacksAndMessages(null)
 
         val minBufferSize = AudioRecord.getMinBufferSize(
@@ -457,7 +424,6 @@ class RoomPresenceService : Service() {
      * redémarrage de la tablette, sans le moindre signe extérieur.
      */
     private fun scheduleCaptureRetry() {
-        if (micYieldedToCompanion) return
         captureRetries++
         // Jamais d'abandon définitif. La version précédente s'arrêtait au bout
         // de quinze tentatives, soit trente secondes : passé ce délai, la
@@ -483,18 +449,6 @@ class RoomPresenceService : Service() {
     private fun stopListening() {
         stopAndroidSpeech()
         stopCapture()
-    }
-
-    /**
-     * Un appel prend l'écran : la bascule doit cesser immédiatement.
-     *
-     * Sans ça, le bandeau de retour — une fenêtre système, posée au-dessus de
-     * tout — flotterait par-dessus le visage de l'appelant, et l'état interne
-     * croirait encore la tablette sur l'application de Google.
-     */
-    private fun endHandoffForCall() {
-        handoff?.returnToHomeScreen("appel entrant")
-        micYieldedToCompanion = false
     }
 
     /**
@@ -572,38 +526,6 @@ class RoomPresenceService : Service() {
         roomTranscriptionOnText = null
         roomTranscriptionOnError = null
     }
-
-    private fun ensureHandoff(): RoomHandoffController {
-        handoff?.let { return it }
-        return RoomHandoffController(
-            context = this,
-            adminConfig = adminConfig,
-            onRelease = {
-                micYieldedToCompanion = true
-                stopListening()
-            },
-            onResume = {
-                micYieldedToCompanion = false
-                startListening()
-            },
-        ).also { handoff = it }
-    }
-
-    /** Senior Visio est revenu au premier plan : voir RoomHandoffController.noteBackOnHomeScreen. */
-    fun noteBackOnHomeScreen() {
-        handoff?.noteBackOnHomeScreen()
-    }
-
-    /** Ce que fait la bascule, en une phrase, pour l'écran admin et le signe de vie. */
-    fun describeHandoff(): String =
-        handoff?.let { "bouton « Sous-titres » seul — ${it.describe()}" }
-            ?: "bouton « Sous-titres » seul (bascule automatique retirée)"
-
-    /**
-     * Bascule sur commande, sans condition, depuis l'écran d'administration.
-     * Rend le message d'échec, ou null si c'est parti.
-     */
-    fun testHandoff(): String? = ensureHandoff().forceHandOff()
 
     private fun computeRms(buffer: ShortArray, length: Int): Double {
         var sumOfSquares = 0.0

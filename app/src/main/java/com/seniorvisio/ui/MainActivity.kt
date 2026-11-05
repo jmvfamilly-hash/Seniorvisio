@@ -457,12 +457,6 @@ class MainActivity : AppCompatActivity() {
      */
     override fun onResume() {
         super.onResume()
-        // Senior Visio est de nouveau devant : si la tablette était basculée
-        // sur Transcription instantanée, elle ne l'est plus — que ce soit par
-        // le bouton Accueil ou par un appel qui a pris l'écran. Sans ce signal,
-        // le bandeau de retour continuerait de flotter par-dessus, et le micro
-        // ne serait jamais repris (voir RoomHandoffController).
-        RoomPresenceService.running?.noteBackOnHomeScreen()
         // L'écran revient au premier plan : il redemande la photo du créneau
         // en cours plutôt que d'attendre le prochain changement. C'est ce qui
         // fait qu'une dalle rallumée par un bruit montre déjà la photo du
@@ -645,8 +639,9 @@ class MainActivity : AppCompatActivity() {
         // retiré de la même façon : boutonTranscription et textConsigneSousTitres
         // restent dans activity_main.xml (déjà masqués par défaut,
         // visibility="gone"), seul brancherBoutonTranscription() disparaît —
-        // c'était le seul code qui les rendait visibles. Le mode automatique
-        // (RoomHandoffController, déclenché par la voix) n'est pas concerné.
+        // c'était le seul code qui les rendait visibles. La bascule
+        // automatique déclenchée par la voix a elle aussi été retirée
+        // (RoomHandoffController et son dispositif ont disparu entièrement).
         // ═══ LE GLISSEMENT VIENT DU PAGER, PLUS DE NOUS ═══
         //
         // Il était détecté à la main par GlissementHorizontal. C'est la

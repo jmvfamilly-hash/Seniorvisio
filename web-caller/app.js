@@ -528,7 +528,6 @@ const els = {
   cancelButton: el("cancelButton"),
   countdownBar: el("countdownBar"),
   policeSelect: el("policeSelect"),
-  handoffReturnSlider: el("handoffReturnSlider"),
   galeriePreferee: el("galeriePreferee"),
   galeriePrefereeStatut: el("galeriePrefereeStatut"),
   cadencePhotos: el("cadencePhotos"),
@@ -1445,9 +1444,6 @@ const ADMIN_SLIDER_FIELDS = [
   // nouvelle convention (voir DeviceStatusReporter, FIELD_QUOTA_PREFIX).
   ["quotaAssemblyaiSlider", "quotaHours_assemblyai"],
   ["quotaGladiaSlider", "quotaHours_gladia"],
-  // Zéro est légitime ici — « pas de retour minuté » — comme pour les
-  // plafonds mensuels.
-  ["handoffReturnSlider", "roomHandoffReturnMinutes"],
   // Zéro est exclu par le curseur lui-même (min=1), et la tablette le borne
   // une seconde fois à la lecture : un sommeil de zéro heure ferait un bouton
   // qui ne fait rien, ce qui est précisément le défaut qu'il corrige.
@@ -2324,8 +2320,7 @@ function applyDeviceSettings(data) {
     // veut dire « sans limite » et non « jamais réglé ». Le refuser ferait
     // revenir le curseur à dix heures à chaque signe de vie, en écrasant
     // silencieusement le choix de l'administrateur.
-    const floor =
-      field.startsWith("quotaHours_") || field === "roomHandoffReturnMinutes" ? 0 : 1;
+    const floor = field.startsWith("quotaHours_") ? 0 : 1;
     if (Number.isFinite(value) && value >= floor) els[elementKey].value = value;
   }
   // Affecter .value par programme ne déclenche aucun événement « input » :

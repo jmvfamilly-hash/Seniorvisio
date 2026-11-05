@@ -28,9 +28,8 @@ fun Activity.appliquerMiseEnFormeSenior() {
  * une police retirée d'une version à l'autre, par exemple.
  *
  * Exposé plutôt que privé : tout ce qui est créé à la volée, hors d'un arbre
- * gonflé depuis une mise en page, doit pouvoir s'habiller pareil (voir
- * ReturnBannerOverlay). Un seul endroit lit le réglage, donc un seul endroit
- * peut se tromper.
+ * gonflé depuis une mise en page, doit pouvoir s'habiller pareil. Un seul
+ * endroit lit le réglage, donc un seul endroit peut se tromper.
  */
 fun policeChoisie(context: Context): PoliceSenior =
     PoliceSenior.depuisValeurDistante(AdminConfig(context).policeSenior)

@@ -14,7 +14,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.provider.Settings
 import android.text.InputType
 import android.webkit.WebView
 import android.widget.ArrayAdapter
@@ -38,7 +37,6 @@ import com.seniorvisio.core.KioskManager
 import com.seniorvisio.core.WifiConfigurator
 import com.seniorvisio.service.RoomPresenceService
 import com.seniorvisio.ui.MainActivity
-import com.seniorvisio.ui.ReturnBannerOverlay
 import com.seniorvisio.ui.TranscriptionLabActivity
 
 /**
@@ -113,19 +111,6 @@ class AdminSettingsActivity : AppCompatActivity() {
             appendLine("Verrou de réveil tenu : ${if (status.wakeLockHeld) "oui" else "non"}")
             appendLine("Rallumages demandés : ${status.wakeRequests}")
             append("Transcription en cours : ${if (status.transcribing) "oui" else "non"}")
-        }
-        refreshHandoffState()
-    }
-
-    /** L'état de la bascule vers Transcription instantanée, rafraîchi au même rythme que le reste. */
-    private fun refreshHandoffState() {
-        findViewById<TextView>(R.id.textHandoffState).text = buildString {
-            append(roomService?.describeHandoff() ?: "service non joignable")
-            append("\nBandeau de retour : ")
-            append(
-                if (Settings.canDrawOverlays(this@AdminSettingsActivity)) "autorisé"
-                else "NON autorisé — seul le bouton Accueil ramènera Jean"
-            )
         }
     }
 
@@ -282,30 +267,6 @@ class AdminSettingsActivity : AppCompatActivity() {
         // franc plutôt qu'un geste caché que personne ne retrouve.
         findViewById<Button>(R.id.buttonTranscriptionLab).setOnClickListener {
             startActivity(Intent(this, TranscriptionLabActivity::class.java))
-        }
-
-        // L'autorisation de dessiner par-dessus les autres applications ne peut
-        // pas s'accorder par le code : elle est précisément la porte des
-        // attaques par recouvrement, et même un propriétaire d'appareil ne peut
-        // se la donner. Ce bouton ouvre la page où un proche la donne, une fois.
-        findViewById<Button>(R.id.buttonOverlayPermission).setOnClickListener {
-            try {
-                startActivity(ReturnBannerOverlay.permissionSettingsIntent(this))
-            } catch (e: ActivityNotFoundException) {
-                Toast.makeText(this, "Réglage de superposition introuvable sur cette tablette", Toast.LENGTH_LONG).show()
-            }
-        }
-
-        findViewById<Button>(R.id.buttonTestHandoff).setOnClickListener {
-            val service = roomService
-            if (service == null) {
-                Toast.makeText(this, "Service d'écoute non joignable", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val failure = service.testHandoff()
-            if (failure != null) {
-                Toast.makeText(this, "Bascule impossible : $failure", Toast.LENGTH_LONG).show()
-            }
         }
 
         findViewById<Button>(R.id.buttonPickWifiNetwork).setOnClickListener { pickWifiNetwork() }

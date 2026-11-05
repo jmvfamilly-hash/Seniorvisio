@@ -5,7 +5,6 @@ import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
-import android.content.pm.PackageManager
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.Looper
@@ -152,7 +151,6 @@ class DeviceStatusReporter(private val context: Context) {
                 // trait, et c'est cette ligne-là qu'on regarde en premier.
                 FIELD_APP_VERSION to Environnement.étiquetteVersion(),
                 FIELD_BATTERY_PERCENT to batteryPercent,
-                FIELD_COMPANION_APPS to companionAppVersions(),
                 FIELD_LAST_HEARTBEAT_AT to FieldValue.serverTimestamp(),
                 FIELD_ADMIN_PIN_FINGERPRINT to adminPinFingerprint(),
                 FIELD_ACCESS_FINGERPRINT to accessFingerprint(),
@@ -282,11 +280,6 @@ class DeviceStatusReporter(private val context: Context) {
                 append(" — pic ").append(format1(androidPeak))
                 append(" dB / seuil ").append(format1(androidThreshold)).append(" dB")
             }
-            append(" — bascule : ").append(service.describeHandoff())
-            // La bascule vers Transcription instantanée : ce qu'elle fait, ou
-            // ce qui l'en empêche. Les causes de refus — application absente,
-            // fenêtre de nuit, pause après un retour — se ressemblent toutes
-            // vues de loin : un mode qui ne bascule pas.
             if (!status.wakeEnabled) append(" — réveil désactivé")
             if (status.inNightWindow) append(" — réveil bloqué (nuit)")
             append(" — réveils demandés : ").append(status.wakeRequests)
@@ -327,25 +320,6 @@ class DeviceStatusReporter(private val context: Context) {
         java.security.MessageDigest.getInstance("SHA-256")
             .digest(valeur.toByteArray())
             .joinToString("") { "%02x".format(it) }
-
-    /**
-     * Version installée de chaque application compagne, remontée avec le signe
-     * de vie. Senior Visio ne maîtrise pas ces versions (c'est Google qui met
-     * à jour la transcription) : sans cette remontée, une régression due à une
-     * mise à jour tierce ne se découvrirait que par Jean, sur place.
-     *
-     * Valeur "absent" plutôt qu'omission quand le paquet n'est pas là : c'est
-     * une information en soi, et elle se distingue ainsi d'un heartbeat trop
-     * ancien pour contenir le champ.
-     */
-    private fun companionAppVersions(): Map<String, String> =
-        CompanionApps.allowedPackages.associateWith { packageName ->
-            try {
-                context.packageManager.getPackageInfo(packageName, 0).versionName ?: "inconnue"
-            } catch (_: PackageManager.NameNotFoundException) {
-                "absent"
-            }
-        }
 
     /**
      * Écoute une mise à jour demandée à distance (URL de l'APK + version
@@ -624,12 +598,6 @@ class DeviceStatusReporter(private val context: Context) {
                 adminConfig.callEngine = it
                 Log.i(TAG, "Moteur des appels réglé à distance : ${it.remoteValue}")
             }
-        }
-        snapshot.getBoolean(FIELD_ROOM_HANDOFF_ENABLED)?.let {
-            adminConfig.roomHandoffEnabled = it
-        }
-        snapshot.getLong(FIELD_ROOM_HANDOFF_RETURN_MINUTES)?.let {
-            adminConfig.roomHandoffReturnMinutes = it.toInt()
         }
         snapshot.getBoolean(FIELD_ROOM_WAKE_ENABLED)?.let {
             adminConfig.roomWakeEnabled = it
@@ -918,7 +886,6 @@ class DeviceStatusReporter(private val context: Context) {
         private const val USAGE_COLLECTION = "usage"
         private const val FIELD_APP_VERSION = "appVersion"
         private const val FIELD_BATTERY_PERCENT = "batteryPercent"
-        private const val FIELD_COMPANION_APPS = "companionAppVersions"
         private const val FIELD_LAST_HEARTBEAT_AT = "lastHeartbeatAt"
         private const val FIELD_REQUESTED_VERSION = "requestedVersion"
         private const val FIELD_REQUESTED_APK_URL = "requestedApkUrl"
@@ -997,8 +964,6 @@ class DeviceStatusReporter(private val context: Context) {
 
         private const val RESTART_REQUEST_CODE = 4207
         private const val RESTART_DELAY_MS = 1_500L
-        private const val FIELD_ROOM_HANDOFF_ENABLED = "roomHandoffEnabled"
-        private const val FIELD_ROOM_HANDOFF_RETURN_MINUTES = "roomHandoffReturnMinutes"
         private const val FIELD_ROOM_WAKE_ENABLED = "roomWakeEnabled"
         private const val FIELD_ROOM_WAKE_THRESHOLD = "roomWakeThreshold"
         private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"

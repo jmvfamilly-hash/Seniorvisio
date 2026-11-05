@@ -29,28 +29,13 @@
 
     <uses-feature android:name="android.hardware.camera.front" android:required="true" />
 
-    <!-- ═══ SYSTEM_ALERT_WINDOW : ELLE REVIENT AVEC LA BASCULE ═══
-
-         Elle sert au bandeau de retour posé par-dessus « Transcription
-         instantanée » : sans lui, le seul chemin de retour serait le bouton
-         Accueil, que Jean n'a aucune raison de connaître.
-
-         C'est la permission même des attaques par recouvrement, et elle ne
-         s'accorde pas toute seule : même un propriétaire d'appareil ne peut se
-         la donner. Elle se donne une fois, à la main, depuis les Réglages — et
-         la bascule fonctionne sans elle, en dégradé. Retirée quand la bascule
-         l'avait été, remise avec elle : une permission de cette portée ne
-         reste pas déclarée « au cas où ».
-
-         Depuis Android 11, une application ne voit plus les autres paquets
+    <!-- Depuis Android 11, une application ne voit plus les autres paquets
          installés sans les déclarer dans <queries> : sans cette section,
          getLaunchIntentForPackage et getPackageInfo échouent exactement comme
          si l'application était absente, alors qu'elle est bien là (constaté en
          test réel sur la tablette). Déclaration ciblée plutôt que la
          permission QUERY_ALL_PACKAGES, disproportionnée et restreinte par
          Google Play. -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-
     <queries>
         <!-- Détecte le ou les navigateurs installés (voir
              AdminSettingsActivity.resolveBrowsers, KioskManager.
@@ -76,12 +61,6 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
-
-        <!-- « Transcription instantanée » de Google (voir CompanionApps). Sans
-             cette déclaration, getLaunchIntentForPackage rend null pour un
-             paquet pourtant installé — indiscernable d'un paquet absent, et
-             sans erreur pour le dire : constaté en test réel. -->
-        <package android:name="com.google.audio.hearing.visualization.accessibility.scribe" />
     </queries>
 
     <!-- Nécessaire à la détection/validation d'un portail captif (voir
