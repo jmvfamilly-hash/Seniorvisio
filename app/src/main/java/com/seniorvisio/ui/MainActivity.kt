@@ -33,7 +33,6 @@ import com.seniorvisio.admin.AdminSettingsActivity
 import com.seniorvisio.core.AdminConfig
 import com.seniorvisio.core.AlertVolume
 import com.seniorvisio.core.CallTrace
-import com.seniorvisio.core.CompanionApps
 import com.seniorvisio.core.MiseEnVeille
 import com.seniorvisio.core.Environnement
 import com.seniorvisio.core.KioskManager
@@ -641,7 +640,13 @@ class MainActivity : AppCompatActivity() {
         // éteindre la dalle depuis l'accueil — brancherSommeil n'est donc plus
         // appelé ici (il l'est toujours côté écran d'appel, en mode
         // « Sous-titres », où le bouton reste visible).
-        brancherBoutonTranscription()
+        //
+        // Plus de bouton « Sous-titres » non plus, pour la même raison, et
+        // retiré de la même façon : boutonTranscription et textConsigneSousTitres
+        // restent dans activity_main.xml (déjà masqués par défaut,
+        // visibility="gone"), seul brancherBoutonTranscription() disparaît —
+        // c'était le seul code qui les rendait visibles. Le mode automatique
+        // (RoomHandoffController, déclenché par la voix) n'est pas concerné.
         // ═══ LE GLISSEMENT VIENT DU PAGER, PLUS DE NOUS ═══
         //
         // Il était détecté à la main par GlissementHorizontal. C'est la
@@ -722,61 +727,6 @@ class MainActivity : AppCompatActivity() {
         super.onUserInteraction()
         if (adminConfig.isSleeping()) {
             MiseEnVeille.réveiller(this, "Jean a touché l'écran ou un bouton")
-        }
-    }
-
-    /**
-     * Le bouton « Sous-titres », en haut à gauche.
-     *
-     * ═══ SANS AUCUNE CONDITION, ET C'EST LA DEMANDE ═══
-     *
-     * Il passe par forceHandOff, qui ne consulte aucune garde : ni le mode
-     * automatique armé, ni une voix détectée, ni la nuit, ni le délai de
-     * retenue après un retour. Ces gardes protègent la bascule AUTOMATIQUE
-     * d'un aspirateur ou d'un aller-retour sans fin ; elles n'ont aucun sens
-     * quand c'est Jean qui demande.
-     *
-     * ═══ MASQUÉ PLUTÔT QU'INERTE ═══
-     *
-     * Si « Transcription instantanée » n'est pas installée, le bouton
-     * n'apparaît pas. Une cible qui ne fait rien est pire qu'une absence :
-     * Jean y revient, conclut que la tablette ne répond plus, et ce n'est pas
-     * une conclusion qu'il peut vérifier ni signaler.
-     *
-     * Réévalué à chaque retour sur l'écran, et non une fois au démarrage :
-     * l'application peut être installée pendant la vie du processus, et une
-     * tablette qui exige un redémarrage pour voir un bouton apparaître est une
-     * tablette qu'il faut aller toucher.
-     *
-     * ═══ ET S'IL ÉCHOUE, IL LE DIT EN FRANÇAIS ═══
-     *
-     * Le message vient de forceHandOff, écrit pour un développeur. Il n'est
-     * PAS montré tel quel : Jean lirait « bascule refusée : ActivityNotFound »
-     * sur son écran. Une phrase unique et lisible, et le détail part au
-     * journal, où quelqu'un saura le lire.
-     */
-    private fun brancherBoutonTranscription() {
-        val bouton = findViewById<Button>(R.id.boutonTranscription) ?: return
-        val visible = if (CompanionApps.isTranscriptionInstalled(this)) View.VISIBLE else View.GONE
-        bouton.visibility = visible
-        // La consigne du bandeau suit le bouton : jamais l'une sans l'autre.
-        findViewById<TextView>(R.id.textConsigneSousTitres)?.visibility = visible
-        bouton.setOnClickListener {
-            UsageStats.noteGeste(UsageStats.GESTE_TRANSCRIPTION)
-            val service = RoomPresenceService.running
-            if (service == null) {
-                CallTrace.record("BASCULE bouton", "service d'écoute non joignable")
-                Toast.makeText(this, MESSAGE_TRANSCRIPTION_INDISPONIBLE, Toast.LENGTH_LONG).show()
-                return@setOnClickListener
-            }
-            val échec = service.testHandoff()
-            CallTrace.record(
-                "BASCULE bouton",
-                if (échec == null) "demandée par Jean — partie" else "demandée par Jean — refusée : $échec",
-            )
-            if (échec != null) {
-                Toast.makeText(this, MESSAGE_TRANSCRIPTION_INDISPONIBLE, Toast.LENGTH_LONG).show()
-            }
         }
     }
 
@@ -960,18 +910,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
-
-        /**
-         * Ce que Jean lit quand la transcription ne peut pas s'ouvrir.
-         *
-         * Une phrase, la même quelle que soit la cause. Les causes réelles —
-         * application absente, écran déjà basculé, service non joignable —
-         * partent au journal, où quelqu'un saura les lire. Les montrer ici
-         * demanderait à Jean de distinguer des situations sur lesquelles il
-         * n'a aucune prise.
-         */
-        private const val MESSAGE_TRANSCRIPTION_INDISPONIBLE =
-            "Les sous-titres ne sont pas disponibles en ce moment"
 
         /** Voir RoomPresenceService.ensureAwake : un bruit dans la pièce demande d'allumer la dalle. */
         const val EXTRA_WAKE_ON_SOUND = "extra_wake_on_sound"
