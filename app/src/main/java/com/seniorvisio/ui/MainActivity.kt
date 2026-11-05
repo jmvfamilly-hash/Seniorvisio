@@ -520,6 +520,12 @@ class MainActivity : AppCompatActivity() {
      * la bande du bas (voir rafraîchirStatutRappelAidant).
      */
     private fun rafraîchirBoutonAppelerAidant() {
+        // Voir BuildConfig.RAPPEL_AIDANT_VISIBLE : fonctionnalité pas encore
+        // publiée, masquée quel que soit le réglage distant.
+        if (!BuildConfig.RAPPEL_AIDANT_VISIBLE) {
+            boutonAppelerAidant.visibility = View.GONE
+            return
+        }
         val nom = adminConfig.aidantNom
         boutonAppelerAidant.visibility = if (nom.isBlank()) View.GONE else View.VISIBLE
         if (nom.isNotBlank()) {
@@ -546,6 +552,10 @@ class MainActivity : AppCompatActivity() {
      * d'utile à dire à Jean, et deviendrait juste un texte figé de plus.
      */
     private fun rafraîchirStatutRappelAidant() {
+        if (!BuildConfig.RAPPEL_AIDANT_VISIBLE) {
+            textStatutRappelAidant.visibility = View.GONE
+            return
+        }
         val demandéLe = adminConfig.dernierRappelDemandéLeMs
         val expiré = demandéLe == 0L ||
             System.currentTimeMillis() - demandéLe > DÉLAI_EXPIRATION_STATUT_RAPPEL_MS

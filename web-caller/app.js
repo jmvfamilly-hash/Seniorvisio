@@ -1051,6 +1051,14 @@ on("callButton", "click", () => lancerAppel());
 // functions/index.js, CLÉS_CONTACTS, qui doit rester identique.
 const CLÉS_CONTACTS = ["c1", "c2", "c3"];
 
+// Pas encore publié — voir app/build.gradle, RAPPEL_AIDANT_VISIBLE : même
+// drapeau, même raison (le bug de relancerEtSecourirRappel qui vient d'être
+// corrigé en est la preuve). #activerAlertesBloc et le panneau admin
+// correspondant sont déjà masqués en HTML ; ce drapeau empêche en plus un
+// vieux lien de notification, envoyé pendant les tests précédents, de
+// rouvrir le roster d'incident une fois ce correctif publié.
+const RAPPEL_AIDANT_VISIBLE = false;
+
 // ═══ ARRIVÉE DEPUIS LA NOTIFICATION DE RAPPEL D'URGENCE (voir
 //     functions/index.js, créerEtNotifier/relancerEtSecourirRappel, et
 //     firebase-messaging-sw.js) ═══
@@ -1106,6 +1114,7 @@ function contactCourant() {
 let désabonnerRoster = null;
 
 function ouvrirIncidentRappel() {
+  if (!RAPPEL_AIDANT_VISIBLE) return;
   const params = paramètresURL();
   const incidentId = params.get("incident");
   const clé = contactCourant();

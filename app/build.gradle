@@ -26,6 +26,17 @@ android {
         // pas encore pris effet, sans avoir à brancher la tablette.
         buildConfigField "String", "BUILD_REV", "\"${project.findProperty('buildRev') ?: "dev"}\""
 
+        // Le rappel d'urgence à trois proches (RappelAidant.kt, bouton
+        // « DEMANDER À ... DE RAPPELER ») n'a jamais encore été publié — le
+        // bug de la fonction planifiée (voir functions/index.js,
+        // relancerEtSecourirRappel) qui vient d'être corrigé en est la
+        // preuve directe. MÊME DRAPEAU DES DEUX FLAVORS, délibérément : il
+        // ne distingue pas test/production, il distingue "prêt" de "pas
+        // encore", pour pouvoir tester EXACTEMENT le build qui partira en
+        // prod sur le banc d'essai avant de le publier. À repasser à true
+        // une fois ce test fait, pas avant.
+        buildConfigField "boolean", "RAPPEL_AIDANT_VISIBLE", "false"
+
         // Clé AssemblyAI par défaut, injectée par la CI depuis le secret GitHub
         // ASSEMBLYAI_API_KEY (voir workflow build-debug-apk.yml) — évite de
         // devoir la saisir à la main dans le panneau admin sur la tablette.

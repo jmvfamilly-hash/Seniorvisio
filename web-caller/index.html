@@ -48,8 +48,12 @@
            chaque proche clique, une seule fois depuis son propre téléphone,
            après avoir ouvert SON lien personnalisé (?contact=c1/c2/c3,
            copié depuis le panneau admin). Voir app.js, activerAlertesButton
-           et firebase-messaging-sw.js. -->
-      <div id="activerAlertesBloc">
+           et firebase-messaging-sw.js.
+
+           PAS ENCORE PUBLIÉ (voir app.js, RAPPEL_AIDANT_VISIBLE) : masqué
+           en dur ici en plus du drapeau JS, pour qu'il n'y ait aucune façon
+           de l'atteindre tant que ce n'est pas repassé à true là-bas. -->
+      <div id="activerAlertesBloc" hidden>
         <button id="activerAlertesButton" class="secondary">🔔 Activer les alertes de Jean</button>
         <p class="hint" id="alertesStatut"></p>
       </div>
@@ -842,6 +846,11 @@
                ci-dessous ne sert JAMAIS à ça — seulement de secours SMS si,
                après cinq minutes, personne n'a répondu (voir
                functions/index.js, relancerEtSecourirRappel). -->
+          <!-- PAS ENCORE PUBLIÉ (voir app.js, RAPPEL_AIDANT_VISIBLE) : tout
+               ce panneau est masqué en dur en attendant, pour qu'il n'y ait
+               aucune façon d'y configurer un contact tant que ce n'est pas
+               repassé à true là-bas. -->
+          <div id="rappelAidantAdminBloc" hidden>
           <h3 class="admin-section">Rappel d'urgence (jusqu'à trois proches)</h3>
           <p class="hint">
             Un bouton sur la tablette de Jean alerte en même temps jusqu'à
@@ -878,6 +887,7 @@
 
           <button id="aidantEnregistrer" class="secondary">💾 Enregistrer les trois proches</button>
           <p class="hint" id="aidantStatut"></p>
+          </div>
 
           <h3 class="admin-section">Diagnostic</h3>
           <!-- Test décisif pour localiser un écho : s'il disparaît en coupant
