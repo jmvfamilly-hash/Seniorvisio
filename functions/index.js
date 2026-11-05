@@ -146,8 +146,20 @@ const CLÉS_CONTACTS = ["c1", "c2", "c3"];
 const DÉLAI_RELANCE_MS = 90 * 1000;
 const DÉLAI_EXPIRATION_MS = 5 * 60 * 1000;
 
-function journalEntrée(événement) {
-  return { horodatage: Date.now(), événement };
+// « clé » distingue deux entrées pour deux contacts différents qui, sinon,
+// seraient de VRAIS doublons structurels aux yeux d'arrayUnion : un même
+// événement texte (ex. deux "push envoyé à Un proche", le nom par défaut
+// quand l'administrateur n'a pas encore nommé les contacts) posé à la même
+// milliseconde depuis une boucle synchrone — arrayUnion ne garde alors QUE
+// LE PREMIER des deux (il déduplique y compris à l'intérieur d'un seul
+// appel), et le journal perd silencieusement la moitié de ce qui s'est
+// réellement passé (piège réel, repéré en re-testant à trois contacts : un
+// seul "push envoyé" apparaissait alors que les deux jetons avaient reçu
+// leur message).
+function journalEntrée(événement, clé) {
+  const entrée = { horodatage: Date.now(), événement };
+  if (clé) entrée.contact = clé;
+  return entrée;
 }
 
 /**
@@ -251,9 +263,9 @@ async function créerEtNotifier(environnement, baseUrl, incidentRef) {
   for (const { clé, nom, résultat } of résultats) {
     if (résultat !== "ok") {
       contactsMisÀJour[clé] = { statut: résultat };
-      journal.push(journalEntrée(`push vers ${nom} : ${résultat}`));
+      journal.push(journalEntrée(`push vers ${nom} : ${résultat}`, clé));
     } else {
-      journal.push(journalEntrée(`push envoyé à ${nom}`));
+      journal.push(journalEntrée(`push envoyé à ${nom}`, clé));
     }
   }
   if (journal.length > 0) {
@@ -329,12 +341,20 @@ exports.relancerEtSecourirRappel = onSchedule(
             contactKey: clé,
             baseUrl: "https://seniorvisio-test.web.app",
           });
-          relances.push(journalEntrée(`relance vers ${contacts[clé].nom} : ${résultat}`));
+          relances.push(journalEntrée(`relance vers ${contacts[clé].nom} : ${résultat}`, clé));
         }
-        await doc.ref.set(
-          { relanceEnvoyéeLe: Date.now(), journal: FieldValue.arrayUnion(...relances) },
-          { merge: true }
-        );
+        // FieldValue.arrayUnion() EXIGE au moins un argument — en fournir
+        // zéro (aucun contact encore en attente de lecture, ex. incident
+        // hérité d'un test précédent avec contacts: {}) ne produit pas un
+        // no-op mais une exception, NON INTERCEPTÉE ici, qui arrêtait net
+        // toute la boucle sur les incidents en attente : plus aucune
+        // relance, expiration ni SMS de secours pour les incidents
+        // suivants du même passage (piège réel, repéré en re-testant :
+        // cette fonction, qui tourne chaque minute, échouait ainsi en
+        // continu depuis plusieurs jours).
+        const correctif = { relanceEnvoyéeLe: Date.now() };
+        if (relances.length > 0) correctif.journal = FieldValue.arrayUnion(...relances);
+        await doc.ref.set(correctif, { merge: true });
       }
 
       if (âgeMs >= DÉLAI_EXPIRATION_MS) {
@@ -344,7 +364,7 @@ exports.relancerEtSecourirRappel = onSchedule(
         for (const clé of secours) {
           const téléphone = contacts[clé].téléphone;
           if (!téléphone) {
-            journal.push(journalEntrée(`pas de secours SMS pour ${contacts[clé].nom} : aucun numéro`));
+            journal.push(journalEntrée(`pas de secours SMS pour ${contacts[clé].nom} : aucun numéro`, clé));
             continue;
           }
           try {
@@ -370,12 +390,12 @@ exports.relancerEtSecourirRappel = onSchedule(
             );
             if (!réponse.ok) {
               const détail = await réponse.text();
-              journal.push(journalEntrée(`SMS de secours refusé pour ${contacts[clé].nom} : ${détail}`));
+              journal.push(journalEntrée(`SMS de secours refusé pour ${contacts[clé].nom} : ${détail}`, clé));
             } else {
-              journal.push(journalEntrée(`SMS de secours envoyé à ${contacts[clé].nom}`));
+              journal.push(journalEntrée(`SMS de secours envoyé à ${contacts[clé].nom}`, clé));
             }
           } catch (e) {
-            journal.push(journalEntrée(`SMS de secours en erreur pour ${contacts[clé].nom} : ${e.message || e}`));
+            journal.push(journalEntrée(`SMS de secours en erreur pour ${contacts[clé].nom} : ${e.message || e}`, clé));
           }
         }
 
