@@ -45,7 +45,7 @@ jobs:
             --environment validation \
             --version "preview-${{ inputs.channel }}-${{ inputs.ref }}"
 
-      - name: Garde-fou : ce canal ne doit jamais viser la tablette de Jean
+      - name: "Garde-fou : ce canal ne doit jamais viser la tablette de Jean"
         run: |
           grep -q '"validation"' site-preview/environment.js
           grep -q 'test_tablet' site-preview/environment.js
