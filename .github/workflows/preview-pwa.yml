@@ -1,0 +1,74 @@
+name: Preview PWA (canal Firebase Hosting temporaire)
+
+# Publie un commit donné du PWA sur un canal de prévisualisation Firebase
+# Hosting, séparé du banc d'essai en direct (seniorvisio-test.web.app) : une
+# adresse temporaire, qui expire toute seule, pour regarder une ancienne
+# version sans republier quoi que ce soit sur un site que quelqu'un utilise
+# peut-être en ce moment pour de vrais tests.
+#
+# TOUJOURS en environnement « validation » (tablette d'essai), jamais
+# « production » — même pour prévisualiser un commit qui a un jour tourné en
+# production : ce canal n'a aucune raison de pouvoir joindre la tablette de
+# Jean.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit (sha complet ou court) ou branche à prévisualiser"
+        required: true
+      channel:
+        description: "Identifiant du canal (minuscules, chiffres, tirets) — forme l'adresse temporaire"
+        required: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du commit demandé
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Vérifie que les scripts du PWA ne se marchent pas dessus
+        run: node scripts/verifie_scripts_pwa.js
+
+      - name: Prépare le PWA (environnement validation, jamais production)
+        run: |
+          python3 scripts/prepare_pwa.py \
+            --out site-preview \
+            --environment validation \
+            --version "preview-${{ inputs.channel }}-${{ inputs.ref }}"
+
+      - name: Garde-fou : ce canal ne doit jamais viser la tablette de Jean
+        run: |
+          grep -q '"validation"' site-preview/environment.js
+          grep -q 'test_tablet' site-preview/environment.js
+          grep -q 'calls_test' site-preview/environment.js
+          if grep -q 'jean_tablet' site-preview/environment.js; then
+            echo "REFUS : ce canal de prévisualisation désigne la tablette de production." >&2
+            exit 1
+          fi
+
+      - name: Déploie sur un canal de prévisualisation temporaire
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
+          npx firebase-tools hosting:channel:deploy "${{ inputs.channel }}" \
+            --project seniorvisio --only test --expires 7d --non-interactive \
+            | tee /tmp/deploy-output.txt
+
+      - name: Rappeler l'adresse
+        run: |
+          echo "### Canal de prévisualisation (expire dans 7 jours)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          grep -oE 'https://[a-zA-Z0-9.-]+\.web\.app[a-zA-Z0-9/._-]*' /tmp/deploy-output.txt \
+            | sort -u >> "$GITHUB_STEP_SUMMARY" || true
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit prévisualisé : \`${{ inputs.ref }}\`" >> "$GITHUB_STEP_SUMMARY"
