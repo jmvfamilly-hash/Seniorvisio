@@ -41,16 +41,16 @@ jobs:
       - name: Prépare le PWA (environnement validation, jamais production)
         run: |
           python3 scripts/prepare_pwa.py \
-            --out site-preview \
+            --out site-test \
             --environment validation \
             --version "preview-${{ inputs.channel }}-${{ inputs.ref }}"
 
       - name: "Garde-fou : ce canal ne doit jamais viser la tablette de Jean"
         run: |
-          grep -q '"validation"' site-preview/environment.js
-          grep -q 'test_tablet' site-preview/environment.js
-          grep -q 'calls_test' site-preview/environment.js
-          if grep -q 'jean_tablet' site-preview/environment.js; then
+          grep -q '"validation"' site-test/environment.js
+          grep -q 'test_tablet' site-test/environment.js
+          grep -q 'calls_test' site-test/environment.js
+          if grep -q 'jean_tablet' site-test/environment.js; then
             echo "REFUS : ce canal de prévisualisation désigne la tablette de production." >&2
             exit 1
           fi
