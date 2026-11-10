@@ -6,10 +6,16 @@ name: Preview PWA (canal Firebase Hosting temporaire)
 # version sans republier quoi que ce soit sur un site que quelqu'un utilise
 # peut-être en ce moment pour de vrais tests.
 #
-# TOUJOURS en environnement « validation » (tablette d'essai), jamais
-# « production » — même pour prévisualiser un commit qui a un jour tourné en
-# production : ce canal n'a aucune raison de pouvoir joindre la tablette de
-# Jean.
+# L'ENVIRONNEMENT EST UN CHOIX EXPLICITE, PAS UNE VALEUR PAR DÉFAUT.
+#
+# « validation » (par défaut si rien n'est précisé) : ce canal ne peut
+# joindre que la tablette d'essai, quel que soit le commit prévisualisé —
+# même un commit qui a un jour tourné en vraie production.
+#
+# « production » : demandé explicitement une fois, pour reproduire un
+# problème réel en conditions réelles (ex. diagnostiquer pourquoi la
+# tablette de Jean ne répond plus). Un appel passé depuis ce canal-là
+# sonnera VRAIMENT chez Jean — ce n'est pas un bac à sable.
 
 on:
   workflow_dispatch:
@@ -20,6 +26,14 @@ on:
       channel:
         description: "Identifiant du canal (minuscules, chiffres, tirets) — forme l'adresse temporaire"
         required: true
+      environment:
+        description: "validation (tablette d'essai, sûr) ou production (vraie tablette de Jean, appels réels)"
+        required: true
+        default: "validation"
+        type: choice
+        options:
+          - validation
+          - production
 
 jobs:
   preview:
@@ -38,21 +52,29 @@ jobs:
       - name: Vérifie que les scripts du PWA ne se marchent pas dessus
         run: node scripts/verifie_scripts_pwa.js
 
-      - name: Prépare le PWA (environnement validation, jamais production)
+      - name: Prépare le PWA (environnement demandé explicitement)
         run: |
           python3 scripts/prepare_pwa.py \
             --out site-test \
-            --environment validation \
+            --environment "${{ inputs.environment }}" \
             --version "preview-${{ inputs.channel }}-${{ inputs.ref }}"
 
-      - name: "Garde-fou : ce canal ne doit jamais viser la tablette de Jean"
+      - name: "Garde-fou : l'environnement obtenu est bien celui demandé"
         run: |
-          grep -q '"validation"' site-test/environment.js
-          grep -q 'test_tablet' site-test/environment.js
-          grep -q 'calls_test' site-test/environment.js
-          if grep -q 'jean_tablet' site-test/environment.js; then
-            echo "REFUS : ce canal de prévisualisation désigne la tablette de production." >&2
-            exit 1
+          echo "--- site-test/environment.js ---"
+          cat site-test/environment.js
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            grep -q '"production"' site-test/environment.js
+            grep -q 'jean_tablet' site-test/environment.js
+            echo "⚠️  Ce canal peut réellement appeler la tablette de Jean."
+          else
+            grep -q '"validation"' site-test/environment.js
+            grep -q 'test_tablet' site-test/environment.js
+            grep -q 'calls_test' site-test/environment.js
+            if grep -q 'jean_tablet' site-test/environment.js; then
+              echo "REFUS : ce canal « validation » désigne pourtant la tablette de production." >&2
+              exit 1
+            fi
           fi
 
       - name: Déploie sur un canal de prévisualisation temporaire
@@ -68,7 +90,11 @@ jobs:
         run: |
           echo "### Canal de prévisualisation (expire dans 7 jours)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            echo "⚠️ **Environnement production : un appel passé depuis ce lien sonnera réellement chez Jean.**" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
           grep -oE 'https://[a-zA-Z0-9.-]+\.web\.app[a-zA-Z0-9/._-]*' /tmp/deploy-output.txt \
             | sort -u >> "$GITHUB_STEP_SUMMARY" || true
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Commit prévisualisé : \`${{ inputs.ref }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit prévisualisé : \`${{ inputs.ref }}\` (environnement : ${{ inputs.environment }})" >> "$GITHUB_STEP_SUMMARY"
