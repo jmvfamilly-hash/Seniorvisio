@@ -122,23 +122,15 @@ class MainActivity : AppCompatActivity() {
     // onPause) : c'est le seul endroit qui affiche ce texte.
 
     private val screenAwakeHandler = Handler(Looper.getMainLooper())
-    private var textGoneSinceMs = 0L
 
     /**
-     * Empêche la tablette de s'endormir tant qu'il reste du texte à l'écran,
-     * et rend la main à la veille un moment après que tout a été affiché.
-     *
-     * Le réveil au son (voir RoomPresenceService) ne suffit pas pour ça : il
-     * suit le SON, qu'il relâche quelques secondes après le dernier bruit. Or
-     * la transcription arrive avec du retard sur la parole, et le texte
-     * continue de défiler après que la personne s'est tue — l'écran
-     * s'éteignait donc en plein milieu de ce que Jean était en train de lire.
-     * Ce qui doit décider ici, c'est ce qui est affiché, pas ce qui s'entend.
-     *
-     * Passe par le drapeau de fenêtre plutôt que par un verrou de réveil :
-     * c'est le mécanisme prévu pour "garder l'écran allumé pendant que cet
-     * écran-ci est visible", il ne demande aucune permission et fonctionne
-     * sur toutes les versions d'Android.
+     * Demandé explicitement : la dalle ne doit plus jamais s'éteindre seule,
+     * quel que soit ce qui est affiché — seul le bouton physique d'alimentation
+     * de la tablette en décide désormais. Ce battement gardait auparavant
+     * l'écran allumé seulement tant qu'il restait du texte de transcription ;
+     * sans texte, Android reprenait la main après sa propre temporisation, ce
+     * qui ressemblait à une mise en veille alors que personne ne l'avait
+     * demandée.
      */
     private val screenAwakeTicker = object : Runnable {
         override fun run() {
@@ -147,17 +139,7 @@ class MainActivity : AppCompatActivity() {
             appliquerFondVariable()
             rafraîchirBoutonAppelerAidant()
             rafraîchirStatutRappelAidant()
-            val hasText = zones.hasTextOnScreen()
-            val now = System.currentTimeMillis()
-            if (hasText) textGoneSinceMs = 0L
-            else if (textGoneSinceMs == 0L) textGoneSinceMs = now
-
-            val keepAwake = hasText || (now - textGoneSinceMs) < READING_GRACE_MS
-            if (keepAwake) {
-                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            } else {
-                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             screenAwakeHandler.postDelayed(this, SCREEN_AWAKE_TICK_MS)
         }
     }
@@ -476,9 +458,13 @@ class MainActivity : AppCompatActivity() {
         // pas encore être là au tout premier lancement (démarrage asynchrone,
         // voir onCreate) : sans effet dans ce cas, et le prochain onResume
         // (retour d'un appel, du panneau admin…) s'abonnera normalement.
-        RoomPresenceService.running?.setRoomCaptionListener(
-            onText = { text, isFinal -> zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal) },
-        )
+        if (adminConfig.transcriptionPieceAffichee) {
+            RoomPresenceService.running?.setRoomCaptionListener(
+                onText = { text, isFinal -> zones.submitTranscription(TranscriptionSource.ROOM, text, isFinal) },
+            )
+        } else {
+            RoomPresenceService.running?.clearRoomCaptionListener()
+        }
         screenAwakeHandler.removeCallbacks(screenAwakeTicker)
         screenAwakeHandler.post(screenAwakeTicker)
         // Reflète un éventuel déblocage survenu pendant que cet écran n'était
@@ -920,14 +906,6 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_WAKE_ON_SOUND = "extra_wake_on_sound"
 
         private const val SCREEN_AWAKE_TICK_MS = 1_000L
-
-        /**
-         * Délai laissé après la disparition du dernier texte avant de rendre
-         * la main à la veille : le temps de finir de lire ce qui vient de
-         * s'effacer, et d'éviter qu'un écran s'éteigne pile au moment où on y
-         * jetait un œil.
-         */
-        private const val READING_GRACE_MS = 20_000L
 
         /** Voir appliquerFondVariable : dosage du lavis, délibérément discret. */
         private const val TEINTE_MOMENT_FRACTION = 0.10f

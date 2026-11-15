@@ -602,6 +602,9 @@ class DeviceStatusReporter(private val context: Context) {
         snapshot.getBoolean(FIELD_ROOM_WAKE_ENABLED)?.let {
             adminConfig.roomWakeEnabled = it
         }
+        snapshot.getBoolean(FIELD_TRANSCRIPTION_PIECE_AFFICHEE)?.let {
+            adminConfig.transcriptionPieceAffichee = it
+        }
         snapshot.getLong(FIELD_ROOM_WAKE_THRESHOLD)?.let {
             if (it > 0) adminConfig.roomWakeSensitivityThreshold = it.toInt()
         }
@@ -965,6 +968,7 @@ class DeviceStatusReporter(private val context: Context) {
         private const val RESTART_REQUEST_CODE = 4207
         private const val RESTART_DELAY_MS = 1_500L
         private const val FIELD_ROOM_WAKE_ENABLED = "roomWakeEnabled"
+        private const val FIELD_TRANSCRIPTION_PIECE_AFFICHEE = "transcriptionPieceAffichee"
         private const val FIELD_ROOM_WAKE_THRESHOLD = "roomWakeThreshold"
         private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"
         private const val FIELD_SLEEP_HOURS = "sleepHours"
