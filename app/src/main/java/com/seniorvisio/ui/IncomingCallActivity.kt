@@ -1255,6 +1255,19 @@ class IncomingCallActivity : AppCompatActivity() {
         callEngine.listenForSelfPreviewMode { enabled ->
             runOnUiThread { localRenderer.visibility = if (enabled) View.VISIBLE else View.INVISIBLE }
         }
+        // Dégradation progressive selon le débit (voir CallQualityAdaptation) :
+        // à partir du palier SANS_VIDEO_PROCHE, la vidéo du proche cède la
+        // place à sa photo — déjà chargée et affichée à la sonnerie, voir
+        // showCallerPhoto — plutôt qu'à un flux qui ramerait sans rien
+        // apporter. L'inverse à l'amélioration, sans rien recharger.
+        callEngine.listenForQualityPalier { palier ->
+            runOnUiThread {
+                if (modeSousTitres || vidéoCachéeMêmePièce) return@runOnUiThread
+                val masquerVidéoProche = palier.niveau >= com.seniorvisio.core.CallQualityAdaptation.Palier.SANS_VIDEO_PROCHE.niveau
+                remoteRendererRef?.visibility = if (masquerVidéoProche) View.GONE else View.VISIBLE
+                findViewById<View>(R.id.imageCallerPhoto).visibility = if (masquerVidéoProche) View.VISIBLE else View.GONE
+            }
+        }
         // Ferme proprement l'écran si la connexion se perd sans qu'un
         // raccroché explicite n'ait été envoyé (Wi-Fi coupé, navigateur du
         // proche qui plante...) : sans ça, la caméra/le micro restaient

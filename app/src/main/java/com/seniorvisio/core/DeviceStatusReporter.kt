@@ -605,6 +605,23 @@ class DeviceStatusReporter(private val context: Context) {
         snapshot.getBoolean(FIELD_TRANSCRIPTION_PIECE_AFFICHEE)?.let {
             adminConfig.transcriptionPieceAffichee = it
         }
+        snapshot.getLong(FIELD_SEUIL_SANS_VIDEO_PROCHE)?.let {
+            if (it > 0) adminConfig.seuilSansVideoProcheKbps = it.toInt()
+        }
+        snapshot.getLong(FIELD_SEUIL_VIDEO_JEAN_MINI)?.let {
+            if (it > 0) adminConfig.seuilVideoJeanMiniKbps = it.toInt()
+        }
+        snapshot.getLong(FIELD_SEUIL_AUDIO_SEUL)?.let {
+            if (it > 0) adminConfig.seuilAudioSeulKbps = it.toInt()
+        }
+        // Jamais lu côté production (voir AdminConfig.simulationRéseauProfil,
+        // qui refuse elle-même de renvoyer autre chose qu'une chaîne vide sur
+        // cette variante) : synchronisé ici quand même, sans condition, pour
+        // qu'un seul endroit décide — pas un deuxième garde-fou qui pourrait
+        // un jour se contredire avec le premier.
+        snapshot.getString(FIELD_SIMULATION_RESEAU_PROFIL)?.let {
+            adminConfig.simulationRéseauProfil = it
+        }
         snapshot.getLong(FIELD_ROOM_WAKE_THRESHOLD)?.let {
             if (it > 0) adminConfig.roomWakeSensitivityThreshold = it.toInt()
         }
@@ -969,6 +986,10 @@ class DeviceStatusReporter(private val context: Context) {
         private const val RESTART_DELAY_MS = 1_500L
         private const val FIELD_ROOM_WAKE_ENABLED = "roomWakeEnabled"
         private const val FIELD_TRANSCRIPTION_PIECE_AFFICHEE = "transcriptionPieceAffichee"
+        private const val FIELD_SEUIL_SANS_VIDEO_PROCHE = "seuilSansVideoProcheKbps"
+        private const val FIELD_SEUIL_VIDEO_JEAN_MINI = "seuilVideoJeanMiniKbps"
+        private const val FIELD_SEUIL_AUDIO_SEUL = "seuilAudioSeulKbps"
+        private const val FIELD_SIMULATION_RESEAU_PROFIL = "simulationReseauProfil"
         private const val FIELD_ROOM_WAKE_THRESHOLD = "roomWakeThreshold"
         private const val FIELD_BLOCK_WAKE_AT_NIGHT = "blockWakeAtNight"
         private const val FIELD_SLEEP_HOURS = "sleepHours"

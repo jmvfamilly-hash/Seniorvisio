@@ -182,6 +182,14 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     private var networkSamples = 0
     private var networkLimitedSamples = 0
 
+    // ---- Dégradation progressive selon le débit (voir CallQualityAdaptation) ----
+    private var qualityAdaptation = CallQualityAdaptation(CallQualityAdaptation.Seuils(150, 100, 40))
+    private var palierActif = CallQualityAdaptation.Palier.NORMAL
+    private var localVideoSender: org.webrtc.RtpSender? = null
+    private var onPalierChange: ((CallQualityAdaptation.Palier) -> Unit)? = null
+    private var callStartElapsedMs = 0L
+    private var simulationProfil: List<CallQualityAdaptation.Profils.Point>? = null
+
     /** Instant du décrochage, pour mesurer le temps de mise en relation. */
     private var answeredAtMs = 0L
 
@@ -197,6 +205,23 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         }
         this.callId = callId
         state = CallState.RINGING_SILENT
+
+        // Un palier ne doit jamais survivre d'un appel à l'autre, et les
+        // seuils sont relus ici plutôt que gardés en dur : un réglage changé
+        // dans le panneau d'administration doit s'appliquer au prochain
+        // appel, pas au prochain redémarrage de la tablette.
+        val adminConfig = AdminConfig(context)
+        qualityAdaptation = CallQualityAdaptation(CallQualityAdaptation.seuilsDepuis(adminConfig))
+        palierActif = CallQualityAdaptation.Palier.NORMAL
+        callStartElapsedMs = SystemClock.elapsedRealtime()
+        simulationProfil = CallQualityAdaptation.Profils.parNom(adminConfig.simulationRéseauProfil)
+        simulationProfil?.let {
+            CallTrace.record(
+                "APPEL simulation réseau",
+                "profil « ${adminConfig.simulationRéseauProfil} » — mesures réelles ignorées pour cet appel",
+            )
+        }
+
         // Version ET permissions dès la première ligne, avant tout le reste.
         //
         // Ce sont les deux choses dont l'absence rend toutes les lignes
@@ -1033,6 +1058,8 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         if (sample.limitation != "none" && sample.limitation != "?") networkLimitedSamples++
         networkSamples++
 
+        évaluerEtAppliquerPalier(sample)
+
         val changement = précédent != null && précédent.limitation != sample.limitation
         val écoulé = sample.horodatageMs - lastNetworkLoggedAtMs
         if (!changement && écoulé < NETWORK_LOG_INTERVAL_MS) return
@@ -1060,6 +1087,78 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
     }
 
     /**
+     * Lit le débit disponible et le RTT — réels, ou rejoués depuis un profil
+     * simulé (voir AdminConfig.simulationRéseauProfil) — et applique le
+     * palier qui en résulte si, et seulement si, il a changé.
+     *
+     * Hors d'un profil simulé, un relevé sans débit disponible (-1) ne veut
+     * rien dire d'utilisable et est ignoré plutôt que pris pour un débit nul
+     * — qui déclencherait à tort le palier le plus sévère.
+     */
+    private fun évaluerEtAppliquerPalier(sample: NetworkSample) {
+        val maintenant = sample.horodatageMs
+        val profil = simulationProfil
+        val dispoKbps: Int
+        val rttMs: Int
+        if (profil != null) {
+            val point = CallQualityAdaptation.Profils.àInstant(profil, maintenant - callStartElapsedMs)
+            dispoKbps = point.dispoKbps
+            rttMs = point.rttMs
+        } else {
+            if (sample.dispoKbps < 0) return
+            dispoKbps = sample.dispoKbps
+            rttMs = if (sample.rttMs >= 0) sample.rttMs else 0
+        }
+        val nouveauPalier = qualityAdaptation.évaluer(dispoKbps, rttMs, maintenant)
+        if (nouveauPalier == palierActif) return
+        val ancien = palierActif
+        palierActif = nouveauPalier
+        CallTrace.record(
+            "APPEL palier qualité",
+            "$ancien → $nouveauPalier (débit=${dispoKbps}kb/s RTT=${rttMs}ms)" +
+                if (profil != null) " [simulé]" else "",
+        )
+        appliquerPalier(nouveauPalier)
+        onPalierChange?.invoke(nouveauPalier)
+    }
+
+    /**
+     * Les effets du palier sur ce que Jean ENVOIE. Ce que le proche envoie —
+     * remplacer sa vidéo par sa photo au palier [CallQualityAdaptation.
+     * Palier.SANS_VIDEO_PROCHE] — est à la charge de l'écran d'appel (voir
+     * [onPalierChange] et IncomingCallActivity), qui seul sait où se trouve
+     * le rendu vidéo et la photo déjà affichée à la sonnerie.
+     */
+    private fun appliquerPalier(palier: CallQualityAdaptation.Palier) {
+        val réduire = palier.niveau >= CallQualityAdaptation.Palier.VIDEO_JEAN_MINI.niveau
+        val sender = localVideoSender
+        if (sender != null) {
+            try {
+                val parameters = sender.parameters
+                parameters.encodings.forEach { encodage ->
+                    encodage.scaleResolutionDownBy = if (réduire) 8.0 else 1.0
+                    encodage.maxBitrateBps = if (réduire) 60_000 else null
+                }
+                val appliqué = sender.setParameters(parameters)
+                CallTrace.record(
+                    "APPEL palier qualité",
+                    if (appliqué) "vidéo de Jean ${if (réduire) "réduite au minimum" else "rétablie"}"
+                    else "REFUSÉ : réglage de l'émetteur non appliqué",
+                )
+            } catch (e: Exception) {
+                CallTrace.record("APPEL palier qualité", "réglage de l'émetteur impossible : ${e.javaClass.simpleName}")
+            }
+        }
+        // Palier AUDIO_SEUL : plus aucune vidéo envoyée par Jean, jamais le son ni les sous-titres.
+        localVideoTrack?.setEnabled(palier.niveau < CallQualityAdaptation.Palier.AUDIO_SEUL.niveau)
+    }
+
+    /** Voir IncomingCallActivity : bascule l'affichage entre la vidéo du proche et sa photo, et inversement. */
+    fun listenForQualityPalier(onChange: (CallQualityAdaptation.Palier) -> Unit) {
+        onPalierChange = onChange
+    }
+
+    /**
      * Le bilan de l'appel, écrit une fois à la fin.
      *
      * Un appel produit des dizaines de relevés ; les comparer entre deux
@@ -1079,6 +1178,11 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         networkLimitedSamples = 0
         lastNetworkSample = null
         lastNetworkLoggedAtMs = 0L
+        qualityAdaptation.réinitialiser()
+        palierActif = CallQualityAdaptation.Palier.NORMAL
+        localVideoSender = null
+        onPalierChange = null
+        simulationProfil = null
     }
 
     /** Les niveaux tels que le système les donne à l'instant, en une ligne comparable. */
@@ -1139,6 +1243,10 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
         val entréeOctets: Long,
         val horodatageMs: Long,
         val limitation: String,
+        /** Débit sortant disponible, en kb/s — voir CallQualityAdaptation. -1 si absent du relevé. */
+        val dispoKbps: Int,
+        /** Temps de réponse du lien, en ms — voir CallQualityAdaptation. -1 si absent du relevé. */
+        val rttMs: Int,
     )
 
     /**
@@ -1201,6 +1309,10 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
             entréeOctets = (paire.members["bytesReceived"] as? Number)?.toLong() ?: 0L,
             horodatageMs = SystemClock.elapsedRealtime(),
             limitation = limitation,
+            dispoKbps = ((paire.members["availableOutgoingBitrate"] as? Number)?.toDouble()?.div(1000.0))
+                ?.toInt() ?: -1,
+            rttMs = ((paire.members["currentRoundTripTime"] as? Number)?.toDouble()?.times(1000.0))
+                ?.toInt() ?: -1,
         )
     }
 
@@ -1965,6 +2077,7 @@ class WebRtcCallEngine(private val context: Context) : CallEngine {
 
         val videoSender = pc.addTrack(videoTrack, listOf("SVIO_STREAM"))
         pc.addTrack(audioTrack, listOf("SVIO_STREAM"))
+        localVideoSender = videoSender
         preferResolutionOverFramerate(videoSender)
     }
 

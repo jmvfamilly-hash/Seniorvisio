@@ -321,6 +321,40 @@ class AdminConfig(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_TRANSCRIPTION_PIECE_AFFICHEE, value).apply()
 
     /**
+     * Les trois seuils de débit disponible (en kb/s) qui font passer d'un
+     * palier de dégradation d'appel au suivant (voir CallQualityAdaptation).
+     * Réglables à distance plutôt que figés : les bons seuils ne pouvaient
+     * se deviner qu'en observant de vrais appels chez Jean, pas en les
+     * inventant avant d'en avoir vu un seul se dégrader.
+     */
+    var seuilSansVideoProcheKbps: Int
+        get() = prefs.getInt(KEY_SEUIL_SANS_VIDEO_PROCHE, 150)
+        set(value) = prefs.edit().putInt(KEY_SEUIL_SANS_VIDEO_PROCHE, value).apply()
+
+    var seuilVideoJeanMiniKbps: Int
+        get() = prefs.getInt(KEY_SEUIL_VIDEO_JEAN_MINI, 100)
+        set(value) = prefs.edit().putInt(KEY_SEUIL_VIDEO_JEAN_MINI, value).apply()
+
+    var seuilAudioSeulKbps: Int
+        get() = prefs.getInt(KEY_SEUIL_AUDIO_SEUL, 40)
+        set(value) = prefs.edit().putInt(KEY_SEUIL_AUDIO_SEUL, value).apply()
+
+    /**
+     * Nom d'un profil de réseau simulé (voir CallQualityAdaptation.Profils),
+     * ou vide pour désactiver la simulation et utiliser les vraies mesures
+     * WebRTC. Rejoué à la place des statistiques réelles pendant un appel,
+     * pour éprouver les quatre paliers sans attendre un vrai mauvais réseau.
+     *
+     * NE PEUT PAS S'ACTIVER EN PRODUCTION : vérifié une seconde fois au
+     * moment de la lecture (voir CallQualityAdaptation), pas seulement ici —
+     * un réglage resté actif par erreur ne doit jamais pouvoir simuler une
+     * panne sur la tablette de Jean.
+     */
+    var simulationRéseauProfil: String
+        get() = if (!BuildConfig.KIOSK_ENABLED) prefs.getString(KEY_SIMULATION_RESEAU_PROFIL, "") ?: "" else ""
+        set(value) = prefs.edit().putString(KEY_SIMULATION_RESEAU_PROFIL, value).apply()
+
+    /**
      * La police employée sur tous les écrans que Jean voit.
      *
      * Réglable à distance, et c'est le point : les consignes d'accessibilité
@@ -537,5 +571,9 @@ class AdminConfig(context: Context) {
         private const val KEY_COMMANDES_VOCALES = "commandes_vocales_actives"
         private const val KEY_CAPTION_INTERLIGNE = "caption_interligne"
         private const val KEY_ROOM_WAKE_THRESHOLD = "room_wake_threshold"
+        private const val KEY_SEUIL_SANS_VIDEO_PROCHE = "seuil_sans_video_proche_kbps"
+        private const val KEY_SEUIL_VIDEO_JEAN_MINI = "seuil_video_jean_mini_kbps"
+        private const val KEY_SEUIL_AUDIO_SEUL = "seuil_audio_seul_kbps"
+        private const val KEY_SIMULATION_RESEAU_PROFIL = "simulation_reseau_profil"
     }
 }
