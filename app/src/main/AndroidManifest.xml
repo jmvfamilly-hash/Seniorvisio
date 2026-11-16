@@ -69,6 +69,7 @@
          seule cette vérification opportuniste utilise du HTTP en clair, sans
          quoi le trafic serait bloqué par défaut depuis Android 9. -->
     <application
+        android:name=".SeniorVisioApplication"
         android:label="Senior Visio"
         android:icon="@drawable/ic_launcher"
         android:theme="@style/Theme.AppCompat.NoActionBar"
