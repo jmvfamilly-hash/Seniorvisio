@@ -518,9 +518,24 @@ class RealCallEngine extends CallEngine {
     localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
     const remoteStream = new MediaStream();
-    document.getElementById("remoteVideo").srcObject = remoteStream;
+    const remoteVideoEl = document.getElementById("remoteVideo");
+    remoteVideoEl.srcObject = remoteStream;
     pc.ontrack = (event) => {
       event.streams[0].getTracks().forEach((track) => remoteStream.addTrack(track));
+      // Ajouter une piste à un flux déjà attaché à la balise <video> ne
+      // relance pas toujours la lecture sur certains navigateurs — constaté
+      // en usage réel : image noire et silence jusqu'à raccrocher et
+      // rappeler plusieurs fois. On force donc une tentative de lecture à
+      // chaque nouvelle piste, avec une seconde tentative si la première est
+      // refusée (ex. politique de lecture automatique du navigateur).
+      remoteVideoEl.play().catch((e) => {
+        console.warn("[RealCallEngine] lecture du flux distant refusée, nouvelle tentative :", e);
+        setTimeout(() => {
+          remoteVideoEl.play().catch((e2) =>
+            console.error("[RealCallEngine] lecture du flux distant toujours refusée :", e2)
+          );
+        }, 500);
+      });
     };
 
     const callDocRef = this._db.collection(this._callsCollection()).doc();
