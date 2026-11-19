@@ -541,6 +541,21 @@ class DeviceStatusReporter(private val context: Context) {
             if (adminConfig.aidantIndisponibleLeMs != it) adminConfig.aidantIndisponibleLeMs = it
         }
 
+        // Le mot public (voir docs/architecture-message-public.md). Les
+        // trois champs arrivent ensemble depuis le PWA ; comparer seulement
+        // le texte pour décider s'il y a du nouveau évite de rejournaliser
+        // à chaque battement un mot qui n'a pas changé.
+        snapshot.getString(FIELD_MESSAGE_PUBLIC_TEXTE)?.let { texte ->
+            if (adminConfig.messagePublicTexte == texte) return@let
+            adminConfig.messagePublicTexte = texte
+            adminConfig.messagePublicDe = snapshot.getString(FIELD_MESSAGE_PUBLIC_DE).orEmpty()
+            adminConfig.messagePublicExpireLeMs = snapshot.getLong(FIELD_MESSAGE_PUBLIC_EXPIRE_LE_MS) ?: 0L
+            CallTrace.record(
+                "MESSAGE PUBLIC",
+                if (texte.isBlank()) "retiré" else "reçu de ${adminConfig.messagePublicDe.ifBlank { "un proche" }}",
+            )
+        }
+
         // Bornée ICI EN PLUS de l'ordonnanceur, et les deux comptent : ce
         // document est ouvert en écriture à qui en connaît l'adresse, et une
         // cadence de zéro ferait tourner les photos à chaque battement. La
@@ -924,6 +939,11 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_AIDANT_MESSAGE_LU_LE_MS = "aidantMessageLuLe"
         private const val FIELD_AIDANT_RAPPEL_PRÉVU_LE_MS = "aidantRappelPrévuLe"
         private const val FIELD_AIDANT_INDISPONIBLE_LE_MS = "aidantIndisponibleLe"
+
+        /** Le mot public écrit depuis le PWA (voir docs/architecture-message-public.md). */
+        private const val FIELD_MESSAGE_PUBLIC_TEXTE = "messagePublicTexte"
+        private const val FIELD_MESSAGE_PUBLIC_DE = "messagePublicDe"
+        private const val FIELD_MESSAGE_PUBLIC_EXPIRE_LE_MS = "messagePublicExpireLe"
 
         /** Combien de minutes chaque photo de la galerie tient l'écran. */
         private const val FIELD_CADENCE_PHOTOS = "cadencePhotosMinutes"

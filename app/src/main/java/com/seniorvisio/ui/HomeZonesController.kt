@@ -190,9 +190,13 @@ class HomeZonesController(
      * IncomingCallActivity, avec sa propre instance de ces zones, qui y
      * affiche alors les sous-titres de l'appel (voir
      * docs/architecture-message-public.md, §3).
+     *
+     * [de] vide (aucun nom connu) retire la mention jaune plutôt que
+     * d'afficher une phrase bancale (« Message de — n'est pas en ligne »).
      */
-    fun afficherMessagePublic(texte: String) {
-        zoneFor(TranscriptionSource.PUBLIC).afficherTexteFixe(texte)
+    fun afficherMessagePublic(texte: String, de: String) {
+        val mention = if (de.isBlank()) null else "Message de $de — $de n'est pas en ligne"
+        zoneFor(TranscriptionSource.PUBLIC).afficherTexteFixe(texte, mention)
         afficherIndicateurMessage()
     }
 

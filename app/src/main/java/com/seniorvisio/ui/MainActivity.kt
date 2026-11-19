@@ -139,6 +139,7 @@ class MainActivity : AppCompatActivity() {
             appliquerFondVariable()
             rafraîchirBoutonAppelerAidant()
             rafraîchirStatutRappelAidant()
+            rafraîchirMessagePublic()
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             screenAwakeHandler.postDelayed(this, SCREEN_AWAKE_TICK_MS)
         }
@@ -472,6 +473,7 @@ class MainActivity : AppCompatActivity() {
         rafraîchirBoutonPauseAppels()
         rafraîchirBoutonAppelerAidant()
         rafraîchirStatutRappelAidant()
+        rafraîchirMessagePublic()
         // Et tant que cet écran reste au premier plan, toute bascule — y
         // compris celle déclenchée à distance pendant qu'on le regarde — met
         // le bouton à jour tout de suite, sans attendre le prochain passage
@@ -505,6 +507,32 @@ class MainActivity : AppCompatActivity() {
      * bouge (voir le clic ci-dessus), la confirmation vivant désormais dans
      * la bande du bas (voir rafraîchirStatutRappelAidant).
      */
+    /** Ce qui est actuellement affiché en zone 3 par [rafraîchirMessagePublic] — null si rien. */
+    private var messagePublicAffiché: String? = null
+
+    /**
+     * Le mot public écrit depuis le PWA (voir
+     * docs/architecture-message-public.md), relu à chaque battement comme
+     * les autres réglages distants. N'affiche/ne retire qu'au changement
+     * réel — pas à chaque battement — pour ne pas réinitialiser le
+     * défilement d'une zone qui n'a de toute façon rien à faire défiler.
+     */
+    private fun rafraîchirMessagePublic() {
+        val texte = adminConfig.messagePublicTexte
+        val expireLeMs = adminConfig.messagePublicExpireLeMs
+        val expiré = expireLeMs > 0L && System.currentTimeMillis() >= expireLeMs
+        val àAfficher = texte.isNotBlank() && !expiré
+
+        if (àAfficher) {
+            if (texte == messagePublicAffiché) return
+            zones.afficherMessagePublic(texte, adminConfig.messagePublicDe)
+            messagePublicAffiché = texte
+        } else if (messagePublicAffiché != null) {
+            zones.masquerMessagePublic()
+            messagePublicAffiché = null
+        }
+    }
+
     private fun rafraîchirBoutonAppelerAidant() {
         // Voir BuildConfig.RAPPEL_AIDANT_VISIBLE : fonctionnalité pas encore
         // publiée, masquée quel que soit le réglage distant.
