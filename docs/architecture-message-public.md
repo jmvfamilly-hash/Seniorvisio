@@ -56,17 +56,24 @@ message public : un texte d'origine distante, pas une parole de la pièce.
 Nouvelle valeur pour `TranscriptionSource` (aux côtés de `ROOM` et `CALL`),
 affichée par le même `RollingCaptionZone`, sans nouvelle vue à créer.
 
-**Priorité à ce qui se passe réellement dans la pièce.** Si quelqu'un parle
-(zone 2, `zoneRoom`) ou qu'un appel est en cours (zone 3 prend alors les
-sous-titres de l'appel, comme aujourd'hui), le message public s'efface
-temporairement — il n'entre jamais en concurrence avec du vivant. Il revient
-dès que la zone se libère, tant qu'il n'a pas expiré.
+**En clair : le texte, puis, juste dessous, en jaune clair et bien lisible,
+« Message de [Nom] »** — même traitement visuel que la mise en garde du
+répondeur (§4 de `architecture-repondeur.md`), pour que les deux fonctions
+se reconnaissent du même coup d'œil.
 
-**Hors appel seulement**, par défaut : je ne l'affiche pas pendant un appel
-vidéo (zone 3 y est prise par les sous-titres de l'appel ou, désormais, du
-répondeur). À confirmer si vous préférez qu'il réapparaisse entre deux
-prises de parole même en plein appel — ce serait plus de code pour un
-bénéfice pas évident.
+**Pas de conflit avec les paroles de la pièce, en fait — correction après
+vérification du code réel.** Zone 2 (`zoneRoom`, paroles de la pièce) et
+zone 3 (`zoneCall`) sont deux tiers d'écran DIFFÉRENTS et jamais superposés
+(voir `view_home_zones.xml`) : le message public, posé en zone 3, ne
+disparaît donc jamais parce que Jean ou quelqu'un parle dans la pièce.
+
+**Pas de conflit avec un appel non plus, pour une raison plus simple
+encore : ce n'est pas le même écran.** L'accueil (`MainActivity`) et l'écran
+d'appel (`IncomingCallActivity`) possèdent chacun leur propre instance de
+ces zones. Le message public n'est entretenu que par l'accueil ; dès que
+Jean passe à l'écran d'appel, cette zone-là affiche les sous-titres de
+l'appel, sans rien savoir du message public — et à son retour à l'accueil,
+celui-ci réapparaît tout seul, tant qu'il n'a pas expiré. Rien à orchestrer.
 
 ## 4. Déroulé côté appelant (PWA)
 
@@ -91,8 +98,8 @@ bénéfice pas évident.
 | Pièce | Nature |
 |---|---|
 | `AdminConfig` | rien de nouveau — `captionVisibleLines` existe déjà et suffit |
-| `DeviceStatusReporter` | lecture/écriture de `devices/{appareil}/messagePublic/actuel`, et publication de `captionVisibleLines` vers le PWA si elle n'y est pas déjà exposée |
-| `TranscriptionSource` / `RollingCaptionZone` | une troisième source, affichée en zone 3 quand rien de plus prioritaire ne l'occupe |
+| `DeviceStatusReporter` | lecture de `devices/{appareil}/messagePublic/actuel` (nouveau listener), écriture `état` si besoin. `captionVisibleLines` est déjà exposé au PWA (champ du document `devices/{appareil}`, confirmé dans le code) — rien à ajouter là |
+| `TranscriptionSource` / `RollingCaptionZone` | une troisième source ; `MainActivity` la réaffiche à chaque battement (même ticker que `rafraîchirBoutonAppelerAidant`), elle disparaît seule à l'expiration |
 | `web-caller/` | écran de dictée + correction, sélecteur de durée, écran de statut avec Modifier/Retirer |
 
 Aucun nouvel écran Android, aucune nouvelle vue : c'est la différence la
@@ -103,20 +110,17 @@ une zone qui sait déjà l'afficher.
 
 1. Le socle : schéma Firestore, écriture/lecture depuis le PWA, statut.
 2. Le budget de caractères côté PWA, aligné sur `captionVisibleLines`.
-3. Le brancher en zone 3 côté tablette, avec la priorité du §3.
+3. Le brancher en zone 3 côté tablette (voir §3, plus simple que prévu).
 4. L'expiration automatique et la bascule Modifier/Retirer.
 
 ## 7. Décisions qui reviennent à vous
 
-**1. Pendant un appel.** Je pars sur « invisible pendant un appel, revient
-après » (§3). Dites-moi si vous préférez autrement.
-
-**2. Un seul message, pas une file.** Publier un nouveau remplace l'ancien
+**1. Un seul message, pas une file.** Publier un nouveau remplace l'ancien
 sans confirmation particulière — est-ce le comportement voulu, ou faut-il
 prévenir l'appelant qu'un message d'un AUTRE proche est actuellement affiché
 avant de l'écraser ?
 
-**3. La vie privée.** Même remarque que pour le répondeur et les recueils :
+**2. La vie privée.** Même remarque que pour le répondeur et les recueils :
 sans authentification, ce texte est lisible par quiconque connaît le chemin
 Firestore. Moins sensible qu'un message vidéo, mais ça reste un mot destiné
 à Jean et personne d'autre.
