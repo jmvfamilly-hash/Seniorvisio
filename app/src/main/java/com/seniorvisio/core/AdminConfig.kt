@@ -437,6 +437,26 @@ class AdminConfig(context: Context) {
         set(value) = prefs.edit().putString(KEY_AIDANT_NOM, value).apply()
 
     /**
+     * Le mot public écrit par un proche depuis le PWA, affiché en permanence
+     * sur l'accueil tant qu'il n'a pas expiré (voir MainActivity,
+     * rafraîchirMessagePublic, et docs/architecture-message-public.md).
+     * Vide = aucun mot en cours.
+     */
+    var messagePublicTexte: String
+        get() = prefs.getString(KEY_MESSAGE_PUBLIC_TEXTE, null).orEmpty()
+        set(value) = prefs.edit().putString(KEY_MESSAGE_PUBLIC_TEXTE, value).apply()
+
+    /** Qui l'a écrit — affiché en jaune sous le texte, voir la maquette. */
+    var messagePublicDe: String
+        get() = prefs.getString(KEY_MESSAGE_PUBLIC_DE, null).orEmpty()
+        set(value) = prefs.edit().putString(KEY_MESSAGE_PUBLIC_DE, value).apply()
+
+    /** Epoch ms au-delà duquel le mot cesse de s'afficher, même sans action de personne. */
+    var messagePublicExpireLeMs: Long
+        get() = prefs.getLong(KEY_MESSAGE_PUBLIC_EXPIRE_LE_MS, 0L)
+        set(value) = prefs.edit().putLong(KEY_MESSAGE_PUBLIC_EXPIRE_LE_MS, value).apply()
+
+    /**
      * Quand Jean a pressé le bouton « Appeler [prénom] » — purement local,
      * jamais publié : c'est le repère que MainActivity utilise pour savoir
      * depuis combien de temps un message attend une réaction (voir
@@ -563,6 +583,9 @@ class AdminConfig(context: Context) {
         private const val KEY_POLICE_SENIOR = "police_senior"
         private const val KEY_RECUEIL_PHOTOS = "recueil_photos"
         private const val KEY_AIDANT_NOM = "aidant_nom"
+        private const val KEY_MESSAGE_PUBLIC_TEXTE = "message_public_texte"
+        private const val KEY_MESSAGE_PUBLIC_DE = "message_public_de"
+        private const val KEY_MESSAGE_PUBLIC_EXPIRE_LE_MS = "message_public_expire_le_ms"
         private const val KEY_DERNIER_RAPPEL_DEMANDÉ_LE_MS = "dernier_rappel_demande_le_ms"
         private const val KEY_AIDANT_MESSAGE_LU_LE_MS = "aidant_message_lu_le_ms"
         private const val KEY_AIDANT_RAPPEL_PRÉVU_LE_MS = "aidant_rappel_prevu_le_ms"

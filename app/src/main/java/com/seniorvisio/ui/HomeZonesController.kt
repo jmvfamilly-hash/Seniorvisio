@@ -166,12 +166,30 @@ class HomeZonesController(
      */
     private fun zoneFor(source: TranscriptionSource) = when (source) {
         TranscriptionSource.ROOM -> roomZone
-        TranscriptionSource.CALL -> callZone
+        TranscriptionSource.CALL, TranscriptionSource.PUBLIC -> callZone
     }
 
     /** Nouveau texte transcrit : il va dans la zone que sa source désigne. */
     fun submitTranscription(source: TranscriptionSource, text: String, isFinal: Boolean) {
         zoneFor(source).submit(text, isFinal)
+    }
+
+    /**
+     * Le mot public (voir TranscriptionSource.PUBLIC), affiché tel quel dans
+     * la zone 3 — jamais par [submitTranscription], qui suppose un texte qui
+     * s'allonge au fil d'une transcription en cours, pas un texte déjà
+     * entièrement écrit. Sans effet pendant un appel : c'est
+     * IncomingCallActivity, avec sa propre instance de ces zones, qui y
+     * affiche alors les sous-titres de l'appel (voir
+     * docs/architecture-message-public.md, §3).
+     */
+    fun afficherMessagePublic(texte: String) {
+        zoneFor(TranscriptionSource.PUBLIC).afficherTexteFixe(texte)
+    }
+
+    /** Retire le mot public affiché par [afficherMessagePublic] — expiration ou retrait depuis le PWA. */
+    fun masquerMessagePublic() {
+        zoneFor(TranscriptionSource.PUBLIC).clear()
     }
 
     /**

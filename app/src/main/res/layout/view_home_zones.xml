@@ -193,6 +193,29 @@
                 android:textSize="@dimen/caption_text_size_default"
                 android:text="" />
         </ScrollView>
+
+        <!-- ═══ CONFIRMATION DE PRÉSENCE, SOUS LE TEXTE ═══
+
+             « [Nom] est en ligne, [il/elle] vous parle actuellement » —
+             posée pendant un appel réel connecté, jamais pendant la lecture
+             d'un message du répondeur ni l'affichage du message public (voir
+             IncomingCallActivity). Même jaune, même style gras que leur
+             propre mise en garde (« [Nom] n'est pas en ligne ») — les deux
+             se répondent délibérément.
+
+             GONE par défaut, et non INVISIBLE : sans texte à côté, elle ne
+             doit réclamer aucune place dans cette pile verticale. -->
+        <TextView
+            android:id="@+id/textCallEnLigne"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:textStyle="bold"
+            android:textColor="#FDE68A"
+            android:textSize="18sp"
+            android:visibility="gone"
+            android:text="" />
     </LinearLayout>
 
 

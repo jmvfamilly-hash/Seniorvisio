@@ -7,6 +7,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
 import android.util.TypedValue
@@ -155,6 +156,43 @@ class RollingCaptionZone(
             val maxScroll = (textView.height - scrollView.height).coerceAtLeast(0)
             if (maxScroll > 0) scrollAnimator.scrollTo(maxScroll)
         }
+    }
+
+    /**
+     * Affiche un texte déjà entièrement connu d'avance, sans défilement ni
+     * effacement automatique — à l'opposé de [submit], pensé pour un flux qui
+     * s'allonge et se corrige au fil de la dictée (voir
+     * TranscriptionSource.PUBLIC et docs/architecture-message-public.md). La
+     * durée d'affichage est décidée par l'appelant (expiration, retrait),
+     * jamais par un silence : rien ici n'arme [clearRunnable].
+     *
+     * [mentionJaune], quand il est fourni, se pose sur sa propre ligne sous
+     * [texte], en jaune clair — « Message de [Nom] — [Nom] n'est pas en
+     * ligne ». Même mise en garde, mot pour mot et même style, que
+     * `IncomingCallActivity` pour le répondeur (voir
+     * docs/architecture-repondeur.md, §4) : les deux fonctions doivent se
+     * reconnaître du même coup d'œil.
+     */
+    fun afficherTexteFixe(texte: String, mentionJaune: String? = null) {
+        handler.removeCallbacks(clearRunnable)
+        committed = texte
+        pending = ""
+        lastTextAtMs = 0L
+        textView.alpha = 1f
+        textView.text = texteAvecMentionJaune(texte, mentionJaune)
+        scrollAnimator.jumpTo(0)
+        reveal()
+    }
+
+    private fun texteAvecMentionJaune(texte: String, mentionJaune: String?): CharSequence {
+        if (mentionJaune.isNullOrBlank()) return texte
+        val full = "$texte\n$mentionJaune"
+        val styled = SpannableStringBuilder(full)
+        val from = texte.length + 1
+        val to = full.length
+        styled.setSpan(ForegroundColorSpan(COULEUR_MENTION_JAUNE), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        styled.setSpan(StyleSpan(Typeface.BOLD), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        return styled
     }
 
     /** Vide la zone immédiatement (fin d'appel, sortie d'écran, silence prolongé). */
@@ -492,6 +530,14 @@ class RollingCaptionZone(
     companion object {
         private const val FADE_MS = 400L
         private const val CORNER_RADIUS_DP = 16f
+
+        /**
+         * Jaune clair, partagé par toutes les mises en garde/confirmations de
+         * présence — répondeur, message public, et l'indicateur « en ligne »
+         * d'un appel réel (voir IncomingCallActivity). Une seule couleur à
+         * changer si elle doit un jour l'être.
+         */
+        const val COULEUR_MENTION_JAUNE = 0xFFFDE68A.toInt()
 
         /**
          * Valeurs de départ, reprises du bandeau d'origine : deux lignes
