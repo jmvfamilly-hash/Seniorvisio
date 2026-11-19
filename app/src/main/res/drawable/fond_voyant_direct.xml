@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Le point plein du voyant « en direct » (voir view_home_zones.xml,
+     zoneCallIndicateur, et IncomingCallActivity.afficherIndicateurEnDirect).
+
+     Vert, pas rouge : le rouge est déjà pris par « Terminé »/« Raccrocher »
+     dans ce projet (fond_bouton_rouge) — l'utiliser ici dirait « danger »
+     à l'endroit où il faut dire « quelqu'un est bien là ».
+
+     Animé en code (respiration lente, pas un clignotement) plutôt que décrit
+     ici : une seule anim XML aurait tourné en boucle même quand la vue est
+     masquée, pour rien.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#2ECC71" />
+</shape>

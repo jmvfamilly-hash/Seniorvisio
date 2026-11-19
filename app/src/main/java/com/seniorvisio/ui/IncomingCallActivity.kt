@@ -1172,6 +1172,12 @@ class IncomingCallActivity : AppCompatActivity() {
         // la date et la météo demeurent, et les photos de l'accueil sont
         // dessinées derrière (voir préparerÉcranSousTitres).
         if (!modeSousTitres) zones.setBackground(HomeZonesController.Background.VIDEO)
+        // Confirmation de présence, sans un mot à lire : voit le voyant qui
+        // respire aussi bien en appel vidéo qu'en mode « Sous-titres », les
+        // deux étant un vrai appel en cours (voir
+        // docs/architecture-repondeur.md, §4 — à ne jamais poser ici pour la
+        // lecture d'un message du répondeur, qui ne passe pas par ce chemin).
+        zones.afficherIndicateurEnDirect()
         findViewById<View>(R.id.alertContent).visibility = View.GONE
         // La photo est dans la barre basse, fille d'alertContent : sa
         // visibilité suit déjà celle de son parent, mais elle est aussi
@@ -1854,6 +1860,7 @@ class IncomingCallActivity : AppCompatActivity() {
         // ne doit rien laisser tourner derrière lui.
         lecteurRecueil?.libérer()
         lecteurRecueil = null
+        zones.masquerIndicateursZoneAppel()
         zones.release()
         // L'écoute de la pièce reprend, et l'écran d'accueil qui réapparaît
         // rebaissera les alertes (voir MainActivity.onResume) : le volume

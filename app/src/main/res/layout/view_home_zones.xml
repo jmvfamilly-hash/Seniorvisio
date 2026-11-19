@@ -151,6 +151,51 @@
         android:visibility="invisible"
         android:alpha="0">
 
+        <!-- ═══ EN DIRECT OU ENREGISTRÉ : AU-DESSUS DE TOUT LE RESTE ═══
+
+             Cette zone affiche trois choses de nature différente — un appel
+             réel, un message du répondeur, un mot public — et rien dans la
+             mise en page ne les distingue jusqu'ici que le bandeau/la
+             mention jaune qu'on doit LIRE. Pour quelqu'un qui ne lit pas
+             facilement, un repère qui ne demande aucune lecture compte
+             davantage : un voyant qui respire doucement (en direct, voir
+             fond_voyant_direct) ou une enveloppe (enregistré, voir
+             ic_message_enregistre), toujours au même endroit, jamais les
+             deux ensemble.
+
+             Posée en haut à gauche de la zone, donc AVANT le reste —
+             premier enfant de cette pile verticale avec layout_gravity
+             « start » pour ne pas s'étirer sur toute la largeur.
+
+             Les deux faces sont GONE par défaut : rien à l'écran tant
+             qu'aucune des deux méthodes (voir HomeZonesController,
+             afficherIndicateurEnDirect/afficherIndicateurMessage) n'a été
+             appelée. -->
+        <LinearLayout
+            android:id="@+id/zoneCallIndicateur"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start"
+            android:layout_marginBottom="4dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <View
+                android:id="@+id/voyantEnDirect"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:background="@drawable/fond_voyant_direct"
+                android:visibility="gone" />
+
+            <ImageView
+                android:id="@+id/iconeMessageEnregistre"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_message_enregistre"
+                android:contentDescription="Message enregistré"
+                android:visibility="gone" />
+        </LinearLayout>
+
         <!-- ═══ QUI PARLE, AU-DESSUS DE CE QU'IL DIT ═══
 
              Masqué partout sauf en mode « Sous-titres » (voir

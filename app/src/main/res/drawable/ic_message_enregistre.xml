@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Une enveloppe, pour dire « ceci est un message, pas un appel en
+     direct » — posée en haut à gauche de la zone de sous-titres (voir
+     view_home_zones.xml, zoneCallIndicateur) chaque fois que le texte vient
+     du répondeur ou du message public plutôt que d'un appel réel (voir
+     RollingCaptionZone.afficherTexteFixe).
+
+     Choisie plutôt qu'un mot : une enveloppe se reconnaît sans savoir lire,
+     et ne se confond pas avec le voyant qui l'accompagne jamais en même
+     temps (voir ic_voyant_direct) — les deux sont mutuellement exclusifs à
+     l'écran, jamais affichés ensemble.
+
+     Contour, comme ic_transcription : un aplat à cette taille se lirait
+     comme un simple carré plein.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Le rabat et le corps de l'enveloppe, en un seul contour. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M3,5.5C3,4.67 3.67,4 4.5,4h15c0.83,0 1.5,0.67 1.5,1.5v13c0,0.83 -0.67,1.5 -1.5,1.5h-15C3.67,20 3,19.33 3,18.5V5.5zM4.5,5.5v0.4l7.5,5.4l7.5,-5.4V5.5h-15zM19.5,7.76l-6.63,4.77c-0.52,0.37 -1.21,0.37 -1.73,0L4.5,7.76v10.74h15V7.76z" />
+</vector>

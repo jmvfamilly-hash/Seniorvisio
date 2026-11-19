@@ -1,5 +1,7 @@
 package com.seniorvisio.ui
 
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
@@ -8,6 +10,7 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -109,6 +112,11 @@ class HomeZonesController(
     private val zoneInfo: View = root.findViewById(R.id.zoneInfo)
     private val zoneRoom: View = root.findViewById(R.id.zoneRoom)
     private val zoneCall: View = root.findViewById(R.id.zoneCall)
+    private val voyantEnDirect: View = root.findViewById(R.id.voyantEnDirect)
+    private val iconeMessageEnregistre: ImageView = root.findViewById(R.id.iconeMessageEnregistre)
+
+    /** Tenu ici pour pouvoir l'arrêter proprement — voir [masquerIndicateursZoneAppel]. */
+    private var animationVoyant: ObjectAnimator? = null
     /**
      * L'hôte de la visionneuse, en plein cadre sous la pile (voir
      * activity_main.xml et VisionneusePhotos).
@@ -185,11 +193,56 @@ class HomeZonesController(
      */
     fun afficherMessagePublic(texte: String) {
         zoneFor(TranscriptionSource.PUBLIC).afficherTexteFixe(texte)
+        afficherIndicateurMessage()
     }
 
     /** Retire le mot public affiché par [afficherMessagePublic] — expiration ou retrait depuis le PWA. */
     fun masquerMessagePublic() {
         zoneFor(TranscriptionSource.PUBLIC).clear()
+        masquerIndicateursZoneAppel()
+    }
+
+    /**
+     * Le voyant qui respire doucement, en haut à gauche de la zone 3 — un
+     * repère qui ne demande aucune lecture pour dire « quelqu'un est bien là,
+     * en ce moment » (voir docs/architecture-repondeur.md). À appeler une
+     * fois, quand un appel réel se connecte — pas à chaque mot transcrit.
+     *
+     * Respiration et non clignotement : un battement RÉPÉTÉ sur tout l'écran
+     * est déjà interdit ici pour le risque de crise chez une personne
+     * photosensible (voir pulseAttentionAppel dans
+     * activity_incoming_call.xml) — un point minuscule l'est beaucoup moins,
+     * mais autant garder le même principe par précaution plutôt que de le
+     * réévaluer à chaque nouvel indicateur.
+     */
+    fun afficherIndicateurEnDirect() {
+        iconeMessageEnregistre.visibility = View.GONE
+        voyantEnDirect.visibility = View.VISIBLE
+        if (animationVoyant?.isRunning == true) return
+        animationVoyant = ObjectAnimator.ofFloat(voyantEnDirect, "alpha", 1f, 0.35f).apply {
+            duration = 1_400L
+            repeatMode = ValueAnimator.REVERSE
+            repeatCount = ValueAnimator.INFINITE
+            start()
+        }
+    }
+
+    /** L'enveloppe fixe, même emplacement — répondeur ou message public, jamais un appel réel. */
+    fun afficherIndicateurMessage() {
+        animationVoyant?.cancel()
+        animationVoyant = null
+        voyantEnDirect.visibility = View.GONE
+        voyantEnDirect.alpha = 1f
+        iconeMessageEnregistre.visibility = View.VISIBLE
+    }
+
+    /** Fin d'appel ou de lecture : plus rien à signaler. */
+    fun masquerIndicateursZoneAppel() {
+        animationVoyant?.cancel()
+        animationVoyant = null
+        voyantEnDirect.visibility = View.GONE
+        voyantEnDirect.alpha = 1f
+        iconeMessageEnregistre.visibility = View.GONE
     }
 
     /**
