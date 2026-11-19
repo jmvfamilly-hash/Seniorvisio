@@ -7,7 +7,6 @@ import android.os.Looper
 import android.os.SystemClock
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
 import android.util.TypedValue
@@ -166,45 +165,23 @@ class RollingCaptionZone(
      * durée d'affichage est décidée par l'appelant (expiration, retrait),
      * jamais par un silence : rien ici n'arme [clearRunnable].
      *
-     * [mentionJaune], quand il est fourni, se pose sur sa propre ligne sous
-     * [texte], en jaune clair — « Message de [Nom] — [Nom] n'est pas en
-     * ligne ». Même mise en garde, mot pour mot et même style, que
-     * `IncomingCallActivity` pour le répondeur (voir
-     * docs/architecture-repondeur.md, §4) : les deux fonctions doivent se
-     * reconnaître du même coup d'œil.
+     * SEUL [texte] vit dans cette zone qui défile — la mention jaune
+     * (« [Nom] n'est pas en ligne ») a sa PROPRE ligne fixe, hors de cette
+     * zone (voir HomeZonesController.afficherMentionJaune et
+     * textCallEnLigne) : les deux ont partagé cette même zone un temps,
+     * et un message un peu long suffisait à faire disparaître l'un des deux
+     * sous le bas, invisible, sans que rien ne permette de l'amener à
+     * l'écran — constaté en usage réel.
      */
-    fun afficherTexteFixe(texte: String, mentionJaune: String? = null) {
+    fun afficherTexteFixe(texte: String) {
         handler.removeCallbacks(clearRunnable)
         committed = texte
         pending = ""
         lastTextAtMs = 0L
         textView.alpha = 1f
-        textView.text = texteAvecMentionJaune(texte, mentionJaune)
+        textView.text = texte
+        scrollAnimator.jumpTo(0)
         reveal()
-
-        textView.post {
-            // Vers le BAS, et non vers le haut (voir submit, qui fait le
-            // même choix) : si le texte et sa mention jaune dépassent à eux
-            // deux la hauteur des lignes visibles, c'est la mention — la
-            // dernière chose — qui doit rester lisible, pas le début du
-            // texte. Un jumpTo(0) laissait la mention sous le bas de la
-            // zone, invisible, sans aucun défilement pour jamais l'amener à
-            // l'écran (rien ici ne scrolle jamais tout seul, à la
-            // différence d'un flux qui s'allonge).
-            val maxScroll = (textView.height - scrollView.height).coerceAtLeast(0)
-            scrollAnimator.jumpTo(maxScroll)
-        }
-    }
-
-    private fun texteAvecMentionJaune(texte: String, mentionJaune: String?): CharSequence {
-        if (mentionJaune.isNullOrBlank()) return texte
-        val full = "$texte\n$mentionJaune"
-        val styled = SpannableStringBuilder(full)
-        val from = texte.length + 1
-        val to = full.length
-        styled.setSpan(ForegroundColorSpan(COULEUR_MENTION_JAUNE), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        styled.setSpan(StyleSpan(Typeface.BOLD), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        return styled
     }
 
     /** Vide la zone immédiatement (fin d'appel, sortie d'écran, silence prolongé). */

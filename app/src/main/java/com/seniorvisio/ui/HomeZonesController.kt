@@ -115,6 +115,7 @@ class HomeZonesController(
     private val voyantEnDirect: View = root.findViewById(R.id.voyantEnDirect)
     private val iconeMessageEnregistre: ImageView = root.findViewById(R.id.iconeMessageEnregistre)
     private val textCallCaptionTitre: TextView = root.findViewById(R.id.textCallCaptionTitre)
+    private val textCallEnLigne: TextView = root.findViewById(R.id.textCallEnLigne)
 
     /** Tenu ici pour pouvoir l'arrêter proprement — voir [masquerIndicateursZoneAppel]. */
     private var animationVoyant: ObjectAnimator? = null
@@ -196,8 +197,8 @@ class HomeZonesController(
      * d'afficher une phrase bancale (« Message de — n'est pas en ligne »).
      */
     fun afficherMessagePublic(texte: String, de: String) {
-        val mention = if (de.isBlank()) null else "Message de $de — $de n'est pas en ligne"
-        zoneFor(TranscriptionSource.PUBLIC).afficherTexteFixe(texte, mention)
+        zoneFor(TranscriptionSource.PUBLIC).afficherTexteFixe(texte)
+        if (de.isBlank()) masquerMentionJaune() else afficherMentionJaune("Message de $de — $de n'est pas en ligne")
         afficherIndicateurMessage()
     }
 
@@ -206,6 +207,33 @@ class HomeZonesController(
         zoneFor(TranscriptionSource.PUBLIC).clear()
         masquerIndicateursZoneAppel()
         masquerHeureZoneAppel()
+        masquerMentionJaune()
+    }
+
+    /**
+     * La mise en garde ou la confirmation de présence, SOUS le texte qui
+     * défile — jamais DANS lui (voir textCallEnLigne dans
+     * view_home_zones.xml). Une ligne fixe, de sa propre hauteur, qui ne
+     * dispute donc jamais la place du texte qui défile au-dessus : les deux
+     * ont un temps partagé la même zone défilante, et un message assez
+     * long suffisait à faire disparaître l'un des deux sous le bas,
+     * invisible, sans aucun moyen de l'amener à l'écran — constaté en
+     * usage réel.
+     *
+     * Même méthode pour le répondeur (« [Nom] n'est pas en ligne ») et,
+     * plus tard, pour un appel réel (« [Nom] est en ligne ») : c'est
+     * l'appelant qui choisit le texte et la couleur reste la même jaune
+     * clair dans les deux cas (voir RollingCaptionZone.COULEUR_MENTION_JAUNE).
+     */
+    fun afficherMentionJaune(texte: String) {
+        textCallEnLigne.text = texte
+        textCallEnLigne.visibility = View.VISIBLE
+    }
+
+    /** Retire la ligne posée par [afficherMentionJaune]. */
+    fun masquerMentionJaune() {
+        textCallEnLigne.visibility = View.GONE
+        textCallEnLigne.text = ""
     }
 
     /**
