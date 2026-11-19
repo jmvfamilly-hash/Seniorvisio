@@ -425,6 +425,11 @@ class TranscriptionEngine(
     private fun label(source: TranscriptionSource) = when (source) {
         TranscriptionSource.ROOM -> "micro tablette"
         TranscriptionSource.CALL -> "appel"
+        // N'ouvre jamais de session ici : un mot public est déjà écrit, pas
+        // transcrit (voir RollingCaptionZone.afficherTexteFixe). Cette
+        // branche ne s'exécute donc pas en pratique ; elle existe pour que
+        // ce `when` reste exhaustif.
+        TranscriptionSource.PUBLIC -> "mot public"
     }
 
     companion object {
