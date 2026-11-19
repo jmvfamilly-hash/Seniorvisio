@@ -152,7 +152,7 @@
         android:visibility="invisible"
         android:alpha="0">
 
-        <!-- ═══ EN DIRECT OU ENREGISTRÉ : AU-DESSUS DE TOUT LE RESTE ═══
+        <!-- ═══ EN DIRECT OU ENREGISTRÉ, ET SON TEXTE, SUR LA MÊME LIGNE ═══
 
              Cette zone affiche trois choses de nature différente — un appel
              réel, un message du répondeur, un mot public — et rien dans la
@@ -164,20 +164,22 @@
              ic_message_enregistre), toujours au même endroit, jamais les
              deux ensemble.
 
-             Posée en haut à gauche de la zone, donc AVANT le reste —
-             premier enfant de cette pile verticale avec layout_gravity
-             « start » pour ne pas s'étirer sur toute la largeur.
+             textCallEnLigne (la mention jaune, « [Nom] n'est pas en ligne »
+             ou, plus tard, « [Nom] est en ligne ») vit ICI, à côté de
+             l'icône qui l'annonce — et non plus sur sa propre ligne sous le
+             texte qui défile : les deux ont un temps disputé la même place
+             qu'un texte assez long, et la zone qui défile en a maintenant
+             TOUTE la hauteur restante, sans plus rien à partager avec elle.
 
-             Les deux faces sont GONE par défaut : rien à l'écran tant
-             qu'aucune des deux méthodes (voir HomeZonesController,
-             afficherIndicateurEnDirect/afficherIndicateurMessage) n'a été
-             appelée. -->
+             Posée en haut de la zone, donc AVANT le reste — premier enfant
+             de cette pile verticale. match_parent et non wrap_content,
+             désormais : la mention peut être longue, et doit pouvoir
+             occuper toute la largeur qui reste après l'icône. -->
         <LinearLayout
             android:id="@+id/zoneCallIndicateur"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="start"
-            android:layout_marginBottom="4dp"
+            android:layout_marginBottom="10dp"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
@@ -195,6 +197,23 @@
                 android:src="@drawable/ic_message_enregistre"
                 android:contentDescription="Message enregistré"
                 android:visibility="gone" />
+
+            <!-- GONE par défaut, et non INVISIBLE : sans texte, elle ne
+                 doit réclamer aucune place sur cette ligne. 0dp + poids
+                 pour profiter de toute la largeur qui reste après l'icône,
+                 plutôt que de la faire déborder sur plusieurs lignes au
+                 milieu de la ligne d'icône. -->
+            <TextView
+                android:id="@+id/textCallEnLigne"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:textStyle="bold"
+                android:textColor="#FDE68A"
+                android:textSize="20sp"
+                android:visibility="gone"
+                android:text="" />
         </LinearLayout>
 
         <!-- ═══ QUI PARLE, AU-DESSUS DE CE QU'IL DIT ═══
@@ -240,29 +259,6 @@
                 android:textSize="@dimen/caption_text_size_default"
                 android:text="" />
         </ScrollView>
-
-        <!-- ═══ CONFIRMATION DE PRÉSENCE, SOUS LE TEXTE ═══
-
-             « [Nom] est en ligne, [il/elle] vous parle actuellement » —
-             posée pendant un appel réel connecté, jamais pendant la lecture
-             d'un message du répondeur ni l'affichage du message public (voir
-             IncomingCallActivity). Même jaune, même style gras que leur
-             propre mise en garde (« [Nom] n'est pas en ligne ») — les deux
-             se répondent délibérément.
-
-             GONE par défaut, et non INVISIBLE : sans texte à côté, elle ne
-             doit réclamer aucune place dans cette pile verticale. -->
-        <TextView
-            android:id="@+id/textCallEnLigne"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:gravity="center"
-            android:textStyle="bold"
-            android:textColor="#FDE68A"
-            android:textSize="18sp"
-            android:visibility="gone"
-            android:text="" />
     </LinearLayout>
 
 

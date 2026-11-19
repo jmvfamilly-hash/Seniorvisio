@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Le petit cadre de respiration autour de l'horloge numérique forcée
+     pendant l'affichage d'un message (voir MainActivity.
+     forcerHorlogeNumériquePendantMessage) — jamais posé sur cette même vue
+     quand elle est le choix normal de l'administrateur, où rien ne doit
+     changer à son apparence habituelle.
+
+     Un simple contour, pas un aplat : l'horloge garde le fond de l'écran
+     derrière elle, seul le cadre la distingue.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="20dp" />
+    <stroke
+        android:width="1dp"
+        android:color="#595B86E5" />
+</shape>

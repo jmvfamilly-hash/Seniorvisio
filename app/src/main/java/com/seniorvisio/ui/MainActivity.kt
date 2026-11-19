@@ -93,6 +93,17 @@ class MainActivity : AppCompatActivity() {
      */
     private lateinit var margesMomentParDéfaut: FrameLayout.LayoutParams
 
+    /**
+     * Marges par défaut de horlogeNumeriqueAccueil, capturées pour la même
+     * raison que ci-dessus : pendant l'affichage d'un message (voir
+     * forcerHorlogeNumériquePendantMessage), cette horloge est confinée à
+     * la zone 2 par une marge basse bien plus grande que sa marge
+     * habituelle (8dp, pensée pour un cadran qui occupe tout l'écran) —
+     * sans quoi son centrage s'étendrait jusque dans la zone 3, par-dessus
+     * le texte du message.
+     */
+    private lateinit var margesHorlogeNumériqueParDéfaut: FrameLayout.LayoutParams
+
     /** Dernier choix appliqué, pour ne recaler le groupe que lors d'un vrai changement. */
     private var dernierChoixHorlogeNumérique: Boolean? = null
 
@@ -283,6 +294,7 @@ class MainActivity : AppCompatActivity() {
         horlogeNumeriqueAccueil = findViewById(R.id.horlogeNumeriqueAccueil)
         groupeMomentAccueil = findViewById(R.id.groupeMomentAccueil)
         margesMomentParDéfaut = FrameLayout.LayoutParams(groupeMomentAccueil.layoutParams as FrameLayout.LayoutParams)
+        margesHorlogeNumériqueParDéfaut = FrameLayout.LayoutParams(horlogeNumeriqueAccueil.layoutParams as FrameLayout.LayoutParams)
         val zoneInfo = findViewById<View>(R.id.zoneInfo)
 
         // ═══ UNE SEULE LIGNE, PAS UN TIERS D'ÉCRAN — ICI SEULEMENT ═══
@@ -541,9 +553,11 @@ class MainActivity : AppCompatActivity() {
      * L'horloge de la zone 2 — pas une seconde horloge créée pour
      * l'occasion (voir la maquette) — bascule sur la numérique tant qu'un
      * message reste affiché en zone 3, quel que soit le choix habituel de
-     * l'administrateur (AdminConfig.horlogeNumerique) : compacte, elle
-     * reste au-dessus du texte sans jamais empiéter sur rien, ce que
-     * l'horloge à aiguilles, plus large, ne garantit pas aussi bien.
+     * l'administrateur (AdminConfig.horlogeNumerique). Elle occupe toute la
+     * place disponible, comme le cadran qu'elle remplace (c'est déjà ce que
+     * fait HorlogeNumerique, en match_parent) — seul un petit cadre, posé
+     * ici et nulle part ailleurs, la distingue de son apparence habituelle
+     * quand c'est l'administrateur qui l'a choisie.
      *
      * N'écrit jamais AdminConfig.horlogeNumerique : c'est un réglage de
      * l'administrateur, pas une conséquence du mot public. Au retrait, on
@@ -555,9 +569,19 @@ class MainActivity : AppCompatActivity() {
         if (actif) {
             horlogeAccueil.visibility = View.GONE
             horlogeNumeriqueAccueil.visibility = View.VISIBLE
+            horlogeNumeriqueAccueil.setBackgroundResource(R.drawable.cadre_horloge_message)
+            // Confinée à la zone 2 (voir margesHorlogeNumériqueParDéfaut) :
+            // sa marge habituelle de 8dp, pensée pour un cadran plein
+            // écran, laisserait sinon son centrage s'étendre jusque dans
+            // la zone 3, par-dessus le texte du message.
+            horlogeNumeriqueAccueil.layoutParams = FrameLayout.LayoutParams(margesHorlogeNumériqueParDéfaut).apply {
+                bottomMargin = (MARGE_BASSE_HORLOGE_PENDANT_MESSAGE_DP * resources.displayMetrics.density).toInt()
+            }
         } else {
             horlogeAccueil.visibility = if (adminConfig.horlogeNumerique) View.GONE else View.VISIBLE
             horlogeNumeriqueAccueil.visibility = if (adminConfig.horlogeNumerique) View.VISIBLE else View.GONE
+            horlogeNumeriqueAccueil.background = null
+            horlogeNumeriqueAccueil.layoutParams = FrameLayout.LayoutParams(margesHorlogeNumériqueParDéfaut)
         }
     }
 
@@ -977,6 +1001,14 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_WAKE_ON_SOUND = "extra_wake_on_sound"
 
         private const val SCREEN_AWAKE_TICK_MS = 1_000L
+
+        /**
+         * Voir forcerHorlogeNumériquePendantMessage : approximation, pas un
+         * calcul — la hauteur réelle d'un tiers d'écran dépend de la
+         * tablette. À ajuster si l'horloge forcée empiète encore sur la
+         * zone 3, ou si elle laisse un vide trop grand au-dessus d'elle.
+         */
+        private const val MARGE_BASSE_HORLOGE_PENDANT_MESSAGE_DP = 280
 
         /** Voir appliquerFondVariable : dosage du lavis, délibérément discret. */
         private const val TEINTE_MOMENT_FRACTION = 0.10f
