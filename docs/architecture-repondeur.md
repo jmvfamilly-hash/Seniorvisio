@@ -57,8 +57,14 @@ message disparaît après sa lecture (§6).
 
 ## 3. Déroulé côté appelant (PWA)
 
-1. Bouton « Laisser un message », à côté de « Appeler ». Choix audio ou
-   vidéo, comme le choix caméra/micro existant à l'ouverture d'un appel.
+1. **Point d'entrée : l'onglet « Message vocal » de l'écran d'accueil du
+   PWA.** L'accueil est en trois onglets — Appeler / Message vocal / Mot
+   écrit (voir `architecture-message-public.md`, cette troisième fonction
+   partage le même écran à onglets) — plutôt qu'un seul écran qui aurait
+   fini par empiler les trois. Cet onglet porte le bouton « Laisser un
+   message vidéo ou audio » et le statut du dernier message envoyé (§3,
+   étape 6 ci-dessous). Choix audio ou vidéo, comme le choix caméra/micro
+   existant à l'ouverture d'un appel.
 2. Écran d'enregistrement : aperçu caméra (si vidéo) identique à `localVideo`
    aujourd'hui, un bouton Enregistrer/Arrêter, une durée maximale annoncée à
    l'écran (proposition : 2 minutes — large assez pour un message, court

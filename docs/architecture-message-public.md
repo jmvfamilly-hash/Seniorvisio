@@ -70,12 +70,11 @@ bénéfice pas évident.
 
 ## 4. Déroulé côté appelant (PWA)
 
-0. **Point d'entrée : l'écran d'accueil du PWA**, en dessous d'« Appeler »
-   et de « Laisser un message » (répondeur) — un lien tertiaire, « Écrire un
-   mot sur son écran », volontairement moins visible que les deux boutons
-   d'appel : c'est un geste occasionnel, pas une action principale. Ce même
-   écran affiche aussi, en une ligne, le statut du mot actuellement affiché
-   s'il y en a un (texte complet en §4bis ci-dessous).
+0. **Point d'entrée : l'onglet « Mot écrit » de l'écran d'accueil du PWA.**
+   L'accueil est désormais en trois onglets — Appeler / Message vocal
+   (répondeur) / Mot écrit — plutôt qu'un seul écran qui aurait fini par
+   empiler les trois fonctions. Chaque onglet porte son action et son
+   statut, sans rien montrer des deux autres.
 1. Dicte le texte (reconnaissance vocale navigateur, même mécanisme qu'en
    §5 du répondeur), le corrige dans le champ éditable.
 2. Voit en direct le budget restant par rapport au réglage actuel de Jean
