@@ -457,6 +457,19 @@ class AdminConfig(context: Context) {
         set(value) = prefs.edit().putLong(KEY_MESSAGE_PUBLIC_EXPIRE_LE_MS, value).apply()
 
     /**
+     * Combien de caractères tiennent réellement sur une ligne de la zone de
+     * sous-titres, mesuré par MainActivity (voir
+     * HomeZonesController.captionCharsPerLine) et republié par le signe de
+     * vie (voir DeviceStatusReporter.reportHeartbeat) pour que le PWA borne
+     * la saisie du mot public sur la vraie géométrie de CETTE tablette,
+     * plutôt que sur une moyenne devinée. Zéro tant que la mise en page n'a
+     * pas encore été mesurée une première fois.
+     */
+    var captionCharsPerLineComputed: Int
+        get() = prefs.getInt(KEY_CAPTION_CHARS_PER_LINE_COMPUTED, 0)
+        set(value) = prefs.edit().putInt(KEY_CAPTION_CHARS_PER_LINE_COMPUTED, value).apply()
+
+    /**
      * Quand Jean a pressé le bouton « Appeler [prénom] » — purement local,
      * jamais publié : c'est le repère que MainActivity utilise pour savoir
      * depuis combien de temps un message attend une réaction (voir
@@ -586,6 +599,7 @@ class AdminConfig(context: Context) {
         private const val KEY_MESSAGE_PUBLIC_TEXTE = "message_public_texte"
         private const val KEY_MESSAGE_PUBLIC_DE = "message_public_de"
         private const val KEY_MESSAGE_PUBLIC_EXPIRE_LE_MS = "message_public_expire_le_ms"
+        private const val KEY_CAPTION_CHARS_PER_LINE_COMPUTED = "caption_chars_per_line_computed"
         private const val KEY_DERNIER_RAPPEL_DEMANDÉ_LE_MS = "dernier_rappel_demande_le_ms"
         private const val KEY_AIDANT_MESSAGE_LU_LE_MS = "aidant_message_lu_le_ms"
         private const val KEY_AIDANT_RAPPEL_PRÉVU_LE_MS = "aidant_rappel_prevu_le_ms"

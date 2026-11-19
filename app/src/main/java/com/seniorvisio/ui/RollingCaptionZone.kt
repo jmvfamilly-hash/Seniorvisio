@@ -180,8 +180,20 @@ class RollingCaptionZone(
         lastTextAtMs = 0L
         textView.alpha = 1f
         textView.text = texteAvecMentionJaune(texte, mentionJaune)
-        scrollAnimator.jumpTo(0)
         reveal()
+
+        textView.post {
+            // Vers le BAS, et non vers le haut (voir submit, qui fait le
+            // même choix) : si le texte et sa mention jaune dépassent à eux
+            // deux la hauteur des lignes visibles, c'est la mention — la
+            // dernière chose — qui doit rester lisible, pas le début du
+            // texte. Un jumpTo(0) laissait la mention sous le bas de la
+            // zone, invisible, sans aucun défilement pour jamais l'amener à
+            // l'écran (rien ici ne scrolle jamais tout seul, à la
+            // différence d'un flux qui s'allonge).
+            val maxScroll = (textView.height - scrollView.height).coerceAtLeast(0)
+            scrollAnimator.jumpTo(maxScroll)
+        }
     }
 
     private fun texteAvecMentionJaune(texte: String, mentionJaune: String?): CharSequence {

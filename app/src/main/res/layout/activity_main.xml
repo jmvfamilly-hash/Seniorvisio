@@ -119,6 +119,57 @@
         android:layout_marginTop="100dp"
         android:visibility="gone" />
 
+    <!-- ═══ LE MOMENT DE LA JOURNÉE ═══
+
+         Déclarée ICI, AVANT la pile des zones, pour que le texte de la
+         zone 3 (sous-titres d'appel, répondeur, mot public) se dessine
+         PAR-DESSUS plutôt que dessous — comme elle l'a toujours fait pour
+         l'horloge, deux blocs plus haut. Elle y est restée après la pile
+         pendant un temps, ce qui la faisait passer devant un texte de zone
+         3 pourtant déjà affiché — constaté en usage réel une fois le mot
+         public capable de remplir cette zone en continu, et non plus
+         seulement par brefs sous-titres d'appel.
+
+         Position par défaut : en bas à gauche de l'écran (pas du bandeau,
+         voir plus haut) — c'est celle qu'il garde quand l'horloge numérique
+         est active, qui n'a pas d'aiguilles à éviter.
+
+         Quand l'horloge à aiguilles est active, MainActivity
+         (repositionnerMomentDansHorloge) reprend la main sur sa position à
+         chaque minute et la pose À L'INTÉRIEUR du cadran, à l'opposé des
+         aiguilles — demandé pour qu'elle profite de la place du cadran sans
+         jamais passer dessous. gravity="top|start" ici n'a donc d'effet que
+         le temps que ce recalcul n'ait pas encore tourné une première fois
+         (moins d'une seconde après l'affichage de l'écran) ou le temps de
+         basculer vers l'horloge numérique, qui restaure la position
+         ci-dessous. -->
+    <LinearLayout
+        android:id="@+id/groupeMomentAccueil"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="32dp"
+        android:layout_marginBottom="90dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/textMomentIcon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="44sp"
+            android:text="" />
+
+        <TextView
+            android:id="@+id/textMomentLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:textSize="34sp"
+            android:textStyle="bold"
+            android:text="" />
+    </LinearLayout>
+
     <include layout="@layout/view_home_zones" />
 
     <!-- ═══ LES BOUTONS DE JEAN, GROUPÉS À DROITE ═══
@@ -132,13 +183,28 @@
          nouvelle taille.
 
          Déclarée APRÈS la pile et l'horloge : elle flotte donc par-dessus,
-         comme les boutons l'ont toujours fait sur cet écran. -->
+         comme les boutons l'ont toujours fait sur cet écran.
+
+         ═══ POURQUOI UNE MARGE BASSE SUR UNE COLONNE « CENTRÉE » ═══
+
+         « Bloquer les appels » (aujourd'hui seul bouton restant visible,
+         voir rafraîchirBoutonAppelerAidant/BuildConfig.RAPPEL_AIDANT_VISIBLE)
+         débordait dans la zone 3, et s'affichait donc PAR-DESSUS son texte
+         — constaté en usage réel avec le mot public, qui remplit cette
+         zone bien plus souvent que ne le faisaient les sous-titres d'un
+         appel. Un centrage vertical pur place en effet le bas de la
+         colonne dans le tiers inférieur de l'écran, exactement celui de la
+         zone 3. Cette marge basse déplace le centrage effectif vers le
+         haut, sans rien retirer à la colonne elle-même ; si ça ne suffit
+         pas sur votre tablette, c'est cette seule valeur qu'il faut
+         augmenter. -->
     <LinearLayout
         android:id="@+id/colonneBoutonsAccueil"
         android:layout_width="260dp"
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical|end"
         android:layout_marginEnd="32dp"
+        android:layout_marginBottom="160dp"
         android:orientation="vertical">
 
         <!-- ═══ « DEMANDER À [NOM] DE RAPPELER » : UN SEUL DESTINATAIRE FIXE ═══
@@ -234,48 +300,6 @@
          le mode simplifié du PWA qu'il ouvrait n'existe plus. L'écran de Jean
          n'affiche que ce qui le concerne — la date, la météo, le moment de la
          journée et ce qui se dit autour de lui. -->
-
-    <!-- ═══ LE MOMENT DE LA JOURNÉE ═══
-
-         Position par défaut : en bas à gauche de l'écran (pas du bandeau,
-         voir plus haut) — c'est celle qu'il garde quand l'horloge numérique
-         est active, qui n'a pas d'aiguilles à éviter.
-
-         Quand l'horloge à aiguilles est active, MainActivity
-         (repositionnerMomentDansHorloge) reprend la main sur sa position à
-         chaque minute et la pose À L'INTÉRIEUR du cadran, à l'opposé des
-         aiguilles — demandé pour qu'elle profite de la place du cadran sans
-         jamais passer dessous. gravity="top|start" ici n'a donc d'effet que
-         le temps que ce recalcul n'ait pas encore tourné une première fois
-         (moins d'une seconde après l'affichage de l'écran) ou le temps de
-         basculer vers l'horloge numérique, qui restaure la position
-         ci-dessous. -->
-    <LinearLayout
-        android:id="@+id/groupeMomentAccueil"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
-        android:layout_marginStart="32dp"
-        android:layout_marginBottom="90dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-
-        <TextView
-            android:id="@+id/textMomentIcon"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="44sp"
-            android:text="" />
-
-        <TextView
-            android:id="@+id/textMomentLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="14dp"
-            android:textSize="34sp"
-            android:textStyle="bold"
-            android:text="" />
-    </LinearLayout>
 
     <!-- ═══ OÙ EN EST LA DEMANDE DE RAPPEL ═══
 

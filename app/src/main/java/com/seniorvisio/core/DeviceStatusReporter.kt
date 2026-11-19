@@ -164,6 +164,13 @@ class DeviceStatusReporter(private val context: Context) {
                 FIELD_CARE_BREAK_STATUS to PauseAppels.décrire(context),
                 FIELD_CARE_BREAK_ACTIVE to AdminConfig(context).isCareBreakActive(),
                 FIELD_CARE_BREAK_STARTED_AT_MS to AdminConfig(context).careBreakStartedAtMs,
+                // Mesuré par MainActivity, pas ici (voir
+                // AdminConfig.captionCharsPerLineComputed) : republié à
+                // chaque signe de vie plutôt que depuis un canal à part,
+                // pour ne pas payer une seconde écriture Firestore pour une
+                // valeur qui ne change de toute façon qu'au changement de
+                // réglage ou de rotation d'écran.
+                FIELD_CAPTION_CHARS_PER_LINE_COMPUTED to AdminConfig(context).captionCharsPerLineComputed,
             ),
             SetOptions.merge()
         ).addOnFailureListener { e -> Log.e(TAG, "Échec de l'envoi du signe de vie à Firestore", e) }
@@ -944,6 +951,9 @@ class DeviceStatusReporter(private val context: Context) {
         private const val FIELD_MESSAGE_PUBLIC_TEXTE = "messagePublicTexte"
         private const val FIELD_MESSAGE_PUBLIC_DE = "messagePublicDe"
         private const val FIELD_MESSAGE_PUBLIC_EXPIRE_LE_MS = "messagePublicExpireLe"
+
+        /** Voir AdminConfig.captionCharsPerLineComputed. */
+        private const val FIELD_CAPTION_CHARS_PER_LINE_COMPUTED = "captionCharsPerLineComputed"
 
         /** Combien de minutes chaque photo de la galerie tient l'écran. */
         private const val FIELD_CADENCE_PHOTOS = "cadencePhotosMinutes"

@@ -140,6 +140,7 @@ class MainActivity : AppCompatActivity() {
             rafraîchirBoutonAppelerAidant()
             rafraîchirStatutRappelAidant()
             rafraîchirMessagePublic()
+            rafraîchirMesureCaptions()
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             screenAwakeHandler.postDelayed(this, SCREEN_AWAKE_TICK_MS)
         }
@@ -530,6 +531,21 @@ class MainActivity : AppCompatActivity() {
         } else if (messagePublicAffiché != null) {
             zones.masquerMessagePublic()
             messagePublicAffiché = null
+        }
+    }
+
+    /**
+     * Mesure réelle, republiée pour que le PWA borne la saisie du mot
+     * public sur la géométrie de CETTE tablette plutôt que sur une moyenne
+     * devinée (voir AdminConfig.captionCharsPerLineComputed et
+     * DeviceStatusReporter.reportHeartbeat). Zéro tant que la zone n'a pas
+     * encore été mise en page — on ne republie rien dans ce cas, le
+     * prochain battement réessaiera.
+     */
+    private fun rafraîchirMesureCaptions() {
+        val charsParLigne = zones.captionCharsPerLine()
+        if (charsParLigne > 0 && charsParLigne != adminConfig.captionCharsPerLineComputed) {
+            adminConfig.captionCharsPerLineComputed = charsParLigne
         }
     }
 
