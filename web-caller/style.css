@@ -360,7 +360,8 @@ body.video-mode .pwa-version {
 .admin-sheet input[type="password"],
 .side-panel select,
 .side-panel input[type="text"],
-.side-panel input[type="file"] {
+.side-panel input[type="file"],
+.side-panel textarea {
   width: 100%;
   margin-top: 6px;
   padding: 10px;
@@ -369,6 +370,15 @@ body.video-mode .pwa-version {
   background: #16233D;
   color: #FFFFFF;
   font-size: 16px;
+}
+
+/* Le mot public (voir messagePublicPanel) : hauteur fixée par ses lignes
+   plutôt que par le contenu, et non redimensionnable — une boîte qui grandit
+   librement inviterait un texte bien plus long que ce que l'écran de Jean
+   peut réellement montrer. */
+.side-panel textarea {
+  resize: none;
+  font-family: inherit;
 }
 
 /* La liste des fils d'information (voir index.html, « Fils d'information »).

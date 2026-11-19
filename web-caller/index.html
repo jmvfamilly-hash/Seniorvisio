@@ -119,6 +119,52 @@
         <div id="recueilListe"></div>
       </details>
 
+      <!-- ═══ LE MOT PUBLIC : UN PENSE-BÊTE, PAS UNE CONVERSATION ═══
+
+           Voir docs/architecture-message-public.md. Affiché en permanence sur
+           l'écran de Jean (zone des sous-titres, au repos), pas seulement
+           pendant un appel — d'où sa place ici, avec les recueils, parmi ce
+           qui se prépare AVANT d'appeler plutôt que pendant.
+
+           Un seul mot actif à la fois : republier remplace simplement le
+           précédent (voir messagePublicPublier dans app.js), pas de file à
+           gérer ni à expliquer. -->
+      <details class="side-panel" id="messagePublicPanel">
+        <summary>Écrire un mot sur son écran</summary>
+        <p class="hint">
+          Un petit texte, affiché en permanence sur l'écran de Jean — pas une
+          conversation, juste un pense-bête. Il disparaît seul à la fin de la
+          durée choisie, ou dès que vous le retirez.
+        </p>
+
+        <label for="messagePublicTexte">Le texte</label>
+        <textarea id="messagePublicTexte" maxlength="200" rows="3"
+          placeholder="Rendez-vous chez le dentiste jeudi à 14h, Marie viendra te chercher."></textarea>
+
+        <!-- Dictée : simple confort, jamais obligatoire — le champ reste un
+             texte normal, entièrement modifiable à la main avant publication
+             (voir docs/architecture-message-public.md, §4, étape 1-2). Masqué
+             par script si le navigateur ne sait pas dicter (voir
+             brancherDicteeMessagePublic). -->
+        <button type="button" id="messagePublicDicter" class="secondary hidden">🎙️ Dicter</button>
+
+        <p class="hint" id="messagePublicBudget"></p>
+
+        <label for="messagePublicDuree">Durée d'affichage</label>
+        <select id="messagePublicDuree">
+          <option value="1">1 heure</option>
+          <option value="6">6 heures</option>
+          <option value="24" selected>24 heures</option>
+          <option value="72">3 jours</option>
+          <option value="168">7 jours</option>
+        </select>
+
+        <button id="messagePublicPublier" class="secondary">📨 Publier sur son écran</button>
+        <p class="hint" id="messagePublicStatut"></p>
+
+        <button id="messagePublicRetirer" class="secondary hidden">🗑️ Retirer le mot affiché</button>
+      </details>
+
       <!-- Le panneau d'administration règle la tablette elle-même et non un
            appel : il est donc accessible d'ici, sans avoir à déranger Jean.
            Protégé par le code de la tablette (voir openAdmin dans app.js). -->

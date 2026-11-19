@@ -1083,6 +1083,21 @@ class RealCallEngine extends CallEngine {
   }
 
   /**
+   * Plusieurs réglages en une seule écriture — pour des champs qui n'ont de
+   * sens qu'ensemble (voir messagePublicPublier dans app.js : texte, auteur
+   * et expiration du mot public). Écrits séparément via [setDeviceSetting],
+   * la tablette aurait pu lire le nouveau texte avec l'ancienne expiration
+   * pendant l'instant qui sépare les deux écritures.
+   */
+  async setDeviceSettings(deviceId, fields) {
+    if (!this._available) return;
+    await this._db
+      .collection("devices")
+      .doc(deviceId)
+      .set(fields, { merge: true });
+  }
+
+  /**
    * Les morceaux de la trace de reconnaissance, dans l'ordre.
    *
    * Chiffrés : cette méthode ne fait que les rapporter, le déchiffrement est

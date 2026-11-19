@@ -598,6 +598,13 @@ const els = {
   recueilEnvoyer: el("recueilEnvoyer"),
   recueilStatut: el("recueilStatut"),
   recueilListe: el("recueilListe"),
+  messagePublicTexte: el("messagePublicTexte"),
+  messagePublicDicter: el("messagePublicDicter"),
+  messagePublicBudget: el("messagePublicBudget"),
+  messagePublicDuree: el("messagePublicDuree"),
+  messagePublicPublier: el("messagePublicPublier"),
+  messagePublicStatut: el("messagePublicStatut"),
+  messagePublicRetirer: el("messagePublicRetirer"),
   vignetteNom: el("vignetteNom"),
   vignetteFichier: el("vignetteFichier"),
   vignetteEnvoyer: el("vignetteEnvoyer"),
@@ -1999,10 +2006,167 @@ function applyDeviceSettings(data) {
   try {
     renderDeviceHealth(data);
     renderCareBreak(data);
+    rendreMessagePublic(data);
   } catch (e) {
     console.warn("[app] État de la tablette non affichable :", e);
   }
 }
+
+// ═══ LE MOT PUBLIC ═══ (voir docs/architecture-message-public.md)
+//
+// Approximation délibérée, et non calculée : la tablette sait exactement
+// combien de caractères tiennent sur une ligne (voir
+// HomeZonesController.captionCharsPerLine côté Android), mais ne le publie
+// aujourd'hui que pendant un appel (voir CallSignalingClient), pas sur le
+// document d'appareil. Vraie tant qu'on reste prudent : la tablette, elle,
+// coupe simplement ce qui dépasse plutôt que de planter.
+const MESSAGE_PUBLIC_CARACTÈRES_PAR_LIGNE_APPROX = 40;
+
+function messagePublicBudgetCaractères() {
+  const lignes = (lastDeviceData && Number(lastDeviceData.captionVisibleLines)) || 2;
+  return lignes * MESSAGE_PUBLIC_CARACTÈRES_PAR_LIGNE_APPROX;
+}
+
+function rendreBudgetMessagePublic() {
+  if (!els.messagePublicTexte) return;
+  const max = messagePublicBudgetCaractères();
+  els.messagePublicTexte.maxLength = max;
+  const lignes = (lastDeviceData && Number(lastDeviceData.captionVisibleLines)) || 2;
+  els.messagePublicBudget.textContent =
+    `${els.messagePublicTexte.value.length} / ${max} caractères — ${lignes} ligne(s), réglage actuel de Jean (approximatif)`;
+}
+
+on("messagePublicTexte", "input", rendreBudgetMessagePublic);
+rendreBudgetMessagePublic();
+
+/** Combien de temps reste-t-il, en mots plutôt qu'en nombre brut de millisecondes. */
+function messagePublicDuréeRestante(ms) {
+  const heures = Math.round(ms / 3_600_000);
+  if (heures < 1) return "moins d'une heure";
+  if (heures === 1) return "1 heure";
+  if (heures < 48) return `${heures} heures`;
+  return `${Math.round(heures / 24)} jours`;
+}
+
+/**
+ * Reflète ce que la tablette affiche RÉELLEMENT, pas ce qu'on vient de lui
+ * envoyer — même principe que renderCareBreak et le reste de ce fichier :
+ * plusieurs proches peuvent avoir cette page ouverte, et c'est l'état réel
+ * qui doit se voir ici, pas une suite de clics locaux.
+ */
+function rendreMessagePublic(data) {
+  if (!els.messagePublicRetirer) return;
+  const texte = (data.messagePublicTexte || "").trim();
+  const expireLe = Number(data.messagePublicExpireLe) || 0;
+  const actif = Boolean(texte) && (!expireLe || expireLe > Date.now());
+  els.messagePublicRetirer.classList.toggle("hidden", !actif);
+  if (!actif) {
+    if (!els.messagePublicStatut.dataset.vientDePublier) {
+      els.messagePublicStatut.textContent = "";
+    }
+    return;
+  }
+  delete els.messagePublicStatut.dataset.vientDePublier;
+  const de = data.messagePublicDe || "quelqu'un";
+  const reste = expireLe ? messagePublicDuréeRestante(expireLe - Date.now()) : null;
+  els.messagePublicStatut.textContent =
+    `Actuellement affiché sur l'écran de Jean (de ${de})` +
+    (reste ? ` — disparaît dans ${reste}.` : ".");
+}
+
+on("messagePublicPublier", "click", async () => {
+  const texte = els.messagePublicTexte.value.trim();
+  if (!texte) {
+    els.messagePublicStatut.textContent = "Écrivez d'abord un texte.";
+    return;
+  }
+  const dureeHeures = Number(els.messagePublicDuree.value) || 24;
+  const identité = loadIdentity() || {};
+  els.messagePublicPublier.disabled = true;
+  try {
+    await engine.setDeviceSettings(CONFIG.deviceDocId, {
+      messagePublicTexte: texte,
+      messagePublicDe: identité.name || "un proche",
+      messagePublicExpireLe: Date.now() + dureeHeures * 3_600_000,
+    });
+    // Affiché tout de suite, sans attendre l'écho du document d'appareil
+    // (voir watchDeviceSettings) : le proche doit savoir que ça a marché
+    // avant même que la tablette ait eu le temps de republier son signe de
+    // vie. rendreMessagePublic reprendra la main au prochain écho, et le
+    // confirmera ou le corrigera si l'écriture a en fait échoué ailleurs.
+    els.messagePublicStatut.textContent = "Publié — Jean le voit maintenant sur son écran.";
+    els.messagePublicStatut.dataset.vientDePublier = "1";
+  } catch (e) {
+    els.messagePublicStatut.textContent = `Publication impossible. ${e.message}`;
+  } finally {
+    els.messagePublicPublier.disabled = false;
+  }
+});
+
+on("messagePublicRetirer", "click", async () => {
+  els.messagePublicRetirer.disabled = true;
+  try {
+    await engine.setDeviceSettings(CONFIG.deviceDocId, {
+      messagePublicTexte: "",
+      messagePublicDe: "",
+      messagePublicExpireLe: 0,
+    });
+    els.messagePublicStatut.textContent = "Retiré — l'écran de Jean ne l'affiche plus.";
+  } catch (e) {
+    els.messagePublicStatut.textContent = `Retrait impossible. ${e.message}`;
+  } finally {
+    els.messagePublicRetirer.disabled = false;
+  }
+});
+
+/**
+ * Dictée vocale, simple confort — le texte reste un champ normal,
+ * entièrement modifiable à la main avant publication (voir le panneau dans
+ * index.html). Bouton masqué si le navigateur ne sait pas dicter plutôt que
+ * désactivé : un bouton inerte inviterait à cliquer pour rien.
+ */
+function brancherDicteeMessagePublic() {
+  const Moteur = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Moteur || !els.messagePublicDicter) return;
+  els.messagePublicDicter.classList.remove("hidden");
+  const reconnaissance = new Moteur();
+  reconnaissance.lang = "fr-FR";
+  reconnaissance.interimResults = false;
+  let enCours = false;
+
+  reconnaissance.onresult = (événement) => {
+    const dit = Array.from(événement.results)
+      .map((résultat) => résultat[0].transcript)
+      .join(" ")
+      .trim();
+    if (!dit) return;
+    const séparateur = els.messagePublicTexte.value.trim() ? " " : "";
+    els.messagePublicTexte.value = (els.messagePublicTexte.value.trim() + séparateur + dit).slice(
+      0,
+      messagePublicBudgetCaractères()
+    );
+    rendreBudgetMessagePublic();
+  };
+  reconnaissance.onend = () => {
+    enCours = false;
+    els.messagePublicDicter.textContent = "🎙️ Dicter";
+  };
+  reconnaissance.onerror = () => {
+    enCours = false;
+    els.messagePublicDicter.textContent = "🎙️ Dicter";
+  };
+
+  on("messagePublicDicter", "click", () => {
+    if (enCours) {
+      reconnaissance.stop();
+      return;
+    }
+    enCours = true;
+    els.messagePublicDicter.textContent = "⏹️ Arrêter";
+    reconnaissance.start();
+  });
+}
+brancherDicteeMessagePublic();
 
 /**
  * L'état de la tablette, à lire avant tout réglage.
