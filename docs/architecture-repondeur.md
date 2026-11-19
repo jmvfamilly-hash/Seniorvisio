@@ -85,6 +85,19 @@ message disparaît après sa lecture (§6).
    ce dernier état localement (ex. `localStorage`) au moment où il voit
    passer `état = "lu"`, plutôt que de dépendre de l'existence continue du
    document pour l'afficher.
+7. **Tant que `état = "nouveau"`, deux actions supplémentaires** sur ce même
+   statut :
+   - **Télécharger** — récupère le fichier depuis Storage vers l'appareil de
+     l'appelant (un simple lien de téléchargement sur l'URL déjà connue).
+     Utile puisque le message, lui, sera détruit dès que Jean l'aura
+     écouté : c'est la seule façon pour l'appelant d'en garder une copie.
+   - **Supprimer** — retire le message avant que Jean ne l'ait entendu (on
+     s'est trompé, on veut le refaire, on a changé d'avis). Supprime le
+     fichier Storage et le document Firestore, exactement comme §6 le fait
+     après lecture — c'est la même opération, déclenchée plus tôt.
+   Les deux disparaissent dès que `état` passe à `"en cours de lecture"` ou
+   `"lu"` : au-delà de ce point, agir sur le message ne regarde plus
+   l'appelant.
 
 ## 4. Déroulé côté Jean
 
@@ -109,21 +122,30 @@ indépendantes, et le répondeur ne dépend pas de l'autre pour exister.
 
 Jean appuie sur « ÉCOUTER » → écran plein, qui reprend **exactement** la mise en page de
 `activity_incoming_call.xml` une fois l'appel connecté (vidéo ou photo en
-fond, zones de texte par-dessus), avec deux différences :
+fond, zones de texte par-dessus), avec ces différences :
 
-- un bandeau fixe, bien visible (même style que `fond_consigne_appel`) :
-  « Message de [Nom] — [il/elle] n'est pas en ligne » — pour qu'il n'y ait
-  aucune ambiguïté avec un appel réel ;
-- un seul bouton, « Terminé » — même rouge, même taille, même emplacement que
-  le bouton raccrocher aujourd'hui. Pas de « Répondre » : rien à décrocher,
-  la lecture démarre seule dès l'ouverture de l'écran.
+- un bandeau fixe en haut, discret : « Message de [Nom] » — une simple
+  identité, pas une mise en garde ;
+- juste sous la zone des sous-titres (§5), bien séparée d'eux : la mise en
+  garde elle-même, « [Nom] n'est pas en ligne », écrite en jaune clair,
+  assez grande pour se lire du fond de la pièce — c'est elle, pas le
+  bandeau du haut, qui doit empêcher toute confusion avec un appel réel ;
+- deux boutons, symétriques comme `buttonAnswerNow`/`buttonBlock`
+  aujourd'hui (même taille, même poids visuel, pour ne pas suggérer que
+  l'un compte plus que l'autre) : « Réécouter » en bas à gauche, « Terminé »
+  en bas à droite, même rouge et même emplacement que le bouton raccrocher.
+  Pas de « Répondre » : rien à décrocher, la lecture démarre seule dès
+  l'ouverture de l'écran.
 
 Si message audio : la photo de l'appelant occupe tout l'écran (centerCrop,
 comme `imageCallerPhoto` aujourd'hui), le son joue derrière. Si message
 vidéo : la vidéo occupe l'écran à la place.
 
-La lecture se termine seule à la fin du fichier, ou avant si Jean appuie sur
-Terminé. Dans les deux cas : §6.
+**La lecture qui se termine seule ne ferme rien.** Jean peut vouloir
+réentendre un passage — à la fin du fichier, l'écran reste ouvert, prêt à
+rejouer depuis le début si Jean appuie sur « Réécouter », autant de fois
+qu'il le souhaite. Seul « Terminé » ferme l'écran, et c'est ce geste-là, et
+lui seul, qui déclenche §6 — jamais la fin naturelle de la lecture.
 
 ## 5. La transcription : écrite avant l'envoi, pas en direct chez Jean
 
@@ -160,8 +182,9 @@ moteur qui l'a proposé.
 
 ## 6. La destruction après lecture
 
-**Détruit, pas seulement marqué lu.** Dès que l'écran se referme (fin
-naturelle ou bouton Terminé) :
+**Détruit, pas seulement marqué lu.** Dès que Jean appuie sur Terminé — et
+seulement à ce moment-là, jamais à la fin naturelle de la lecture (§4, Jean
+peut réécouter avant de fermer) :
 
 1. la tablette écrit `état = "lu"` (utile seulement si la suppression qui
    suit échoue en cours de route — pour qu'on sache qu'il faut réessayer,
