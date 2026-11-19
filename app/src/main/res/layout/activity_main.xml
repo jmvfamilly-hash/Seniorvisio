@@ -100,24 +100,34 @@
         android:layout_marginStart="8dp"
         android:layout_marginEnd="316dp"
         android:layout_marginBottom="8dp"
-        android:layout_marginTop="100dp" />
+        android:layout_marginTop="100dp"
+        android:visibility="gone" />
 
-    <!-- ═══ HORLOGE NUMÉRIQUE, ALTERNATIVE AU CHOIX DE L'ADMINISTRATEUR ═══
+    <!-- ═══ HORLOGE NUMÉRIQUE, DEVENUE LE CHOIX DE DÉPART ═══
 
-         Même emplacement que horlogeAccueil (dont elle copie les marges),
-         mais jamais les deux visibles en même temps — voir MainActivity,
-         appliquerChoixHorloge, qui bascule l'une et l'autre selon
-         AdminConfig.horlogeNumerique. GONE par défaut : l'horloge à
-         aiguilles reste le choix de départ. -->
+         Même emplacement que horlogeAccueil, mais jamais les deux visibles
+         à la fois — voir MainActivity, appliquerChoixHorloge, qui bascule
+         l'une et l'autre selon AdminConfig.horlogeNumerique (vrai par
+         défaut désormais, voir ce champ).
+
+         ═══ UNE MARGE BASSE EN PLUS, ELLE, QUE L'HORLOGE À AIGUILLES N'A PAS ═══
+
+         Un texte centré dans une zone qui va presque jusqu'au bas de
+         l'écran (marginBottom=8dp) peut s'approcher de la zone 3, surtout
+         à la plus grande taille d'autosize — constaté en usage réel une
+         fois le mot public capable de remplir cette zone en continu. Cette
+         marge en plus confine le centrage à la partie haute de l'écran,
+         sans toucher à l'horloge à aiguilles ni à sa propre logique
+         d'évitement (repositionnerMomentDansHorloge), qui n'a pas ce
+         défaut. -->
     <com.seniorvisio.ui.HorlogeNumerique
         android:id="@+id/horlogeNumeriqueAccueil"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_marginStart="8dp"
         android:layout_marginEnd="316dp"
-        android:layout_marginBottom="8dp"
-        android:layout_marginTop="100dp"
-        android:visibility="gone" />
+        android:layout_marginBottom="160dp"
+        android:layout_marginTop="100dp" />
 
     <!-- ═══ LE MOMENT DE LA JOURNÉE ═══
 
