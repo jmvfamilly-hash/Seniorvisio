@@ -133,9 +133,12 @@ fond, zones de texte par-dessus), avec ces différences :
 - un bandeau fixe en haut, discret : « Message de [Nom] » — une simple
   identité, pas une mise en garde ;
 - juste sous la zone des sous-titres (§5), bien séparée d'eux : la mise en
-  garde elle-même, « [Nom] n'est pas en ligne », écrite en jaune clair,
-  assez grande pour se lire du fond de la pièce — c'est elle, pas le
-  bandeau du haut, qui doit empêcher toute confusion avec un appel réel ;
+  garde elle-même, « Message de [Nom] — [Nom] n'est pas en ligne », écrite
+  en jaune clair, assez grande pour se lire du fond de la pièce — même
+  formulation exacte que pour le message public
+  (`architecture-message-public.md`, §3), pour que les deux fonctions se
+  reconnaissent du même coup d'œil. C'est elle, pas le bandeau du haut, qui
+  doit empêcher toute confusion avec un appel réel ;
 - deux boutons, symétriques comme `buttonAnswerNow`/`buttonBlock`
   aujourd'hui (même taille, même poids visuel, pour ne pas suggérer que
   l'un compte plus que l'autre) : « Réécouter » en bas à gauche, « Terminé »

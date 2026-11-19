@@ -57,9 +57,11 @@ Nouvelle valeur pour `TranscriptionSource` (aux côtés de `ROOM` et `CALL`),
 affichée par le même `RollingCaptionZone`, sans nouvelle vue à créer.
 
 **En clair : le texte, puis, juste dessous, en jaune clair et bien lisible,
-« Message de [Nom] »** — même traitement visuel que la mise en garde du
-répondeur (§4 de `architecture-repondeur.md`), pour que les deux fonctions
-se reconnaissent du même coup d'œil.
+« Message de [Nom] — [Nom] n'est pas en ligne »** — exactement la même
+phrase et le même traitement visuel que la mise en garde du répondeur (§4
+de `architecture-repondeur.md`), pour que les deux fonctions se
+reconnaissent du même coup d'œil, même si l'une est un fichier et l'autre
+un simple texte.
 
 **Pas de conflit avec les paroles de la pièce, en fait — correction après
 vérification du code réel.** Zone 2 (`zoneRoom`, paroles de la pièce) et
