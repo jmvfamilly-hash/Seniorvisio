@@ -396,10 +396,18 @@ class RollingCaptionZone(
      * Fond dessiné en code plutôt que par un drawable XML teinté : le coin
      * arrondi doit survivre au changement de palette (voir ScreenTheme), et
      * setBackgroundColor l'aurait remplacé par un rectangle net.
+     *
+     * Posé sur [scrollView] seul, et non sur [container] : ce dernier porte
+     * aussi l'heure au-dessus et la mention en dessous (voir
+     * HomeZonesController.afficherHeureZoneAppel/afficherMentionJaune), qui
+     * doivent rester HORS du bandeau translucide — sur le fond ordinaire de
+     * l'écran — plutôt que de paraître appartenir au même bloc que le texte.
+     * Le bandeau se réduit ainsi à sa vraie hauteur, deux lignes, jamais
+     * plus, quoi que portent ses frères dans la pile.
      */
     fun applyColors(textColor: Int, backgroundColor: Int) {
         textView.setTextColor(textColor)
-        container.background = GradientDrawable().apply {
+        scrollView.background = GradientDrawable().apply {
             cornerRadius = CORNER_RADIUS_DP * container.resources.displayMetrics.density
             setColor(backgroundColor)
         }
