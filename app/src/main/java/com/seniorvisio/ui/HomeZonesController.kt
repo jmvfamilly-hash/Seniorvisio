@@ -114,6 +114,7 @@ class HomeZonesController(
     private val zoneCall: View = root.findViewById(R.id.zoneCall)
     private val voyantEnDirect: View = root.findViewById(R.id.voyantEnDirect)
     private val iconeMessageEnregistre: ImageView = root.findViewById(R.id.iconeMessageEnregistre)
+    private val textCallCaptionTitre: TextView = root.findViewById(R.id.textCallCaptionTitre)
 
     /** Tenu ici pour pouvoir l'arrêter proprement — voir [masquerIndicateursZoneAppel]. */
     private var animationVoyant: ObjectAnimator? = null
@@ -204,6 +205,38 @@ class HomeZonesController(
     fun masquerMessagePublic() {
         zoneFor(TranscriptionSource.PUBLIC).clear()
         masquerIndicateursZoneAppel()
+        masquerHeureZoneAppel()
+    }
+
+    /**
+     * L'heure, en numérique, juste au-dessus du texte du mot public ou du
+     * répondeur — jamais le reste du temps, où l'horloge de l'accueil (à
+     * aiguilles ou numérique selon AdminConfig.horlogeNumerique, sans
+     * rapport avec celle-ci) occupe seule la zone 2.
+     *
+     * RÉUTILISE la ligne-titre de la zone 3 (textCallCaptionTitre), qui ne
+     * sert autrement qu'au « qui parle » du mode Sous-titres pendant un
+     * appel réel — sur un écran différent (IncomingCallActivity), avec sa
+     * propre instance de ces zones : les deux usages ne se croisent jamais.
+     *
+     * C'est cette même ligne, et non une vue à part, qui garantit « au-
+     * dessus du texte, sans jamais le chevaucher » : dans une pile
+     * verticale, un frère qui prend sa propre hauteur repousse
+     * mécaniquement celui du dessous, là où une vue positionnée à la main
+     * aurait pu un jour se retrouver mal placée sur une tablette différente.
+     *
+     * À appeler À CHAQUE BATTEMENT tant qu'un message est affiché — l'heure
+     * doit avancer même si le texte, lui, ne change pas.
+     */
+    fun afficherHeureZoneAppel(heure: String) {
+        textCallCaptionTitre.text = heure
+        textCallCaptionTitre.visibility = View.VISIBLE
+    }
+
+    /** Retire l'heure posée par [afficherHeureZoneAppel]. */
+    fun masquerHeureZoneAppel() {
+        textCallCaptionTitre.visibility = View.GONE
+        textCallCaptionTitre.text = ""
     }
 
     /**

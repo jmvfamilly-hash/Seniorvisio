@@ -525,14 +525,24 @@ class MainActivity : AppCompatActivity() {
         val àAfficher = texte.isNotBlank() && !expiré
 
         if (àAfficher) {
-            if (texte == messagePublicAffiché) return
-            zones.afficherMessagePublic(texte, adminConfig.messagePublicDe)
-            messagePublicAffiché = texte
+            if (texte != messagePublicAffiché) {
+                zones.afficherMessagePublic(texte, adminConfig.messagePublicDe)
+                messagePublicAffiché = texte
+            }
+            // À CHAQUE battement, contrairement au texte ci-dessus : l'heure
+            // doit avancer même quand le message, lui, ne change pas (voir
+            // HomeZonesController.afficherHeureZoneAppel — numérique
+            // uniquement ici, au-dessus de ce texte, jamais à la place de
+            // l'horloge habituelle de l'accueil).
+            zones.afficherHeureZoneAppel(heureActuelle())
         } else if (messagePublicAffiché != null) {
             zones.masquerMessagePublic()
             messagePublicAffiché = null
         }
     }
+
+    private fun heureActuelle(): String =
+        java.text.SimpleDateFormat("HH:mm", java.util.Locale.FRANCE).format(java.util.Date())
 
     /**
      * Mesure réelle, republiée pour que le PWA borne la saisie du mot

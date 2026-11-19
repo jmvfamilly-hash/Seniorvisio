@@ -221,15 +221,12 @@ class AdminConfig(context: Context) {
 
     /**
      * Horloge numérique plutôt qu'à aiguilles sur l'écran d'accueil (voir
-     * MainActivity, HorlogeNumerique). VRAI par défaut depuis que le mot
-     * public et le répondeur remplissent régulièrement la zone 3 : la
-     * numérique reste compacte quelle que soit l'heure affichée, alors que
-     * le cadran à aiguilles, plus haut et plus large, se rapprochait
-     * davantage du texte en dessous. L'administrateur peut toujours revenir
-     * aux aiguilles depuis le PWA.
+     * MainActivity, HorlogeNumerique). Faux par défaut : l'horloge à
+     * aiguilles reste le choix de départ, ce réglage est l'exception que
+     * l'administrateur active sciemment depuis le PWA.
      */
     var horlogeNumerique: Boolean
-        get() = prefs.getBoolean(KEY_HORLOGE_NUMERIQUE, true)
+        get() = prefs.getBoolean(KEY_HORLOGE_NUMERIQUE, false)
         set(value) = prefs.edit().putBoolean(KEY_HORLOGE_NUMERIQUE, value).apply()
 
     fun setMonthlyQuotaHours(engine: TranscriptionEngineChoice, hours: Int) {
