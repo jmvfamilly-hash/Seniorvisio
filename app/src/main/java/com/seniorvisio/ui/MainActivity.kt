@@ -529,20 +529,37 @@ class MainActivity : AppCompatActivity() {
                 zones.afficherMessagePublic(texte, adminConfig.messagePublicDe)
                 messagePublicAffiché = texte
             }
-            // À CHAQUE battement, contrairement au texte ci-dessus : l'heure
-            // doit avancer même quand le message, lui, ne change pas (voir
-            // HomeZonesController.afficherHeureZoneAppel — numérique
-            // uniquement ici, au-dessus de ce texte, jamais à la place de
-            // l'horloge habituelle de l'accueil).
-            zones.afficherHeureZoneAppel(heureActuelle())
+            forcerHorlogeNumériquePendantMessage(true)
         } else if (messagePublicAffiché != null) {
             zones.masquerMessagePublic()
             messagePublicAffiché = null
+            forcerHorlogeNumériquePendantMessage(false)
         }
     }
 
-    private fun heureActuelle(): String =
-        java.text.SimpleDateFormat("HH:mm", java.util.Locale.FRANCE).format(java.util.Date())
+    /**
+     * L'horloge de la zone 2 — pas une seconde horloge créée pour
+     * l'occasion (voir la maquette) — bascule sur la numérique tant qu'un
+     * message reste affiché en zone 3, quel que soit le choix habituel de
+     * l'administrateur (AdminConfig.horlogeNumerique) : compacte, elle
+     * reste au-dessus du texte sans jamais empiéter sur rien, ce que
+     * l'horloge à aiguilles, plus large, ne garantit pas aussi bien.
+     *
+     * N'écrit jamais AdminConfig.horlogeNumerique : c'est un réglage de
+     * l'administrateur, pas une conséquence du mot public. Au retrait, on
+     * revient exactement au choix réel — pas à un simple rappel de
+     * appliquerChoixHorloge(), qui ne referait rien tant que ce réglage n'a
+     * pas changé depuis le dernier passage.
+     */
+    private fun forcerHorlogeNumériquePendantMessage(actif: Boolean) {
+        if (actif) {
+            horlogeAccueil.visibility = View.GONE
+            horlogeNumeriqueAccueil.visibility = View.VISIBLE
+        } else {
+            horlogeAccueil.visibility = if (adminConfig.horlogeNumerique) View.GONE else View.VISIBLE
+            horlogeNumeriqueAccueil.visibility = if (adminConfig.horlogeNumerique) View.VISIBLE else View.GONE
+        }
+    }
 
     /**
      * Mesure réelle, republiée pour que le PWA borne la saisie du mot

@@ -398,12 +398,12 @@ class RollingCaptionZone(
      * setBackgroundColor l'aurait remplacé par un rectangle net.
      *
      * Posé sur [scrollView] seul, et non sur [container] : ce dernier porte
-     * aussi l'heure au-dessus et la mention en dessous (voir
-     * HomeZonesController.afficherHeureZoneAppel/afficherMentionJaune), qui
-     * doivent rester HORS du bandeau translucide — sur le fond ordinaire de
-     * l'écran — plutôt que de paraître appartenir au même bloc que le texte.
-     * Le bandeau se réduit ainsi à sa vraie hauteur, deux lignes, jamais
-     * plus, quoi que portent ses frères dans la pile.
+     * aussi la mention en dessous (voir
+     * HomeZonesController.afficherMentionJaune), qui doit rester HORS du
+     * bandeau translucide — sur le fond ordinaire de l'écran — plutôt que
+     * de paraître appartenir au même bloc que le texte. Le bandeau se
+     * réduit ainsi à sa vraie hauteur, deux lignes, jamais plus, quoi que
+     * portent ses frères dans la pile.
      */
     fun applyColors(textColor: Int, backgroundColor: Int) {
         textView.setTextColor(textColor)
