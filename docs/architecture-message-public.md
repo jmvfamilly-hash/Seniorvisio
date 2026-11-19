@@ -63,6 +63,20 @@ de `architecture-repondeur.md`), pour que les deux fonctions se
 reconnaissent du même coup d'œil, même si l'une est un fichier et l'autre
 un simple texte.
 
+**Et un repère qui ne demande aucune lecture, en haut à gauche de la
+zone.** Le texte jaune suppose que Jean lit ; pour quelqu'un avec une
+déficience intellectuelle, ce n'est pas garanti, ni au bon moment. Une
+petite enveloppe fixe, toujours au même endroit (voir
+`ic_message_enregistre` et `HomeZonesController.afficherIndicateurMessage`),
+double donc le texte sans dépendre de la lecture — exactement le même
+repère, et le même emplacement, que pour le répondeur. Pendant un appel
+réel, c'est l'inverse : un voyant vert qui respire doucement remplace
+l'enveloppe (`afficherIndicateurEnDirect`), jamais les deux ensemble. Les
+deux reposent sur un signal déjà existant et plus fort que n'importe quelle
+icône : une image fixe (répondeur, message public) ne se confond jamais
+avec une image qui bouge (un vrai appel) — l'icône et le texte ne sont que
+la couche de confirmation en plus.
+
 **Pas de conflit avec les paroles de la pièce, en fait — correction après
 vérification du code réel.** Zone 2 (`zoneRoom`, paroles de la pièce) et
 zone 3 (`zoneCall`) sont deux tiers d'écran DIFFÉRENTS et jamais superposés

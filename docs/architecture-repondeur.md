@@ -144,7 +144,16 @@ fond, zones de texte par-dessus), avec ces différences :
   l'un compte plus que l'autre) : « Réécouter » en bas à gauche, « Terminé »
   en bas à droite, même rouge et même emplacement que le bouton raccrocher.
   Pas de « Répondre » : rien à décrocher, la lecture démarre seule dès
-  l'ouverture de l'écran.
+  l'ouverture de l'écran ;
+- une petite enveloppe fixe, en haut à gauche de la zone des sous-titres —
+  le même repère, au même endroit, que le message public
+  (`architecture-message-public.md`, §3), qui ne demande aucune lecture.
+  Jamais le voyant qui respire d'un appel réel (voir
+  `HomeZonesController.afficherIndicateurMessage` /
+  `afficherIndicateurEnDirect`, mutuellement exclusifs) : ici, l'image fixe
+  de l'appelant le confirme déjà d'elle-même — l'enveloppe et le texte jaune
+  ne sont qu'une confirmation en plus, pour qui ne capterait pas ce premier
+  signal.
 
 Si message audio : la photo de l'appelant occupe tout l'écran (centerCrop,
 comme `imageCallerPhoto` aujourd'hui), le son joue derrière. Si message
