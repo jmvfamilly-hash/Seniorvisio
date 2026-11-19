@@ -2020,11 +2020,22 @@ function applyDeviceSettings(data) {
 // aujourd'hui que pendant un appel (voir CallSignalingClient), pas sur le
 // document d'appareil. Vraie tant qu'on reste prudent : la tablette, elle,
 // coupe simplement ce qui dépasse plutôt que de planter.
+// N'a plus à être devinée : la tablette mesure réellement ce qui tient sur
+// une ligne de sa zone de sous-titres (police, largeur d'écran, tout y
+// compte déjà) et le republie à chaque signe de vie (voir
+// AdminConfig.captionCharsPerLineComputed côté Android). Cette moyenne ne
+// sert plus qu'avant la toute première mesure d'une tablette neuve, ou si le
+// champ manque encore sur une tablette pas à jour.
 const MESSAGE_PUBLIC_CARACTÈRES_PAR_LIGNE_APPROX = 40;
+
+function messagePublicCaractèresParLigne() {
+  const mesuré = lastDeviceData && Number(lastDeviceData.captionCharsPerLineComputed);
+  return mesuré > 0 ? mesuré : MESSAGE_PUBLIC_CARACTÈRES_PAR_LIGNE_APPROX;
+}
 
 function messagePublicBudgetCaractères() {
   const lignes = (lastDeviceData && Number(lastDeviceData.captionVisibleLines)) || 2;
-  return lignes * MESSAGE_PUBLIC_CARACTÈRES_PAR_LIGNE_APPROX;
+  return lignes * messagePublicCaractèresParLigne();
 }
 
 function rendreBudgetMessagePublic() {
@@ -2032,8 +2043,10 @@ function rendreBudgetMessagePublic() {
   const max = messagePublicBudgetCaractères();
   els.messagePublicTexte.maxLength = max;
   const lignes = (lastDeviceData && Number(lastDeviceData.captionVisibleLines)) || 2;
+  const mesuré = lastDeviceData && Number(lastDeviceData.captionCharsPerLineComputed) > 0;
   els.messagePublicBudget.textContent =
-    `${els.messagePublicTexte.value.length} / ${max} caractères — ${lignes} ligne(s), réglage actuel de Jean (approximatif)`;
+    `${els.messagePublicTexte.value.length} / ${max} caractères — ${lignes} ligne(s), réglage actuel de Jean` +
+    (mesuré ? "" : " (estimation en attendant la première mesure de sa tablette)");
 }
 
 on("messagePublicTexte", "input", rendreBudgetMessagePublic);
