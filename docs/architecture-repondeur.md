@@ -48,6 +48,8 @@ devices/{appareil}/messages/{messageId}
                     si le message est audio
     crééLe          horodatage serveur
     état            "nouveau" | "en cours de lecture" | "lu"
+    sousTitres      texte final, corrigé par l'appelant avant envoi (§3) —
+                     c'est ce texte, et aucun autre, qui s'affiche chez Jean
 ```
 
 Un seul champ `état` suffit : pas de compteur de vues, pas d'historique — le
@@ -61,27 +63,51 @@ message disparaît après sa lecture (§6).
    aujourd'hui, un bouton Enregistrer/Arrêter, une durée maximale annoncée à
    l'écran (proposition : 2 minutes — large assez pour un message, court
    assez pour ne pas remplir le quota).
-3. Relecture avant envoi, avec refaire/envoyer — personne n'envoie un message
-   à Jean sans savoir ce qu'il contient.
-4. Envoi : upload vers Storage (`MediaRecorder` côté navigateur, comme pour
-   les recueils vidéo), puis écriture du document Firestore une fois l'upload
-   terminé — jamais avant, pour ne jamais pointer vers une URL qui n'existe
-   pas encore.
+3. **Relecture, avec les sous-titres déjà transcrits et modifiables.** Dès
+   l'arrêt de l'enregistrement, le son est transcrit automatiquement (côté
+   PWA — voir §5, ça change par rapport à la première version de ce plan) et
+   le texte obtenu s'affiche dans un champ éditable. L'appelant corrige ce
+   que la transcription automatique a mal compris avant d'envoyer — **c'est
+   ce texte-là, tel qu'il est au moment de l'envoi, qui part avec le
+   message** et qui sera affiché et lu sur la tablette de Jean. Personne
+   n'envoie un message à Jean sans savoir ce qu'il contient, ni ce qui sera
+   écrit sous ses yeux.
+4. Envoi : upload du fichier vers Storage (`MediaRecorder` côté navigateur,
+   comme pour les recueils vidéo), puis écriture du document Firestore une
+   fois l'upload terminé — jamais avant, pour ne jamais pointer vers une URL
+   qui n'existe pas encore. Le texte corrigé à l'étape 3 part dans ce même
+   document (champ `sousTitres`, voir §2).
 5. Confirmation à l'écran : « Message envoyé, Jean l'écoutera. »
+6. **Statut, visible depuis le PWA tant que le message existe.** Le même
+   écran (ou l'écran d'accueil du PWA) affiche l'état courant du dernier
+   message envoyé : « envoyé, pas encore écouté » puis « écouté par Jean à
+   HH:MM ». Comme le document disparaît une fois lu (§6), le PWA doit retenir
+   ce dernier état localement (ex. `localStorage`) au moment où il voit
+   passer `état = "lu"`, plutôt que de dépendre de l'existence continue du
+   document pour l'afficher.
 
 ## 4. Déroulé côté Jean
 
-**Rien de nouveau à apprendre.** Deux pièces déjà en place suffisent :
+**La notification remplace l'horloge, elle ne s'ajoute pas à côté.** Tant
+qu'un message attend, la zone centrale de l'accueil — où vit l'horloge à
+aiguilles ou numérique aujourd'hui — est entièrement prise par :
 
-- le bouton conditionnel de la colonne de droite (même mécanisme que
-  `boutonAppelerAidant`, voir `MainActivity.rafraîchirBoutonAppelerAidant`) :
-  masqué tant qu'aucun message n'attend, visible et vert sinon — texte
-  « ÉCOUTER LE MESSAGE DE [NOM] » ;
-- la consigne écrite en grand juste au-dessus ou au-dessous, même procédé que
-  `textConsigneSousTitres` : « Un message vous attend. Appuyez sur le bouton
-  vert pour l'écouter. »
+- une grande image d'enveloppe ;
+- un texte écrit en gros : « [Nom] vous a laissé un message » ;
+- un bouton vert, large, juste dessous : « ÉCOUTER ».
 
-Jean appuie → écran plein, qui reprend **exactement** la mise en page de
+**L'heure ne disparaît pas, elle se déplace.** Elle reste visible, en
+digital (pas l'horloge à aiguilles), dans la colonne de droite,
+**juste au-dessus du bouton « Bloquer les appels 30 minutes »** — qui, lui,
+ne bouge pas.
+
+**Le bouton « Demander à [Nom] de rappeler » n'existe pas encore en
+production** (voir `MainActivity.rafraîchirBoutonAppelerAidant`,
+`BuildConfig.RAPPEL_AIDANT_VISIBLE`) : il ne doit pas apparaître dans cette
+colonne tant qu'il n'est pas lui-même activé. Les deux fonctions sont
+indépendantes, et le répondeur ne dépend pas de l'autre pour exister.
+
+Jean appuie sur « ÉCOUTER » → écran plein, qui reprend **exactement** la mise en page de
 `activity_incoming_call.xml` une fois l'appel connecté (vidéo ou photo en
 fond, zones de texte par-dessus), avec deux différences :
 
@@ -99,23 +125,38 @@ vidéo : la vidéo occupe l'écran à la place.
 La lecture se termine seule à la fin du fichier, ou avant si Jean appuie sur
 Terminé. Dans les deux cas : §6.
 
-## 5. La transcription pendant la lecture
+## 5. La transcription : écrite avant l'envoi, pas en direct chez Jean
 
-Pendant un appel, les sous-titres viennent de la transcription du flux audio
-distant WebRTC en direct (voir `WebRtcCallEngine` et les implémentations de
-`TranscriptionEngine`). Un message enregistré n'est pas un flux WebRTC, mais
-la même chaîne de transcription peut recevoir n'importe quel flux audio
-décodé — c'est le point d'entrée qu'on réutilise : on décode le fichier du
-message (extraction audio, `MediaExtractor`/`MediaCodec` côté Android) et on
-nourrit le `TranscriptionEngine` déjà en place avec ces échantillons au lieu
-de ceux de WebRTC, à la cadence de la lecture. L'affichage (`PacedCaptionZone`,
-zone 3) ne change pas : il ne sait déjà pas d'où vient le texte.
+**Changement par rapport à la première version de ce plan.** Pendant un
+appel, les sous-titres viennent de la transcription du flux audio WebRTC en
+direct — mais un message enregistré n'a personne en ligne pour relire et
+corriger ce que la machine aurait mal compris pendant la lecture. La
+transcription se fait donc **côté PWA, juste après l'enregistrement**, et
+l'appelant la corrige avant d'envoyer (§3, étape 3). Le texte final part
+dans le document du message (champ `sousTitres`, §2).
 
-Pour une vidéo, la lecture elle-même (image) ne peut pas passer par
+**Conséquence qui simplifie la tablette : elle n'a plus rien à transcrire.**
+Elle affiche le texte déjà écrit, dans la même zone (`PacedCaptionZone`,
+zone 3) et selon le même rythme que pour les paroles transcrites en direct —
+mais ce texte est connu d'avance, donc pas de `TranscriptionEngine`, pas de
+décodage audio pour la voix, pas de pont à construire entre un fichier et la
+chaîne de transcription. Ce qui restait la pièce la plus incertaine du plan
+disparaît.
+
+Pour une vidéo, la lecture de l'image ne peut toujours pas passer par
 `SurfaceViewRenderer` (WebRTC) — il faut un lecteur de fichier (ExoPlayer ou
 `MediaPlayer` sur une `SurfaceView` dédiée), au même emplacement à l'écran.
-C'est la pièce techniquement la plus neuve de cette fonction ; tout le reste
-réutilise une pièce existante.
+C'est la seule pièce technique vraiment neuve côté Android.
+
+**Reste à choisir : quel moteur transcrit côté PWA.** L'API de
+reconnaissance vocale du navigateur (`webkitSpeechRecognition`) est la plus
+simple à poser, sans service externe ni coût, mais sa qualité et sa
+disponibilité varient selon le navigateur du proche. L'alternative — envoyer
+l'enregistrement à un service de transcription (AssemblyAI ou Gladia, déjà
+utilisés côté Android) — donne un résultat plus fiable mais ajoute un appel
+réseau et un coût par message. À trancher à l'implémentation, sans que ça
+change rien au reste du plan : l'appelant corrige le texte quel que soit le
+moteur qui l'a proposé.
 
 ## 6. La destruction après lecture
 
@@ -136,11 +177,11 @@ Wi-Fi, en se basant sur `état = "lu"` plutôt que sur l'absence du document.
 | Pièce | Nature |
 |---|---|
 | `storage.rules` | nouveau chemin `messages/{appareil}/{messageId}`, même forme que `recueils/...` (taille et type bornés, lecture/écriture/suppression ouvertes — voir §9 décision 2) |
-| `web-caller/` | bouton « Laisser un message », écran d'enregistrement, upload |
+| `web-caller/` | bouton « Laisser un message », écran d'enregistrement, transcription + relecture modifiable, upload, statut du message envoyé |
 | `AdminConfig` / `DeviceStatusReporter` | rien de neuf a priori — les messages sont lus directement sous `devices/{appareil}/messages`, pas besoin d'un réglage à distance pour démarrer |
-| `activity_main.xml` + `MainActivity` | bouton conditionnel + consigne, sur le modèle de `boutonAppelerAidant` |
-| nouvel écran (ou mode de `IncomingCallActivity`) | lecture du message : bandeau, photo/vidéo, sous-titres, bouton Terminé |
-| nouveau composant Android | lecteur de fichier audio/vidéo + pont vers `TranscriptionEngine` (voir §5) |
+| `activity_main.xml` + `MainActivity` | notification plein écran remplaçant l'horloge, horloge digitale déplacée au-dessus de `boutonPauseAppels` (voir §4) |
+| nouvel écran (ou mode de `IncomingCallActivity`) | lecture du message : bandeau, photo/vidéo, sous-titres déjà écrits (pas de transcription embarquée, voir §5), bouton Terminé |
+| nouveau composant Android | lecteur de fichier vidéo (image seulement — plus de pont vers `TranscriptionEngine`, voir §5) |
 
 Réutiliser `IncomingCallActivity` en lui ajoutant un « mode message » plutôt
 qu'écrire un écran séparé évite de dupliquer toute la mise en page (zones,
@@ -151,10 +192,9 @@ ici.
 
 1. **Le socle** — schéma Storage/Firestore, upload PWA, liste des messages en
    attente visible côté admin (PWA). Rien de visible pour Jean.
-2. **La lecture audio** — bouton + écran chez Jean, photo + son + sous-titres
-   + suppression. Pas encore la vidéo.
-3. **La lecture vidéo** — le lecteur de fichier, et son pont vers la
-   transcription.
+2. **La lecture audio** — notification plein écran + écran chez Jean, photo +
+   son + sous-titres déjà écrits + suppression. Pas encore la vidéo.
+3. **La lecture vidéo** — le lecteur de fichier pour l'image.
 4. **Les finitions** — plusieurs messages en attente, limites de durée/poids
    annoncées côté PWA avant l'enregistrement plutôt que découvertes à l'envoi.
 
