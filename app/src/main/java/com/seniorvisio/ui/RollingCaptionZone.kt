@@ -425,7 +425,15 @@ class RollingCaptionZone(
      * fixe — faux dès qu'on change de police ou de langue.
      */
     private fun fitTextToVisibleLines() {
-        val availableHeight = scrollView.height
+        // Le padding du ScrollView (voir callCaptionScroll/roomCaptionScroll,
+        // ajouté pour que le texte ne touche plus les coins arrondis du
+        // bandeau translucide) retire de la place réellement disponible pour
+        // le texte, mais scrollView.height ne le reflète pas — c'est la
+        // hauteur EXTÉRIEURE de la vue. Sans cette soustraction, la police
+        // calculée était un peu trop grande pour le vrai espace restant, et
+        // la fin de la deuxième ligne sortait de la fenêtre visible sans
+        // qu'aucun défilement ne l'y ramène jamais — constaté en usage réel.
+        val availableHeight = scrollView.height - scrollView.paddingTop - scrollView.paddingBottom
         if (availableHeight <= 0) return
 
         val targetLineHeight = availableHeight.toFloat() / visibleLines
