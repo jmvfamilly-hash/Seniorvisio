@@ -118,17 +118,29 @@
         android:visibility="invisible"
         android:alpha="0">
 
+        <!-- fillViewport, et la TextView en match_parent : un texte court
+             (p. ex. un mot public de deux lignes, voir
+             RollingCaptionZone.afficherTexteFixe) se centre alors
+             verticalement dans tout le bandeau au lieu de s'accrocher en
+             haut avec du vide gris en dessous — constaté en usage réel.
+             android:gravity="center" sur la TextView centre déjà le texte
+             DANS ses propres limites ; sans ces deux réglages, ces limites
+             ne faisaient que la hauteur du texte lui-même. Un texte plus
+             long qu'un bandeau continue de défiler normalement :
+             fillViewport n'agit que quand le contenu est plus PETIT que la
+             zone. -->
         <ScrollView
             android:id="@+id/roomCaptionScroll"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:padding="16dp"
-            android:scrollbars="none">
+            android:scrollbars="none"
+            android:fillViewport="true">
 
             <TextView
                 android:id="@+id/textRoomCaption"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:gravity="center"
                 android:textStyle="bold"
                 android:textSize="@dimen/caption_text_size_default"
@@ -242,18 +254,26 @@
              désormais un frère dans une pile verticale, et un match_parent y
              réclamerait la hauteur ENTIÈRE de la zone en plus de celle du
              titre — les dernières lignes du texte sortiraient par le bas. -->
+        <!-- fillViewport, et la TextView en match_parent : voir la même
+             remarque sur roomCaptionScroll — un texte plus court que le
+             bandeau (le cas courant du mot public) se centre verticalement
+             au lieu de s'accrocher en haut avec du vide gris en dessous,
+             constaté en usage réel. N'empêche pas un texte plus long de
+             défiler normalement : fillViewport n'agit que si le contenu
+             est plus PETIT que la zone. -->
         <ScrollView
             android:id="@+id/callCaptionScroll"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:padding="16dp"
-            android:scrollbars="none">
+            android:scrollbars="none"
+            android:fillViewport="true">
 
             <TextView
                 android:id="@+id/textCallCaption"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:gravity="center"
                 android:textStyle="bold"
                 android:textSize="@dimen/caption_text_size_default"
